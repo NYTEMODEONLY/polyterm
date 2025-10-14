@@ -27,11 +27,12 @@ def settings_screen(console: RichConsole):
     settings_table.add_column("Setting", style="cyan")
     settings_table.add_column("Value", style="white")
     
-    settings_table.add_row("Config File", config.config_path)
-    settings_table.add_row("Alert Threshold", f"{config.alert_threshold}%")
-    settings_table.add_row("Refresh Rate", f"{config.refresh_rate}s")
-    settings_table.add_row("Min Volume", f"${config.min_volume:,}")
-    settings_table.add_row("API Rate Limit", f"{config.rate_limit_calls}/{config.rate_limit_period}s")
+    settings_table.add_row("Config File", str(config.config_path))
+    settings_table.add_row("Probability Threshold", f"{config.probability_threshold}%")
+    settings_table.add_row("Volume Threshold", f"{config.volume_threshold}%")
+    settings_table.add_row("Check Interval", f"{config.check_interval}s")
+    settings_table.add_row("Refresh Rate", f"{config.get('display.refresh_rate', 2)}s")
+    settings_table.add_row("Max Markets", f"{config.get('display.max_markets', 20)}")
     
     console.print(settings_table)
     console.print()
@@ -59,21 +60,21 @@ def settings_screen(console: RichConsole):
     
     if choice == '1':
         # Edit Alert Settings
-        threshold = console.input(f"Alert threshold % [cyan][current: {config.alert_threshold}][/cyan] ").strip()
+        threshold = console.input(f"Probability threshold % [cyan][current: {config.probability_threshold}][/cyan] ").strip()
         if threshold:
-            console.print(f"[yellow]Alert threshold would be set to {threshold}%[/yellow]")
+            console.print(f"[yellow]Probability threshold would be set to {threshold}%[/yellow]")
             console.print("[dim]Note: Config editing coming soon. Edit config.toml manually for now.[/dim]")
     
     elif choice == '2':
         # Edit API Settings
-        rate_limit = console.input(f"Rate limit (calls/period) [cyan][current: {config.rate_limit_calls}/{config.rate_limit_period}s][/cyan] ").strip()
-        if rate_limit:
-            console.print(f"[yellow]Rate limit would be set to {rate_limit}[/yellow]")
+        api_key = console.input(f"Gamma API Key [cyan][current: {'***' if config.gamma_api_key else 'Not set'}][/cyan] ").strip()
+        if api_key:
+            console.print(f"[yellow]API key would be set[/yellow]")
             console.print("[dim]Note: Config editing coming soon. Edit config.toml manually for now.[/dim]")
     
     elif choice == '3':
         # Edit Display Settings
-        refresh = console.input(f"Refresh rate (seconds) [cyan][current: {config.refresh_rate}][/cyan] ").strip()
+        refresh = console.input(f"Refresh rate (seconds) [cyan][current: {config.get('display.refresh_rate', 2)}][/cyan] ").strip()
         if refresh:
             console.print(f"[yellow]Refresh rate would be set to {refresh}s[/yellow]")
             console.print("[dim]Note: Config editing coming soon. Edit config.toml manually for now.[/dim]")
@@ -81,12 +82,12 @@ def settings_screen(console: RichConsole):
     elif choice == '4':
         # View Config File
         console.print(f"[green]Config file location:[/green]")
-        console.print(f"  {config.config_path}")
+        console.print(f"  {str(config.config_path)}")
         console.print()
         
-        if os.path.exists(config.config_path):
+        if os.path.exists(str(config.config_path)):
             console.print("[dim]Use 'cat' or your editor to view/edit:[/dim]")
-            console.print(f"[dim]  cat {config.config_path}[/dim]")
+            console.print(f"[dim]  cat {str(config.config_path)}[/dim]")
         else:
             console.print("[yellow]Config file not found (using defaults)[/yellow]")
     
