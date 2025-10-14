@@ -49,11 +49,12 @@ def settings_screen(console: RichConsole):
     menu.add_row("3", "Edit Display Settings")
     menu.add_row("4", "View Config File")
     menu.add_row("5", "Reset to Defaults")
+    menu.add_row("6", "🔄 Update PolyTerm")
     
     console.print(menu)
     console.print()
     
-    choice = console.input("[cyan]Select option (1-5):[/cyan] ").strip()
+    choice = console.input("[cyan]Select option (1-6):[/cyan] ").strip()
     console.print()
     
     if choice == '1':
@@ -98,7 +99,74 @@ def settings_screen(console: RichConsole):
         else:
             console.print("[dim]Reset cancelled[/dim]")
     
+    elif choice == '6':
+        # Update PolyTerm
+        console.print("[bold green]🔄 Updating PolyTerm...[/bold green]")
+        console.print()
+        
+        import subprocess
+        import sys
+        
+        try:
+            # Check current version
+            console.print("[dim]Checking current version...[/dim]")
+            result = subprocess.run([sys.executable, "-m", "pip", "show", "polyterm"], 
+                                  capture_output=True, text=True)
+            if result.returncode == 0:
+                for line in result.stdout.split('\n'):
+                    if line.startswith('Version:'):
+                        current_version = line.split(':')[1].strip()
+                        console.print(f"[dim]Current version: {current_version}[/dim]")
+                        break
+            
+            console.print()
+            console.print("[green]Updating to latest version...[/green]")
+            
+            # Update using pipx if available, otherwise pip
+            update_cmd = None
+            try:
+                subprocess.run(["pipx", "--version"], capture_output=True, check=True)
+                update_cmd = ["pipx", "upgrade", "polyterm"]
+                console.print("[dim]Using pipx to update...[/dim]")
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                update_cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "polyterm"]
+                console.print("[dim]Using pip to update...[/dim]")
+            
+            if update_cmd:
+                result = subprocess.run(update_cmd, capture_output=True, text=True)
+                
+                if result.returncode == 0:
+                    console.print()
+                    console.print("[bold green]✅ Update successful![/bold green]")
+                    console.print("[green]PolyTerm has been updated to the latest version.[/green]")
+                    console.print()
+                    console.print("[yellow]Please restart PolyTerm to use the new version.[/yellow]")
+                else:
+                    console.print()
+                    console.print("[bold red]❌ Update failed[/bold red]")
+                    console.print(f"[red]Error: {result.stderr}[/red]")
+                    console.print()
+                    console.print("[yellow]You can try updating manually:[/yellow]")
+                    console.print("[dim]  pipx upgrade polyterm[/dim]")
+                    console.print("[dim]  or[/dim]")
+                    console.print("[dim]  pip install --upgrade polyterm[/dim]")
+            else:
+                console.print("[red]Could not determine update method[/red]")
+                
+        except Exception as e:
+            console.print()
+            console.print("[bold red]❌ Update failed[/bold red]")
+            console.print(f"[red]Error: {e}[/red]")
+            console.print()
+            console.print("[yellow]You can try updating manually:[/yellow]")
+            console.print("[dim]  pipx upgrade polyterm[/dim]")
+            console.print("[dim]  or[/dim]")
+            console.print("[dim]  pip install --upgrade polyterm[/dim]")
+    
     else:
         console.print("[red]Invalid option[/red]")
+    
+    console.print()
+    console.input("[dim]Press Enter to continue...[/dim]")
 
 
