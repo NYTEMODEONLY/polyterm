@@ -3,6 +3,10 @@
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
+import polyterm
+import requests
+import re
+from packaging import version
 
 
 class MainMenu:
@@ -10,6 +14,32 @@ class MainMenu:
     
     def __init__(self):
         self.console = Console()
+    
+    def check_for_updates(self) -> str:
+        """Check if there's a newer version available on PyPI
+        
+        Returns:
+            Update indicator string (empty if no update available)
+        """
+        try:
+            # Get current version
+            current_version = polyterm.__version__
+            
+            # Get latest version from PyPI
+            response = requests.get("https://pypi.org/pypi/polyterm/json", timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                latest_version = data["info"]["version"]
+                
+                # Compare versions
+                if version.parse(latest_version) > version.parse(current_version):
+                    return f" [bold green]🔄 Update Available: v{latest_version}[/bold green]"
+            
+        except Exception:
+            # If update check fails, silently continue
+            pass
+        
+        return ""
     
     def display(self):
         """Display main menu with all options, responsive to terminal width"""
@@ -75,8 +105,15 @@ class MainMenu:
         for key, desc in menu_items:
             menu.add_row(key, desc)
         
+        # Check for updates
+        update_indicator = self.check_for_updates()
+        
+        # Display version and update indicator
+        version_text = f"[dim]PolyTerm v{polyterm.__version__}[/dim]{update_indicator}"
+        
         # No panel borders - just print menu directly
         self.console.print("[bold yellow]Main Menu[/bold yellow]")
+        self.console.print(version_text)
         self.console.print()
         self.console.print(menu)
         self.console.print()
