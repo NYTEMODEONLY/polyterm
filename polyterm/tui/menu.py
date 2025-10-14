@@ -75,18 +75,23 @@ class MainMenu:
         for key, desc in menu_items:
             menu.add_row(key, desc)
         
-        # Adjust panel width based on terminal width
-        panel_width = min(width - 4, 70) if width >= 60 else width - 2
+        if width >= 60:
+            # Use panel for wider terminals
+            panel_width = min(width - 4, 70)
+            panel = Panel(
+                menu,
+                title="[bold yellow]Main Menu[/bold yellow]",
+                border_style="green",
+                padding=(1, 1),
+                width=panel_width
+            )
+            self.console.print(panel)
+        else:
+            # No panel for narrow terminals - just print menu directly
+            self.console.print("[bold yellow]Main Menu[/bold yellow]")
+            self.console.print()
+            self.console.print(menu)
         
-        panel = Panel(
-            menu,
-            title="[bold yellow]Main Menu[/bold yellow]",
-            border_style="green",
-            padding=(1, 1),
-            width=panel_width
-        )
-        
-        self.console.print(panel)
         self.console.print()
     
     def get_choice(self) -> str:
