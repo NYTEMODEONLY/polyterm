@@ -20,7 +20,7 @@ def analytics_screen(console: RichConsole):
     console.print("[bold]Select Analytics Type:[/bold]")
     console.print()
     
-    menu = Table.grid(padding=(0, 2))
+    menu = Table.grid(padding=(0, 1))
     menu.add_column(style="cyan bold", justify="right", width=3)
     menu.add_column(style="white")
     

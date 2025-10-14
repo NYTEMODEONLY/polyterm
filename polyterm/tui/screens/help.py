@@ -19,8 +19,8 @@ def help_screen(console: RichConsole):
     console.print("[bold yellow]Keyboard Shortcuts:[/bold yellow]")
     console.print()
     
-    shortcuts = Table(show_header=False, box=None, padding=(0, 2))
-    shortcuts.add_column(style="cyan bold", width=10)
+    shortcuts = Table(show_header=False, box=None, padding=(0, 1))
+    shortcuts.add_column(style="cyan bold", width=8)
     shortcuts.add_column(style="white")
     
     shortcuts.add_row("1-7", "Navigate to menu option")
@@ -36,7 +36,7 @@ def help_screen(console: RichConsole):
     console.print()
     
     features = Table(show_header=False, box=None, padding=(0, 1))
-    features.add_column(style="cyan bold", width=3)
+    features.add_column(style="cyan bold", width=2)
     features.add_column(style="white")
     
     features.add_row("📊", "[bold]Monitor:[/bold] Real-time market tracking with customizable refresh rates")
