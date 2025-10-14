@@ -86,7 +86,24 @@ def monitor(ctx, limit, category, refresh, active_only):
                 title = market.get("question", market.get("title", ""))[:45]
                 
                 # Get probability and volume from market data
-                price = float(market.get('outcomePrices', ['0', '0'])[0] if isinstance(market.get('outcomePrices'), list) else 0)
+                # outcomePrices can be at top level or nested in markets[0]
+                outcome_prices = market.get('outcomePrices')
+                if not outcome_prices and market.get('markets') and len(market.get('markets', [])) > 0:
+                    outcome_prices = market['markets'][0].get('outcomePrices')
+                
+                # Parse outcome prices (can be string "[\"0.5\", \"0.5\"]" or list)
+                if isinstance(outcome_prices, str):
+                    import json
+                    try:
+                        outcome_prices = json.loads(outcome_prices)
+                    except:
+                        outcome_prices = None
+                
+                if outcome_prices and isinstance(outcome_prices, list) and len(outcome_prices) > 0:
+                    price = float(outcome_prices[0])
+                else:
+                    price = 0
+                
                 probability = price * 100 if price else 0
                 volume_24hr = float(market.get('volume24hr', 0) or 0)
                 
@@ -99,7 +116,12 @@ def monitor(ctx, limit, category, refresh, active_only):
                             end_date = date_parser.parse(end_date_str)
                         else:
                             end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
-                        hours_until = (end_date - now).total_seconds() / 3600
+                        
+                        # Make now timezone-aware to match end_date
+                        from datetime import timezone
+                        now_utc = datetime.now(timezone.utc)
+                        
+                        hours_until = (end_date - now_utc).total_seconds() / 3600
                         if hours_until > 24:
                             days_until = int(hours_until / 24)
                             data_age = f"{days_until}d"
@@ -107,7 +129,7 @@ def monitor(ctx, limit, category, refresh, active_only):
                             data_age = f"{int(hours_until)}h"
                         else:
                             data_age = "[red]Ended[/red]"
-                    except:
+                    except Exception as e:
                         data_age = "?"
                 
                 # Format probability with color

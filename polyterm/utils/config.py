@@ -108,6 +108,10 @@ class Config:
         return self.get("api.gamma_base_url", "https://gamma-api.polymarket.com")
     
     @property
+    def gamma_markets_endpoint(self) -> str:
+        return self.get("api.gamma_markets_endpoint", "/events")
+    
+    @property
     def clob_endpoint(self) -> str:
         return self.get("api.clob_endpoint", "wss://clob.polymarket.com/ws")
     
