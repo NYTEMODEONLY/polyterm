@@ -4,7 +4,7 @@ import click
 from ..utils.config import Config
 
 
-@click.group()
+@click.group(invoke_without_command=True)
 @click.version_option(version="0.1.0")
 @click.pass_context
 def cli(ctx):
@@ -15,6 +15,12 @@ def cli(ctx):
     # Initialize config and pass to subcommands
     ctx.ensure_object(dict)
     ctx.obj["config"] = Config()
+    
+    # If no subcommand, launch TUI
+    if ctx.invoked_subcommand is None:
+        from ..tui.controller import TUIController
+        tui = TUIController()
+        tui.run()
 
 
 # Import commands

@@ -33,6 +33,66 @@ polyterm monitor --limit 10
 └─────────────────────────────────────────┴────────────┴──────────────┴──────────┘
 ```
 
+## 🎨 Terminal User Interface (TUI)
+
+PolyTerm now features a **beautiful interactive menu** for easy navigation! Simply run:
+
+```bash
+polyterm
+```
+
+And you'll see an ASCII logo and main menu with guided workflows:
+
+```
+╔═══════════════════════════════════════════════════════════╗
+║                                                           ║
+║   ██████╗  ██████╗ ██╗  ██╗   ██╗████████╗███████╗██████╗ ███╗   ███╗
+║   ██╔══██╗██╔═══██╗██║  ╚██╗ ██╔╝╚══██╔══╝██╔════╝██╔══██╗████╗ ████║
+║   ██████╔╝██║   ██║██║   ╚████╔╝    ██║   █████╗  ██████╔╝██╔████╔██║
+║   ██╔═══╝ ██║   ██║██║    ╚██╔╝     ██║   ██╔══╝  ██╔══██╗██║╚██╔╝██║
+║   ██║     ╚██████╔╝███████╗██║      ██║   ███████╗██║  ██║██║ ╚═╝ ██║
+║   ╚═╝      ╚═════╝ ╚══════╝╚═╝      ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝
+║                                                           ║
+║         Terminal-Based Monitoring for PolyMarket         ║
+║                   Track. Analyze. Profit.                ║
+║                                                           ║
+╚═══════════════════════════════════════════════════════════╝
+
+                      Main Menu
+    ┌─────────────────────────────────────────────────┐
+    │ 1  📊 Monitor Markets - Real-time market tracking
+    │ 2  🐋 Whale Activity - High-volume markets
+    │ 3  👁  Watch Market - Track specific market
+    │ 4  📈 Market Analytics - Trends and predictions
+    │ 5  💼 Portfolio - View your positions
+    │ 6  📤 Export Data - Export to JSON/CSV
+    │ 7  ⚙️  Settings - Configuration
+    │
+    │ h  ❓ Help - View documentation
+    │ q  🚪 Quit - Exit PolyTerm
+    └─────────────────────────────────────────────────┘
+
+Select an option:
+```
+
+### Navigation
+- **Number keys (1-7)**: Navigate to features
+- **Letter shortcuts**: `m` (monitor), `w` (whales), `a` (analytics), `p` (portfolio), `e` (export), `s` (settings)
+- **Help**: Press `h` or `?`
+- **Quit**: Press `q`
+- **All options have guided workflows** - just follow the prompts!
+
+### CLI Commands Still Work
+Power users can still use direct commands:
+```bash
+polyterm monitor --limit 10
+polyterm whales --hours 24
+polyterm watch <market-id>
+polyterm export --market <id> --format json
+```
+
+**See [TUI_GUIDE.md](TUI_GUIDE.md) for a complete guide to the Terminal User Interface.**
+
 ## ✨ Features
 
 ### Core Functionality
@@ -277,11 +337,17 @@ polyterm/
 │   ├── api/           # API clients (Gamma, CLOB, Subgraph, Aggregator)
 │   ├── core/          # Core logic (Scanner, Alerts, Analytics)
 │   ├── cli/           # CLI commands
+│   ├── tui/           # Terminal User Interface (TUI)
+│   │   ├── screens/   # TUI screens (Monitor, Whales, etc.)
+│   │   ├── controller.py
+│   │   ├── menu.py
+│   │   └── logo.py
 │   └── utils/         # Utilities (Config, Formatting)
 ├── tests/
 │   ├── test_api/      # API client tests
 │   ├── test_core/     # Core logic tests
 │   ├── test_cli/      # CLI tests
+│   ├── test_tui/      # TUI tests
 │   └── test_live_data/ # Live data validation tests
 ├── examples/          # Example scripts
 └── docs/             # Documentation
@@ -388,6 +454,7 @@ polyterm portfolio --wallet YOUR_ADDRESS
 
 ## 📖 Documentation
 
+- **[TUI_GUIDE.md](TUI_GUIDE.md)** - Complete Terminal User Interface guide
 - **[API_SETUP.md](API_SETUP.md)** - API documentation and troubleshooting
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** - Contribution guidelines
 - **[examples/](examples/)** - Example scripts and use cases
