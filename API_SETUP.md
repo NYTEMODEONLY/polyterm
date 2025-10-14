@@ -23,12 +23,13 @@ PolyTerm has been updated to use the correct PolyMarket API endpoints that retur
 - **Status**: ✅ Working (fallback when Gamma fails)
 - **Note**: No volume data in response
 
-### ⚠️ Subgraph GraphQL
-**For historical on-chain data**
+### ❌ Subgraph GraphQL (Deprecated)
+**Endpoint has been removed**
 
 - **URL**: `https://api.thegraph.com/subgraphs/name/polymarket/matic-markets`
-- **Use**: Historical trades, on-chain events
-- **Status**: For supplementary data only
+- **Status**: ❌ Removed by The Graph (returns schema fetch error)
+- **Impact**: Portfolio tracking and individual trade history unavailable
+- **Workaround**: PolyTerm uses Gamma API for whale detection via volume analysis
 
 ## Data Validation
 

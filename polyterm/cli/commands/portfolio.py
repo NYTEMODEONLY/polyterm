@@ -48,6 +48,13 @@ def portfolio(ctx, wallet):
         # Get portfolio analytics
         portfolio_data = analytics.get_portfolio_analytics(wallet)
         
+        # Check for error from graceful degradation
+        if portfolio_data.get("error"):
+            console.print(f"[yellow]{portfolio_data['error']}[/yellow]")
+            if portfolio_data.get("note"):
+                console.print(f"[dim]{portfolio_data['note']}[/dim]")
+            return
+        
         if not portfolio_data.get("positions"):
             console.print("[yellow]No positions found[/yellow]")
             return

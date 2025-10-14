@@ -14,6 +14,7 @@ class WhaleActivity:
     """Represents a whale trade or activity"""
     
     def __init__(self, trade_data: Dict[str, Any]):
+        self.data = trade_data  # Store original data
         self.trader = trade_data.get("trader", "")
         self.market_id = trade_data.get("market", "")
         self.outcome = trade_data.get("outcome", "")
@@ -63,34 +64,74 @@ class AnalyticsEngine:
         min_notional: float = 10000,
         lookback_hours: int = 24,
     ) -> List[WhaleActivity]:
-        """Track large trades (whale activity)
+        """Track whale activity using volume spikes (individual trades not available from API)
         
         Args:
-            min_notional: Minimum trade size to be considered whale
+            min_notional: Minimum volume spike to be considered whale activity
             lookback_hours: Hours to look back
         
         Returns:
-            List of whale activities
+            List of whale activities (volume-based detection)
         """
         try:
-            # Get whale trades from subgraph
-            whale_trades = self.subgraph_client.get_whale_trades(
-                min_notional=min_notional,
-                first=100,
-            )
+            # Get active markets from Gamma
+            markets = self.gamma_client.get_markets(limit=50, active=True, closed=False)
             
             activities = []
-            cutoff_time = int(time.time()) - (lookback_hours * 3600)
+            current_time = int(time.time())
             
-            for trade in whale_trades:
-                if int(trade.get("timestamp", 0)) >= cutoff_time:
-                    activity = WhaleActivity(trade)
-                    activities.append(activity)
+            for market in markets:
+                market_id = market.get('id')
+                if not market_id:
+                    continue
+                
+                # Check for volume spikes as proxy for whale activity
+                volume_24hr = float(market.get('volume24hr', 0) or 0)
+                
+                # If significant volume in last 24hrs, could indicate whale activity
+                if volume_24hr >= min_notional:
+                    # Get nested market data for price info
+                    nested_markets = market.get('markets', [])
+                    last_price = 0
+                    outcome = "Unknown"
                     
-                    # Store in known whales
-                    self.known_whales[activity.trader].append(activity)
+                    if nested_markets:
+                        nested = nested_markets[0]
+                        last_price = float(nested.get('lastTradePrice', 0) or 0)
+                        prices = nested.get('outcomePrices', [])
+                        
+                        # Handle outcomePrices which might be a JSON string
+                        if isinstance(prices, str):
+                            import json
+                            try:
+                                prices = json.loads(prices)
+                            except:
+                                prices = []
+                        
+                        if prices and len(prices) > 0:
+                            try:
+                                outcome = "YES" if float(prices[0]) > 0.5 else "NO"
+                            except:
+                                outcome = "Unknown"
+                    
+                    # Store market title for display
+                    market_title = market.get('title', market.get('question', 'Unknown'))
+                    
+                    # Create activity based on volume spike
+                    activity = WhaleActivity({
+                        'trader': 'Volume Spike',  # Can't determine individual trader
+                        'market': market_id,
+                        'outcome': outcome,
+                        'shares': volume_24hr / (last_price if last_price > 0 else 1),
+                        'price': last_price,
+                        'notional': volume_24hr,
+                        'timestamp': current_time,
+                        'transactionHash': '',
+                        '_market_title': market_title,  # Cache title
+                    })
+                    activities.append(activity)
             
-            return activities
+            return sorted(activities, key=lambda x: x.notional, reverse=True)
             
         except Exception as e:
             print(f"Error tracking whale trades: {e}")
@@ -333,15 +374,16 @@ class AnalyticsEngine:
             }
     
     def get_portfolio_analytics(self, wallet_address: str) -> Dict[str, Any]:
-        """Get analytics for a user's portfolio
+        """Get analytics for a user's portfolio (limited without Subgraph)
         
         Args:
             wallet_address: User wallet address
         
         Returns:
-            Portfolio analytics
+            Portfolio analytics with available data
         """
         try:
+            # Try Subgraph first (may not work if endpoint removed)
             positions = self.subgraph_client.get_user_positions(wallet_address)
             
             total_value = 0
@@ -368,8 +410,17 @@ class AnalyticsEngine:
             }
             
         except Exception as e:
-            print(f"Error getting portfolio analytics: {e}")
-            return {}
+            # Graceful degradation - return empty portfolio with error message
+            return {
+                "wallet_address": wallet_address,
+                "total_positions": 0,
+                "total_value": 0,
+                "total_pnl": 0,
+                "roi_percent": 0,
+                "positions": [],
+                "error": "Portfolio data unavailable - Subgraph API endpoint has been removed",
+                "note": "Historical position tracking requires on-chain data access",
+            }
     
     def detect_market_manipulation(self, market_id: str) -> Dict[str, Any]:
         """Detect potential market manipulation patterns

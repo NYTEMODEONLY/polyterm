@@ -52,16 +52,15 @@ def replay(ctx, market, hours, speed, trades):
         
         console.print(f"[green]Replaying:[/green] {market_title}\n")
         
-        # Get historical trades
+        # Get historical trades from Gamma API
         import time as time_module
         end_time = int(time_module.time())
         start_time = end_time - (hours * 3600)
         
-        historical_trades = subgraph_client.get_market_trades(
+        # Use Gamma API instead of Subgraph
+        historical_trades = gamma_client.get_market_trades(
             market_id,
-            first=1000,
-            order_by="timestamp",
-            order_direction="asc",
+            limit=1000,
         )
         
         # Filter by time window
@@ -69,6 +68,9 @@ def replay(ctx, market, hours, speed, trades):
             t for t in historical_trades
             if start_time <= int(t.get("timestamp", 0)) <= end_time
         ]
+        
+        # Sort by timestamp ascending for replay
+        historical_trades = sorted(historical_trades, key=lambda t: int(t.get("timestamp", 0)))
         
         if not historical_trades:
             console.print("[yellow]No historical data found for this time period[/yellow]")

@@ -20,7 +20,8 @@ class SubgraphClient:
         self.endpoint = endpoint
         if HAS_GQL:
             transport = RequestsHTTPTransport(url=endpoint)
-            self.client = Client(transport=transport, fetch_schema_from_transport=True)
+            # Don't fetch schema - endpoint may be deprecated
+            self.client = Client(transport=transport, fetch_schema_from_transport=False)
         else:
             self.client = None
     

@@ -51,6 +51,20 @@ polyterm monitor --limit 10
 - **Smart Fallback** - Automatic failover if one API is down
 - **Data Freshness** - Visual indicators showing market end dates
 
+## ⚠️ Known Limitations
+
+**Due to PolyMarket API constraints, some features have limitations:**
+
+- **Portfolio Tracking**: The Subgraph API has been removed by The Graph. Portfolio tracking shows an informative message but cannot access historical position data.
+
+- **Whale Detection**: Individual trade data is not exposed by current APIs. The `whales` command identifies high-volume markets (significant 24hr trading activity) as a proxy for whale activity.
+
+- **Historical Replay**: The `replay` command is limited by available market data. Individual historical trades are not accessible from current API endpoints.
+
+- **Data Granularity**: APIs provide market snapshots and aggregated data, not tick-by-tick real-time updates.
+
+**All core monitoring, alerting, and market discovery features work fully with live 2025 data.**
+
 ## 📚 Commands
 
 ### Monitor Markets

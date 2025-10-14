@@ -37,8 +37,9 @@ def whales(ctx, min_amount, market, hours, limit):
     # Initialize analytics
     analytics = AnalyticsEngine(gamma_client, clob_client, subgraph_client)
     
-    console.print(f"[cyan]Tracking whale trades ≥ ${min_amount:,.0f}[/cyan]")
-    console.print(f"[cyan]Lookback period: {hours} hours[/cyan]\n")
+    console.print(f"[cyan]Tracking high-volume markets ≥ ${min_amount:,.0f}[/cyan]")
+    console.print(f"[cyan]Period: Last {hours} hours[/cyan]")
+    console.print(f"[dim]Note: Showing markets with significant 24hr volume (individual trades not available from API)[/dim]\n")
     
     try:
         # Get whale trades
@@ -59,35 +60,25 @@ def whales(ctx, min_amount, market, hours, limit):
             return
         
         # Create table
-        table = Table(title=f"Whale Trades (Last {hours}h)")
+        table = Table(title=f"High Volume Markets (Last {hours}h)")
         
-        table.add_column("Time", style="cyan")
-        table.add_column("Trader", style="yellow")
-        table.add_column("Market", style="green", no_wrap=False, max_width=40)
-        table.add_column("Side", justify="center")
-        table.add_column("Size", justify="right", style="magenta")
-        table.add_column("Price", justify="right")
-        table.add_column("Notional", justify="right", style="bold")
+        table.add_column("Market", style="green", no_wrap=False, max_width=50)
+        table.add_column("Trend", justify="center")
+        table.add_column("Last Price", justify="right")
+        table.add_column("24h Volume", justify="right", style="bold yellow")
         
         for trade in whale_trades:
-            # Get market info
-            try:
-                market_data = gamma_client.get_market(trade.market_id)
-                market_name = market_data.get("question", "Unknown")[:40]
-            except:
-                market_name = trade.market_id[:20]
+            # Get market name from cached data or fallback
+            market_name = trade.data.get('_market_title', trade.market_id)[:50]
             
-            # Format side
-            side_style = "green" if trade.outcome == "YES" else "red"
-            side_text = f"[{side_style}]{trade.outcome}[/{side_style}]"
+            # Format trend/outcome
+            trend_style = "green" if trade.outcome == "YES" else "red" if trade.outcome == "NO" else "dim"
+            trend_text = f"[{trend_style}]{trade.outcome}[/{trend_style}]"
             
             table.add_row(
-                format_timestamp(trade.timestamp),
-                f"{trade.trader[:8]}...",
                 market_name,
-                side_text,
-                format_volume(trade.shares, use_short=False),
-                f"${trade.price:.4f}",
+                trend_text,
+                f"${trade.price:.3f}" if trade.price > 0 else "[dim]N/A[/dim]",
                 f"${trade.notional:,.0f}",
             )
         
@@ -95,12 +86,11 @@ def whales(ctx, min_amount, market, hours, limit):
         
         # Summary
         total_volume = sum(t.notional for t in whale_trades)
-        unique_traders = len(set(t.trader for t in whale_trades))
         
         console.print(f"\n[bold]Summary:[/bold]")
-        console.print(f"  Total trades: {len(whale_trades)}")
-        console.print(f"  Total volume: ${total_volume:,.0f}")
-        console.print(f"  Unique traders: {unique_traders}")
+        console.print(f"  High-volume markets: {len(whale_trades)}")
+        console.print(f"  Total 24hr volume: ${total_volume:,.0f}")
+        console.print(f"  Average per market: ${total_volume/len(whale_trades):,.0f}" if whale_trades else "N/A")
     
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
