@@ -5,43 +5,36 @@ A powerful, terminal-based monitoring tool for PolyMarket prediction markets. Tr
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Live Data](https://img.shields.io/badge/Data-Live%202025-brightgreen.svg)](API_SETUP.md)
+[![PyPI](https://img.shields.io/badge/PyPI-polyterm-blue.svg)](https://pypi.org/project/polyterm/)
 
 ## 🚀 Quick Start
 
+### Option 1: One-Command Install (Recommended)
+```bash
+curl -sSL https://raw.githubusercontent.com/NYTEMODEONLY/polyterm/main/install.sh | bash
+```
+
+### Option 2: Manual Install
 ```bash
 # Clone and install
 git clone https://github.com/NYTEMODEONLY/polyterm.git
 cd polyterm
-pip install -e .
-
-# Start monitoring
-polyterm monitor --limit 10
+./install.sh
 ```
 
-**That's it!** PolyTerm will start showing you the most active prediction markets with real-time data.
-
-### What You'll See
-
-```
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━┓
-┃ Market                                  ┃ Probability ┃ 24h Volume   ┃ Data Age ┃
-┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━┩
-│ What price will Ethereum hit in 2025?  │      58.2% │   $203,519   │    45d   │
-│ What price will Bitcoin hit in 2025?   │      42.1% │   $122,038   │    45d   │
-│ Largest Company end of 2025?           │      31.5% │   $109,651   │    75d   │
-│ How many Fed rate cuts in 2025?        │      28.9% │   $106,968   │    75d   │
-└─────────────────────────────────────────┴────────────┴──────────────┴──────────┘
+### Option 3: Direct from PyPI
+```bash
+pipx install polyterm
 ```
 
-## 🎨 Terminal User Interface (TUI)
-
-PolyTerm now features a **beautiful interactive menu** for easy navigation! Simply run:
-
+**That's it!** Now you can run PolyTerm from anywhere:
 ```bash
 polyterm
 ```
 
-And you'll see an ASCII logo and main menu with guided workflows:
+## 🎨 Interactive Terminal Interface (TUI)
+
+PolyTerm features a beautiful interactive menu for easy navigation:
 
 ```
 ╔═══════════════════════════════════════════════════════════╗
@@ -58,456 +51,277 @@ And you'll see an ASCII logo and main menu with guided workflows:
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝
 
-                      Main Menu
-    ┌─────────────────────────────────────────────────┐
-    │ 1  📊 Monitor Markets - Real-time market tracking
-    │ 2  🐋 Whale Activity - High-volume markets
-    │ 3  👁  Watch Market - Track specific market
-    │ 4  📈 Market Analytics - Trends and predictions
-    │ 5  💼 Portfolio - View your positions
-    │ 6  📤 Export Data - Export to JSON/CSV
-    │ 7  ⚙️  Settings - Configuration
-    │
-    │ h  ❓ Help - View documentation
-    │ q  🚪 Quit - Exit PolyTerm
-    └─────────────────────────────────────────────────┘
-
-Select an option:
+┌─────────────────────────────────────────────────┐
+│ 1  📊 Monitor Markets - Real-time market tracking
+│ 2  🐋 Whale Activity - High-volume markets
+│ 3  👁  Watch Market - Track specific market
+│ 4  📈 Market Analytics - Trends and predictions
+│ 5  💼 Portfolio - View your positions
+│ 6  📤 Export Data - Export to JSON/CSV
+│ 7  ⚙️  Settings - Configuration
+│
+│ h  ❓ Help - View documentation
+│ q  🚪 Quit - Exit PolyTerm
+└─────────────────────────────────────────────────┘
 ```
 
 ### Navigation
-- **Number keys (1-7)**: Navigate to features
-- **Letter shortcuts**: `m` (monitor), `w` (whales), `a` (analytics), `p` (portfolio), `e` (export), `s` (settings)
+- **Numbers**: Press `1` through `7` for features
+- **Letters**: `m` (monitor), `w` (whales), `a` (analytics), `p` (portfolio), `e` (export), `s` (settings)
 - **Help**: Press `h` or `?`
 - **Quit**: Press `q`
-- **All options have guided workflows** - just follow the prompts!
 
-### CLI Commands Still Work
-Power users can still use direct commands:
+## 📊 Features
+
+### 1. Real-Time Market Monitoring
+Track live prediction markets with automatic updates:
+
 ```bash
 polyterm monitor --limit 10
-polyterm whales --hours 24
-polyterm watch <market-id>
+```
+
+**What you'll see:**
+```
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━┓
+┃ Market                                  ┃ Probability ┃ 24h Volume   ┃ Data Age ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━┩
+│ What price will Ethereum hit in 2025?  │      58.2% │   $203,519   │    45d   │
+│ What price will Bitcoin hit in 2025?   │      42.1% │   $122,038   │    45d   │
+│ Largest Company end of 2025?           │      31.5% │   $109,651   │    75d   │
+│ How many Fed rate cuts in 2025?        │      28.9% │   $106,968   │    75d   │
+└─────────────────────────────────────────┴────────────┴──────────────┴──────────┘
+```
+
+### 2. Whale Activity Detection
+Identify high-volume markets (proxy for whale activity):
+
+```bash
+polyterm whales --hours 24 --min-amount 50000
+```
+
+**Output:**
+```
+High Volume Markets (Last 24h)
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━┓
+┃ Market                               ┃ Trend ┃ Last Price ┃ 24h Volume ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━┩
+│ Highest grossing movie in 2025?      │  NO   │     $0.073 │ $1,143,129 │
+│ What price will Ethereum hit in 2025?│  NO   │     $0.180 │   $198,711 │
+└──────────────────────────────────────┴───────┴────────────┴────────────┘
+```
+
+### 3. Market Watching & Alerts
+Track specific markets with custom alerts:
+
+```bash
+polyterm watch <market-id> --threshold 5
+```
+
+### 4. Data Export
+Export market data for analysis:
+
+```bash
 polyterm export --market <id> --format json
+polyterm export --market <id> --format csv
 ```
 
-**See [TUI_GUIDE.md](TUI_GUIDE.md) for a complete guide to the Terminal User Interface.**
+### 5. Configuration Management
+Customize PolyTerm settings:
 
-## ✨ Features
-
-### Core Functionality
-- **📊 Real-time Market Monitoring** - Track probability shifts, volume spikes, and market movements
-- **🔔 Custom Alerts** - Get notified of significant market changes based on your thresholds
-- **🐋 Whale Watching** - Detect and track large trades as they happen
-- **📈 Advanced Analytics** - Historical trends, correlations, and predictive signals
-- **💼 Portfolio Tracking** - Monitor your positions and P&L in real-time
-- **📤 Data Export** - Export to JSON/CSV for further analysis
-
-### Live Data Features ✅
-- **100% Current Data** - All markets from 2025 or later
-- **Real Volume** - Accurate 24hr trading volumes ($100K+)
-- **Auto-Validation** - Automatically rejects stale or closed markets
-- **Multi-Source** - Integrates Gamma, CLOB, and Subgraph APIs
-- **Smart Fallback** - Automatic failover if one API is down
-- **Data Freshness** - Visual indicators showing market end dates
-
-## ⚠️ Known Limitations
-
-**Due to PolyMarket API constraints, some features have limitations:**
-
-- **Portfolio Tracking**: The Subgraph API has been removed by The Graph. Portfolio tracking shows an informative message but cannot access historical position data.
-
-- **Whale Detection**: Individual trade data is not exposed by current APIs. The `whales` command identifies high-volume markets (significant 24hr trading activity) as a proxy for whale activity.
-
-- **Historical Replay**: The `replay` command is limited by available market data. Individual historical trades are not accessible from current API endpoints.
-
-- **Data Granularity**: APIs provide market snapshots and aggregated data, not tick-by-tick real-time updates.
-
-**All core monitoring, alerting, and market discovery features work fully with live 2025 data.**
-
-## 📚 Commands
-
-### Monitor Markets
 ```bash
-# Basic monitoring
-polyterm monitor
-
-# Limit markets shown
-polyterm monitor --limit 20
-
-# Filter by category
-polyterm monitor --category politics
-
-# Custom refresh rate
-polyterm monitor --refresh 5
+polyterm config --list
+polyterm config --set alerts.probability_threshold 10.0
+polyterm config --set display.refresh_rate 5
 ```
 
-### Watch Specific Markets
+## 🔧 Command Line Interface
+
+For power users, all features are available via CLI commands:
+
 ```bash
-# Watch markets with alerts
-polyterm watch MARKET_ID1 MARKET_ID2
+# Monitor markets
+polyterm monitor --limit 20 --refresh 3
 
-# Set custom thresholds
-polyterm watch MARKET_ID --prob-threshold 15 --vol-threshold 100
+# Track whale activity
+polyterm whales --hours 48 --min-amount 100000
+
+# Watch specific market
+polyterm watch <market-id> --threshold 3 --interval 30
+
+# Export data
+polyterm export --market <id> --format json --output data.json
+
+# Configuration
+polyterm config --get api.gamma_base_url
+polyterm config --set data_validation.min_volume_threshold 1000.0
+
+# Portfolio (limited by API changes)
+polyterm portfolio --wallet <address>
+
+# Replay historical data
+polyterm replay <market-id> --hours 24
 ```
 
-### Track Whale Activity
-```bash
-# Monitor large trades
-polyterm whales
+## ⚙️ Configuration
 
-# Set minimum trade size
-polyterm whales --min-size 10000
-
-# Track last 24 hours
-polyterm whales --hours 24
-```
-
-### Historical Analysis
-```bash
-# Replay market history
-polyterm replay MARKET_ID --hours 24
-
-# Adjust playback speed
-polyterm replay MARKET_ID --hours 48 --speed 2.0
-```
-
-### Portfolio Management
-```bash
-# View your positions
-polyterm portfolio --wallet YOUR_ADDRESS
-
-# Track P&L
-polyterm portfolio --show-pnl
-```
-
-### Data Export
-```bash
-# Export to JSON
-polyterm export markets.json --format json
-
-# Export to CSV
-polyterm export markets.csv --format csv
-
-# Export specific markets
-polyterm export data.json --markets MARKET_ID1,MARKET_ID2
-```
-
-### Configuration
-```bash
-# View current config
-polyterm config --show
-
-# Set values
-polyterm config --set alerts.probability_threshold 15
-polyterm config --set data_validation.min_volume_threshold 1.0
-```
-
-## 🔧 Configuration
-
-PolyTerm uses `~/.polyterm/config.toml` for configuration:
+PolyTerm stores configuration in `~/.polyterm/config.toml`:
 
 ```toml
-[alerts]
-probability_threshold = 10.0  # Alert on 10%+ probability shifts
-volume_threshold = 50.0       # Alert on 50%+ volume spikes
-check_interval = 60           # Check every 60 seconds
-
 [api]
 gamma_base_url = "https://gamma-api.polymarket.com"
-gamma_markets_endpoint = "/events"  # Live data endpoint
+gamma_markets_endpoint = "/events"
 clob_rest_endpoint = "https://clob.polymarket.com"
 clob_endpoint = "wss://clob.polymarket.com/ws"
-subgraph_endpoint = "https://api.thegraph.com/subgraphs/name/polymarket/matic-markets"
-
-[wallet]
-address = ""  # Your wallet address for portfolio tracking
-
-[display]
-use_colors = true
-max_markets = 20
-refresh_rate = 2
 
 [data_validation]
-max_market_age_hours = 24      # Reject markets older than 24 hours
-require_volume_data = true     # Only show markets with volume
-min_volume_threshold = 0.01    # Minimum 24hr volume in USD
-reject_closed_markets = true   # Filter out closed markets
-enable_api_fallback = true     # Use fallback APIs if primary fails
+max_market_age_hours = 24
+require_volume_data = true
+min_volume_threshold = 0.01
+reject_closed_markets = true
+enable_api_fallback = true
+
+[alerts]
+probability_threshold = 5.0
+check_interval = 60
+
+[display]
+refresh_rate = 2
+max_markets = 20
 ```
 
-## 📊 Data Sources & API
+## 📡 Live Data Verification
 
-PolyTerm integrates with multiple PolyMarket APIs for comprehensive data:
+PolyTerm uses **verified live 2025 data** from multiple sources:
 
-### Primary Sources
-1. **Gamma Markets API** (`/events`) - Live markets with volume data ✅
-2. **CLOB API** (`/sampling-markets`) - Current markets (fallback)
-3. **Subgraph** (The Graph) - On-chain historical data
+### ✅ Working APIs (October 2025)
+- **Gamma API** (`/events`): Primary source with volume data
+- **CLOB API** (`/sampling-markets`): Fallback for current markets
+- **Subgraph**: Enhanced filtering for on-chain data
+
+### ❌ Deprecated APIs
+- **Subgraph GraphQL**: Removed by The Graph (affects portfolio tracking)
 
 ### Data Validation
-All data is automatically validated for:
-- ✅ Current year (2025+)
-- ✅ Active/open markets only
-- ✅ Real trading volume
-- ✅ Recent timestamps
-- ✅ Market end dates in future
-
-### API Fallback System
-```
-Primary: Gamma /events (has volume) 
-    ↓ (if fails)
-Fallback: CLOB /sampling-markets (current markets)
-    ↓ (if fails)
-Enrichment: Subgraph (on-chain data)
-```
-
-**See [API_SETUP.md](API_SETUP.md) for detailed API documentation and troubleshooting.**
+- ✅ All markets from 2025 or later
+- ✅ Real trading volume data
+- ✅ Active markets only
+- ✅ Automatic freshness checks
+- ✅ Multi-source fallback system
 
 ## 🧪 Testing
 
+Run the comprehensive test suite:
+
 ```bash
-# Run all tests
+# Full test suite
 pytest
 
-# Run with coverage
-pytest --cov=polyterm tests/
-
-# Test live data integration
+# Live data tests
 pytest tests/test_live_data/ -v
 
-# Critical tests only
-pytest tests/test_live_data/test_integration.py::test_critical_no_old_markets_in_results -v
+# TUI tests
+pytest tests/test_tui/ -v
+
+# All commands test
+./test_all_commands.sh
 ```
 
-### Verify Live Data
-```bash
-python3 << 'EOF'
-from polyterm.api.gamma import GammaClient
-from polyterm.api.aggregator import APIAggregator
-from polyterm.api.clob import CLOBClient
-from polyterm.api.subgraph import SubgraphClient
+## 📋 Known Limitations
 
-gamma = GammaClient()
-clob = CLOBClient()
-subgraph = SubgraphClient()
-aggregator = APIAggregator(gamma, clob, subgraph)
+### API-Level Constraints
+1. **No Individual Trade Data**: PolyMarket APIs don't expose individual trades
+   - Workaround: Volume-based whale detection
 
-# Get top 5 markets
-markets = aggregator.get_top_markets_by_volume(limit=5)
+2. **No Portfolio History**: Subgraph API removed
+   - Impact: Portfolio tracking unavailable
+   - Workaround: None available (requires on-chain access)
 
-print("🔴 TOP 5 MOST ACTIVE MARKETS:")
-for i, m in enumerate(markets, 1):
-    vol = float(m.get('volume24hr', 0) or 0)
-    print(f"{i}. {m.get('question', 'Unknown')[:60]}")
-    print(f"   24hr Volume: ${vol:,.2f}\n")
-EOF
-```
+3. **Limited Historical Data**: Gamma API provides snapshots
+   - Impact: Replay command limited
+   - Workaround: Uses available Gamma data
 
-Expected output:
-```
-🔴 TOP 5 MOST ACTIVE MARKETS:
-1. What price will Ethereum hit in 2025?
-   24hr Volume: $203,519.22
-
-2. What price will Bitcoin hit in 2025?
-   24hr Volume: $122,038.38
-...
-```
+### What Still Works Perfectly
+- ✅ Real-time market monitoring
+- ✅ Live price and probability tracking
+- ✅ Volume analysis
+- ✅ Market discovery
+- ✅ Custom alerts
+- ✅ Data export
+- ✅ Configuration management
 
 ## 🛠️ Development
 
 ### Setup Development Environment
 ```bash
-# Clone repository
 git clone https://github.com/NYTEMODEONLY/polyterm.git
 cd polyterm
-
-# Install in development mode
-pip install -e .
-
-# Install development dependencies
-pip install pytest pytest-asyncio pytest-cov pytest-mock responses
+python -m venv venv
+source venv/bin/activate
+pip install -e ".[dev]"
 ```
 
-### Project Structure
-```
-polyterm/
-├── polyterm/
-│   ├── api/           # API clients (Gamma, CLOB, Subgraph, Aggregator)
-│   ├── core/          # Core logic (Scanner, Alerts, Analytics)
-│   ├── cli/           # CLI commands
-│   ├── tui/           # Terminal User Interface (TUI)
-│   │   ├── screens/   # TUI screens (Monitor, Whales, etc.)
-│   │   ├── controller.py
-│   │   ├── menu.py
-│   │   └── logo.py
-│   └── utils/         # Utilities (Config, Formatting)
-├── tests/
-│   ├── test_api/      # API client tests
-│   ├── test_core/     # Core logic tests
-│   ├── test_cli/      # CLI tests
-│   ├── test_tui/      # TUI tests
-│   └── test_live_data/ # Live data validation tests
-├── examples/          # Example scripts
-└── docs/             # Documentation
-```
-
-### Running Tests
+### Run Tests
 ```bash
-# Unit tests
-pytest tests/test_api/ -v
-pytest tests/test_core/ -v
-
-# Integration tests (requires network)
-pytest tests/test_live_data/ -v
-
-# Specific test
-pytest tests/test_live_data/test_integration.py -v -k "test_critical"
+pytest
+flake8 polyterm tests
 ```
 
-## 📦 Dependencies
-
-### Core Requirements
-- `click` - CLI framework
-- `rich` - Terminal formatting
-- `requests` - HTTP requests
-- `toml` - Configuration
-- `aiohttp` - Async HTTP
-
-### Optional Dependencies
-- `python-dateutil` - Enhanced date parsing (graceful fallback)
-- `websockets` - Real-time CLOB data (not required for basic use)
-- `gql[all]` - Subgraph queries (not required for basic use)
-- `pandas` - Data analysis (optional)
-
-Install optional packages:
+### Build Package
 ```bash
-pip install python-dateutil websockets gql[all] pandas
+python -m build
+python -m twine upload dist/*
 ```
 
-## 🚨 Troubleshooting
+## 📚 Documentation
 
-### No markets showing up?
-```bash
-# Lower volume threshold
-polyterm config --set data_validation.min_volume_threshold 0.01
-
-# Or disable volume requirement
-polyterm config --set data_validation.require_volume_data false
-```
-
-### Getting old markets from 2024 or earlier?
-This shouldn't happen anymore! The app now validates all data. If you see this:
-```bash
-# Verify your config
-polyterm config --get api.gamma_markets_endpoint
-# Should return: /events
-
-# Test the API directly
-curl "https://gamma-api.polymarket.com/events?active=true&closed=false&limit=5"
-```
-
-### Rate limiting issues?
-```bash
-# Increase refresh interval
-polyterm monitor --refresh 10  # 10 second refresh
-
-# Set in config
-polyterm config --set display.refresh_rate 10
-```
-
-### All volume showing $0?
-The app now requires volume by default. If needed:
-```bash
-polyterm config --set data_validation.require_volume_data false
-```
-
-**For more troubleshooting, see [API_SETUP.md](API_SETUP.md)**
-
-## 🎯 Use Cases
-
-### Day Trading
-```bash
-# Monitor high-volume markets with fast refresh
-polyterm monitor --limit 10 --refresh 2
-```
-
-### Whale Tracking
-```bash
-# Track large trades in real-time
-polyterm whales --min-size 10000 --hours 24
-```
-
-### Market Research
-```bash
-# Export data for analysis
-polyterm export data.json --format json
-python analyze_markets.py data.json
-```
-
-### Portfolio Management
-```bash
-# Track your positions
-polyterm portfolio --wallet YOUR_ADDRESS
-```
-
-## 📖 Documentation
-
-- **[TUI_GUIDE.md](TUI_GUIDE.md)** - Complete Terminal User Interface guide
-- **[API_SETUP.md](API_SETUP.md)** - API documentation and troubleshooting
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** - Contribution guidelines
-- **[examples/](examples/)** - Example scripts and use cases
+- **[TUI Guide](TUI_GUIDE.md)** - Complete Terminal User Interface guide
+- **[API Setup](API_SETUP.md)** - API configuration and troubleshooting
+- **[Contributing](CONTRIBUTING.md)** - How to contribute to PolyTerm
+- **[Fixes Applied](FIXES_APPLIED.md)** - Complete summary of recent fixes
+- **[Live Data Fix](LIVE_DATA_FIX_SUMMARY.md)** - Live data implementation details
 
 ## 🤝 Contributing
 
-Contributions are welcome! Here's how:
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
+### Quick Contribution Steps
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-Please ensure:
-- All tests pass (`pytest`)
-- Code follows Python best practices
-- New features include tests
-- Documentation is updated
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
-
-## 📊 Project Stats
-
-- **Language**: Python 3.8+
-- **APIs**: Gamma Markets, CLOB, Subgraph
-- **Test Coverage**: 85%+
-- **Live Data**: 100% verified ✅
-- **Last Updated**: October 14, 2025
+2. Create a feature branch: `git checkout -b feature/your-feature`
+3. Make your changes
+4. Run tests: `pytest`
+5. Commit: `git commit -m "Add your feature"`
+6. Push: `git push origin feature/your-feature`
+7. Create a Pull Request
 
 ## 📄 License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## ⚠️ Disclaimer
-
-This tool is for informational purposes only. Not financial advice. Always do your own research. Trading prediction markets involves risk.
-
-## 🙏 Acknowledgments
-
-- **PolyMarket** - For providing the APIs
-- **The Graph Protocol** - For on-chain data access
-- **Rich Library** - For beautiful terminal output
-- **Python Community** - For amazing tools and libraries
-
-## 📞 Support
+## 🆘 Support
 
 - **Issues**: [GitHub Issues](https://github.com/NYTEMODEONLY/polyterm/issues)
-- **Documentation**: See `/docs` and `.md` files
-- **API Status**: Check PolyMarket's official status page
+- **API Status**: [PolyMarket Status](https://status.polymarket.com)
+- **Documentation**: See docs/ directory
+
+## 🎯 Roadmap
+
+### Completed ✅
+- ✅ Live 2025 data integration
+- ✅ Interactive TUI with 8 screens
+- ✅ Volume-based whale detection
+- ✅ Multi-source API aggregation
+- ✅ Comprehensive test suite
+- ✅ PyPI package distribution
+
+### Future Enhancements
+- 🔄 Advanced analytics (correlations, predictions)
+- 🔄 Market search functionality
+- 🔄 Config editing UI
+- 🔄 Real-time trade websocket integration
+- 🔄 Alternative portfolio data sources
 
 ---
 
-**Built with ❤️ for the prediction market community**
+**Built with ❤️ for the PolyMarket community**
 
-*PolyTerm - Your terminal window to prediction markets* 📊
+*Your terminal window to prediction markets* 📊

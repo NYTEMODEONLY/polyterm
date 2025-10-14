@@ -2,11 +2,11 @@
 
 ## Overview
 
-PolyTerm has been updated to use the correct PolyMarket API endpoints that return live, current data with accurate volume information.
+PolyTerm uses verified PolyMarket API endpoints that return live, current data with accurate volume information.
 
-## Verified Working Endpoints (October 2025)
+## ✅ Working Endpoints (October 2025)
 
-### ✅ Gamma Markets API - `/events` endpoint
+### Gamma Markets API - `/events` endpoint
 **Primary source for live data with volume**
 
 - **URL**: `https://gamma-api.polymarket.com/events`
@@ -15,7 +15,7 @@ PolyTerm has been updated to use the correct PolyMarket API endpoints that retur
 - **Volume Fields**: `volume`, `volume24hr`
 - **Status**: ✅ Working with live data
 
-### ✅ CLOB API - `/sampling-markets` endpoint
+### CLOB API - `/sampling-markets` endpoint
 **Fallback source for current markets (no volume)**
 
 - **URL**: `https://clob.polymarket.com/sampling-markets`
@@ -33,7 +33,7 @@ PolyTerm has been updated to use the correct PolyMarket API endpoints that retur
 
 ## Data Validation
 
-PolyTerm now includes automatic data validation:
+PolyTerm includes automatic data validation:
 
 ### Freshness Checks
 - ✅ Rejects markets from previous years
@@ -59,7 +59,7 @@ Located in `~/.polyterm/config.toml`:
 ```toml
 [api]
 gamma_base_url = "https://gamma-api.polymarket.com"
-gamma_markets_endpoint = "/events"  # Updated to use /events
+gamma_markets_endpoint = "/events"
 clob_rest_endpoint = "https://clob.polymarket.com"
 clob_endpoint = "wss://clob.polymarket.com/ws"
 subgraph_endpoint = "https://api.thegraph.com/subgraphs/name/polymarket/matic-markets"

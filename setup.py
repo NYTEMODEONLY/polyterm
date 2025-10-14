@@ -13,7 +13,7 @@ setup(
     description="A terminal-based monitoring app for PolyMarket shifts",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/yourusername/polyterm",
+    url="https://github.com/NYTEMODEONLY/polyterm",
     packages=find_packages(),
     classifiers=[
         "Development Status :: 3 - Alpha",
