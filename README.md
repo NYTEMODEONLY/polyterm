@@ -14,7 +14,12 @@ A powerful, terminal-based monitoring tool for PolyMarket prediction markets. Tr
 curl -sSL https://raw.githubusercontent.com/NYTEMODEONLY/polyterm/main/install.sh | bash
 ```
 
-### Option 2: Manual Install
+### Option 2: Direct from PyPI (Easiest)
+```bash
+pipx install polyterm
+```
+
+### Option 3: Manual Install
 ```bash
 # Clone and install
 git clone https://github.com/NYTEMODEONLY/polyterm.git
@@ -22,14 +27,44 @@ cd polyterm
 ./install.sh
 ```
 
-### Option 3: Direct from PyPI
-```bash
-pipx install polyterm
-```
-
 **That's it!** Now you can run PolyTerm from anywhere:
 ```bash
 polyterm
+```
+
+## 🔄 Updating PolyTerm
+
+### Automatic Update Check
+PolyTerm automatically checks for updates and displays them in the main menu:
+```
+Main Menu
+PolyTerm v0.1.5 🔄 Update Available: v0.1.6
+
+   1 📊 Monitor Markets - Real-time market tracking
+   ...
+```
+
+### Update Methods
+
+**Via TUI (Easiest):**
+1. Launch PolyTerm: `polyterm`
+2. Go to Settings (option 7)
+3. Select "🔄 Update PolyTerm" (option 6)
+4. Follow the prompts
+
+**Via Command Line:**
+```bash
+# Using pipx (recommended)
+pipx upgrade polyterm
+
+# Using pip
+pip install --upgrade polyterm
+```
+
+**Fresh Install:**
+```bash
+# Reinstall latest version
+pipx install polyterm --force
 ```
 
 ## 🎨 Interactive Terminal Interface (TUI)
@@ -37,32 +72,30 @@ polyterm
 PolyTerm features a beautiful interactive menu for easy navigation:
 
 ```
-╔═══════════════════════════════════════════════════════════╗
-║                                                           ║
-║   ██████╗  ██████╗ ██╗  ██╗   ██╗████████╗███████╗██████╗ ███╗   ███╗
-║   ██╔══██╗██╔═══██╗██║  ╚██╗ ██╔╝╚══██╔══╝██╔════╝██╔══██╗████╗ ████║
-║   ██████╔╝██║   ██║██║   ╚████╔╝    ██║   █████╗  ██████╔╝██╔████╔██║
-║   ██╔═══╝ ██║   ██║██║    ╚██╔╝     ██║   ██╔══╝  ██╔══██╗██║╚██╔╝██║
-║   ██║     ╚██████╔╝███████╗██║      ██║   ███████╗██║  ██║██║ ╚═╝ ██║
-║   ╚═╝      ╚═════╝ ╚══════╝╚═╝      ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝
-║                                                           ║
-║         Terminal-Based Monitoring for PolyMarket         ║
-║                   Track. Analyze. Profit.                ║
-║                                                           ║
-╚═══════════════════════════════════════════════════════════╝
+   ██████╗  ██████╗ ██╗  ██╗   ██╗████████╗███████╗██████╗ ███╗   ███╗
+   ██╔══██╗██╔═══██╗██║  ╚██╗ ██╔╝╚══██╔══╝██╔════╝██╔══██╗████╗ ████║
+   ██████╔╝██║   ██║██║   ╚████╔╝    ██║   █████╗  ██████╔╝██╔████╔██║
+   ██╔═══╝ ██║   ██║██║    ╚██╔╝     ██║   ██╔══╝  ██╔══██╗██║╚██╔╝██║
+   ██║     ╚██████╔╝███████╗██║      ██║   ███████╗██║  ██║██║ ╚═╝ ██║
+   ╚═╝      ╚═════╝ ╚══════╝╚═╝      ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝
 
-┌─────────────────────────────────────────────────┐
-│ 1  📊 Monitor Markets - Real-time market tracking
-│ 2  🐋 Whale Activity - High-volume markets
-│ 3  👁  Watch Market - Track specific market
-│ 4  📈 Market Analytics - Trends and predictions
-│ 5  💼 Portfolio - View your positions
-│ 6  📤 Export Data - Export to JSON/CSV
-│ 7  ⚙️  Settings - Configuration
-│
-│ h  ❓ Help - View documentation
-│ q  🚪 Quit - Exit PolyTerm
-└─────────────────────────────────────────────────┘
+         Terminal-Based Monitoring for PolyMarket
+                   Track. Analyze. Profit.
+
+
+Main Menu
+PolyTerm v0.1.5
+
+   1 📊 Monitor Markets - Real-time market tracking
+   2 🐋 Whale Activity - High-volume markets       
+   3 👁  Watch Market - Track specific market       
+   4 📈 Market Analytics - Trends and predictions  
+   5 💼 Portfolio - View your positions            
+   6 📤 Export Data - Export to JSON/CSV           
+   7 ⚙️  Settings - Configuration                   
+                                                   
+   h ❓ Help - View documentation                  
+   q 🚪 Quit - Exit PolyTerm                       
 ```
 
 ### Navigation
@@ -277,8 +310,6 @@ python -m twine upload dist/*
 - **[TUI Guide](TUI_GUIDE.md)** - Complete Terminal User Interface guide
 - **[API Setup](API_SETUP.md)** - API configuration and troubleshooting
 - **[Contributing](CONTRIBUTING.md)** - How to contribute to PolyTerm
-- **[Fixes Applied](FIXES_APPLIED.md)** - Complete summary of recent fixes
-- **[Live Data Fix](LIVE_DATA_FIX_SUMMARY.md)** - Live data implementation details
 
 ## 🤝 Contributing
 
@@ -312,6 +343,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - ✅ Multi-source API aggregation
 - ✅ Comprehensive test suite
 - ✅ PyPI package distribution
+- ✅ Automatic update checking
+- ✅ Version display in TUI
+- ✅ Responsive terminal design
+- ✅ Settings screen with update functionality
 
 ### Future Enhancements
 - 🔄 Advanced analytics (correlations, predictions)
