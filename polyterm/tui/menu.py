@@ -44,8 +44,8 @@ class MainMenu:
         return "", ""
     
     def quick_update(self) -> bool:
-        """Perform a quick update from the main menu
-        
+        """Perform a quick update from the main menu with auto-restart
+
         Returns:
             True if update was successful, False otherwise
         """
@@ -53,9 +53,11 @@ class MainMenu:
             import subprocess
             import sys
             import importlib
-            
+            import shutil
+            import os
+
             self.console.print("\n[bold green]🔄 Quick Update Starting...[/bold green]")
-            
+
             # Check for pipx first (preferred)
             try:
                 subprocess.run(["pipx", "--version"], capture_output=True, check=True)
@@ -65,29 +67,52 @@ class MainMenu:
                 # Fallback to pip
                 update_cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "polyterm"]
                 method = "pip"
-            
+
             self.console.print(f"[dim]Using {method} to update...[/dim]")
-            
+
             # Run update
             result = subprocess.run(update_cmd, capture_output=True, text=True)
-            
+
             if result.returncode == 0:
                 # Force reload to get new version
                 importlib.reload(polyterm)
                 new_version = polyterm.__version__
-                
+
                 self.console.print(f"[bold green]✅ Update successful![/bold green]")
                 self.console.print(f"[green]Updated to version {new_version}[/green]")
                 self.console.print()
-                self.console.print("[bold yellow]🔄 Restart Required[/bold yellow]")
-                self.console.print("[yellow]Please restart PolyTerm to use the new version.[/yellow]")
+
+                # Ask user if they want to restart
+                self.console.print("[bold cyan]Would you like to restart PolyTerm now?[/bold cyan]")
+                self.console.print("[dim]Restarting is required to use the new version.[/dim]")
+                self.console.print()
+                restart = self.console.input("[cyan]Restart now? (Y/n):[/cyan] ").strip().lower()
+
+                if restart != 'n':
+                    self.console.print()
+                    self.console.print("[green]🔄 Restarting PolyTerm...[/green]")
+                    self.console.print()
+
+                    # Use os.execv to replace current process with new polyterm
+                    polyterm_path = shutil.which("polyterm")
+
+                    if polyterm_path:
+                        os.execv(polyterm_path, ["polyterm"])
+                    else:
+                        # Fallback: try running as module
+                        os.execv(sys.executable, [sys.executable, "-m", "polyterm"])
+                else:
+                    self.console.print()
+                    self.console.print("[yellow]Update installed but not active.[/yellow]")
+                    self.console.print("[dim]Please restart PolyTerm manually to use the new version.[/dim]")
+
                 return True
             else:
                 self.console.print("[bold red]❌ Update failed[/bold red]")
                 if result.stderr:
                     self.console.print(f"[red]Error: {result.stderr}[/red]")
                 return False
-                
+
         except Exception as e:
             self.console.print(f"[bold red]❌ Update error: {e}[/bold red]")
             return False
