@@ -43,6 +43,22 @@ class MainMenu:
         
         return "", ""
     
+    def _get_installed_version_pipx(self) -> str:
+        """Get the currently installed version from pipx"""
+        import subprocess
+        try:
+            result = subprocess.run(["pipx", "list"], capture_output=True, text=True)
+            if result.returncode == 0:
+                for line in result.stdout.split('\n'):
+                    if 'polyterm' in line.lower():
+                        # Parse "package polyterm 0.4.2, installed using..."
+                        match = re.search(r'polyterm\s+(\d+\.\d+\.\d+)', line)
+                        if match:
+                            return match.group(1)
+        except Exception:
+            pass
+        return ""
+
     def quick_update(self) -> bool:
         """Perform a quick update from the main menu with auto-restart
 
@@ -52,34 +68,75 @@ class MainMenu:
         try:
             import subprocess
             import sys
-            import importlib
             import shutil
             import os
 
             self.console.print("\n[bold green]🔄 Quick Update Starting...[/bold green]")
 
+            # Get latest version from PyPI
+            latest_version = None
+            try:
+                response = requests.get("https://pypi.org/pypi/polyterm/json", timeout=5)
+                if response.status_code == 200:
+                    latest_version = response.json()["info"]["version"]
+            except Exception:
+                pass
+
+            has_pipx = False
+            has_pip = False
+
             # Check for pipx first (preferred)
             try:
                 subprocess.run(["pipx", "--version"], capture_output=True, check=True)
-                update_cmd = ["pipx", "upgrade", "polyterm"]
-                method = "pipx"
+                has_pipx = True
             except (subprocess.CalledProcessError, FileNotFoundError):
-                # Fallback to pip
-                update_cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "polyterm"]
-                method = "pip"
+                pass
 
-            self.console.print(f"[dim]Using {method} to update...[/dim]")
+            # Check for pip
+            try:
+                subprocess.run([sys.executable, "-m", "pip", "--version"], capture_output=True, check=True)
+                has_pip = True
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                pass
 
-            # Run update
-            result = subprocess.run(update_cmd, capture_output=True, text=True)
+            update_success = False
 
-            if result.returncode == 0:
-                # Force reload to get new version
-                importlib.reload(polyterm)
-                new_version = polyterm.__version__
+            if has_pipx:
+                self.console.print("[dim]Using pipx to update...[/dim]")
 
+                # First try pipx upgrade
+                result = subprocess.run(["pipx", "upgrade", "polyterm"], capture_output=True, text=True)
+
+                # Verify the upgrade actually worked
+                installed_version = self._get_installed_version_pipx()
+                if latest_version and installed_version == latest_version:
+                    update_success = True
+                    self.console.print(f"[green]✓ Upgraded to {installed_version}[/green]")
+                else:
+                    # pipx upgrade didn't work, try reinstall
+                    self.console.print("[yellow]pipx upgrade didn't work, trying reinstall...[/yellow]")
+                    subprocess.run(["pipx", "uninstall", "polyterm"], capture_output=True, text=True)
+                    result = subprocess.run(["pipx", "install", "polyterm"], capture_output=True, text=True)
+
+                    if result.returncode == 0:
+                        installed_version = self._get_installed_version_pipx()
+                        if latest_version and installed_version == latest_version:
+                            update_success = True
+                            self.console.print(f"[green]✓ Reinstalled to {installed_version}[/green]")
+
+            if not update_success and has_pip:
+                self.console.print("[dim]Using pip to update...[/dim]")
+                result = subprocess.run(
+                    [sys.executable, "-m", "pip", "install", "--upgrade", "polyterm"],
+                    capture_output=True, text=True
+                )
+                if result.returncode == 0:
+                    update_success = True
+
+            if update_success:
                 self.console.print(f"[bold green]✅ Update successful![/bold green]")
-                self.console.print(f"[green]Updated to version {new_version}[/green]")
+                if latest_version:
+                    self.console.print(f"[green]Updated to version {latest_version}[/green]")
                 self.console.print()
 
                 # Ask user if they want to restart
@@ -109,8 +166,7 @@ class MainMenu:
                 return True
             else:
                 self.console.print("[bold red]❌ Update failed[/bold red]")
-                if result.stderr:
-                    self.console.print(f"[red]Error: {result.stderr}[/red]")
+                self.console.print("[yellow]Try: pipx uninstall polyterm && pipx install polyterm[/yellow]")
                 return False
 
         except Exception as e:
