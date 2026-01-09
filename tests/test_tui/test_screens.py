@@ -57,16 +57,50 @@ def test_watch_screen(mock_run):
     assert mock_console.input.call_count >= 3
 
 
-@patch('polyterm.tui.screens.analytics.subprocess.run')
-def test_analytics_screen_trending(mock_run):
+@patch('polyterm.tui.screens.analytics.APIAggregator')
+@patch('polyterm.tui.screens.analytics.SubgraphClient')
+@patch('polyterm.tui.screens.analytics.CLOBClient')
+@patch('polyterm.tui.screens.analytics.GammaClient')
+@patch('polyterm.tui.screens.analytics.Config')
+def test_analytics_screen_trending(mock_config, mock_gamma, mock_clob, mock_subgraph, mock_aggregator):
     """Test analytics screen trending markets option"""
+    # Setup mocks
+    mock_config_instance = Mock()
+    mock_config_instance.gamma_base_url = "https://gamma-api.polymarket.com"
+    mock_config_instance.gamma_api_key = ""
+    mock_config_instance.clob_rest_endpoint = "https://clob.polymarket.com"
+    mock_config_instance.clob_endpoint = "wss://clob.polymarket.com/ws"
+    mock_config_instance.subgraph_endpoint = "https://api.thegraph.com"
+    mock_config.return_value = mock_config_instance
+
+    # Mock aggregator to return sample markets
+    mock_agg_instance = Mock()
+    mock_agg_instance.get_top_markets_by_volume.return_value = [
+        {
+            "question": "Test Market 1",
+            "outcomePrices": ["0.75", "0.25"],
+            "volume24hr": 50000,
+            "endDate": "2026-02-01T00:00:00Z",
+        },
+        {
+            "question": "Test Market 2",
+            "outcomePrices": ["0.50", "0.50"],
+            "volume24hr": 30000,
+            "endDate": "2026-01-20T00:00:00Z",
+        },
+    ]
+    mock_aggregator.return_value = mock_agg_instance
+
     mock_console = Mock()
     mock_console.input.side_effect = ["1", "10"]
-    
+
     analytics_screen(mock_console)
-    
-    # Should display submenu
+
+    # Should display submenu and table
     assert mock_console.print.call_count >= 2
+
+    # Verify aggregator was called with correct parameters
+    mock_agg_instance.get_top_markets_by_volume.assert_called_once_with(limit=10, min_volume=1000)
 
 
 def test_analytics_screen_coming_soon():

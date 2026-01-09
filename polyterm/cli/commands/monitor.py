@@ -26,8 +26,9 @@ except ImportError:
 @click.option("--category", default=None, help="Filter by category (politics, crypto, sports)")
 @click.option("--refresh", default=5, help="Refresh interval in seconds")
 @click.option("--active-only", is_flag=True, help="Show only active markets")
+@click.option("--sort", type=click.Choice(["volume", "probability", "recent"]), default=None, help="Sort markets by: volume, probability, or recent")
 @click.pass_context
-def monitor(ctx, limit, category, refresh, active_only):
+def monitor(ctx, limit, category, refresh, active_only, sort):
     """Monitor markets in real-time with live updates"""
     
     config = ctx.obj["config"]
@@ -67,19 +68,42 @@ def monitor(ctx, limit, category, refresh, active_only):
         
         try:
             # Get live markets from aggregator with validation
-            markets = aggregator.get_live_markets(
-                limit=limit,
-                require_volume=True,
-                min_volume=0.01
-            )
-            
+            if sort == 'volume':
+                # Use dedicated method for volume-sorted markets
+                markets = aggregator.get_top_markets_by_volume(limit=limit, min_volume=0.01)
+            else:
+                markets = aggregator.get_live_markets(
+                    limit=limit,
+                    require_volume=True,
+                    min_volume=0.01
+                )
+
             # Filter by category if specified
             if category:
                 markets = [m for m in markets if m.get('category') == category]
-            
+
             # Filter by active status
             if active_only:
                 markets = [m for m in markets if m.get('active', False) and not m.get('closed', True)]
+
+            # Apply additional sorting if specified
+            if sort == 'probability':
+                def get_probability(m):
+                    outcome_prices = m.get('outcomePrices')
+                    if not outcome_prices and m.get('markets') and len(m.get('markets', [])) > 0:
+                        outcome_prices = m['markets'][0].get('outcomePrices')
+                    if isinstance(outcome_prices, str):
+                        import json
+                        try:
+                            outcome_prices = json.loads(outcome_prices)
+                        except:
+                            return 0
+                    if outcome_prices and isinstance(outcome_prices, list) and len(outcome_prices) > 0:
+                        return float(outcome_prices[0])
+                    return 0
+                markets = sorted(markets, key=get_probability, reverse=True)
+            elif sort == 'recent':
+                markets = sorted(markets, key=lambda m: m.get('endDate', ''), reverse=False)
             
             for market in markets:
                 market_id = market.get("id")

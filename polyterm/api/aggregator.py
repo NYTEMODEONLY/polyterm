@@ -145,15 +145,16 @@ class APIAggregator:
         min_volume: float = 100,
     ) -> List[Dict[str, Any]]:
         """Get top markets sorted by 24hr volume
-        
+
         Args:
             limit: Number of markets to return
             min_volume: Minimum 24hr volume
-        
+
         Returns:
             List of top markets sorted by volume
         """
-        markets = self.get_live_markets(limit=limit * 2, require_volume=True, min_volume=min_volume)
+        # Request more markets to account for filtering (5x to be safe)
+        markets = self.get_live_markets(limit=max(limit * 5, 100), require_volume=True, min_volume=min_volume)
         
         # Sort by 24hr volume
         sorted_markets = sorted(

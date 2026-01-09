@@ -95,8 +95,53 @@ def test_polyterm_help():
     """Test 'polyterm --help' works"""
     runner = CliRunner()
     result = runner.invoke(cli, ['--help'])
-    
+
     # Should show CLI help, not TUI
     assert result.exit_code == 0
     assert 'PolyMarket' in result.output or 'monitor' in result.output.lower()
+
+
+def test_monitor_sort_option_exists():
+    """Test 'polyterm monitor --sort' option exists (used by analytics screen)"""
+    runner = CliRunner()
+    result = runner.invoke(cli, ['monitor', '--help'])
+
+    # Should show sort option in help
+    assert result.exit_code == 0
+    assert '--sort' in result.output
+    assert 'volume' in result.output.lower()
+
+
+def test_monitor_sort_volume_is_valid():
+    """Test 'polyterm monitor --sort volume' is a valid command"""
+    runner = CliRunner()
+    # Just check that the option is accepted (don't actually run monitor)
+    result = runner.invoke(cli, ['monitor', '--sort', 'volume', '--help'])
+
+    assert result.exit_code == 0
+
+
+def test_monitor_sort_probability_is_valid():
+    """Test 'polyterm monitor --sort probability' is a valid command"""
+    runner = CliRunner()
+    result = runner.invoke(cli, ['monitor', '--sort', 'probability', '--help'])
+
+    assert result.exit_code == 0
+
+
+def test_monitor_sort_recent_is_valid():
+    """Test 'polyterm monitor --sort recent' is a valid command"""
+    runner = CliRunner()
+    result = runner.invoke(cli, ['monitor', '--sort', 'recent', '--help'])
+
+    assert result.exit_code == 0
+
+
+def test_monitor_invalid_sort_rejected():
+    """Test 'polyterm monitor --sort invalid' is rejected"""
+    runner = CliRunner()
+    result = runner.invoke(cli, ['monitor', '--sort', 'invalid'])
+
+    assert result.exit_code != 0
+    assert 'invalid' in result.output.lower() or 'choice' in result.output.lower()
 
