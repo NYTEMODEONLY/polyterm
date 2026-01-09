@@ -66,7 +66,7 @@ def display_logo(console: Console):
         nytemode_padding = "           "
 
     console.print(logo_text, style="bold cyan")
-    console.print(f"{nytemode_padding}[medium_purple1]a nytemode project[/medium_purple1]")
+    console.print(f"{nytemode_padding}[bright_magenta]a nytemode project[/bright_magenta]")
     console.print()
 
 
