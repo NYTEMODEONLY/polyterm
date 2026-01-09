@@ -111,6 +111,24 @@ def settings_screen(console: RichConsole):
     console.input("[dim]Press Enter to continue...[/dim]")
 
 
+def _get_installed_version_pipx() -> str:
+    """Get the currently installed version from pipx"""
+    import subprocess
+    try:
+        result = subprocess.run(["pipx", "list"], capture_output=True, text=True)
+        if result.returncode == 0:
+            for line in result.stdout.split('\n'):
+                if 'polyterm' in line.lower():
+                    # Parse "package polyterm 0.4.2, installed using..."
+                    import re
+                    match = re.search(r'polyterm\s+(\d+\.\d+\.\d+)', line)
+                    if match:
+                        return match.group(1)
+    except Exception:
+        pass
+    return ""
+
+
 def update_polyterm(console: RichConsole) -> bool:
     """Enhanced PolyTerm update function with auto-restart capability
 
@@ -166,12 +184,13 @@ def update_polyterm(console: RichConsole) -> bool:
         # Step 3: Determine update method
         console.print("[cyan]Step 3:[/cyan] Determining update method...")
 
-        update_methods = []
+        has_pipx = False
+        has_pip = False
 
         # Check for pipx
         try:
             subprocess.run(["pipx", "--version"], capture_output=True, check=True)
-            update_methods.append(("pipx", ["pipx", "upgrade", "polyterm"]))
+            has_pipx = True
             console.print("[green]✓[/green] pipx available")
         except (subprocess.CalledProcessError, FileNotFoundError):
             console.print("[dim]✗[/dim] pipx not available")
@@ -179,12 +198,12 @@ def update_polyterm(console: RichConsole) -> bool:
         # Check for pip
         try:
             subprocess.run([sys.executable, "-m", "pip", "--version"], capture_output=True, check=True)
-            update_methods.append(("pip", [sys.executable, "-m", "pip", "install", "--upgrade", "polyterm"]))
+            has_pip = True
             console.print("[green]✓[/green] pip available")
         except (subprocess.CalledProcessError, FileNotFoundError):
             console.print("[dim]✗[/dim] pip not available")
 
-        if not update_methods:
+        if not has_pipx and not has_pip:
             console.print()
             console.print("[bold red]❌ No update method available[/bold red]")
             console.print("[red]Neither pipx nor pip could be found.[/red]")
@@ -204,22 +223,39 @@ def update_polyterm(console: RichConsole) -> bool:
         console.print()
         console.print("[cyan]Step 4:[/cyan] Updating PolyTerm...")
 
-        # Use pipx if available (preferred), otherwise pip
-        method_name, update_cmd = update_methods[0]
-        console.print(f"[green]Using {method_name} to update...[/green]")
-        console.print("[dim]Running update command...[/dim]")
-
-        result = subprocess.run(update_cmd, capture_output=True, text=True)
-
         update_success = False
-        if result.returncode == 0:
-            update_success = True
-        elif len(update_methods) > 1:
-            # Try alternative method
-            console.print("[yellow]Trying alternative update method...[/yellow]")
-            alt_method_name, alt_update_cmd = update_methods[1]
-            alt_result = subprocess.run(alt_update_cmd, capture_output=True, text=True)
-            if alt_result.returncode == 0:
+
+        if has_pipx:
+            console.print("[green]Using pipx to update...[/green]")
+
+            # First try pipx upgrade
+            console.print("[dim]Trying pipx upgrade...[/dim]")
+            result = subprocess.run(["pipx", "upgrade", "polyterm"], capture_output=True, text=True)
+
+            # Verify the upgrade actually worked by checking installed version
+            installed_version = _get_installed_version_pipx()
+            if installed_version == latest_version:
+                update_success = True
+                console.print(f"[green]✓ Upgraded to {installed_version}[/green]")
+            else:
+                # pipx upgrade didn't work, try reinstall
+                console.print("[yellow]pipx upgrade didn't update the version, trying reinstall...[/yellow]")
+                subprocess.run(["pipx", "uninstall", "polyterm"], capture_output=True, text=True)
+                result = subprocess.run(["pipx", "install", "polyterm"], capture_output=True, text=True)
+
+                if result.returncode == 0:
+                    installed_version = _get_installed_version_pipx()
+                    if installed_version == latest_version:
+                        update_success = True
+                        console.print(f"[green]✓ Reinstalled to {installed_version}[/green]")
+
+        if not update_success and has_pip:
+            console.print("[green]Using pip to update...[/green]")
+            result = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "--upgrade", "polyterm"],
+                capture_output=True, text=True
+            )
+            if result.returncode == 0:
                 update_success = True
 
         if update_success:
@@ -264,14 +300,8 @@ def update_polyterm(console: RichConsole) -> bool:
             console.print()
             console.print("[bold red]❌ Update failed[/bold red]")
             console.print()
-
-            if result.stderr:
-                console.print("[red]Error details:[/red]")
-                console.print(f"[red]{result.stderr[:500]}[/red]")
-                console.print()
-
             console.print("[yellow]Try running manually:[/yellow]")
-            console.print("[dim]  pipx upgrade polyterm[/dim]")
+            console.print("[dim]  pipx uninstall polyterm && pipx install polyterm[/dim]")
             console.print("[dim]  pip install --upgrade polyterm[/dim]")
             console.print()
             console.input("[dim]Press Enter to return to menu...[/dim]")
@@ -283,7 +313,7 @@ def update_polyterm(console: RichConsole) -> bool:
         console.print(f"[red]Unexpected error: {e}[/red]")
         console.print()
         console.print("[yellow]Please try updating manually:[/yellow]")
-        console.print("[dim]  pipx upgrade polyterm[/dim]")
+        console.print("[dim]  pipx uninstall polyterm && pipx install polyterm[/dim]")
         console.print("[dim]  pip install --upgrade polyterm[/dim]")
         console.print()
         console.input("[dim]Press Enter to return to menu...[/dim]")
