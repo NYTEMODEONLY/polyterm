@@ -116,7 +116,11 @@ class MainMenu:
                     # pipx upgrade didn't work, try reinstall
                     self.console.print("[yellow]pipx upgrade didn't work, trying reinstall...[/yellow]")
                     subprocess.run(["pipx", "uninstall", "polyterm"], capture_output=True, text=True)
-                    result = subprocess.run(["pipx", "install", "polyterm"], capture_output=True, text=True)
+                    # Use --no-cache-dir to avoid pip caching old versions
+                    result = subprocess.run(
+                        ["pipx", "install", "polyterm", "--pip-args=--no-cache-dir"],
+                        capture_output=True, text=True
+                    )
 
                     if result.returncode == 0:
                         installed_version = self._get_installed_version_pipx()
