@@ -61,7 +61,7 @@ Located in `~/.polyterm/config.toml`:
 gamma_base_url = "https://gamma-api.polymarket.com"
 gamma_markets_endpoint = "/events"
 clob_rest_endpoint = "https://clob.polymarket.com"
-clob_endpoint = "wss://clob.polymarket.com/ws"
+clob_endpoint = "wss://ws-live-data.polymarket.com"
 subgraph_endpoint = "https://api.thegraph.com/subgraphs/name/polymarket/matic-markets"
 
 [data_validation]

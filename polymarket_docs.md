@@ -132,7 +132,7 @@ PolyTerm's configuration aligns with Polymarket's API structure:
 gamma_base_url = "https://gamma-api.polymarket.com"
 gamma_markets_endpoint = "/events"
 clob_rest_endpoint = "https://clob.polymarket.com"
-clob_endpoint = "wss://clob.polymarket.com/ws"
+clob_endpoint = "wss://ws-live-data.polymarket.com"
 
 [data_validation]
 max_market_age_hours = 24

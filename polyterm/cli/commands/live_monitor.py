@@ -379,44 +379,58 @@ class LiveMarketMonitor:
         """Handle incoming trade data from RTDS"""
         try:
             timestamp = datetime.now(timezone.utc).strftime("%H:%M:%S")
-            
-            # Extract trade details from RTDS format (based on official client docs)
-            market_id = trade_data.get("market", trade_data.get("market_slug", "unknown"))
-            market_title = market_titles.get(market_id, "Unknown Market")
-            
-            # Extract trade details - official RTDS format
-            size = float(trade_data.get("size", 0))
-            price = float(trade_data.get("price", 0))
-            side = trade_data.get("side", "unknown")  # BUY or SELL
-            maker_address = trade_data.get("maker_address", "unknown")
-            asset_id = trade_data.get("asset_id", "unknown")
-            
+
+            # RTDS format: {topic, type, payload: {eventSlug, slug, price, size, side, ...}}
+            # Extract payload - all trade details are inside the payload object
+            payload = trade_data.get("payload", {})
+            if not payload:
+                return  # No payload, skip this message
+
+            # Extract market identifiers from payload
+            event_slug = payload.get("eventSlug", "")
+            market_slug = payload.get("slug", "")
+
+            # Try to get market title from our titles dict or from payload
+            market_title = (
+                market_titles.get(event_slug) or
+                market_titles.get(market_slug) or
+                payload.get("title", "Unknown Market")
+            )
+
+            # Extract trade details from payload
+            size = float(payload.get("size", 0))
+            price = float(payload.get("price", 0))
+            side = payload.get("side", "unknown")  # BUY or SELL
+            outcome = payload.get("outcome", "")  # Yes/No outcome
+            trader_name = payload.get("name", payload.get("pseudonym", ""))
+
             # Calculate notional value
             notional = size * price
-            
-            # Format trade display based on official RTDS format
+
+            # Format trade display
             side_symbol = "🟢 BUY" if side.upper() == "BUY" else "🔴 SELL"
             side_color = "green" if side.upper() == "BUY" else "red"
-            
+
             # Format size and price
             size_str = f"{size:.0f}" if size >= 1 else f"{size:.2f}"
             price_str = f"${price:.4f}" if price < 1 else f"${price:.2f}"
             notional_str = f"${notional:.0f}" if notional >= 1000 else f"${notional:.2f}"
-            
-            # Truncate market title and maker address
+
+            # Truncate market title and trader name
             title_short = market_title[:25] + "..." if len(market_title) > 25 else market_title
-            maker_short = maker_address[:8] + "..." if len(maker_address) > 8 else maker_address
-            
+            trader_short = trader_name[:10] + "..." if len(trader_name) > 10 else trader_name
+            outcome_str = f"({outcome})" if outcome else ""
+
             # Print detailed trade information
             self.console.print(
-                f"[{side_color}]{timestamp} | {title_short:<28} | {side_symbol} | "
-                f"{size_str:>8} @ {price_str:>8} | {notional_str:>8} | {maker_short}[/{side_color}]"
+                f"[{side_color}]{timestamp} | {title_short:<28} | {side_symbol} {outcome_str:<5} | "
+                f"{size_str:>8} @ {price_str:>8} | {notional_str:>8} | {trader_short}[/{side_color}]"
             )
-            
+
         except Exception as e:
             self.console.print(f"[red]{datetime.now(timezone.utc).strftime('%H:%M:%S')} | ERROR processing trade: {e}[/red]")
-            # Debug: print the raw trade data
-            self.console.print(f"[dim]Raw trade data: {trade_data}[/dim]")
+            # Debug: print the raw trade data keys
+            self.console.print(f"[dim]Raw trade data keys: {list(trade_data.keys())}[/dim]")
 
     async def _run_polling_monitor(self, market_slugs: List[str], market_titles: Dict[str, str]):
         """Fallback polling mode when WebSocket fails"""

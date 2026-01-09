@@ -19,7 +19,7 @@ class Config:
             "gamma_api_key": "",
             "gamma_base_url": "https://gamma-api.polymarket.com",
             "gamma_markets_endpoint": "/events",  # Use /events for live data with volume
-            "clob_endpoint": "wss://clob.polymarket.com/ws",
+            "clob_endpoint": "wss://ws-live-data.polymarket.com",
             "clob_rest_endpoint": "https://clob.polymarket.com",
             "subgraph_endpoint": "https://api.thegraph.com/subgraphs/name/polymarket/matic-markets",
             "kalshi_api_key": "",
@@ -154,7 +154,7 @@ class Config:
     
     @property
     def clob_endpoint(self) -> str:
-        return self.get("api.clob_endpoint", "wss://clob.polymarket.com/ws")
+        return self.get("api.clob_endpoint", "wss://ws-live-data.polymarket.com")
     
     @property
     def clob_rest_endpoint(self) -> str:
