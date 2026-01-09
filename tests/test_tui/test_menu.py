@@ -17,14 +17,17 @@ def test_logo_display():
 
     display_logo(mock_console)
 
-    # Should call print with logo and style
-    assert mock_console.print.call_count == 2  # Logo + newline
+    # Should call print with logo, nytemode line, and newline
+    assert mock_console.print.call_count == 3
     first_call = mock_console.print.call_args_list[0]
     # Check that logo contains expected text
     logo_text = first_call[0][0]
     assert "PolyMarket" in logo_text
     assert "Track. Analyze. Profit." in logo_text
     assert 'style' in first_call[1]
+    # Check nytemode branding
+    second_call = mock_console.print.call_args_list[1]
+    assert "nytemode" in second_call[0][0]
 
 
 def test_logo_display_narrow():
@@ -36,12 +39,15 @@ def test_logo_display_narrow():
 
     display_logo(mock_console)
 
-    assert mock_console.print.call_count == 2
+    assert mock_console.print.call_count == 3
     first_call = mock_console.print.call_args_list[0]
     logo_text = first_call[0][0]
     # Narrow logo should still have key text
     assert "PolyTerm" in logo_text
     assert "Track. Analyze. Profit." in logo_text
+    # Check nytemode branding
+    second_call = mock_console.print.call_args_list[1]
+    assert "nytemode" in second_call[0][0]
 
 
 def test_main_menu_creation():

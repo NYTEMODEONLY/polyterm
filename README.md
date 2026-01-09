@@ -2,6 +2,8 @@
 
 A powerful, terminal-based monitoring tool for PolyMarket prediction markets. Track market shifts, whale activity, and trading opportunities—all from your command line with **100% live, verified 2025 data**.
 
+*a [nytemode](https://nytemode.com) project*
+
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Live Data](https://img.shields.io/badge/Data-Live%202025-brightgreen.svg)](API_SETUP.md)
@@ -432,3 +434,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 **Built with ❤️ for the PolyMarket community**
 
 *Your terminal window to prediction markets* 📊
+
+*a [nytemode](https://nytemode.com) project*
