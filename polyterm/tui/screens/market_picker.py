@@ -20,12 +20,15 @@ def fetch_markets(limit: int = 20) -> List[Dict[str, Any]]:
     """
     try:
         config = Config()
-        aggregator = APIAggregator(
-            gamma_base_url=config.gamma_base_url,
-            clob_rest_endpoint=config.clob_rest_endpoint,
+        # Use GammaClient directly - it's more reliable for fetching market lists
+        gamma_client = GammaClient(
+            base_url=config.gamma_base_url,
+            api_key=config.gamma_api_key,
         )
-        markets = aggregator.get_live_markets(limit=limit)
-        aggregator.close()
+        markets = gamma_client.get_markets(limit=limit)
+        # Filter to active markets
+        markets = [m for m in markets if m.get('active') and not m.get('closed')]
+        gamma_client.close()
         return markets
     except Exception:
         return []
