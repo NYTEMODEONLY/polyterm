@@ -1,44 +1,92 @@
-"""Predictions Screen - AI-powered market predictions"""
+"""Predictions Screen - Signal-based market predictions"""
 
 import subprocess
 from rich.panel import Panel
 from rich.console import Console as RichConsole
 from rich.table import Table
 
+from .market_picker import pick_market, get_market_id, get_market_title
+
 
 def predictions_screen(console: RichConsole):
-    """Generate AI-powered predictions for markets
+    """Generate signal-based predictions for markets
+
+    Uses momentum, volume, whale activity, and technical indicators.
+    No external AI/LLM required - all analysis is algorithmic.
 
     Args:
         console: Rich Console instance
     """
-    console.print(Panel("[bold]AI Predictions[/bold]", style="cyan"))
+    console.print(Panel("[bold]Signal-Based Predictions[/bold]\n[dim]Momentum, volume, whale & technical analysis[/dim]", style="cyan"))
     console.print()
 
-    # Settings submenu
-    console.print("[bold]Prediction Settings:[/bold]")
+    # Ask user what they want to do
+    console.print("[bold]Prediction Options:[/bold]")
     console.print()
 
-    # Specific market or top markets
-    market_id = console.input(
-        "Specific market ID [cyan][leave blank for top markets][/cyan] "
-    ).strip()
+    menu = Table.grid(padding=(0, 1))
+    menu.add_column(style="cyan bold", justify="right", width=3)
+    menu.add_column(style="white")
 
-    # If no specific market, ask for limit
-    if not market_id:
-        limit = console.input(
-            "Number of markets to analyze [cyan][default: 10][/cyan] "
+    menu.add_row("1", "Analyze Top Markets - Predictions for highest volume markets")
+    menu.add_row("2", "Select Specific Market - Choose from list")
+    menu.add_row("3", "Enter Market ID - Manual ID entry")
+
+    console.print(menu)
+    console.print()
+
+    choice = console.input("[cyan]Select option (1-3):[/cyan] ").strip()
+    console.print()
+
+    market_id = None
+    limit = 10
+
+    if choice == '1':
+        # Top markets - ask for limit
+        limit_input = console.input(
+            "How many markets to analyze? [cyan][default: 10][/cyan] "
         ).strip() or "10"
         try:
-            limit = int(limit)
+            limit = int(limit_input)
             if limit < 1:
                 limit = 10
             elif limit > 25:
                 limit = 25
         except ValueError:
             limit = 10
+
+    elif choice == '2':
+        # Pick from list
+        market = pick_market(
+            console,
+            prompt="Select a market for prediction",
+            allow_manual=True,
+            limit=15,
+        )
+        if not market:
+            console.print("[yellow]No market selected[/yellow]")
+            return
+        market_id = get_market_id(market)
+        if not market_id:
+            console.print("[red]Could not get market ID[/red]")
+            return
+
+    elif choice == '3':
+        # Manual ID entry
+        market_id = console.input(
+            "[cyan]Enter market ID or slug:[/cyan] "
+        ).strip()
+        if not market_id:
+            console.print("[red]No ID provided[/red]")
+            return
+
     else:
-        limit = 1
+        console.print("[red]Invalid option[/red]")
+        return
+
+    # Get prediction settings
+    console.print()
+    console.print("[bold]Prediction Settings:[/bold]")
 
     # Prediction horizon
     horizon = console.input(
@@ -55,7 +103,7 @@ def predictions_screen(console: RichConsole):
 
     # Minimum confidence
     min_confidence = console.input(
-        "Minimum confidence [cyan][default: 0.5][/cyan] "
+        "Minimum confidence (0-1) [cyan][default: 0.5][/cyan] "
     ).strip() or "0.5"
     try:
         min_confidence = float(min_confidence)
