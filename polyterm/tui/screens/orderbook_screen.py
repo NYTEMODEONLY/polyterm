@@ -5,6 +5,8 @@ from rich.panel import Panel
 from rich.console import Console as RichConsole
 from rich.table import Table
 
+from .market_picker import pick_market, get_market_id, get_market_title
+
 
 def orderbook_screen(console: RichConsole):
     """Analyze order book for a market
@@ -12,15 +14,86 @@ def orderbook_screen(console: RichConsole):
     Args:
         console: Rich Console instance
     """
-    console.print(Panel("[bold]Order Book Analyzer[/bold]", style="cyan"))
+    console.print(Panel("[bold]Order Book Analyzer[/bold]\n[dim]Depth charts, slippage, liquidity analysis[/dim]", style="cyan"))
     console.print()
 
-    # Get market ID (required)
-    market_id = console.input(
-        "[cyan]Enter market token ID:[/cyan] "
-    ).strip()
-    if not market_id:
-        console.print("[red]Market ID is required[/red]")
+    # Ask user how they want to select a market
+    console.print("[bold]Select Market:[/bold]")
+    console.print()
+
+    menu = Table.grid(padding=(0, 1))
+    menu.add_column(style="cyan bold", justify="right", width=3)
+    menu.add_column(style="white")
+
+    menu.add_row("1", "Choose from List - Select from active markets")
+    menu.add_row("2", "Enter Token ID - Manual token ID entry")
+
+    console.print(menu)
+    console.print()
+
+    choice = console.input("[cyan]Select option (1-2):[/cyan] ").strip()
+    console.print()
+
+    market_id = None
+
+    if choice == '1':
+        # Pick from list
+        market = pick_market(
+            console,
+            prompt="Select a market for order book analysis",
+            allow_manual=True,
+            limit=15,
+        )
+        if not market:
+            console.print("[yellow]No market selected[/yellow]")
+            return
+
+        # For order book, we need the token ID, not the event ID
+        # The token ID is typically in 'clobTokenIds' or similar
+        clob_ids = market.get('clobTokenIds', [])
+        if isinstance(clob_ids, str):
+            try:
+                import json
+                clob_ids = json.loads(clob_ids)
+            except:
+                clob_ids = []
+
+        if clob_ids:
+            # Show YES/NO choice if multiple tokens
+            if len(clob_ids) >= 2:
+                console.print()
+                console.print("[bold]Select outcome:[/bold]")
+                console.print("  [cyan]1[/cyan] YES token")
+                console.print("  [cyan]2[/cyan] NO token")
+                outcome = console.input("[cyan]Choice (1/2):[/cyan] ").strip()
+                if outcome == '2' and len(clob_ids) > 1:
+                    market_id = clob_ids[1]
+                else:
+                    market_id = clob_ids[0]
+            else:
+                market_id = clob_ids[0]
+        else:
+            # Fall back to regular ID
+            market_id = get_market_id(market)
+
+        if not market_id:
+            console.print("[red]Could not get token ID for this market[/red]")
+            console.print("[dim]Try entering the token ID manually[/dim]")
+            market_id = console.input("[cyan]Enter token ID:[/cyan] ").strip()
+            if not market_id:
+                return
+
+    elif choice == '2':
+        # Manual ID entry
+        market_id = console.input(
+            "[cyan]Enter market token ID:[/cyan] "
+        ).strip()
+        if not market_id:
+            console.print("[red]No ID provided[/red]")
+            return
+
+    else:
+        console.print("[red]Invalid option[/red]")
         return
 
     console.print()
@@ -42,9 +115,9 @@ def orderbook_screen(console: RichConsole):
 
     # Show chart
     show_chart = console.input(
-        "Show ASCII depth chart? [cyan](y/n)[/cyan] [default: n] "
+        "Show ASCII depth chart? [cyan](y/n)[/cyan] [default: y] "
     ).strip().lower()
-    show_chart = show_chart == 'y'
+    show_chart = show_chart != 'n'
 
     # Slippage calculation
     slippage_size = console.input(

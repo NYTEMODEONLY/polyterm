@@ -1,4 +1,4 @@
-"""Predict command - AI-powered market predictions"""
+"""Predict command - Signal-based market predictions"""
 
 import click
 from datetime import datetime
@@ -20,7 +20,11 @@ from ...utils.json_output import print_json
 @click.option("--format", "output_format", type=click.Choice(["table", "json"]), default="table", help="Output format")
 @click.pass_context
 def predict(ctx, market, limit, horizon, min_confidence, output_format):
-    """Generate AI-powered predictions for markets"""
+    """Generate signal-based predictions for markets
+
+    Uses momentum, volume, whale activity, and technical indicators
+    to generate market predictions. No external AI/LLM required.
+    """
 
     config = ctx.obj["config"]
     console = Console()
@@ -40,13 +44,21 @@ def predict(ctx, market, limit, horizon, min_confidence, output_format):
         predictions = []
 
         if market:
-            # Single market prediction
-            markets_data = gamma_client.get_markets(limit=1, market_id=market)
-            if markets_data:
-                title = markets_data[0].get('title', market)
-                pred = engine.generate_prediction(market, title, horizon)
-                predictions.append(pred)
-        else:
+            # Single market prediction - use get_market() for single lookup
+            try:
+                market_data = gamma_client.get_market(market)
+                if market_data:
+                    title = market_data.get('title', market_data.get('question', market))
+                    pred = engine.generate_prediction(market, title, horizon)
+                    predictions.append(pred)
+            except Exception:
+                # Market ID not found, try searching by slug/title
+                if output_format != 'json':
+                    console.print(f"[yellow]Market '{market}' not found. Searching...[/yellow]")
+                # Fall through to search
+                market = None
+
+        if not market:
             # Top markets by volume
             markets_data = gamma_client.get_markets(limit=limit, active=True, closed=False)
 
