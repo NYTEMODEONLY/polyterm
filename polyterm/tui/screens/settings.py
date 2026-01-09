@@ -51,11 +51,13 @@ def settings_screen(console: RichConsole):
     menu.add_row("4", "View Config File")
     menu.add_row("5", "Reset to Defaults")
     menu.add_row("6", "🔄 Update PolyTerm")
-    
+    menu.add_row("", "")
+    menu.add_row("b", "Back - Return to main menu")
+
     console.print(menu)
     console.print()
-    
-    choice = console.input("[cyan]Select option (1-6):[/cyan] ").strip()
+
+    choice = console.input("[cyan]Select option (1-6, b):[/cyan] ").strip().lower()
     console.print()
     
     if choice == '1':
@@ -103,10 +105,14 @@ def settings_screen(console: RichConsole):
     elif choice == '6':
         # Update PolyTerm
         update_polyterm(console)
-    
+        return
+
+    elif choice == 'b':
+        return
+
     else:
         console.print("[red]Invalid option[/red]")
-    
+
     console.print()
     console.input("[dim]Press Enter to continue...[/dim]")
 

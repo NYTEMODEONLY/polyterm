@@ -152,11 +152,13 @@ def analytics_screen(console: RichConsole):
     menu.add_row("2", "Market Correlations - Related markets")
     menu.add_row("3", "Price Predictions - Trend analysis")
     menu.add_row("4", "Volume Analysis - Volume patterns")
+    menu.add_row("", "")
+    menu.add_row("b", "Back - Return to main menu")
 
     console.print(menu)
     console.print()
 
-    choice = console.input("[cyan]Select option (1-4):[/cyan] ").strip()
+    choice = console.input("[cyan]Select option (1-4, b):[/cyan] ").strip().lower()
     console.print()
 
     if choice == '1':
@@ -191,6 +193,9 @@ def analytics_screen(console: RichConsole):
         # Volume Analysis
         console.print("[yellow]Volume analysis coming soon![/yellow]")
         console.print("[dim]This feature will identify volume patterns and spikes.[/dim]")
+
+    elif choice == 'b':
+        return
 
     else:
         console.print("[red]Invalid option[/red]")

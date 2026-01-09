@@ -29,11 +29,13 @@ def alerts_screen(console: RichConsole):
     menu.add_row("4", "Acknowledge Alert - Mark alert as read")
     menu.add_row("5", "Test Telegram - Send test notification")
     menu.add_row("6", "Test Discord - Send test notification")
+    menu.add_row("", "")
+    menu.add_row("b", "Back - Return to main menu")
 
     console.print(menu)
     console.print()
 
-    choice = console.input("[cyan]Select option (1-6):[/cyan] ").strip()
+    choice = console.input("[cyan]Select option (1-6, b):[/cyan] ").strip().lower()
     console.print()
 
     if choice == '1':
@@ -115,6 +117,9 @@ def alerts_screen(console: RichConsole):
         console.print("[green]Sending Discord test notification...[/green]")
         console.print()
         cmd = ["polyterm", "alerts", "--test-discord"]
+
+    elif choice == 'b':
+        return
 
     else:
         console.print("[red]Invalid option[/red]")
