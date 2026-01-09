@@ -8,7 +8,7 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
 
 setup(
     name="polyterm",
-    version="0.4.8",
+    version="0.4.9",
     author="PolyTerm Contributors",
     description="A terminal-based monitoring app for PolyMarket shifts",
     long_description=long_description,
