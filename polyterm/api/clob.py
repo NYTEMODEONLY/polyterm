@@ -127,38 +127,41 @@ class CLOBClient:
     
     async def subscribe_to_trades(self, market_slugs: List[str], callback: Callable):
         """Subscribe to live trade feeds for multiple markets using RTDS
-        
+
         Args:
-            market_slugs: List of market slugs to monitor
+            market_slugs: List of market slugs to monitor (can be empty to subscribe to all)
             callback: Function to call when trade data is received
         """
         if not self.ws_connection:
             await self.connect_websocket()
-        
-        # Subscribe to RTDS trades topic with correct format
-        # RTDS requires individual subscriptions for each market
-        for market_slug in market_slugs:
-            subscribe_msg = {
-                "action": "subscribe",
-                "subscriptions": [
-                    {
-                        "topic": "activity",
-                        "type": "trades",
-                        "filters": f"{{\"market_slug\":\"{market_slug}\"}}"
-                    }
-                ]
-            }
-            await self.ws_connection.send(json.dumps(subscribe_msg))
-        
-        # Store callback for all markets
+
+        # Subscribe to ALL trades (no filter) - we'll filter client-side
+        # This is more reliable than per-market subscriptions which may miss data
+        subscribe_msg = {
+            "action": "subscribe",
+            "subscriptions": [
+                {
+                    "topic": "activity",
+                    "type": "trades"
+                }
+            ]
+        }
+        await self.ws_connection.send(json.dumps(subscribe_msg))
+
+        # Store callback for all markets (keyed by slug)
+        # Also store a special "_all" key for unfiltered callbacks
         for market_slug in market_slugs:
             self.subscriptions[market_slug] = callback
+
+        # If no specific markets, store callback for all trades
+        if not market_slugs:
+            self.subscriptions["_all"] = callback
     
     async def listen_for_trades(self):
         """Listen for incoming trade messages from RTDS"""
         if not self.ws_connection:
             raise Exception("WebSocket not connected")
-        
+
         try:
             async for message in self.ws_connection:
                 try:
@@ -166,31 +169,52 @@ class CLOBClient:
                     if message == "PING":
                         await self.ws_connection.send("PONG")
                         continue
-                    
+
+                    # Skip empty messages
+                    if not message or message.strip() == "":
+                        continue
+
                     data = json.loads(message)
-                    
-                    # Handle RTDS trade messages with correct topic/type
+
+                    # Only process messages with payload (actual trade data)
+                    if "payload" not in data:
+                        continue
+
+                    # Handle RTDS trade messages
+                    # RTDS format: {topic, type, payload: {eventSlug, slug, price, size, side, ...}}
                     if data.get("topic") == "activity" and data.get("type") == "trades":
-                        # Extract market identifier from the trade data
-                        # The official client shows 'market' field contains the market identifier
-                        market_id = data.get("market") or data.get("market_slug")
-                        if market_id and market_id in self.subscriptions:
-                            callback = self.subscriptions[market_id]
+                        payload = data.get("payload", {})
+
+                        # Extract market identifiers from payload (not top level!)
+                        event_slug = payload.get("eventSlug", "")
+                        market_slug = payload.get("slug", "")
+
+                        # Check if we have a callback for this market
+                        callback = None
+
+                        # Try to find matching callback by eventSlug or slug
+                        if event_slug and event_slug in self.subscriptions:
+                            callback = self.subscriptions[event_slug]
+                        elif market_slug and market_slug in self.subscriptions:
+                            callback = self.subscriptions[market_slug]
+                        elif "_all" in self.subscriptions:
+                            # Unfiltered callback for all trades
+                            callback = self.subscriptions["_all"]
+                        elif self.subscriptions:
+                            # If we have any subscriptions, use the first one
+                            # (assumes single callback for all monitored markets)
+                            callback = next(iter(self.subscriptions.values()))
+
+                        if callback:
+                            # Pass the full data (with payload) to the callback
                             await callback(data)
-                    
-                    # Handle other activity messages
-                    elif data.get("topic") == "activity":
-                        market_id = data.get("market") or data.get("market_slug")
-                        if market_id and market_id in self.subscriptions:
-                            callback = self.subscriptions[market_id]
-                            await callback(data)
-                    
+
                 except json.JSONDecodeError:
                     continue
                 except Exception as e:
                     print(f"Error processing message: {e}")
                     continue
-                    
+
         except websockets.exceptions.ConnectionClosed:
             print("WebSocket connection closed")
         except Exception as e:
