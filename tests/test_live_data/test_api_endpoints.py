@@ -83,18 +83,17 @@ class TestAPIEndpoints:
     def test_aggregator_live_markets(self, aggregator):
         """Test aggregator returns live markets"""
         markets = aggregator.get_live_markets(limit=10, require_volume=False)
-        
+
         assert len(markets) > 0, "Aggregator returned no live markets"
-        
-        # Verify markets are fresh
-        from datetime import datetime
-        current_year = datetime.now().year
-        
+
+        # Verify markets are active (not closed)
+        # Note: Markets may have endDate in the past but still be active if not yet resolved
         for market in markets:
-            end_date = market.get('endDate', market.get('end_date_iso', ''))
-            if end_date and len(end_date) >= 4:
-                year = int(end_date[:4])
-                assert year >= current_year, f"Aggregator returned old market: {market.get('question')}"
+            is_active = market.get('active')
+            is_closed = market.get('closed')
+            # If we have explicit flags, verify market is active
+            if is_active is not None and is_closed is not None:
+                assert is_active and not is_closed, f"Aggregator returned inactive/closed market: {market.get('question')}"
     
     def test_aggregator_top_markets_by_volume(self, aggregator):
         """Test getting top markets by volume"""

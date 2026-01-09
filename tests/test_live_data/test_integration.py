@@ -39,13 +39,13 @@ class TestLiveIntegration:
         if len(markets) == 0:
             pytest.skip("No fresh markets available from API")
         
-        # 2. Verify markets are fresh
-        current_year = datetime.now().year
+        # 2. Verify markets are active (not closed)
+        # Note: Markets may have endDate in the past but still be active if not yet resolved
         for market in markets:
-            end_date = market.get('endDate', '')
-            if end_date and len(end_date) >= 4:
-                year = int(end_date[:4])
-                assert year >= current_year, f"Old market: {market.get('question')}"
+            is_active = market.get('active')
+            is_closed = market.get('closed')
+            if is_active is not None and is_closed is not None:
+                assert is_active and not is_closed, f"Inactive/closed market: {market.get('question')}"
         
         # 3. Verify markets have volume
         markets_with_volume = sum(1 for m in markets if float(m.get('volume24hr', 0) or 0) > 0)
@@ -132,26 +132,27 @@ class TestLiveIntegration:
         except Exception as e:
             pytest.skip(f"Could not test snapshot creation: {e}")
     
-    def test_critical_no_old_markets_in_results(self, aggregator):
-        """CRITICAL: Ensure no markets from 2024 or earlier appear"""
+    def test_critical_no_closed_markets_in_results(self, aggregator):
+        """CRITICAL: Ensure no closed/inactive markets appear in live results"""
         markets = aggregator.get_live_markets(limit=50, require_volume=False)
 
         # Skip if no fresh markets available (depends on external API data)
         if len(markets) == 0:
             pytest.skip("No fresh markets available from API - freshness filter working correctly")
 
-        current_year = datetime.now().year
-        old_markets = []
+        # Check for closed or inactive markets
+        # Note: Markets with past endDate are OK if they're still active (not yet resolved)
+        closed_markets = []
 
         for market in markets:
-            end_date = market.get('endDate', '')
-            if end_date and len(end_date) >= 4:
-                year = int(end_date[:4])
-                if year < current_year:
-                    old_markets.append(f"{market.get('question', 'Unknown')[:50]} ({year})")
+            is_active = market.get('active')
+            is_closed = market.get('closed')
+            # Only flag markets that are explicitly closed or inactive
+            if is_closed == True or is_active == False:
+                closed_markets.append(f"{market.get('question', 'Unknown')[:50]}")
 
-        assert len(old_markets) == 0, \
-            f"CRITICAL: Old markets found in results:\n" + "\n".join(old_markets[:5])
+        assert len(closed_markets) == 0, \
+            f"CRITICAL: Closed/inactive markets found in results:\n" + "\n".join(closed_markets[:5])
     
     def test_critical_volume_data_present(self, aggregator):
         """CRITICAL: Ensure volume data is present for active markets"""

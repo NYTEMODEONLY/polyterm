@@ -189,37 +189,42 @@ class GammaClient:
     
     def is_market_fresh(self, market: Dict[str, Any], max_age_hours: int = 24) -> bool:
         """Check if market data is fresh (not stale)
-        
+
         Args:
             market: Market dictionary
             max_age_hours: Maximum age in hours to consider fresh
-        
+
         Returns:
             True if market is fresh, False if stale
         """
+        # Primary check: use active/closed flags from API
+        # These are authoritative - if a market is marked active and not closed, it's tradeable
+        is_active = market.get('active')
+        is_closed = market.get('closed')
+
+        # If we have explicit active/closed flags, use them
+        if is_active is not None and is_closed is not None:
+            return is_active and not is_closed
+
+        # Fallback: check end date for markets without explicit flags
         try:
-            # Check end date
             end_date_str = market.get('endDate', market.get('end_date_iso', ''))
             if not end_date_str:
+                # No date info and no flags - consider stale
                 return False
-            
+
             # Parse ISO date
             if HAS_DATEUTIL:
                 end_date = parser.parse(end_date_str)
             else:
-                # Simple ISO date parsing for YYYY-MM-DD format
                 end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
-            
+
             now = datetime.now(end_date.tzinfo) if end_date.tzinfo else datetime.now()
-            
+
             # Market should end in the future or very recently (within max_age_hours)
             if end_date < now - timedelta(hours=max_age_hours):
                 return False
-            
-            # Check if market is from current year or future
-            if end_date.year < datetime.now().year:
-                return False
-                
+
             return True
         except Exception:
             # If we can't parse date, consider it stale
