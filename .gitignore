@@ -142,3 +142,4 @@ Thumbs.db
 
 # PyPI credentials
 .pypirc
+launch_polyterm_dev.sh
