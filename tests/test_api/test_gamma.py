@@ -39,13 +39,13 @@ class TestGammaClient:
     @responses.activate
     def test_get_markets(self, client):
         """Test getting markets list"""
-        # Note: get_markets uses /events endpoint, not /markets
+        # Note: get_markets uses /markets endpoint for individual market data with prices
         responses.add(
             responses.GET,
-            "https://test-api.polymarket.com/events",
+            "https://test-api.polymarket.com/markets",
             json=[
-                {"id": "1", "question": "Test Market 1", "volume": 10000},
-                {"id": "2", "question": "Test Market 2", "volume": 20000},
+                {"id": "1", "question": "Test Market 1", "volume": 10000, "oneDayPriceChange": 0.05},
+                {"id": "2", "question": "Test Market 2", "volume": 20000, "oneDayPriceChange": -0.02},
             ],
             status=200,
         )

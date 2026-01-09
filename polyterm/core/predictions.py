@@ -8,6 +8,7 @@ Features:
 - Confidence scoring with historical accuracy
 """
 
+import json
 import math
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime, timedelta
@@ -127,6 +128,7 @@ class PredictionEngine:
         market_id: str,
         market_title: str = "",
         horizon_hours: int = 24,
+        market_data: Optional[Dict[str, Any]] = None,
     ) -> Prediction:
         """
         Generate prediction for a market.
@@ -135,18 +137,23 @@ class PredictionEngine:
             market_id: Market ID
             market_title: Market title for display
             horizon_hours: Prediction horizon
+            market_data: Optional API market data with price/volume info
 
         Returns:
             Prediction with signals
         """
         signals = []
 
-        # Generate individual signals
-        momentum_signal = self._calculate_momentum_signal(market_id)
+        # Generate individual signals - try API data first, then fall back to DB
+        momentum_signal = self._calculate_momentum_signal_from_api(market_data) if market_data else None
+        if not momentum_signal:
+            momentum_signal = self._calculate_momentum_signal(market_id)
         if momentum_signal:
             signals.append(momentum_signal)
 
-        volume_signal = self._calculate_volume_signal(market_id)
+        volume_signal = self._calculate_volume_signal_from_api(market_data) if market_data else None
+        if not volume_signal:
+            volume_signal = self._calculate_volume_signal(market_id)
         if volume_signal:
             signals.append(volume_signal)
 
@@ -158,7 +165,9 @@ class PredictionEngine:
         if smart_money_signal:
             signals.append(smart_money_signal)
 
-        technical_signal = self._calculate_technical_signal(market_id)
+        technical_signal = self._calculate_technical_signal_from_api(market_data) if market_data else None
+        if not technical_signal:
+            technical_signal = self._calculate_technical_signal(market_id)
         if technical_signal:
             signals.append(technical_signal)
 
@@ -402,6 +411,197 @@ class PredictionEngine:
             strength=strength,
             confidence=0.5,  # Technical analysis has moderate confidence
             value=rsi,
+            description=description,
+        )
+
+    def _calculate_momentum_signal_from_api(self, market_data: Dict[str, Any]) -> Optional[Signal]:
+        """Calculate momentum signal from API price change data"""
+        if not market_data:
+            return None
+
+        # Extract price changes from API data
+        one_day_change = market_data.get('oneDayPriceChange')
+        one_week_change = market_data.get('oneWeekPriceChange')
+        one_month_change = market_data.get('oneMonthPriceChange')
+
+        # Need at least one price change metric
+        if one_day_change is None and one_week_change is None:
+            return None
+
+        # Convert to float if string
+        try:
+            if one_day_change is not None:
+                one_day_change = float(one_day_change)
+            if one_week_change is not None:
+                one_week_change = float(one_week_change)
+            if one_month_change is not None:
+                one_month_change = float(one_month_change)
+        except (ValueError, TypeError):
+            return None
+
+        # Calculate weighted momentum (short-term weighted higher)
+        momentum = 0
+        weight_sum = 0
+
+        if one_day_change is not None:
+            momentum += one_day_change * 0.5
+            weight_sum += 0.5
+        if one_week_change is not None:
+            momentum += one_week_change * 0.35
+            weight_sum += 0.35
+        if one_month_change is not None:
+            momentum += one_month_change * 0.15
+            weight_sum += 0.15
+
+        if weight_sum > 0:
+            momentum = momentum / weight_sum
+
+        # Determine direction and strength
+        if momentum > 0.02:
+            direction = Direction.BULLISH
+            strength = min(1.0, momentum * 5)
+        elif momentum < -0.02:
+            direction = Direction.BEARISH
+            strength = min(1.0, abs(momentum) * 5)
+        else:
+            direction = Direction.NEUTRAL
+            strength = 0.3
+
+        # Higher confidence when we have more data points
+        data_points = sum(1 for x in [one_day_change, one_week_change, one_month_change] if x is not None)
+        confidence = min(1.0, 0.4 + (data_points * 0.2))
+
+        return Signal(
+            signal_type=SignalType.MOMENTUM,
+            direction=direction,
+            strength=strength,
+            confidence=confidence,
+            value=momentum,
+            description=f"Price momentum: {momentum:+.1%} (1d: {one_day_change:+.1%})" if one_day_change else f"Price momentum: {momentum:+.1%}",
+        )
+
+    def _calculate_volume_signal_from_api(self, market_data: Dict[str, Any]) -> Optional[Signal]:
+        """Calculate volume signal from API volume data"""
+        if not market_data:
+            return None
+
+        # Extract volume data
+        volume_24hr = market_data.get('volume24hr')
+        total_volume = market_data.get('volume')
+        liquidity = market_data.get('liquidity')
+
+        # Try alternative field names
+        if volume_24hr is None:
+            volume_24hr = market_data.get('volume24Hour')
+        if total_volume is None:
+            total_volume = market_data.get('volumeNum')
+
+        # Need at least 24hr volume
+        if volume_24hr is None:
+            return None
+
+        try:
+            volume_24hr = float(volume_24hr)
+            total_volume = float(total_volume) if total_volume else 0
+            liquidity = float(liquidity) if liquidity else 0
+        except (ValueError, TypeError):
+            return None
+
+        # Calculate volume acceleration if we have total volume
+        if total_volume > 0:
+            # Estimate 7-day average daily volume (rough approximation)
+            avg_daily_volume = total_volume / 30  # Assume market existed ~30 days
+            acceleration = (volume_24hr - avg_daily_volume) / avg_daily_volume if avg_daily_volume > 0 else 0
+        else:
+            acceleration = 0
+
+        # Volume level analysis
+        if volume_24hr > 100000:
+            volume_level = "very high"
+            base_strength = 0.8
+        elif volume_24hr > 50000:
+            volume_level = "high"
+            base_strength = 0.6
+        elif volume_24hr > 10000:
+            volume_level = "moderate"
+            base_strength = 0.4
+        else:
+            volume_level = "low"
+            base_strength = 0.2
+
+        # Direction based on price movement (combine with momentum if available)
+        one_day_change = market_data.get('oneDayPriceChange')
+        if one_day_change is not None:
+            try:
+                one_day_change = float(one_day_change)
+                if one_day_change > 0.02 and volume_24hr > 10000:
+                    direction = Direction.BULLISH
+                elif one_day_change < -0.02 and volume_24hr > 10000:
+                    direction = Direction.BEARISH
+                else:
+                    direction = Direction.NEUTRAL
+            except (ValueError, TypeError):
+                direction = Direction.NEUTRAL
+        else:
+            direction = Direction.NEUTRAL
+
+        strength = min(1.0, base_strength + abs(acceleration) * 0.2)
+        confidence = 0.5 if volume_24hr > 10000 else 0.3
+
+        return Signal(
+            signal_type=SignalType.VOLUME,
+            direction=direction,
+            strength=strength,
+            confidence=confidence,
+            value=acceleration,
+            description=f"Volume {volume_level}: ${volume_24hr:,.0f}/24h",
+        )
+
+    def _calculate_technical_signal_from_api(self, market_data: Dict[str, Any]) -> Optional[Signal]:
+        """Calculate technical signal from API price data"""
+        if not market_data:
+            return None
+
+        # Get current price
+        outcome_prices = market_data.get('outcomePrices')
+        if not outcome_prices:
+            return None
+
+        try:
+            if isinstance(outcome_prices, list) and len(outcome_prices) > 0:
+                current_price = float(outcome_prices[0])
+            elif isinstance(outcome_prices, str):
+                # Parse JSON string if needed
+                prices = json.loads(outcome_prices)
+                current_price = float(prices[0]) if prices else None
+            else:
+                return None
+        except (ValueError, TypeError, json.JSONDecodeError):
+            return None
+
+        if current_price is None:
+            return None
+
+        # Simple overbought/oversold based on extreme probabilities
+        if current_price > 0.85:
+            direction = Direction.BEARISH
+            strength = min(1.0, (current_price - 0.85) * 5)
+            description = f"High probability {current_price:.0%} (potential overconfidence)"
+        elif current_price < 0.15:
+            direction = Direction.BULLISH
+            strength = min(1.0, (0.15 - current_price) * 5)
+            description = f"Low probability {current_price:.0%} (potential underconfidence)"
+        else:
+            direction = Direction.NEUTRAL
+            strength = 0.2
+            description = f"Price {current_price:.0%} (neutral range)"
+
+        return Signal(
+            signal_type=SignalType.TECHNICAL,
+            direction=direction,
+            strength=strength,
+            confidence=0.4,  # Lower confidence for simple technical analysis
+            value=current_price,
             description=description,
         )
 

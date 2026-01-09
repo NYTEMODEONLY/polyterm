@@ -49,7 +49,8 @@ def predict(ctx, market, limit, horizon, min_confidence, output_format):
                 market_data = gamma_client.get_market(market)
                 if market_data:
                     title = market_data.get('title', market_data.get('question', market))
-                    pred = engine.generate_prediction(market, title, horizon)
+                    # Pass market_data to engine for API-based signals
+                    pred = engine.generate_prediction(market, title, horizon, market_data=market_data)
                     predictions.append(pred)
             except Exception:
                 # Market ID not found, try searching by slug/title
@@ -69,7 +70,8 @@ def predict(ctx, market, limit, horizon, min_confidence, output_format):
                 if not market_id:
                     continue
 
-                pred = engine.generate_prediction(market_id, title, horizon)
+                # Pass market data to engine for API-based signals
+                pred = engine.generate_prediction(market_id, title, horizon, market_data=m)
 
                 if pred.confidence >= min_confidence:
                     predictions.append(pred)
