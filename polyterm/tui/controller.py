@@ -13,6 +13,11 @@ from .screens import (
     export_screen,
     settings_screen,
     help_screen,
+    arbitrage_screen,
+    predictions_screen,
+    wallets_screen,
+    alerts_screen,
+    orderbook_screen,
 )
 
 
@@ -51,6 +56,16 @@ class TUIController:
                     export_screen(self.console)
                 elif choice == '8' or choice == 's':
                     settings_screen(self.console)
+                elif choice == '9' or choice == 'arb':
+                    arbitrage_screen(self.console)
+                elif choice == '10' or choice == 'pred':
+                    predictions_screen(self.console)
+                elif choice == '11' or choice == 'wal':
+                    wallets_screen(self.console)
+                elif choice == '12' or choice == 'alert':
+                    alerts_screen(self.console)
+                elif choice == '13' or choice == 'ob':
+                    orderbook_screen(self.console)
                 elif choice == 'u' or choice == 'update':
                     # Quick update option
                     from .screens.settings import update_polyterm

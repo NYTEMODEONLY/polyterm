@@ -22,9 +22,12 @@ class Config:
             "clob_endpoint": "wss://clob.polymarket.com/ws",
             "clob_rest_endpoint": "https://clob.polymarket.com",
             "subgraph_endpoint": "https://api.thegraph.com/subgraphs/name/polymarket/matic-markets",
+            "kalshi_api_key": "",
+            "kalshi_base_url": "https://trading-api.kalshi.com/trade-api/v2",
         },
         "wallet": {
             "address": "",
+            "tracked_wallets": [],
         },
         "display": {
             "use_colors": True,
@@ -37,6 +40,44 @@ class Config:
             "min_volume_threshold": 0.01,
             "reject_closed_markets": True,
             "enable_api_fallback": True,
+        },
+        "notifications": {
+            "telegram": {
+                "enabled": False,
+                "bot_token": "",
+                "chat_id": "",
+            },
+            "discord": {
+                "enabled": False,
+                "webhook_url": "",
+            },
+            "system": {
+                "enabled": True,
+            },
+            "sound": {
+                "enabled": True,
+                "file": "",
+            },
+            "email": {
+                "enabled": False,
+                "smtp_host": "",
+                "smtp_port": 587,
+                "smtp_user": "",
+                "smtp_password": "",
+                "email_to": "",
+            },
+        },
+        "whale_tracking": {
+            "min_whale_trade": 10000,
+            "min_smart_money_win_rate": 0.70,
+            "min_smart_money_trades": 10,
+            "insider_alert_threshold": 70,
+        },
+        "arbitrage": {
+            "min_spread": 0.025,  # 2.5% minimum profitable spread
+            "include_kalshi": False,
+            "polymarket_fee": 0.02,  # 2% winner fee
+            "kalshi_fee": 0.007,  # 0.7% fee
         },
     }
     
@@ -138,4 +179,45 @@ class Config:
     @property
     def wallet_address(self) -> str:
         return self.get("wallet.address", "")
+
+    @property
+    def kalshi_api_key(self) -> str:
+        return self.get("api.kalshi_api_key", "")
+
+    @property
+    def kalshi_base_url(self) -> str:
+        return self.get("api.kalshi_base_url", "https://trading-api.kalshi.com/trade-api/v2")
+
+    @property
+    def notification_config(self) -> dict:
+        """Get notification configuration"""
+        return self.get("notifications", {})
+
+    @property
+    def whale_tracking_config(self) -> dict:
+        """Get whale tracking configuration"""
+        return self.get("whale_tracking", {})
+
+    @property
+    def arbitrage_config(self) -> dict:
+        """Get arbitrage configuration"""
+        return self.get("arbitrage", {})
+
+    def get_tracked_wallets(self) -> list:
+        """Get list of tracked wallet addresses"""
+        return self.get("wallet.tracked_wallets", [])
+
+    def add_tracked_wallet(self, address: str) -> None:
+        """Add wallet to tracked list"""
+        wallets = self.get_tracked_wallets()
+        if address not in wallets:
+            wallets.append(address)
+            self.set("wallet.tracked_wallets", wallets)
+
+    def remove_tracked_wallet(self, address: str) -> None:
+        """Remove wallet from tracked list"""
+        wallets = self.get_tracked_wallets()
+        if address in wallets:
+            wallets.remove(address)
+            self.set("wallet.tracked_wallets", wallets)
 
