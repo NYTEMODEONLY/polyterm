@@ -29,11 +29,13 @@ def wallets_screen(console: RichConsole):
     menu.add_row("4", "Analyze Wallet - Deep dive on specific wallet")
     menu.add_row("5", "Track Wallet - Add wallet to tracking list")
     menu.add_row("6", "Untrack Wallet - Remove from tracking list")
+    menu.add_row("", "")
+    menu.add_row("b", "Back - Return to main menu")
 
     console.print(menu)
     console.print()
 
-    choice = console.input("[cyan]Select option (1-6):[/cyan] ").strip()
+    choice = console.input("[cyan]Select option (1-6, b):[/cyan] ").strip().lower()
     console.print()
 
     if choice == '1':
@@ -112,6 +114,9 @@ def wallets_screen(console: RichConsole):
             return
 
         cmd = ["polyterm", "wallets", f"--untrack={address}"]
+
+    elif choice == 'b':
+        return
 
     else:
         console.print("[red]Invalid option[/red]")
