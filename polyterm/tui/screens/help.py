@@ -77,5 +77,7 @@ def help_screen(console: RichConsole):
     console.print("📄 [link=https://docs.polymarket.com]PolyMarket Docs[/link]")
     console.print("🐛 [link=https://github.com/NYTEMODEONLY/polyterm/issues]Report Issues[/link]")
     console.print()
+    console.print("[medium_purple1]a nytemode project[/medium_purple1] - [link=https://nytemode.com]nytemode.com[/link]")
+    console.print()
 
 

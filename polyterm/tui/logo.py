@@ -35,6 +35,7 @@ def display_logo(console: Console):
          Terminal-Based Monitoring for PolyMarket
                    Track. Analyze. Profit.
 """
+        nytemode_padding = "                      "
     elif width >= 60:
         # Medium ASCII logo for medium terminals - NO BORDER
         logo_text = """
@@ -48,21 +49,24 @@ def display_logo(console: Console):
     Terminal-Based Monitoring for PolyMarket
               Track. Analyze. Profit.
 """
+        nytemode_padding = "                 "
     else:
         # Compact ASCII logo for narrow terminals - NO BORDER
         logo_text = """
   ██████╗  ██████╗ ██╗  ██╗   ██╗████████╗
   ██╔══██╗██╔═══██╗██║  ╚██╗ ██╔╝╚══██╔══╝
-  ██████╔╝██║   ██║██║   ╚████╔╝    ██║   
-  ██╔═══╝ ██║   ██║██║    ╚██╔╝     ██║   
-  ██║     ╚██████╔╝███████╗██║      ██║   
-  ╚═╝      ╚═════╝ ╚══════╝╚═╝      ╚═╝   
+  ██████╔╝██║   ██║██║   ╚████╔╝    ██║
+  ██╔═══╝ ██║   ██║██║    ╚██╔╝     ██║
+  ██║     ╚██████╔╝███████╗██║      ██║
+  ╚═╝      ╚═════╝ ╚══════╝╚═╝      ╚═╝
 
      PolyTerm - PolyMarket Monitor
         Track. Analyze. Profit.
 """
-    
+        nytemode_padding = "           "
+
     console.print(logo_text, style="bold cyan")
+    console.print(f"{nytemode_padding}[medium_purple1]a nytemode project[/medium_purple1]")
     console.print()
 
 
