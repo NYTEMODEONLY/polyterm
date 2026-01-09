@@ -67,61 +67,74 @@ class TestConfigCommand:
 
 class TestExportCommand:
     """Test export command"""
-    
+
     @pytest.fixture
     def runner(self):
         return CliRunner()
-    
+
     @patch('polyterm.cli.commands.export_cmd.GammaClient')
     @patch('polyterm.cli.commands.export_cmd.CLOBClient')
-    @patch('polyterm.cli.commands.export_cmd.SubgraphClient')
-    def test_export_json(self, mock_subgraph, mock_clob, mock_gamma, runner):
+    def test_export_json(self, mock_clob, mock_gamma, runner):
         """Test exporting data as JSON"""
         # Mock API responses
         mock_gamma_instance = Mock()
         mock_gamma_instance.get_market.return_value = {
             "id": "market1",
             "question": "Test Market",
+            "slug": "test-market",
+            "description": "Test description",
+            "endDate": "2026-12-31",
+            "active": True,
+            "closed": False,
+            "volume": 1000,
+            "volume24hr": 100,
+            "volume1wk": 500,
+            "volume1mo": 800,
+            "liquidity": 500,
+            "outcomePrices": '["0.65", "0.35"]',
+            "spread": 0.01,
+            "bestBid": 0.64,
+            "bestAsk": 0.66,
+            "oneHourPriceChange": 0.01,
+            "oneDayPriceChange": 0.02,
+            "oneWeekPriceChange": 0.03,
+            "oneMonthPriceChange": 0.05,
         }
         mock_gamma.return_value = mock_gamma_instance
-        
-        mock_subgraph_instance = Mock()
-        mock_subgraph_instance.get_market_trades.return_value = [
-            {"trader": "0x123", "shares": "100", "price": "0.65", "timestamp": "1000"},
-        ]
-        mock_subgraph_instance.get_market_statistics.return_value = {
-            "totalVolume": "10000",
-        }
-        mock_subgraph.return_value = mock_subgraph_instance
-        
+
         result = runner.invoke(cli, ["export", "--market", "market1", "--format", "json"])
-        
+
         # Should output JSON
         assert result.exit_code == 0
-        assert "market" in result.output or result.exit_code == 0
-    
+        assert "market" in result.output
+
     @patch('polyterm.cli.commands.export_cmd.GammaClient')
     @patch('polyterm.cli.commands.export_cmd.CLOBClient')
-    @patch('polyterm.cli.commands.export_cmd.SubgraphClient')
-    def test_export_csv(self, mock_subgraph, mock_clob, mock_gamma, runner):
+    def test_export_csv(self, mock_clob, mock_gamma, runner):
         """Test exporting data as CSV"""
         mock_gamma_instance = Mock()
         mock_gamma_instance.get_market.return_value = {
             "id": "market1",
             "question": "Test Market",
+            "slug": "test-market",
+            "description": "Test description",
+            "endDate": "2026-12-31",
+            "active": True,
+            "closed": False,
+            "volume": 1000,
+            "volume24hr": 100,
+            "liquidity": 500,
+            "outcomePrices": '["0.65", "0.35"]',
+            "spread": 0.01,
+            "oneHourPriceChange": 0.01,
+            "oneDayPriceChange": 0.02,
         }
         mock_gamma.return_value = mock_gamma_instance
-        
-        mock_subgraph_instance = Mock()
-        mock_subgraph_instance.get_market_trades.return_value = [
-            {"trader": "0x123", "shares": "100", "price": "0.65", "timestamp": "1000", "outcome": "YES"},
-        ]
-        mock_subgraph_instance.get_market_statistics.return_value = {}
-        mock_subgraph.return_value = mock_subgraph_instance
-        
+
         result = runner.invoke(cli, ["export", "--market", "market1", "--format", "csv"])
-        
+
         assert result.exit_code == 0
+        assert "id,question" in result.output
 
 
 class TestUtilityFunctions:

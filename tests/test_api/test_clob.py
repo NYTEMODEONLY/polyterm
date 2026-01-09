@@ -21,24 +21,24 @@ class TestCLOBClient:
         """Test getting order book"""
         responses.add(
             responses.GET,
-            "https://test-clob.polymarket.com/book/123",
+            "https://test-clob.polymarket.com/book",
             json={
                 "bids": [
-                    ["0.65", "1000"],
-                    ["0.64", "2000"],
+                    {"price": "0.65", "size": "1000"},
+                    {"price": "0.64", "size": "2000"},
                 ],
                 "asks": [
-                    ["0.66", "1500"],
-                    ["0.67", "2500"],
+                    {"price": "0.66", "size": "1500"},
+                    {"price": "0.67", "size": "2500"},
                 ],
             },
             status=200,
         )
-        
+
         order_book = client.get_order_book("123", depth=20)
         assert len(order_book["bids"]) == 2
         assert len(order_book["asks"]) == 2
-        assert order_book["bids"][0][0] == "0.65"
+        assert order_book["bids"][0]["price"] == "0.65"
     
     @responses.activate
     def test_get_ticker(self, client):

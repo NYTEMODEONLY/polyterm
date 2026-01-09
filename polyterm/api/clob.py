@@ -35,23 +35,31 @@ class CLOBClient:
     
     # REST API Methods
     
-    def get_order_book(self, market_id: str, depth: int = 20) -> Dict[str, Any]:
+    def get_order_book(self, token_id: str, depth: int = 20) -> Dict[str, Any]:
         """Get order book for a market
-        
+
         Args:
-            market_id: Market ID
+            token_id: Token ID (from clobTokenIds field)
             depth: Order book depth (number of price levels)
-        
+
         Returns:
             Order book with bids and asks
         """
-        url = f"{self.rest_endpoint}/book/{market_id}"
-        params = {"depth": depth}
-        
+        url = f"{self.rest_endpoint}/book"
+        params = {"token_id": token_id}
+
         try:
             response = self.session.get(url, params=params)
             response.raise_for_status()
-            return response.json()
+            data = response.json()
+
+            # Limit depth if specified
+            if depth and data.get('bids'):
+                data['bids'] = data['bids'][:depth]
+            if depth and data.get('asks'):
+                data['asks'] = data['asks'][:depth]
+
+            return data
         except requests.exceptions.RequestException as e:
             raise Exception(f"Failed to get order book: {e}")
     
@@ -234,22 +242,30 @@ class CLOBClient:
     
     def calculate_spread(self, order_book: Dict[str, Any]) -> float:
         """Calculate bid-ask spread from order book
-        
+
         Args:
             order_book: Order book dictionary
-        
+
         Returns:
             Spread as percentage
         """
         if not order_book.get("bids") or not order_book.get("asks"):
             return 0.0
-        
-        best_bid = float(order_book["bids"][0][0])
-        best_ask = float(order_book["asks"][0][0])
-        
+
+        # Handle both formats: list of dicts with 'price' key, or list of [price, size]
+        first_bid = order_book["bids"][0]
+        first_ask = order_book["asks"][0]
+
+        if isinstance(first_bid, dict):
+            best_bid = float(first_bid.get("price", 0))
+            best_ask = float(first_ask.get("price", 0))
+        else:
+            best_bid = float(first_bid[0])
+            best_ask = float(first_ask[0])
+
         if best_bid == 0:
             return 0.0
-        
+
         spread = ((best_ask - best_bid) / best_bid) * 100
         return spread
     
