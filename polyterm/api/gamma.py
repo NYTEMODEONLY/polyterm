@@ -83,16 +83,16 @@ class GammaClient:
             closed = False
             
         params = {"limit": limit, "offset": offset}
-        
+
         if active is not None:
             params["active"] = str(active).lower()
         if closed is not None:
             params["closed"] = str(closed).lower()
         if tag:
             params["tag"] = tag
-        
-        # Use /events endpoint which returns current data with volume
-        return self._request("GET", "/events", params=params)
+
+        # Use /markets endpoint which returns individual markets with price data
+        return self._request("GET", "/markets", params=params)
     
     def get_market(self, market_id: str) -> Dict[str, Any]:
         """Get single market details
