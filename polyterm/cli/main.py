@@ -25,6 +25,7 @@ def cli(ctx):
 
 # Import commands
 from .commands import monitor, watch, whales, replay, portfolio, export_cmd, config_cmd, live_monitor
+from .commands import arbitrage, predict, orderbook, wallets, alerts
 
 @click.command()
 def update():
@@ -102,6 +103,11 @@ cli.add_command(export_cmd.export)
 cli.add_command(config_cmd.config)
 cli.add_command(live_monitor.live_monitor)
 cli.add_command(update)
+cli.add_command(arbitrage.arbitrage)
+cli.add_command(predict.predict)
+cli.add_command(orderbook.orderbook)
+cli.add_command(wallets.wallets)
+cli.add_command(alerts.alerts)
 
 
 if __name__ == "__main__":

@@ -122,10 +122,16 @@ class MainMenu:
                 ("7", "📤 Export Data - Export to JSON/CSV"),
                 ("8", "⚙️  Settings - Configuration"),
                 ("", ""),
+                ("9", "💰 Arbitrage - Scan for arbitrage opportunities"),
+                ("10", "🤖 Predictions - AI-powered market predictions"),
+                ("11", "👛 Wallets - Smart money tracking"),
+                ("12", "🔔 Alerts - Manage notifications"),
+                ("13", "📖 Order Book - Analyze market depth"),
+                ("", ""),
                 ("h", "❓ Help - View documentation"),
                 ("q", "🚪 Quit - Exit PolyTerm")
             ]
-            
+
             # Add quick update option if update is available
             if has_update:
                 menu_items.insert(-2, ("u", f"🔄 Quick Update to v{latest_version}"))
@@ -141,10 +147,16 @@ class MainMenu:
                 ("7", "📤 Export Data"),
                 ("8", "⚙️  Settings"),
                 ("", ""),
+                ("9", "💰 Arbitrage"),
+                ("10", "🤖 Predictions"),
+                ("11", "👛 Wallets"),
+                ("12", "🔔 Alerts"),
+                ("13", "📖 Order Book"),
+                ("", ""),
                 ("h", "❓ Help"),
                 ("q", "🚪 Quit")
             ]
-            
+
             # Add quick update option if update is available
             if has_update:
                 menu_items.insert(-2, ("u", f"🔄 Update to v{latest_version}"))
@@ -160,10 +172,16 @@ class MainMenu:
                 ("7", "📤 Export"),
                 ("8", "⚙️  Settings"),
                 ("", ""),
+                ("9", "💰 Arbitrage"),
+                ("10", "🤖 Predict"),
+                ("11", "👛 Wallets"),
+                ("12", "🔔 Alerts"),
+                ("13", "📖 Book"),
+                ("", ""),
                 ("h", "❓ Help"),
                 ("q", "🚪 Quit")
             ]
-            
+
             # Add quick update option if update is available
             if has_update:
                 menu_items.insert(-2, ("u", f"🔄 Update"))

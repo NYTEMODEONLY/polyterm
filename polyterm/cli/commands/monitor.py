@@ -1,6 +1,7 @@
 """Monitor command - real-time market feed"""
 
 import click
+import json
 import time
 from rich.console import Console
 from rich.table import Table
@@ -12,6 +13,7 @@ from ...api.subgraph import SubgraphClient
 from ...api.aggregator import APIAggregator
 from ...core.scanner import MarketScanner
 from ...utils.formatting import format_probability_rich, format_volume
+from ...utils.json_output import print_json, format_markets_json
 from datetime import datetime
 
 try:
@@ -27,8 +29,10 @@ except ImportError:
 @click.option("--refresh", default=5, help="Refresh interval in seconds")
 @click.option("--active-only", is_flag=True, help="Show only active markets")
 @click.option("--sort", type=click.Choice(["volume", "probability", "recent"]), default=None, help="Sort markets by: volume, probability, or recent")
+@click.option("--format", "output_format", type=click.Choice(["table", "json"]), default="table", help="Output format: table (default) or json")
+@click.option("--once", is_flag=True, help="Run once and exit (no live updates)")
 @click.pass_context
-def monitor(ctx, limit, category, refresh, active_only, sort):
+def monitor(ctx, limit, category, refresh, active_only, sort, output_format, once):
     """Monitor markets in real-time with live updates"""
     
     config = ctx.obj["config"]
@@ -175,13 +179,77 @@ def monitor(ctx, limit, category, refresh, active_only, sort):
         
         return table
     
+    def get_markets_data():
+        """Get filtered and sorted markets data"""
+        try:
+            if sort == 'volume':
+                markets = aggregator.get_top_markets_by_volume(limit=limit, min_volume=0.01)
+            else:
+                markets = aggregator.get_live_markets(
+                    limit=limit,
+                    require_volume=True,
+                    min_volume=0.01
+                )
+
+            if category:
+                markets = [m for m in markets if m.get('category') == category]
+
+            if active_only:
+                markets = [m for m in markets if m.get('active', False) and not m.get('closed', True)]
+
+            if sort == 'probability':
+                def get_probability(m):
+                    outcome_prices = m.get('outcomePrices')
+                    if not outcome_prices and m.get('markets') and len(m.get('markets', [])) > 0:
+                        outcome_prices = m['markets'][0].get('outcomePrices')
+                    if isinstance(outcome_prices, str):
+                        try:
+                            outcome_prices = json.loads(outcome_prices)
+                        except:
+                            return 0
+                    if outcome_prices and isinstance(outcome_prices, list) and len(outcome_prices) > 0:
+                        return float(outcome_prices[0])
+                    return 0
+                markets = sorted(markets, key=get_probability, reverse=True)
+            elif sort == 'recent':
+                markets = sorted(markets, key=lambda m: m.get('endDate', ''), reverse=False)
+
+            return markets
+        except Exception as e:
+            return []
+
+    # JSON output mode
+    if output_format == 'json':
+        try:
+            markets = get_markets_data()
+            output = {
+                'success': True,
+                'timestamp': datetime.now().isoformat(),
+                'count': len(markets),
+                'markets': format_markets_json(markets),
+            }
+            print_json(output)
+        except Exception as e:
+            print_json({'success': False, 'error': str(e)})
+        finally:
+            gamma_client.close()
+            clob_client.close()
+        return
+
+    # Run once mode (for scripting)
+    if once:
+        console.print(generate_table())
+        gamma_client.close()
+        clob_client.close()
+        return
+
     # Live display
     try:
         with Live(generate_table(), refresh_per_second=1/refresh, console=console) as live:
             while True:
                 time.sleep(refresh)
                 live.update(generate_table())
-    
+
     except KeyboardInterrupt:
         console.print("\n[yellow]Monitoring stopped[/yellow]")
     finally:
