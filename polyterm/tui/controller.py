@@ -5,6 +5,7 @@ from .logo import display_logo
 from .menu import MainMenu
 from .screens import (
     monitor_screen,
+    live_monitor_screen,
     whales_screen,
     watch_screen,
     analytics_screen,
@@ -36,18 +37,24 @@ class TUIController:
                 # Handle menu choices
                 if choice == '1' or choice == 'm':
                     monitor_screen(self.console)
-                elif choice == '2' or choice == 'w':
+                elif choice == '2' or choice == 'l':
+                    live_monitor_screen(self.console)
+                elif choice == '3' or choice == 'w':
                     whales_screen(self.console)
-                elif choice == '3':
+                elif choice == '4':
                     watch_screen(self.console)
-                elif choice == '4' or choice == 'a':
+                elif choice == '5' or choice == 'a':
                     analytics_screen(self.console)
-                elif choice == '5' or choice == 'p':
+                elif choice == '6' or choice == 'p':
                     portfolio_screen(self.console)
-                elif choice == '6' or choice == 'e':
+                elif choice == '7' or choice == 'e':
                     export_screen(self.console)
-                elif choice == '7' or choice == 's':
+                elif choice == '8' or choice == 's':
                     settings_screen(self.console)
+                elif choice == 'u' or choice == 'update':
+                    # Quick update option
+                    from .screens.settings import update_polyterm
+                    update_polyterm(self.console)
                 elif choice == 'h' or choice == '?':
                     help_screen(self.console)
                 elif choice == 'q' or choice == 'quit' or choice == 'exit':

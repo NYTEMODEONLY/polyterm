@@ -47,41 +47,38 @@ class TestAnalyticsEngine:
         return AnalyticsEngine(gamma, clob, subgraph)
     
     def test_track_whale_trades(self, analytics, mock_clients):
-        """Test tracking whale trades"""
+        """Test tracking whale trades via volume spike detection"""
         gamma, clob, subgraph = mock_clients
-        
+
         import time
         current_time = int(time.time())
-        
-        subgraph.get_whale_trades.return_value = [
+
+        # track_whale_trades now uses Gamma API volume data, not subgraph
+        gamma.get_markets.return_value = [
             {
-                "trader": "0x123",
-                "market": "market1",
-                "outcome": "YES",
-                "shares": "10000",
-                "price": "0.65",
-                "timestamp": str(current_time - 3600),
-                "notional": 6500.0,
+                "id": "market1",
+                "title": "Test Market 1",
+                "volume24hr": 15000.0,  # Above min_notional threshold
+                "probability": 0.65,
             },
             {
-                "trader": "0x456",
-                "market": "market2",
-                "outcome": "NO",
-                "shares": "20000",
-                "price": "0.50",
-                "timestamp": str(current_time - 7200),
-                "notional": 10000.0,
+                "id": "market2",
+                "title": "Test Market 2",
+                "volume24hr": 25000.0,  # Above threshold
+                "probability": 0.50,
             },
         ]
-        
+
         whale_trades = analytics.track_whale_trades(
             min_notional=5000,
             lookback_hours=24,
         )
-        
+
+        # Should find 2 markets with significant volume (whale activity proxy)
         assert len(whale_trades) == 2
-        assert whale_trades[0].trader == "0x123"
-        assert whale_trades[1].notional == 10000.0
+        # Whale trades are volume-based, verify structure (order may vary)
+        market_ids = {wt.market_id for wt in whale_trades}
+        assert market_ids == {"market1", "market2"}
     
     def test_get_whale_impact_on_market(self, analytics):
         """Test analyzing whale impact"""

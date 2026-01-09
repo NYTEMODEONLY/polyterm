@@ -124,15 +124,16 @@ def test_tui_whales_navigation(mock_console_class, mock_whales_screen, mock_disp
     """Test TUI navigates to whales screen"""
     mock_console = Mock()
     mock_console_class.return_value = mock_console
-    
+
     mock_menu = Mock()
-    mock_menu.get_choice.side_effect = ['2', 'q']
-    
+    # Whales is now option 3 (option 2 is live monitor)
+    mock_menu.get_choice.side_effect = ['3', 'q']
+
     with patch('builtins.input', return_value=''):
         controller = TUIController()
         controller.menu = mock_menu
         controller.run()
-    
+
     # Should have called whales screen
     assert mock_whales_screen.called
 

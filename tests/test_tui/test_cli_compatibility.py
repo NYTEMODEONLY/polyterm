@@ -82,12 +82,13 @@ def test_polyterm_config_command_exists():
 
 def test_polyterm_version():
     """Test 'polyterm --version' works"""
+    import polyterm
     runner = CliRunner()
     result = runner.invoke(cli, ['--version'])
-    
+
     # Should show version, not TUI
     assert result.exit_code == 0
-    assert '0.1.0' in result.output
+    assert polyterm.__version__ in result.output
 
 
 def test_polyterm_help():

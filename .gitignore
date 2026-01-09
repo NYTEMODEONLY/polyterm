@@ -139,3 +139,6 @@ Thumbs.db
 *.csv
 !setup.py
 !requirements.txt
+
+# PyPI credentials
+.pypirc

@@ -32,6 +32,78 @@ cd polyterm
 polyterm
 ```
 
+## 🔄 Enhanced Update System (NEW!)
+
+**Version 0.1.7 introduces automatic, seamless updates** - no more manual pip commands or virtual environment knowledge required!
+
+### Features
+- **🔍 Automatic Update Detection**: Checks PyPI for new versions on startup
+- **🔄 One-Click Updates**: Update directly from the main menu or settings
+- **⚡ Smart Update Methods**: Automatically uses pipx or pip based on what's available
+- **📊 Update Progress**: Step-by-step progress with clear success/error messages
+- **🛡️ Fallback Support**: Multiple update methods with automatic fallback
+- **🎯 Version Verification**: Confirms successful updates and shows new version
+
+### How It Works
+
+**From Main Menu:**
+- When updates are available, you'll see: `🔄 Update Available: v0.1.7`
+- Press `u` for quick update, or go to Settings → Update
+
+**From Settings:**
+- Go to Settings (option 8) → Update (option 6)
+- Follow the guided update process
+
+**Automatic Detection:**
+- PolyTerm checks for updates every time you start it
+- Shows update notifications in the main menu
+- No internet required for normal operation
+
+### Update Process
+1. **Version Check**: Compares current vs latest version
+2. **Method Detection**: Finds pipx or pip automatically  
+3. **Download & Install**: Updates to latest version
+4. **Verification**: Confirms successful update
+5. **Restart Prompt**: Reminds you to restart for new features
+
+## 🔴 Live Market Monitor
+
+**Version 0.1.6 introduces the Live Market Monitor** - a dedicated terminal window for real-time market monitoring with professional-grade visual indicators.
+
+### Features
+- **🔴 Dedicated Terminal Window**: Opens in separate terminal for focused monitoring
+- **🎨 Color-Coded Indicators**: 
+  - 🟢 Green: Price increases, bullish activity
+  - 🔴 Red: Price decreases, bearish activity
+  - 🔵 Blue: Volume spikes, significant activity
+  - 🟡 Yellow: Neutral/sideways movement
+- **⚡ Real-Time Updates**: Sub-second refresh rates for smooth monitoring
+- **📊 Multiple Monitoring Modes**:
+  - Single market monitoring
+  - Category-based monitoring (crypto, politics, sports, etc.)
+  - All active markets overview
+
+### Usage
+```bash
+# Interactive mode (recommended)
+polyterm live-monitor --interactive
+
+# Monitor specific market
+polyterm live-monitor --market "bitcoin-price-2024"
+
+# Monitor category
+polyterm live-monitor --category crypto
+
+# Monitor all active markets
+polyterm live-monitor
+```
+
+### From TUI Menu
+1. Launch PolyTerm: `polyterm`
+2. Select **"2. 🔴 Live Monitor"**
+3. Choose monitoring mode and target
+4. Live monitor opens in new terminal window
+
 ## 🔄 Updating PolyTerm
 
 ### Automatic Update Check

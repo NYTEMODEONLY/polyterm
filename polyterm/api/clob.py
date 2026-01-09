@@ -25,7 +25,7 @@ class CLOBClient:
     def __init__(
         self,
         rest_endpoint: str = "https://clob.polymarket.com",
-        ws_endpoint: str = "wss://clob.polymarket.com/ws",
+        ws_endpoint: str = "wss://ws-live-data.polymarket.com",
     ):
         self.rest_endpoint = rest_endpoint.rstrip("/")
         self.ws_endpoint = ws_endpoint
@@ -111,82 +111,90 @@ class CLOBClient:
         except requests.exceptions.RequestException as e:
             raise Exception(f"Failed to get market depth: {e}")
     
-    # WebSocket Methods
+    # WebSocket Methods for Live Trading Data
     
     async def connect_websocket(self):
-        """Establish WebSocket connection"""
+        """Connect to PolyMarket RTDS WebSocket"""
         if not HAS_WEBSOCKETS:
-            raise Exception("websockets package not installed. Install with: pip install websockets")
+            raise Exception("websockets library not installed. Install with: pip install websockets")
+        
         try:
+            # Connect to RTDS endpoint (no path needed)
             self.ws_connection = await websockets.connect(self.ws_endpoint)
+            return True
         except Exception as e:
             raise Exception(f"Failed to connect to WebSocket: {e}")
     
-    async def subscribe_to_market(
-        self,
-        market_id: str,
-        callback: Callable[[Dict[str, Any]], None],
-        channels: Optional[List[str]] = None,
-    ):
-        """Subscribe to market updates via WebSocket
+    async def subscribe_to_trades(self, market_slugs: List[str], callback: Callable):
+        """Subscribe to live trade feeds for multiple markets using RTDS
         
         Args:
-            market_id: Market ID to subscribe to
-            callback: Function to call with each update
-            channels: List of channels (trades, book, ticker). Default: all
+            market_slugs: List of market slugs to monitor
+            callback: Function to call when trade data is received
         """
         if not self.ws_connection:
             await self.connect_websocket()
         
-        if channels is None:
-            channels = ["trades", "book", "ticker"]
+        # Subscribe to RTDS trades topic with correct format
+        # RTDS requires individual subscriptions for each market
+        for market_slug in market_slugs:
+            subscribe_msg = {
+                "action": "subscribe",
+                "subscriptions": [
+                    {
+                        "topic": "activity",
+                        "type": "trades",
+                        "filters": f"{{\"market_slug\":\"{market_slug}\"}}"
+                    }
+                ]
+            }
+            await self.ws_connection.send(json.dumps(subscribe_msg))
         
-        subscribe_message = {
-            "type": "subscribe",
-            "market_id": market_id,
-            "channels": channels,
-        }
-        
-        await self.ws_connection.send(json.dumps(subscribe_message))
-        self.subscriptions[market_id] = callback
+        # Store callback for all markets
+        for market_slug in market_slugs:
+            self.subscriptions[market_slug] = callback
     
-    async def unsubscribe_from_market(self, market_id: str):
-        """Unsubscribe from market updates
-        
-        Args:
-            market_id: Market ID to unsubscribe from
-        """
-        if not self.ws_connection:
-            return
-        
-        unsubscribe_message = {
-            "type": "unsubscribe",
-            "market_id": market_id,
-        }
-        
-        await self.ws_connection.send(json.dumps(unsubscribe_message))
-        if market_id in self.subscriptions:
-            del self.subscriptions[market_id]
-    
-    async def listen(self):
-        """Listen for WebSocket messages and dispatch to callbacks"""
+    async def listen_for_trades(self):
+        """Listen for incoming trade messages from RTDS"""
         if not self.ws_connection:
             raise Exception("WebSocket not connected")
         
         try:
             async for message in self.ws_connection:
-                data = json.loads(message)
-                
-                # Dispatch to appropriate callback
-                if "market_id" in data:
-                    market_id = data["market_id"]
-                    if market_id in self.subscriptions:
-                        callback = self.subscriptions[market_id]
-                        callback(data)
+                try:
+                    # Handle ping messages
+                    if message == "PING":
+                        await self.ws_connection.send("PONG")
+                        continue
+                    
+                    data = json.loads(message)
+                    
+                    # Handle RTDS trade messages with correct topic/type
+                    if data.get("topic") == "activity" and data.get("type") == "trades":
+                        # Extract market identifier from the trade data
+                        # The official client shows 'market' field contains the market identifier
+                        market_id = data.get("market") or data.get("market_slug")
+                        if market_id and market_id in self.subscriptions:
+                            callback = self.subscriptions[market_id]
+                            await callback(data)
+                    
+                    # Handle other activity messages
+                    elif data.get("topic") == "activity":
+                        market_id = data.get("market") or data.get("market_slug")
+                        if market_id and market_id in self.subscriptions:
+                            callback = self.subscriptions[market_id]
+                            await callback(data)
+                    
+                except json.JSONDecodeError:
+                    continue
+                except Exception as e:
+                    print(f"Error processing message: {e}")
+                    continue
+                    
         except websockets.exceptions.ConnectionClosed:
             print("WebSocket connection closed")
         except Exception as e:
-            print(f"Error in WebSocket listener: {e}")
+            print(f"WebSocket error: {e}")
     
     async def close_websocket(self):
         """Close WebSocket connection"""
