@@ -1,32 +1,12 @@
-# PolyTerm 📊
+# PolyTerm
 
-A powerful, terminal-based monitoring and analytics tool for PolyMarket prediction markets. Track market shifts, whale activity, insider patterns, arbitrage opportunities, and AI-powered predictions—all from your command line.
+A powerful, terminal-based monitoring and analytics tool for PolyMarket prediction markets. Track market shifts, whale activity, insider patterns, arbitrage opportunities, and signal-based predictions—all from your command line.
 
 *a [nytemode](https://nytemode.com) project*
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PyPI version](https://img.shields.io/pypi/v/polyterm.svg)](https://pypi.org/project/polyterm/)
-[![Live Data](https://img.shields.io/badge/Data-Live%202025-brightgreen.svg)](API_SETUP.md)
-
----
-
-## What's New in v0.4.0
-
-**Major Feature Release** - PolyTerm is now a comprehensive trading analytics platform:
-
-- **SQLite Database** - Persistent local storage for wallets, trades, alerts, and market data
-- **Individual Whale Tracking** - Track specific wallets via WebSocket maker_address
-- **Insider Detection Engine** - Risk scoring system (0-100) to identify suspicious patterns
-- **Smart Money Identification** - Find wallets with >70% win rates
-- **Arbitrage Scanner** - Cross-market and cross-platform (Kalshi) arbitrage detection
-- **Order Book Analysis** - ASCII depth charts, iceberg detection, slippage calculator
-- **AI-Powered Predictions** - Multi-factor signals with confidence scoring
-- **Market Correlation Engine** - Find related markets and correlation breaks
-- **Multi-Channel Alerts** - Telegram, Discord, system notifications, email, sound
-- **JSON Output Mode** - All commands support `--format json` for scripting
-- **5 New CLI Commands** - arbitrage, predict, orderbook, wallets, alerts
-- **5 New TUI Screens** - Premium features accessible from interactive menu
 
 ---
 
@@ -58,7 +38,7 @@ polyterm
 
 ## Features Overview
 
-### Core Features (Free)
+### Core Features
 | Feature | Command | Description |
 |---------|---------|-------------|
 | Market Monitoring | `polyterm monitor` | Real-time market tracking with live updates |
@@ -68,11 +48,11 @@ polyterm
 | Export Data | `polyterm export` | Export to JSON/CSV |
 | Historical Replay | `polyterm replay` | Replay market history |
 
-### Premium Features (v0.4.0)
+### Premium Features
 | Feature | Command | Description |
 |---------|---------|-------------|
 | Arbitrage Scanner | `polyterm arbitrage` | Find cross-market profit opportunities |
-| AI Predictions | `polyterm predict` | Multi-factor market predictions |
+| Signal-based Predictions | `polyterm predict` | Multi-factor market predictions using live data |
 | Order Book Analysis | `polyterm orderbook` | Depth charts, slippage, icebergs |
 | Wallet Tracking | `polyterm wallets` | Smart money & whale wallet analysis |
 | Alert Management | `polyterm alerts` | Multi-channel notification system |
@@ -121,7 +101,7 @@ polyterm arbitrage --format json
 - **Correlated markets**: Similar events with price discrepancies
 - **Cross-platform**: Polymarket vs Kalshi price differences
 
-### AI Predictions
+### Signal-based Predictions
 ```bash
 # Generate predictions for top markets
 polyterm predict --limit 10 --horizon 24
@@ -251,31 +231,35 @@ polyterm
 
 ### Main Menu
 ```
-   1 📊 Monitor Markets - Real-time market tracking
-   2 🔴 Live Monitor - Dedicated terminal window
-   3 🐋 Whale Activity - High-volume markets
-   4 👁  Watch Market - Track specific market
-   5 📈 Market Analytics - Trends and predictions
-   6 💼 Portfolio - View your positions
-   7 📤 Export Data - Export to JSON/CSV
-   8 ⚙️  Settings - Configuration
+   1  Monitor Markets - Real-time market tracking
+   2  Live Monitor - Dedicated terminal window
+   3  Whale Activity - High-volume markets
+   4  Watch Market - Track specific market
+   5  Market Analytics - Trends and analysis
+   6  Portfolio - View your positions
+   7  Export Data - Export to JSON/CSV
+   8  Settings - Configuration
 
-   9 💰 Arbitrage - Scan for arbitrage opportunities
-  10 🤖 Predictions - AI-powered market predictions
-  11 👛 Wallets - Smart money tracking
-  12 🔔 Alerts - Manage notifications
-  13 📖 Order Book - Analyze market depth
+   9  Arbitrage - Scan for arbitrage opportunities
+  10  Predictions - Signal-based market predictions
+  11  Wallets - Smart money tracking
+  12  Alerts - Manage notifications
+  13  Order Book - Analyze market depth
 
-   h ❓ Help - View documentation
-   q 🚪 Quit - Exit PolyTerm
+   h  Help - View documentation
+   q  Quit - Exit PolyTerm
 ```
 
 ### Navigation
 - **Numbers**: Press `1-13` for features
 - **Shortcuts**: `m` (monitor), `l` (live), `w` (whales), `a` (analytics), `p` (portfolio), `e` (export), `s` (settings)
-- **New shortcuts**: `arb` (arbitrage), `pred` (predictions), `wal` (wallets), `alert` (alerts), `ob` (orderbook)
+- **Premium shortcuts**: `arb` (arbitrage), `pred` (predictions), `wal` (wallets), `alert` (alerts), `ob` (orderbook)
+- **Back**: Press `b` or `back` to return to previous menu
 - **Help**: Press `h` or `?`
 - **Quit**: Press `q`
+
+### Market Picker
+When selecting markets for analysis (watch, orderbook, predictions), PolyTerm displays a numbered list of active markets for easy selection.
 
 ---
 
@@ -402,7 +386,7 @@ polyterm/
 │   ├── notifications.py  # Multi-channel alerts
 │   ├── arbitrage.py      # Arbitrage scanner
 │   ├── orderbook.py      # Order book analysis
-│   ├── predictions.py    # AI predictions
+│   ├── predictions.py    # Signal-based predictions
 │   ├── correlation.py    # Market correlations
 │   ├── historical.py     # Historical data API
 │   └── portfolio.py      # Portfolio analytics
@@ -427,7 +411,7 @@ polyterm/
 ## Testing
 
 ```bash
-# Full test suite (184 tests)
+# Full test suite
 pytest
 
 # Specific test categories
@@ -435,7 +419,8 @@ pytest tests/test_core/ -v          # Core logic tests
 pytest tests/test_db/ -v            # Database tests
 pytest tests/test_cli/ -v           # CLI tests
 pytest tests/test_tui/ -v           # TUI tests
-pytest tests/test_live_data/ -v     # Live API tests
+pytest tests/test_api/ -v           # API tests
+pytest tests/test_live_data/ -v     # Live API tests (may fail due to data changes)
 ```
 
 ---
@@ -468,30 +453,6 @@ python -m twine upload dist/*
 
 ---
 
-## Roadmap
-
-### Completed in v0.4.0
-- ✅ SQLite persistent database
-- ✅ Individual whale/wallet tracking
-- ✅ Insider detection engine
-- ✅ Smart money identification
-- ✅ Cross-market arbitrage scanner
-- ✅ Kalshi cross-platform arbitrage
-- ✅ Order book analysis with ASCII charts
-- ✅ AI-powered predictions
-- ✅ Market correlation engine
-- ✅ Multi-channel notifications
-- ✅ JSON output for all commands
-- ✅ Historical data API
-
-### Future
-- 🔄 Python SDK for programmatic access
-- 🔄 Custom dashboard builder
-- 🔄 Webhook API for external integrations
-- 🔄 News sentiment integration
-
----
-
 ## Support
 
 - **Issues**: [GitHub Issues](https://github.com/NYTEMODEONLY/polyterm/issues)
@@ -506,8 +467,8 @@ MIT License - see [LICENSE](LICENSE) file.
 
 ---
 
-**Built with ❤️ for the PolyMarket community**
+**Built for the PolyMarket community**
 
-*Your terminal window to prediction market alpha* 📊
+*Your terminal window to prediction market alpha*
 
 *a [nytemode](https://nytemode.com) project*
