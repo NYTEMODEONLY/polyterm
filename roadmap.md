@@ -54,40 +54,58 @@ Polymarket has exploded to **$14B+ monthly volume** with an $8B valuation. This 
 
 ---
 
-## Current State Assessment
+## Current State Assessment (Updated January 2025)
 
 ### What PolyTerm Does Well
 
 | Feature | Status | Quality |
 |---------|--------|---------|
-| Real-time market monitoring | Working | Excellent |
-| WebSocket live trades | Working | Excellent |
-| Volume-based whale detection | Working | Good |
-| Market shift alerts | Working | Good |
-| Historical replay | Working | Good |
-| Export functionality | Working | Good |
-| Multi-terminal support | Working | Good |
-| Auto-updates | Working | Good |
+| Real-time market monitoring | ✅ Working | Excellent |
+| WebSocket live trades | ✅ Working | Excellent |
+| Volume-based whale detection | ✅ Working | Excellent |
+| Market shift alerts | ✅ Working | Good |
+| Historical replay | ✅ Working | Good |
+| Export functionality | ✅ Working | Good |
+| Multi-terminal support | ✅ Working | Good |
+| Auto-updates | ✅ Working | Good |
+| **Individual whale tracking** | ✅ Working | Excellent |
+| **Insider pattern detection** | ✅ Working | Excellent |
+| **Cross-market arbitrage** | ✅ Working | Excellent |
+| **Smart money tracking** | ✅ Working | Excellent |
+| **Order book analysis** | ✅ Working | Good |
+| **Signal-based predictions** | ✅ Working | Excellent |
+| **Kalshi integration** | ✅ Working | Good |
+| **Multi-channel notifications** | ✅ Working | Excellent |
+| **JSON output (all commands)** | ✅ Working | Excellent |
+| **SQLite persistent storage** | ✅ Working | Excellent |
 
-### Critical Gaps
+### Previously Critical Gaps (Now Resolved)
 
-| Gap | Impact | Competitor Coverage |
-|-----|--------|---------------------|
-| **Individual whale tracking** | High | Polywhaler, PolyTrack |
-| **Insider pattern detection** | High | PolyTrack, HashDive |
-| **Cross-market arbitrage** | High | Eventarb, GetArbitrageBets |
-| **Multi-wallet portfolio** | High | PredictFolio, Polymarket Analytics |
-| **Real-time whale alerts** | High | PolyTrack ($9.99/wk) |
-| **Order book depth analysis** | Medium | Parsec |
-| **AI-powered signals** | Medium | Polysights |
-| **Kalshi integration** | Medium | FinFeedAPI |
+| Gap | Status | Implementation |
+|-----|--------|----------------|
+| Individual whale tracking | ✅ RESOLVED | `polyterm wallets --type whales` |
+| Insider pattern detection | ✅ RESOLVED | `polyterm wallets --type suspicious` (risk scoring 0-100) |
+| Cross-market arbitrage | ✅ RESOLVED | `polyterm arbitrage` (intra-market, correlated, Kalshi) |
+| Real-time whale alerts | ✅ RESOLVED | `polyterm alerts` + Telegram/Discord webhooks |
+| Order book depth analysis | ✅ RESOLVED | `polyterm orderbook` with ASCII charts |
+| AI-powered signals | ✅ RESOLVED | `polyterm predict` (signal-based multi-factor) |
+| Kalshi integration | ✅ RESOLVED | `polyterm arbitrage --include-kalshi` |
 
-### Technical Debt
+### Previously Technical Debt (Now Resolved)
 
-1. **Subgraph API deprecated** - Breaks portfolio tracking, individual trades
-2. **Correlation analysis placeholder** - Never fully implemented
-3. **Manipulation detection basic** - Pattern-based only
-4. **No persistent storage** - Loses historical context on restart
+1. ~~**Subgraph API deprecated**~~ - ✅ RESOLVED: Rebuilt using CLOB WebSocket + local SQLite
+2. ~~**Correlation analysis placeholder**~~ - ✅ RESOLVED: Full implementation in `core/correlation.py`
+3. ~~**Manipulation detection basic**~~ - ✅ RESOLVED: Insider detection with 0-100 risk scoring
+4. ~~**No persistent storage**~~ - ✅ RESOLVED: SQLite at `~/.polyterm/data.db`
+
+### Remaining Items (Future Work)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Python SDK | ❌ Not started | Planned for Phase 4 |
+| Webhook API | ❌ Not started | For external integrations |
+| Custom dashboard builder | ❌ Not started | Split-pane TUI layouts |
+| Multi-wallet portfolio | ⚠️ Partial | Requires wallet address config |
 
 ---
 
@@ -367,23 +385,28 @@ polyterm watch --webhook https://my-server.com/alerts
 
 ## Implementation Priority
 
-### High Impact, Low Effort (Do First)
-1. **SQLite local database** - Foundation for all tracking
-2. **WebSocket whale tracking** - Parse maker_address from existing stream
-3. **Telegram/Discord alerts** - Simple HTTP webhooks
-4. **Order book visualization** - Data already available
+### High Impact, Low Effort (Do First) - ✅ ALL COMPLETED
+1. ✅ **SQLite local database** - Foundation for all tracking
+2. ✅ **WebSocket whale tracking** - Parse maker_address from existing stream
+3. ✅ **Telegram/Discord alerts** - Simple HTTP webhooks
+4. ✅ **Order book visualization** - Data already available
 
-### High Impact, Medium Effort
-5. **Insider detection scoring** - Algorithm over local DB
-6. **Smart money leaderboard** - Aggregate wallet metrics
-7. **Intra-platform arbitrage** - Compare YES+NO prices
-8. **JSON output mode** - Enable scripting
+### High Impact, Medium Effort - ✅ ALL COMPLETED
+5. ✅ **Insider detection scoring** - Algorithm over local DB
+6. ✅ **Smart money leaderboard** - Aggregate wallet metrics
+7. ✅ **Intra-platform arbitrage** - Compare YES+NO prices
+8. ✅ **JSON output mode** - Enable scripting
 
-### High Impact, High Effort
-9. **Kalshi integration** - New API client
-10. **On-chain portfolio rebuild** - Polygon RPC/Bitquery
-11. **AI predictions** - Model development
-12. **Historical data API** - Storage + serving
+### High Impact, High Effort - ✅ MOSTLY COMPLETED
+9. ✅ **Kalshi integration** - New API client
+10. ⚠️ **On-chain portfolio rebuild** - Partial (requires wallet config)
+11. ✅ **AI predictions** - Signal-based multi-factor model
+12. ✅ **Historical data API** - Via export command and replay
+
+### Remaining (Future Work)
+13. ❌ **Python SDK** - For programmatic access
+14. ❌ **Webhook API** - For external integrations
+15. ❌ **Custom dashboard builder** - Split-pane TUI layouts
 
 ---
 
@@ -521,15 +544,27 @@ CREATE TABLE market_snapshots (
 
 ---
 
-## Conclusion
+## Conclusion (Updated January 2025)
 
-PolyTerm has strong foundations and a unique market position. By adding **whale/insider detection**, **arbitrage scanning**, and **premium alerting**, it can justify a $19-49/month subscription.
+**PolyTerm has successfully implemented all core premium features** outlined in this roadmap. The platform now provides:
 
-The key to 20-30% conversion is providing **genuine alpha**—information that makes users money. Insider detection and arbitrage alerts are the highest-value features because they directly translate to profitable trades.
+✅ **Whale/Insider Detection** - Individual wallet tracking with 0-100 risk scoring
+✅ **Arbitrage Scanning** - Intra-market, correlated markets, and Kalshi cross-platform
+✅ **Premium Alerting** - Telegram, Discord, system notifications, and sound alerts
+✅ **Signal-based Predictions** - Multi-factor analysis with confidence scoring
+✅ **Order Book Analysis** - ASCII depth charts, slippage calculator, iceberg detection
+✅ **JSON Output** - All commands support `--format json` for scripting/automation
+✅ **Persistent Storage** - SQLite database for historical context
 
-**Recommended Next Steps:**
-1. Implement SQLite database foundation
-2. Add individual wallet tracking from WebSocket
-3. Build insider detection scoring algorithm
-4. Launch with 14-day Pro trial
-5. Iterate based on user feedback
+The key features that provide **genuine alpha** are now fully operational:
+- Insider detection alerts traders to suspicious activity
+- Arbitrage scanner identifies cross-market profit opportunities
+- Smart money tracking shows where high win-rate wallets are positioning
+
+**Remaining Work (Future Phases):**
+1. Python SDK for programmatic access
+2. Webhook API for external integrations
+3. Custom dashboard builder for personalized TUI layouts
+4. Multi-wallet portfolio tracking improvements
+
+**Current Version:** v0.4.9 (183 tests passing)

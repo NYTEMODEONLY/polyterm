@@ -192,12 +192,19 @@ class Alert:
         elif created_at is None:
             created_at = datetime.now()
 
+        # Handle severity - convert string labels to numeric values
+        severity = data.get('severity', 0)
+        if isinstance(severity, str):
+            severity_map = {'high': 80, 'medium': 50, 'low': 20, 'critical': 90}
+            severity = severity_map.get(severity.lower(), 0)
+        severity = int(severity) if severity else 0
+
         return cls(
             id=data.get('id'),
             alert_type=data.get('alert_type', ''),
             market_id=data.get('market_id', ''),
             wallet_address=data.get('wallet_address', ''),
-            severity=data.get('severity', 0),
+            severity=severity,
             message=data.get('message', ''),
             data=alert_data,
             created_at=created_at,
