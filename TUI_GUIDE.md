@@ -1,4 +1,4 @@
-# PolyTerm TUI Guide 🎨
+# PolyTerm TUI Guide
 
 Complete guide to using PolyTerm's Terminal User Interface.
 
@@ -6,15 +6,11 @@ Complete guide to using PolyTerm's Terminal User Interface.
 
 - [Getting Started](#getting-started)
 - [Main Menu](#main-menu)
-- [Features](#features)
-  - [Monitor Markets](#1-monitor-markets-)
-  - [Whale Activity](#2-whale-activity-)
-  - [Watch Market](#3-watch-market-)
-  - [Market Analytics](#4-market-analytics-)
-  - [Portfolio](#5-portfolio-)
-  - [Export Data](#6-export-data-)
-  - [Settings](#7-settings-)
-  - [Help](#help-)
+- [Core Features](#core-features)
+- [Premium Features](#premium-features)
+- [Tools & Calculators](#tools--calculators)
+- [Research & Analysis](#research--analysis)
+- [Learning Resources](#learning-resources)
 - [Keyboard Shortcuts](#keyboard-shortcuts)
 - [Tips & Tricks](#tips--tricks)
 
@@ -26,319 +22,379 @@ Launch the TUI with:
 polyterm
 ```
 
-You'll see the PolyTerm ASCII logo and main menu:
+**First-time users** will be guided through an interactive tutorial covering:
+- How prediction markets work
+- Understanding prices and probabilities
+- Tracking whales and smart money
+- Finding arbitrage opportunities
 
-```
-   ██████╗  ██████╗ ██╗  ██╗   ██╗████████╗███████╗██████╗ ███╗   ███╗
-   ██╔══██╗██╔═══██╗██║  ╚██╗ ██╔╝╚══██╔══╝██╔════╝██╔══██╗████╗ ████║
-   ██████╔╝██║   ██║██║   ╚████╔╝    ██║   █████╗  ██████╔╝██╔████╔██║
-   ██╔═══╝ ██║   ██║██║    ╚██╔╝     ██║   ██╔══╝  ██╔══██╗██║╚██╔╝██║
-   ██║     ╚██████╔╝███████╗██║      ██║   ███████╗██║  ██║██║ ╚═╝ ██║
-   ╚═╝      ╚═════╝ ╚══════╝╚═╝      ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝
-
-         Terminal-Based Monitoring for PolyMarket
-                   Track. Analyze. Profit.
-
-
-Main Menu
-PolyTerm v0.1.5
-```
+You can skip the tutorial and access it anytime by pressing `t`.
 
 ## Main Menu
 
-The main menu offers 7 features plus help and quit options:
+The main menu displays all available features with keyboard shortcuts:
 
 ```
-   1 📊 Monitor Markets - Real-time market tracking
-   2 🐋 Whale Activity - High-volume markets       
-   3 👁  Watch Market - Track specific market       
-   4 📈 Market Analytics - Trends and predictions  
-   5 💼 Portfolio - View your positions            
-   6 📤 Export Data - Export to JSON/CSV           
-   7 ⚙️  Settings - Configuration                   
-                                                   
-   h ❓ Help - View documentation                  
-   q 🚪 Quit - Exit PolyTerm                       
+1/m = monitor        5/a = analytics      9/arb = arbitrage
+2/l = live monitor   6/p = portfolio     10/pred = predictions
+3/w = whales         7/e = export        11/wal = wallets
+4   = watch          8/s = settings      12/alert = alerts
+                                         13/ob = orderbook
+                                         14/risk = risk assessment
+                                         15/follow = copy trading
+                                         16/parlay = parlay calculator
+                                         17/bm = bookmarks
+
+d   = dashboard      t   = tutorial       g   = glossary
+sim = simulate       ch  = chart          cmp = compare
+sz  = size           rec = recent         pa  = pricealert
+cal = calendar       fee = fees           st  = stats
+sr  = search         pos = position       nt  = notes
+pr  = presets        sent = sentiment     corr = correlate
+ex  = exitplan       dp  = depth          tr  = trade
+tl  = timeline       an  = analyze        jn  = journal
+hot = hot markets    pnl = profit/loss    u   = quick update
+h/? = help           q   = quit
 ```
 
 ### Navigation
 
-- **Select by number**: Press `1` through `7`
-- **Use shortcuts**: Press letter keys (see [Keyboard Shortcuts](#keyboard-shortcuts))
-- **Get help**: Press `h` or `?`
+- **Numbers**: Press `1-17` for numbered features
+- **Shortcuts**: Use letter/abbreviation shortcuts (e.g., `m` for monitor)
+- **Help**: Press `h` or `?`
+- **Tutorial**: Press `t` for the interactive tutorial
+- **Glossary**: Press `g` for terminology
+- **Quick Update**: Press `u` when an update is available
 - **Quit**: Press `q`
 
 ### Version Display & Updates
 
-PolyTerm automatically displays the current version and checks for updates:
+PolyTerm automatically checks for updates on launch:
 
-**Current Version Display:**
+**Current Version:**
 ```
 Main Menu
-PolyTerm v0.1.5
+PolyTerm v0.5.2
 ```
 
 **Update Available:**
 ```
 Main Menu
-PolyTerm v0.1.5 🔄 Update Available: v0.1.6
+PolyTerm v0.5.2 Update Available: v0.5.3
 ```
 
-**Updating via TUI:**
-1. Go to Settings (option 7)
-2. Select "🔄 Update PolyTerm" (option 6)
-3. Follow the prompts to update
+Press `u` to quick update directly from the menu.
 
-## Features
+## Core Features
 
-### 1. Monitor Markets 📊
+### 1. Monitor Markets (1/m)
 
-**Real-time market tracking with live probability updates.**
+Real-time market tracking with live probability updates.
 
-When you select this option, you'll be prompted:
+**Prompts:**
+- How many markets to display?
+- Category filter (politics/crypto/sports)
+- Refresh rate in seconds
+- Active markets only?
+- Show volume quality indicators?
 
-```
-How many markets to display? [default: 10] 
-Category filter (or press Enter for all): politics/crypto/sports
-Refresh rate in seconds? [default: 2]
-Active markets only? [Y/n]
-```
-
-**What it does:**
-- Displays a live-updating table of markets
-- Shows probability, 24hr volume, and data age
+**Features:**
+- Live-updating table of markets
 - Color-coded changes (green=up, red=down)
-- Press `Ctrl+C` to stop monitoring
-
-**Example output:**
-```
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━┓
-┃ Market                                  ┃ Probability ┃ 24h Volume   ┃ Data Age ┃
-┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━┩
-│ What price will Ethereum hit in 2025?  │      58.2% │   $203,519   │    45d   │
-│ What price will Bitcoin hit in 2025?   │      42.1% │   $122,038   │    45d   │
-└─────────────────────────────────────────┴────────────┴──────────────┴──────────┘
-```
-
-### 2. Whale Activity 🐋
-
-**Track high-volume markets (proxy for whale activity).**
-
-Prompts:
-```
-Minimum 24hr volume? [default: $10,000] $
-Lookback period in hours? [default: 24]
-Maximum results to show? [default: 20]
-```
-
-**What it does:**
-- Identifies markets with significant 24hr trading volume
-- Shows top markets by volume (proxy for whale activity)
-- Displays market details and volume metrics
-
-**Note:** Individual trade data is not available from current PolyMarket APIs. This feature identifies high-volume markets as a proxy.
-
-### 3. Watch Market 👁
-
-**Track a specific market with alerts.**
-
-Prompts:
-```
-Search for market (or enter Market ID):
-Enter Market ID:
-Alert on probability change > [default: 5%]
-Check interval in seconds? [default: 10]
-```
-
-**What it does:**
-- Monitors a single market continuously
-- Alerts when probability changes exceed threshold
-- Shows real-time updates
+- Volume quality indicators (wash trade detection)
 - Press `Ctrl+C` to stop
 
-**Finding Market IDs:**
-- Use Monitor Markets to see IDs
-- Check PolyMarket website URL
-- Market IDs are long hexadecimal strings
+### 2. Live Monitor (2/l)
 
-### 4. Market Analytics 📈
+Dedicated terminal window for focused real-time monitoring.
 
-**Advanced market analysis and insights.**
+### 3. Whale Activity (3/w)
 
-Submenu:
-```
-1. 📈 Trending Markets - Most active markets
-2. 🔗 Market Correlations - Related markets
-3. 🔮 Price Predictions - Trend analysis
-4. 📊 Volume Analysis - Volume patterns
-```
+Track high-volume markets and whale activity.
 
-**Currently Available:**
-- ✅ Trending Markets (option 1)
+**Prompts:**
+- Minimum 24hr volume
+- Lookback period in hours
+- Maximum results
 
-**Coming Soon:**
-- 🔄 Market Correlations
-- 🔄 Price Predictions  
-- 🔄 Volume Analysis
+### 4. Watch Market (4)
 
-### 5. Portfolio 💼
+Track a specific market with custom alerts.
 
-**View your positions and P&L.**
+**Prompts:**
+- Search for market or enter Market ID
+- Alert threshold percentage
+- Check interval
 
-Prompts:
-```
-Wallet address (or press Enter for config):
-```
+### 5. Market Analytics (5/a)
 
-**What it does:**
-- Shows your market positions
-- Displays P&L and performance
-- Uses wallet from config if none provided
+Advanced market analysis including:
+- Trending markets
+- Market correlations
+- Volume analysis
 
-**Note:** Portfolio tracking is limited by PolyMarket API changes. The Subgraph API has been removed.
+### 6. Portfolio (6/p)
 
-### 6. Export Data 📤
+View your positions and P&L tracking.
 
-**Export market data to JSON or CSV.**
+### 7. Export Data (7/e)
 
-Prompts:
-```
-Market ID or search term:
-Format? [json/csv] [default: json]
-Output file: [default: export.json]
-```
+Export market data to JSON or CSV formats.
 
-**What it does:**
-- Exports market data to file
-- Supports JSON and CSV formats
-- Shows success/error message
-- Creates file in current directory
+### 8. Settings (8/s)
 
-**Example:**
-```bash
-Market ID: abc123...
-Format: json
-Output file: my_markets.json
+Configure PolyTerm settings:
+- Alert thresholds
+- API settings
+- Display preferences
+- Notification channels
+- Update PolyTerm
 
-✓ Successfully exported to my_markets.json
-```
+## Premium Features
 
-### 7. Settings ⚙️
+### 9. Arbitrage Scanner (9/arb)
 
-**View and configure PolyTerm settings.**
+Find cross-market profit opportunities.
 
-Current configuration display:
-```
-┏━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Setting               ┃ Value                             ┃
-┡━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ Config File           │ ~/.polyterm/config.toml           │
-│ Probability Threshold │ 15%                                │
-│ Volume Threshold      │ 50.0%                              │
-│ Check Interval        │ 60s                                │
-│ Refresh Rate          │ 2s                                 │
-│ Max Markets           │ 20                                │
-└───────────────────────┴───────────────────────────────────┘
-```
+**Types detected:**
+- **Intra-market**: YES + NO < $1.00
+- **Correlated**: Similar events with price gaps
+- **Cross-platform**: Polymarket vs Kalshi
 
-Options:
-```
-1. Edit Alert Settings
-2. Edit API Settings
-3. Edit Display Settings
-4. View Config File
-5. Reset to Defaults
-6. 🔄 Update PolyTerm
-```
+### 10. Predictions (10/pred)
 
-**Note:** Config editing UI coming soon. For now, manually edit `~/.polyterm/config.toml`
+Signal-based market predictions using:
+- Price momentum
+- Volume acceleration
+- Whale behavior
+- Smart money positioning
+- Technical indicators (RSI)
 
-### Help ❓
+### 11. Wallets (11/wal)
 
-**Documentation and quick reference.**
+Smart money tracking:
+- Whale wallets (by volume)
+- Smart money (>70% win rate)
+- Suspicious wallets (insider risk scoring)
+- Analyze specific wallets
 
-Shows:
-- Keyboard shortcuts
-- Feature descriptions
-- CLI command examples
-- API status
-- Resource links
+### 12. Alerts (12/alert)
+
+Multi-channel notification management:
+- View recent alerts
+- Filter by type (whale, insider, arbitrage)
+- Test Telegram/Discord notifications
+- Acknowledge alerts
+
+### 13. Order Book (13/ob)
+
+Analyze market depth:
+- ASCII depth charts
+- Slippage calculations
+- Large order detection (icebergs)
+- Support/resistance levels
+
+### 14. Risk Assessment (14/risk)
+
+Market risk scoring (A-F grades) based on:
+- Resolution clarity (25%)
+- Liquidity (20%)
+- Time risk (15%)
+- Volume quality (15%)
+- Spread (15%)
+- Category risk (10%)
+
+### 15. Copy Trading (15/follow)
+
+Follow successful wallets:
+- Track up to 10 wallets
+- View win rates and stats
+- Get alerts on their trades
+
+### 16. Parlay Calculator (16/parlay)
+
+Combine multiple bets:
+- Calculate combined probability
+- View decimal/American odds
+- Expected value analysis
+- Fee-adjusted payouts
+
+### 17. Bookmarks (17/bm)
+
+Save favorite markets:
+- Quick access to watched markets
+- Add notes to bookmarks
+- Interactive management
+
+## Tools & Calculators
+
+### Dashboard (d)
+
+Quick overview showing:
+- Top volume markets
+- Your bookmarks
+- Active alerts
+- Followed wallet activity
+
+### Simulate P&L (sim)
+
+Interactive profit/loss calculator for scenario analysis.
+
+### Position Size Calculator (sz)
+
+Kelly Criterion-based bet sizing:
+- Calculate optimal position size
+- Full vs fractional Kelly
+- Edge and expected value
+
+### Fee Calculator (fee)
+
+Calculate trading costs:
+- Polymarket fee structure
+- Slippage estimation
+- Net profit projections
+- Gas fee estimates
+
+### Price Alerts (pa)
+
+Set target price notifications:
+- Alert when price crosses threshold
+- Direction-aware (above/below)
+- Persistent across sessions
+
+### Market Calendar (cal)
+
+View upcoming market resolutions:
+- Filter by days ahead
+- Filter by category
+- See resolution countdown
+
+## Research & Analysis
+
+### Price Charts (ch)
+
+ASCII price history visualization:
+- Line charts
+- Sparklines for compact display
+- Customizable timeframe
+
+### Compare Markets (cmp)
+
+Side-by-side market comparison:
+- Compare up to 4 markets
+- See price changes and volumes
+- Identify arbitrage opportunities
+
+### Market Statistics (st)
+
+Technical analysis:
+- Volatility (standard deviation)
+- Trend analysis (regression)
+- RSI indicator
+- Momentum detection
+
+### Advanced Search (sr)
+
+Filter markets by:
+- Category
+- Volume/liquidity
+- Price range
+- Resolution date
+
+### Recent Markets (rec)
+
+Quick return to recently viewed markets with view counts.
+
+### Market Notes (nt)
+
+Add personal notes to markets for tracking your analysis.
+
+## Learning Resources
+
+### Tutorial (t)
+
+Interactive beginner guide covering:
+- Prediction market basics
+- Price = probability concept
+- Whale tracking
+- Arbitrage fundamentals
+
+### Glossary (g)
+
+Comprehensive prediction market terminology reference.
 
 ## Keyboard Shortcuts
 
-### Main Menu Shortcuts
+### Quick Reference
 
 | Key(s) | Action |
 |--------|--------|
-| `1` | Monitor Markets |
-| `2` | Whale Activity |
-| `3` | Watch Market |
-| `4` | Market Analytics |
-| `5` | Portfolio |
-| `6` | Export Data |
-| `7` | Settings |
+| `1-17` | Numbered menu items |
+| `m` | Monitor Markets |
+| `l` | Live Monitor |
+| `w` | Whale Activity |
+| `a` | Analytics |
+| `p` | Portfolio |
+| `e` | Export |
+| `s` | Settings |
+| `d` | Dashboard |
+| `t` | Tutorial |
+| `g` | Glossary |
+| `sim` | Simulate P&L |
+| `arb` | Arbitrage |
+| `pred` | Predictions |
+| `wal` | Wallets |
+| `ob` | Order Book |
+| `risk` | Risk Assessment |
+| `follow` | Copy Trading |
+| `parlay` | Parlay Calculator |
+| `bm` | Bookmarks |
+| `ch` | Chart |
+| `cmp` | Compare |
+| `sz` | Size Calculator |
+| `rec` | Recent |
+| `pa` | Price Alerts |
+| `cal` | Calendar |
+| `fee` | Fee Calculator |
+| `st` | Stats |
+| `sr` | Search |
+| `hot` | Hot Markets |
+| `pnl` | Profit/Loss |
+| `u` | Quick Update |
 | `h`, `?` | Help |
 | `q` | Quit |
 
-### Alternative Shortcuts
-
-| Key | Same as | Feature |
-|-----|---------|---------|
-| `m` | `1` | Monitor |
-| `w` | `2` | Whales |
-| `a` | `4` | Analytics |
-| `p` | `5` | Portfolio |
-| `e` | `6` | Export |
-| `s` | `7` | Settings |
-
-### Global Shortcuts
+### Global Controls
 
 | Key | Action |
 |-----|--------|
 | `Ctrl+C` | Stop current operation |
 | `Enter` | Return to main menu |
-| `q` | Quit from most screens |
 
 ## Tips & Tricks
 
-### Quick Access
+### Quick Workflow
 
-For fastest access, use alternative shortcuts:
-- `m` for Monitor
-- `w` for Whales
-- Press `Enter` to quickly return to menu
+1. Start with **Dashboard** (`d`) for a quick overview
+2. Use **Monitor** (`m`) to see top markets
+3. **Bookmark** (`bm`) interesting markets
+4. Set **Price Alerts** (`pa`) for notifications
+5. Check **Calendar** (`cal`) for upcoming resolutions
 
 ### Power User Mode
 
-If you prefer command-line:
+Use CLI commands directly for scripting:
+
 ```bash
-# Direct commands still work
-polyterm monitor --limit 20
-polyterm whales --hours 24
-polyterm watch <market-id>
+# JSON output for automation
+polyterm monitor --format json --limit 10 --once | jq '.markets[]'
 
-# Bypass TUI completely
-polyterm monitor  # Skip menu, go straight to monitoring
+# Arbitrage scanning
+polyterm arbitrage --format json | jq '.opportunities[]'
+
+# Predictions
+polyterm predict --format json --min-confidence 0.7
 ```
-
-### Market Discovery
-
-Best workflow for finding interesting markets:
-
-1. Start with **Monitor** (`1`) to see top markets
-2. Find market ID of interest
-3. Use **Watch** (`3`) to track that specific market
-4. Set up alerts with custom thresholds
-
-### Exporting Data
-
-Quick export workflow:
-
-1. Use **Monitor** to see markets
-2. Copy market IDs you're interested in
-3. Go to **Export** (`6`)
-4. Export to JSON for analysis
-5. Process with Python/Excel/etc.
 
 ### Configuration
 
@@ -346,73 +402,31 @@ Edit `~/.polyterm/config.toml` for persistent settings:
 
 ```toml
 [alerts]
-probability_threshold = 10.0
+probability_threshold = 5.0
 check_interval = 60
 
 [display]
 refresh_rate = 2
 max_markets = 20
 
-[data_validation]
-min_volume_threshold = 1000.0
+[notification.telegram]
+enabled = true
+bot_token = "YOUR_BOT_TOKEN"
+chat_id = "YOUR_CHAT_ID"
 ```
-
-Then restart PolyTerm to apply changes.
 
 ### Troubleshooting
 
 **TUI not launching?**
 ```bash
-# Check installation
 pip show polyterm
-
-# Try reinstalling
-pip install -e .
+pip install --upgrade polyterm
 ```
 
-**Screen issues?**
+**Want CLI only?**
 ```bash
-# Clear terminal first
-clear
-polyterm
-```
-
-**Want to go back to CLI only?**
-```bash
-# Just add any command
-polyterm monitor  # Skips TUI
-polyterm whales   # Skips TUI
-```
-
-### Advanced Usage
-
-**Combining TUI with CLI:**
-
-```bash
-# Launch TUI
-polyterm
-
-# In another terminal, run CLI commands
-polyterm monitor --limit 5 --once
-
-# Export from CLI while TUI is running
-polyterm export --market <id> --format json
-```
-
-**Scripting with TUI:**
-
-The TUI can be scripted (though CLI is better for this):
-
-```bash
-# Not recommended, but possible
-echo "1" | polyterm  # Will enter monitor screen
-```
-
-Better approach - use CLI commands in scripts:
-```bash
-#!/bin/bash
-# monitor_script.sh
-polyterm monitor --limit 10 --refresh 5 --once
+polyterm monitor  # Skips TUI, runs directly
+polyterm whales   # Skips TUI, runs directly
 ```
 
 ## Getting Help
@@ -424,7 +438,6 @@ polyterm monitor --limit 10 --refresh 5 --once
 
 ---
 
-**Enjoy using PolyTerm! 🎨📊**
+**Enjoy using PolyTerm!**
 
 *Your terminal window to prediction markets*
-
