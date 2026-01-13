@@ -26,10 +26,28 @@ pytest tests/test_live_data/ -v                           # Live API integration
 ### Running the Application
 ```bash
 polyterm                              # Launch TUI (default)
+polyterm tutorial                     # Interactive tutorial for new users
+polyterm glossary                     # Prediction market terminology
+polyterm simulate -i                  # P&L calculator (interactive)
 polyterm monitor --limit 20           # CLI market monitoring
 polyterm whales --hours 24            # Whale activity
 polyterm arbitrage --min-spread 0.025 # Arbitrage scanning
 polyterm predict --limit 10           # AI predictions
+polyterm risk --market "bitcoin"      # Market risk assessment
+polyterm follow --list                # Copy trading / followed wallets
+polyterm parlay -i                    # Parlay calculator (interactive)
+polyterm bookmarks --list             # View saved markets
+polyterm dashboard                    # Quick overview of activity
+polyterm chart -m "bitcoin"           # ASCII price history chart
+polyterm compare -i                   # Compare markets side by side
+polyterm size -i                      # Position size calculator (Kelly Criterion)
+polyterm recent                       # View recently accessed markets
+polyterm pricealert -i                # Set price target alerts
+polyterm calendar --days 7            # View upcoming resolutions
+polyterm fees -i                      # Calculate fees and slippage
+polyterm stats -m "bitcoin"           # Market statistics and technicals
+polyterm search --min-volume 100000   # Advanced market search
+polyterm monitor --show-quality       # Show volume quality indicators
 polyterm monitor --format json --once # JSON output mode (all commands support this)
 ```
 
@@ -60,6 +78,10 @@ polyterm/
 │   ├── arbitrage.py      # Arbitrage scanner (intra-market, correlated, Kalshi)
 │   ├── orderbook.py      # Order book analysis with ASCII charts
 │   ├── predictions.py    # AI-powered multi-factor predictions
+│   ├── risk_score.py     # Market risk scoring system (A-F grades)
+│   ├── uma_tracker.py    # UMA oracle dispute risk analysis
+│   ├── wash_trade_detector.py  # Wash trade detection indicators
+│   ├── charts.py         # ASCII chart generation (line, bar, sparkline)
 │   └── notifications.py  # Multi-channel notifications
 ├── db/               # Database layer (SQLite at ~/.polyterm/data.db)
 │   ├── database.py       # SQLite database manager
@@ -73,7 +95,10 @@ polyterm/
 │   └── screens/          # Individual TUI screens
 └── utils/            # Utilities
     ├── config.py         # Config management (~/.polyterm/config.toml)
-    └── json_output.py    # JSON output utilities
+    ├── json_output.py    # JSON output utilities
+    ├── errors.py         # Centralized error handling with user-friendly messages
+    ├── tips.py           # Contextual tips and hints system
+    └── contextual_help.py # Screen-specific help content
 ```
 
 ### Key Patterns
@@ -97,8 +122,21 @@ polyterm/
 3/w = whales         7/e = export        11/wal = wallets
 4   = watch          8/s = settings      12/alert = alerts
                                          13/ob = orderbook
-u   = quick update   h/? = help
-q   = quit
+                                         14/risk = risk assessment
+                                         15/follow = copy trading
+                                         16/parlay = parlay calculator
+                                         17/bm = bookmarks
+
+d   = dashboard      t   = tutorial       g   = glossary
+sim = simulate       ch  = chart          cmp = compare
+sz  = size           rec = recent         pa  = pricealert
+cal = calendar       fee = fees           st  = stats
+sr  = search         pos = position       nt  = notes
+pr  = presets        sent = sentiment     corr = correlate
+ex  = exitplan       dp  = depth          tr  = trade
+tl  = timeline       an  = analyze        jn  = journal
+hot = hot markets    pnl = profit/loss    u   = quick update
+h/? = help           q   = quit
 ```
 
 ## Testing Notes
@@ -140,3 +178,115 @@ Version is defined in TWO places (keep in sync):
 - Whale: Large wallet positioning
 - Smart Money: High win-rate wallet activity
 - Technical: RSI-based overbought/oversold
+
+**Market Risk Scoring** (`core/risk_score.py`):
+- 6 risk factors with weighted scores: resolution clarity (25%), liquidity (20%), time risk (15%), volume quality (15%), spread (15%), category risk (10%)
+- Grades: A (0-20), B (21-35), C (36-50), D (51-70), F (71+)
+- Includes warnings and recommendations
+
+**Copy Trading / Wallet Following** (`cli/commands/follow.py`, `db/database.py`):
+- Follow up to 10 wallets
+- Track win rate, volume, trade count, avg position size
+- Interactive mode and CLI options (--add, --remove, --list)
+
+**Parlay Calculator** (`cli/commands/parlay.py`):
+- Combine multiple bets for higher potential payouts
+- Calculates combined probability, decimal/American odds
+- Shows expected value and risk level
+- Fee-adjusted payouts (2% on winnings)
+
+**Error Handling** (`utils/errors.py`):
+- Centralized user-friendly error messages
+- API error handling with suggestions (timeouts, rate limits, etc.)
+- Predefined error messages for common scenarios
+
+**UMA Dispute Tracking** (`core/uma_tracker.py`):
+- Analyzes markets for resolution dispute risk
+- Factors: subjectivity, category, resolution source clarity, time risk
+- Risk levels: Low, Medium, High, Very High
+- Used in risk assessment command
+
+**Wash Trade Detection** (`core/wash_trade_detector.py`):
+- Identifies potential artificial volume
+- Indicators: volume/liquidity ratio, trader concentration, size uniformity, side balance
+- Based on research showing ~25% of Polymarket volume may be wash trading
+- Risk levels: Low, Medium, High, Very High
+- Integrated into monitor command with `--show-quality` flag
+
+**Market Bookmarks** (`cli/commands/bookmarks.py`, `db/database.py`):
+- Save favorite markets for quick access
+- Add notes to bookmarks
+- Interactive and CLI modes (--list, --add, --remove)
+- Stored in local SQLite database
+
+**Dashboard** (`cli/commands/dashboard.py`):
+- Quick overview of market activity
+- Shows top volume markets, bookmarks, alerts, followed wallets
+- Perfect for daily check-ins
+- Available via `d` shortcut or `polyterm dashboard`
+
+**ASCII Charts** (`core/charts.py`):
+- Terminal-based price visualization
+- Line charts with Bresenham's line algorithm
+- Sparklines for compact display (8 levels: ▁▂▃▄▅▆▇█)
+- Bar charts and comparison charts
+- Used by chart command for price history
+
+**Price Charts** (`cli/commands/chart.py`):
+- View price history for any market
+- Supports full charts and compact sparklines
+- Customizable timeframe (hours) and dimensions
+- Data from database snapshots
+
+**Market Comparison** (`cli/commands/compare.py`):
+- Compare up to 4 markets side by side
+- Shows sparklines, price changes, volumes
+- Interactive market selection
+- Identifies potential arbitrage (combined probability analysis)
+
+**Position Size Calculator** (`cli/commands/size.py`):
+- Kelly Criterion-based bet sizing
+- Calculates edge, expected value per dollar
+- Full Kelly vs fractional Kelly (quarter, half)
+- Fixed percentage alternatives (1%, 2%, 5%)
+- Outcome projections (profit if win, loss if lose)
+
+**Recently Viewed Markets** (`cli/commands/recent.py`, `db/database.py`):
+- Automatic tracking of viewed markets
+- View count for frequently accessed markets
+- Quick return to markets being researched
+- Clear history option
+- Stored in SQLite `recently_viewed` table
+
+**Price Alerts** (`cli/commands/pricealert.py`, `db/database.py`):
+- Set alerts when markets hit target prices
+- Direction-aware (above/below target)
+- Interactive management (add, list, check, remove)
+- Stored in SQLite `price_alerts` table
+- Check command to verify triggered alerts
+
+**Market Calendar** (`cli/commands/calendar.py`):
+- View upcoming market resolutions
+- Filter by days ahead, category, bookmarked
+- Grouped by date with countdown
+- Helps plan exits before resolution
+
+**Fee & Slippage Calculator** (`cli/commands/fees.py`):
+- Polymarket fee structure (0% maker, 2% taker on winnings)
+- Slippage estimation from order book
+- Net profit/loss projections
+- Gas fee estimates (Polygon network)
+
+**Market Statistics** (`cli/commands/stats.py`):
+- Volatility calculation (standard deviation of returns)
+- Trend analysis (linear regression slope)
+- RSI (Relative Strength Index) - 14 period
+- Momentum detection (accelerating/decelerating)
+- Price range analysis (high/low/range)
+- Certainty measurement (distance from 50%)
+
+**Advanced Search** (`cli/commands/search.py`):
+- Filter by category, volume, liquidity, price range
+- Filter by resolution date (ending soon)
+- Multiple sort options (volume, liquidity, price, recent)
+- Interactive and CLI modes

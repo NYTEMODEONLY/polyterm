@@ -568,3 +568,102 @@ The key features that provide **genuine alpha** are now fully operational:
 4. Multi-wallet portfolio tracking improvements
 
 **Current Version:** v0.4.9 (183 tests passing)
+
+---
+
+## Next Phase: Go-To Tool Strategy (January 2025 Update)
+
+Based on comprehensive market research and competitor analysis, here are the **NEW priorities** to make PolyTerm the go-to tool for all Polymarket/Kalshi traders.
+
+### Market Context (2025)
+- **190+ tools** now exist in the Polymarket ecosystem
+- **$18B cumulative volume** processed through Polymarket
+- **1.3M traders** active on the platform
+- **25% of volume** estimated to be wash trading (Columbia study)
+- **$300M+ in disputed markets** due to UMA oracle issues
+
+### Critical Gaps Identified
+
+#### 1. Beginner Experience (70% of traders struggle)
+- No competitor offers a terminal-based tutorial
+- Prediction market concepts are confusing (price = probability)
+- Error messages are technical, not helpful
+
+#### 2. UMA Dispute Transparency (Major pain point)
+- Multiple $7M+ manipulation incidents in 2025
+- No tool tracks dispute status comprehensively
+- 2 whales control >50% of UMA voting power
+
+#### 3. Wash Trade Detection (Unique opportunity)
+- No competitor offers this
+- 25% of volume is artificial
+- Traders need real liquidity info
+
+#### 4. Copy Trading (High demand)
+- 5+ competitors offer this
+- Casual traders want to follow winners
+- Easy to implement with existing wallet tracking
+
+### New Feature Roadmap
+
+#### Phase 5: Beginner Experience (v0.5.0)
+| Feature | Priority | Effort |
+|---------|----------|--------|
+| Interactive tutorial command | Critical | Medium |
+| Contextual help (? key anywhere) | Critical | Low |
+| Glossary command | High | Low |
+| Simplified "basic mode" | High | Medium |
+| Better error messages | High | Low |
+| First-run onboarding flow | High | Medium |
+
+#### Phase 6: Market Intelligence (v0.6.0)
+| Feature | Priority | Effort |
+|---------|----------|--------|
+| UMA dispute tracker | Critical | High |
+| Wash trade detection algorithm | Critical | High |
+| Real volume estimates | High | Medium |
+| Market risk scoring (A-F) | High | Medium |
+| Resolution transparency indicator | Medium | Medium |
+
+#### Phase 7: Social Trading (v0.7.0)
+| Feature | Priority | Effort |
+|---------|----------|--------|
+| Copy trading / wallet following | High | Medium |
+| Performance leaderboard | High | Medium |
+| Parlay/multi-bet calculator | Medium | Medium |
+| Social proof indicators | Medium | Low |
+
+#### Phase 8: Professional Tools (v0.8.0)
+| Feature | Priority | Effort |
+|---------|----------|--------|
+| Python SDK | High | High |
+| Webhook API | High | Medium |
+| News integration | Medium | Medium |
+| Position simulator | Medium | Medium |
+| Custom dashboard builder | Low | High |
+
+### Success Metrics
+
+| Metric | Current | 6-Month Target | 12-Month Target |
+|--------|---------|----------------|-----------------|
+| Monthly downloads | ~100 | 1,000 | 5,000 |
+| Daily active users | Unknown | 100 | 500 |
+| GitHub stars | ~50 | 500 | 2,000 |
+| Tutorial completion rate | N/A | 50% | 60% |
+
+### Competitive Advantages to Double Down On
+
+1. **Terminal-Native**: We are the ONLY serious terminal tool
+2. **Privacy-First**: No tracking, all data local
+3. **Scriptable**: JSON output enables automation
+4. **Free Core**: Build trust before asking for money
+5. **Full-Featured**: One tool for everything
+
+### Reference: Full Analysis Document
+
+See `POLYMARKET_ANALYSIS_2025.md` for complete:
+- Deep dive on Polymarket mechanics
+- Detailed competitor analysis (190+ tools)
+- User pain points with evidence
+- Implementation specifications
+- UX best practices

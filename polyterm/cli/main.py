@@ -26,6 +26,15 @@ def cli(ctx):
 # Import commands
 from .commands import monitor, watch, whales, replay, portfolio, export_cmd, config_cmd, live_monitor
 from .commands import arbitrage, predict, orderbook, wallets, alerts
+from .commands import tutorial, glossary, simulate, risk, follow, parlay, bookmarks, dashboard, chart, size, compare, recent, pricealert, calendar, fees, stats, search, position, notes, presets, sentiment
+from .commands import correlate, exit, depth, trade, timeline
+from .commands import analytics, journal, hot, lookup, pnl
+from .commands import alertcenter, groups, attribution, snapshot
+from .commands import signals, similar, ladder, benchmark, pin
+from .commands import spread, history, streak, digest, timing
+from .commands import odds, health, scenario, summary, watchdog
+from .commands import volume, screener, backtest, report, liquidity
+from .commands import ev, calibrate, quick, leaderboard, notify
 
 @click.command()
 def update():
@@ -108,6 +117,66 @@ cli.add_command(predict.predict)
 cli.add_command(orderbook.orderbook)
 cli.add_command(wallets.wallets)
 cli.add_command(alerts.alerts)
+cli.add_command(tutorial.tutorial)
+cli.add_command(glossary.glossary)
+cli.add_command(simulate.simulate)
+cli.add_command(risk.risk)
+cli.add_command(follow.follow)
+cli.add_command(parlay.parlay)
+cli.add_command(bookmarks.bookmarks)
+cli.add_command(dashboard.dashboard)
+cli.add_command(chart.chart)
+cli.add_command(size.size)
+cli.add_command(compare.compare)
+cli.add_command(recent.recent)
+cli.add_command(pricealert.pricealert)
+cli.add_command(calendar.calendar)
+cli.add_command(fees.fees)
+cli.add_command(stats.stats)
+cli.add_command(search.search)
+cli.add_command(position.position)
+cli.add_command(notes.notes)
+cli.add_command(presets.presets)
+cli.add_command(sentiment.sentiment)
+cli.add_command(correlate.correlate)
+cli.add_command(exit.exit)
+cli.add_command(depth.depth)
+cli.add_command(trade.trade)
+cli.add_command(timeline.timeline)
+cli.add_command(analytics.analyze)
+cli.add_command(journal.journal)
+cli.add_command(hot.hot)
+cli.add_command(lookup.lookup)
+cli.add_command(pnl.pnl)
+cli.add_command(alertcenter.center)
+cli.add_command(groups.groups)
+cli.add_command(attribution.attribution)
+cli.add_command(snapshot.snapshot)
+cli.add_command(signals.signals)
+cli.add_command(similar.similar)
+cli.add_command(ladder.ladder)
+cli.add_command(benchmark.benchmark)
+cli.add_command(pin.pin)
+cli.add_command(spread.spread)
+cli.add_command(history.history)
+cli.add_command(streak.streak)
+cli.add_command(digest.digest)
+cli.add_command(timing.timing)
+cli.add_command(odds.odds)
+cli.add_command(health.health)
+cli.add_command(scenario.scenario)
+cli.add_command(summary.summary)
+cli.add_command(watchdog.watchdog)
+cli.add_command(volume.volume)
+cli.add_command(screener.screener)
+cli.add_command(backtest.backtest)
+cli.add_command(report.report)
+cli.add_command(liquidity.liquidity)
+cli.add_command(ev.ev)
+cli.add_command(calibrate.calibrate)
+cli.add_command(quick.quick)
+cli.add_command(leaderboard.leaderboard)
+cli.add_command(notify.notify)
 
 
 if __name__ == "__main__":
