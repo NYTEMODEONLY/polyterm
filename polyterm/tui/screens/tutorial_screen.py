@@ -31,7 +31,14 @@ def tutorial_screen(console: RichConsole):
 
         # Run the tutorial command
         try:
-            subprocess.run([sys.executable, "-m", "polyterm", "tutorial"])
+            result = subprocess.run(
+                [sys.executable, "-m", "polyterm", "tutorial"],
+                capture_output=False
+            )
+            if result.returncode != 0:
+                console.print()
+                console.print("[yellow]Tutorial encountered an issue.[/yellow]")
+                console.print("[dim]Try running directly: polyterm tutorial[/dim]")
         except Exception as e:
             console.print(f"[red]Error running tutorial: {e}[/red]")
             console.print("[dim]Try running: polyterm tutorial[/dim]")
