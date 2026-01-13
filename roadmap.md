@@ -567,7 +567,7 @@ The key features that provide **genuine alpha** are now fully operational:
 3. Custom dashboard builder for personalized TUI layouts
 4. Multi-wallet portfolio tracking improvements
 
-**Current Version:** v0.4.9 (183 tests passing)
+**Current Version:** v0.5.2
 
 ---
 

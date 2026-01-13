@@ -56,6 +56,35 @@ polyterm
 | Order Book Analysis | `polyterm orderbook` | Depth charts, slippage, icebergs |
 | Wallet Tracking | `polyterm wallets` | Smart money & whale wallet analysis |
 | Alert Management | `polyterm alerts` | Multi-channel notification system |
+| Risk Assessment | `polyterm risk` | Market risk scoring (A-F grades) |
+| Copy Trading | `polyterm follow` | Follow successful wallets |
+
+### Tools & Calculators
+| Feature | Command | Description |
+|---------|---------|-------------|
+| Dashboard | `polyterm dashboard` | Quick overview of activity |
+| Simulate P&L | `polyterm simulate -i` | Interactive P&L calculator |
+| Parlay Calculator | `polyterm parlay -i` | Combine multiple bets |
+| Position Size | `polyterm size -i` | Kelly Criterion bet sizing |
+| Fee Calculator | `polyterm fees -i` | Calculate fees and slippage |
+| Price Alerts | `polyterm pricealert -i` | Set target price notifications |
+
+### Research & Analysis
+| Feature | Command | Description |
+|---------|---------|-------------|
+| Market Search | `polyterm search` | Advanced filtering and search |
+| Market Stats | `polyterm stats -m "market"` | Volatility, RSI, trends |
+| Price Charts | `polyterm chart -m "market"` | ASCII price history |
+| Compare Markets | `polyterm compare -i` | Side-by-side comparison |
+| Calendar | `polyterm calendar` | Upcoming resolutions |
+| Bookmarks | `polyterm bookmarks` | Save favorite markets |
+| Recent Markets | `polyterm recent` | Recently viewed markets |
+
+### Learning
+| Feature | Command | Description |
+|---------|---------|-------------|
+| Tutorial | `polyterm tutorial` | Interactive beginner guide |
+| Glossary | `polyterm glossary` | Prediction market terminology |
 
 ---
 
@@ -229,37 +258,39 @@ Launch the interactive terminal interface:
 polyterm
 ```
 
+**First-time users** will be guided through an interactive tutorial covering prediction market basics, whale tracking, and arbitrage detection.
+
 ### Main Menu
 ```
-   1  Monitor Markets - Real-time market tracking
-   2  Live Monitor - Dedicated terminal window
-   3  Whale Activity - High-volume markets
-   4  Watch Market - Track specific market
-   5  Market Analytics - Trends and analysis
-   6  Portfolio - View your positions
-   7  Export Data - Export to JSON/CSV
-   8  Settings - Configuration
+1/m = monitor        5/a = analytics      9/arb = arbitrage
+2/l = live monitor   6/p = portfolio     10/pred = predictions
+3/w = whales         7/e = export        11/wal = wallets
+4   = watch          8/s = settings      12/alert = alerts
+                                         13/ob = orderbook
+                                         14/risk = risk assessment
+                                         15/follow = copy trading
+                                         16/parlay = parlay calculator
+                                         17/bm = bookmarks
 
-   9  Arbitrage - Scan for arbitrage opportunities
-  10  Predictions - Signal-based market predictions
-  11  Wallets - Smart money tracking
-  12  Alerts - Manage notifications
-  13  Order Book - Analyze market depth
-
-   h  Help - View documentation
-   q  Quit - Exit PolyTerm
+d   = dashboard      t   = tutorial       g   = glossary
+sim = simulate       ch  = chart          cmp = compare
+sz  = size           rec = recent         pa  = pricealert
+cal = calendar       fee = fees           st  = stats
+sr  = search         pos = position       nt  = notes
+pr  = presets        sent = sentiment     corr = correlate
+ex  = exitplan       dp  = depth          tr  = trade
+tl  = timeline       an  = analyze        jn  = journal
+hot = hot markets    pnl = profit/loss    u   = quick update
+h/? = help           q   = quit
 ```
 
 ### Navigation
-- **Numbers**: Press `1-13` for features
-- **Shortcuts**: `m` (monitor), `l` (live), `w` (whales), `a` (analytics), `p` (portfolio), `e` (export), `s` (settings)
-- **Premium shortcuts**: `arb` (arbitrage), `pred` (predictions), `wal` (wallets), `alert` (alerts), `ob` (orderbook)
-- **Back**: Press `b` or `back` to return to previous menu
-- **Help**: Press `h` or `?`
-- **Quit**: Press `q`
-
-### Market Picker
-When selecting markets for analysis (watch, orderbook, predictions), PolyTerm displays a numbered list of active markets for easy selection.
+- **Numbers**: Press `1-17` for numbered features
+- **Shortcuts**: Use the letter/abbreviation shortcuts shown above
+- **Help**: Press `h` or `?` for documentation
+- **Tutorial**: Press `t` to launch the interactive tutorial
+- **Glossary**: Press `g` for prediction market terminology
+- **Quit**: Press `q` to exit
 
 ---
 
