@@ -14,6 +14,8 @@ from ...api.aggregator import APIAggregator
 from ...core.scanner import MarketScanner
 from ...utils.formatting import format_probability_rich, format_volume
 from ...utils.json_output import print_json, format_markets_json
+from ...utils.errors import handle_api_error, show_error
+from ...core.wash_trade_detector import quick_wash_trade_score
 from datetime import datetime
 
 try:
@@ -31,8 +33,9 @@ except ImportError:
 @click.option("--sort", type=click.Choice(["volume", "probability", "recent"]), default=None, help="Sort markets by: volume, probability, or recent")
 @click.option("--format", "output_format", type=click.Choice(["table", "json"]), default="table", help="Output format: table (default) or json")
 @click.option("--once", is_flag=True, help="Run once and exit (no live updates)")
+@click.option("--show-quality", is_flag=True, help="Show volume quality indicators (wash trade detection)")
 @click.pass_context
-def monitor(ctx, limit, category, refresh, active_only, sort, output_format, once):
+def monitor(ctx, limit, category, refresh, active_only, sort, output_format, once, show_quality):
     """Monitor markets in real-time with live updates"""
     
     config = ctx.obj["config"]
@@ -65,10 +68,12 @@ def monitor(ctx, limit, category, refresh, active_only, sort, output_format, onc
         now = datetime.now()
         table = Table(title=f"PolyTerm - Live Market Monitor (Updated: {now.strftime('%H:%M:%S')})")
         
-        table.add_column("Market", style="cyan", no_wrap=False, max_width=45)
-        table.add_column("Probability", justify="right", style="green")
+        table.add_column("Market", style="cyan", no_wrap=False, max_width=40 if show_quality else 45)
+        table.add_column("Prob", justify="right", style="green")
         table.add_column("24h Volume", justify="right", style="yellow")
-        table.add_column("Data Age", justify="right", style="dim")
+        if show_quality:
+            table.add_column("Quality", justify="center", width=7)
+        table.add_column("Ends", justify="right", style="dim")
         
         try:
             # Get live markets from aggregator with validation
@@ -163,20 +168,41 @@ def monitor(ctx, limit, category, refresh, active_only, sort, output_format, onc
                 # Format probability with color
                 prob_style = "green" if probability > 50 else "yellow" if probability > 30 else "white"
                 prob_text = f"[{prob_style}]{probability:.1f}%[/{prob_style}]"
-                
+
                 # Format volume
                 volume_text = f"${volume_24hr:,.0f}" if volume_24hr > 0 else "[dim]$0[/dim]"
-                
-                table.add_row(
-                    title,
-                    prob_text,
-                    volume_text,
-                    data_age,
-                )
+
+                # Volume quality indicator
+                quality_text = ""
+                if show_quality:
+                    liquidity = float(market.get('liquidity', 0) or 0)
+                    wash_score, _ = quick_wash_trade_score(volume_24hr, liquidity)
+                    if wash_score >= 75:
+                        quality_text = "[red]![/red]"  # Warning
+                    elif wash_score >= 55:
+                        quality_text = "[yellow]?[/yellow]"  # Caution
+                    else:
+                        quality_text = "[green]OK[/green]"  # Good
+
+                if show_quality:
+                    table.add_row(
+                        title,
+                        prob_text,
+                        volume_text,
+                        quality_text,
+                        data_age,
+                    )
+                else:
+                    table.add_row(
+                        title,
+                        prob_text,
+                        volume_text,
+                        data_age,
+                    )
         
         except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
-        
+            handle_api_error(console, e, "fetching markets")
+
         return table
     
     def get_markets_data():

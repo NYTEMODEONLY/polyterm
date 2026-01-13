@@ -10,6 +10,7 @@ from ...api.clob import CLOBClient
 from ...db.database import Database
 from ...core.arbitrage import ArbitrageScanner, KalshiArbitrageScanner
 from ...utils.json_output import print_json
+from ...utils.errors import handle_api_error, show_error
 
 
 @click.command()
@@ -100,7 +101,7 @@ def arbitrage(ctx, min_spread, limit, include_kalshi, output_format):
             return
 
         if not all_opportunities:
-            console.print("[yellow]No arbitrage opportunities found above minimum spread[/yellow]")
+            show_error(console, "no_arbitrage")
             return
 
         # Create table
@@ -145,7 +146,7 @@ def arbitrage(ctx, min_spread, limit, include_kalshi, output_format):
         if output_format == 'json':
             print_json({'success': False, 'error': str(e)})
         else:
-            console.print(f"[red]Error: {e}[/red]")
+            handle_api_error(console, e, "scanning for arbitrage")
     finally:
         gamma_client.close()
         clob_client.close()

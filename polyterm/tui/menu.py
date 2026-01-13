@@ -212,14 +212,22 @@ class MainMenu:
                 ("11", "👛 Wallets - Smart money tracking"),
                 ("12", "🔔 Alerts - Manage notifications"),
                 ("13", "📖 Order Book - Analyze market depth"),
+                ("14", "🛡️  Risk - Market risk assessment"),
+                ("15", "👥 Copy Trading - Follow wallets"),
+                ("16", "🎰 Parlay - Combine multiple bets"),
+                ("17", "🔖 Bookmarks - Saved markets"),
                 ("", ""),
+                ("d", "📊 Dashboard - Quick overview"),
+                ("t", "📚 Tutorial - Learn the basics"),
+                ("g", "📖 Glossary - Market terminology"),
+                ("sim", "🧮 Simulate - P&L calculator"),
                 ("h", "❓ Help - View documentation"),
                 ("q", "🚪 Quit - Exit PolyTerm")
             ]
 
             # Add quick update option if update is available
             if has_update:
-                menu_items.insert(-2, ("u", f"🔄 Quick Update to v{latest_version}"))
+                menu_items.insert(-5, ("u", f"🔄 Quick Update to v{latest_version}"))
         elif width >= 60:
             # Medium descriptions for medium terminals
             menu_items = [
@@ -237,14 +245,22 @@ class MainMenu:
                 ("11", "👛 Wallets"),
                 ("12", "🔔 Alerts"),
                 ("13", "📖 Order Book"),
+                ("14", "🛡️  Risk"),
+                ("15", "👥 Copy Trading"),
+                ("16", "🎰 Parlay"),
+                ("17", "🔖 Bookmarks"),
                 ("", ""),
+                ("d", "📊 Dashboard"),
+                ("t", "📚 Tutorial"),
+                ("g", "📖 Glossary"),
+                ("sim", "🧮 Simulate"),
                 ("h", "❓ Help"),
                 ("q", "🚪 Quit")
             ]
 
             # Add quick update option if update is available
             if has_update:
-                menu_items.insert(-2, ("u", f"🔄 Update to v{latest_version}"))
+                menu_items.insert(-5, ("u", f"🔄 Update to v{latest_version}"))
         else:
             # Compact menu for narrow terminals
             menu_items = [
@@ -262,15 +278,23 @@ class MainMenu:
                 ("11", "👛 Wallets"),
                 ("12", "🔔 Alerts"),
                 ("13", "📖 Book"),
+                ("14", "🛡️  Risk"),
+                ("15", "👥 Copy"),
+                ("16", "🎰 Parlay"),
+                ("17", "🔖 Bookmarks"),
                 ("", ""),
+                ("d", "📊 Dash"),
+                ("t", "📚 Tutorial"),
+                ("g", "📖 Glossary"),
+                ("sim", "🧮 Simulate"),
                 ("h", "❓ Help"),
                 ("q", "🚪 Quit")
             ]
 
             # Add quick update option if update is available
             if has_update:
-                menu_items.insert(-2, ("u", f"🔄 Update"))
-        
+                menu_items.insert(-5, ("u", f"🔄 Update"))
+
         menu = Table.grid(padding=(0, 1))
         menu.add_column(style="cyan bold", justify="right", width=3)
         menu.add_column(style="white")

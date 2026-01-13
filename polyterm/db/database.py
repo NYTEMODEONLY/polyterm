@@ -129,6 +129,84 @@ class Database:
                 )
             """)
 
+            # Bookmarked markets table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS bookmarks (
+                    market_id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    category TEXT DEFAULT '',
+                    probability REAL DEFAULT 0.0,
+                    created_at TIMESTAMP NOT NULL,
+                    notes TEXT DEFAULT ''
+                )
+            """)
+
+            # Recently viewed markets table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS recently_viewed (
+                    market_id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    probability REAL DEFAULT 0.0,
+                    viewed_at TIMESTAMP NOT NULL,
+                    view_count INTEGER DEFAULT 1
+                )
+            """)
+
+            # Price alerts table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS price_alerts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    market_id TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    target_price REAL NOT NULL,
+                    direction TEXT NOT NULL,
+                    created_at TIMESTAMP NOT NULL,
+                    triggered_at TIMESTAMP DEFAULT NULL,
+                    triggered INTEGER DEFAULT 0,
+                    notified INTEGER DEFAULT 0,
+                    notes TEXT DEFAULT ''
+                )
+            """)
+
+            # Manual positions table (for tracking without wallet)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS positions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    market_id TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    side TEXT NOT NULL,
+                    shares REAL NOT NULL,
+                    entry_price REAL NOT NULL,
+                    entry_date TIMESTAMP NOT NULL,
+                    exit_price REAL DEFAULT NULL,
+                    exit_date TIMESTAMP DEFAULT NULL,
+                    status TEXT DEFAULT 'open',
+                    platform TEXT DEFAULT 'polymarket',
+                    notes TEXT DEFAULT ''
+                )
+            """)
+
+            # Screener presets table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS screener_presets (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE,
+                    filters TEXT NOT NULL,
+                    created_at TIMESTAMP NOT NULL
+                )
+            """)
+
+            # Market notes table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS market_notes (
+                    market_id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    notes TEXT NOT NULL,
+                    created_at TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP NOT NULL
+                )
+            """)
+
             # Create indexes for performance
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_trades_wallet ON trades(wallet_address)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_trades_market ON trades(market_id)")
@@ -138,6 +216,12 @@ class Database:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_snapshots_market ON market_snapshots(market_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_snapshots_timestamp ON market_snapshots(timestamp)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_wallets_risk ON wallets(risk_score)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_created ON bookmarks(created_at)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_recently_viewed_at ON recently_viewed(viewed_at)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_price_alerts_market ON price_alerts(market_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_price_alerts_triggered ON price_alerts(triggered)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_positions_market ON positions(market_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_positions_status ON positions(status)")
 
     # Wallet operations
 
@@ -247,6 +331,455 @@ class Database:
             wallet.tags.remove(tag)
             wallet.updated_at = datetime.now()
             self.upsert_wallet(wallet)
+
+    def get_followed_wallets(self) -> List[Wallet]:
+        """Get wallets the user is following for copy trading"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT * FROM wallets
+                WHERE tags LIKE '%"followed"%'
+                ORDER BY win_rate DESC, total_volume DESC
+            """)
+            return [Wallet.from_dict(dict(row)) for row in cursor.fetchall()]
+
+    def follow_wallet(self, address: str) -> bool:
+        """Start following a wallet for copy trading
+
+        Returns:
+            True if wallet was followed, False if already followed
+        """
+        wallet = self.get_wallet(address)
+        if wallet is None:
+            # Create new wallet entry
+            wallet = Wallet(
+                address=address,
+                first_seen=datetime.now(),
+                tags=['followed'],
+            )
+            self.upsert_wallet(wallet)
+            return True
+
+        if 'followed' not in wallet.tags:
+            wallet.tags.append('followed')
+            wallet.updated_at = datetime.now()
+            self.upsert_wallet(wallet)
+            return True
+        return False
+
+    def unfollow_wallet(self, address: str) -> bool:
+        """Stop following a wallet
+
+        Returns:
+            True if wallet was unfollowed, False if not following
+        """
+        wallet = self.get_wallet(address)
+        if wallet and 'followed' in wallet.tags:
+            wallet.tags.remove('followed')
+            wallet.updated_at = datetime.now()
+            self.upsert_wallet(wallet)
+            return True
+        return False
+
+    def is_following(self, address: str) -> bool:
+        """Check if user is following a wallet"""
+        wallet = self.get_wallet(address)
+        return wallet is not None and 'followed' in wallet.tags
+
+    # Bookmark operations
+
+    def bookmark_market(
+        self, market_id: str, title: str, category: str = "", probability: float = 0.0, notes: str = ""
+    ) -> bool:
+        """Bookmark a market"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT OR REPLACE INTO bookmarks (
+                    market_id, title, category, probability, created_at, notes
+                ) VALUES (?, ?, ?, ?, ?, ?)
+            """, (market_id, title, category, probability, datetime.now().isoformat(), notes))
+            return True
+
+    def remove_bookmark(self, market_id: str) -> bool:
+        """Remove a market bookmark"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM bookmarks WHERE market_id = ?", (market_id,))
+            return cursor.rowcount > 0
+
+    def is_bookmarked(self, market_id: str) -> bool:
+        """Check if a market is bookmarked"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1 FROM bookmarks WHERE market_id = ?", (market_id,))
+            return cursor.fetchone() is not None
+
+    def get_bookmarks(self) -> List[Dict[str, Any]]:
+        """Get all bookmarked markets"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT * FROM bookmarks ORDER BY created_at DESC
+            """)
+            return [dict(row) for row in cursor.fetchall()]
+
+    def get_bookmark(self, market_id: str) -> Optional[Dict[str, Any]]:
+        """Get a specific bookmark"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM bookmarks WHERE market_id = ?", (market_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def update_bookmark_notes(self, market_id: str, notes: str) -> bool:
+        """Update notes for a bookmark"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE bookmarks SET notes = ? WHERE market_id = ?",
+                (notes, market_id)
+            )
+            return cursor.rowcount > 0
+
+    # Recently viewed operations
+
+    def track_market_view(self, market_id: str, title: str, probability: float = 0.0) -> bool:
+        """Track a market view (upsert with view count)"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            # Check if already exists
+            cursor.execute("SELECT view_count FROM recently_viewed WHERE market_id = ?", (market_id,))
+            row = cursor.fetchone()
+
+            if row:
+                # Update existing
+                cursor.execute("""
+                    UPDATE recently_viewed
+                    SET title = ?, probability = ?, viewed_at = ?, view_count = view_count + 1
+                    WHERE market_id = ?
+                """, (title, probability, datetime.now().isoformat(), market_id))
+            else:
+                # Insert new
+                cursor.execute("""
+                    INSERT INTO recently_viewed (market_id, title, probability, viewed_at, view_count)
+                    VALUES (?, ?, ?, ?, 1)
+                """, (market_id, title, probability, datetime.now().isoformat()))
+
+            # Keep only last 50 viewed markets
+            cursor.execute("""
+                DELETE FROM recently_viewed
+                WHERE market_id NOT IN (
+                    SELECT market_id FROM recently_viewed
+                    ORDER BY viewed_at DESC LIMIT 50
+                )
+            """)
+            return True
+
+    def get_recently_viewed(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """Get recently viewed markets"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT * FROM recently_viewed
+                ORDER BY viewed_at DESC
+                LIMIT ?
+            """, (limit,))
+            return [dict(row) for row in cursor.fetchall()]
+
+    def get_most_viewed(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """Get most frequently viewed markets"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT * FROM recently_viewed
+                ORDER BY view_count DESC, viewed_at DESC
+                LIMIT ?
+            """, (limit,))
+            return [dict(row) for row in cursor.fetchall()]
+
+    def clear_recent_history(self) -> bool:
+        """Clear recently viewed history"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM recently_viewed")
+            return True
+
+    # Price alert operations
+
+    def add_price_alert(
+        self,
+        market_id: str,
+        title: str,
+        target_price: float,
+        direction: str,
+        notes: str = ""
+    ) -> int:
+        """Add a price alert and return its ID"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO price_alerts (
+                    market_id, title, target_price, direction, created_at, notes
+                ) VALUES (?, ?, ?, ?, ?, ?)
+            """, (market_id, title, target_price, direction, datetime.now().isoformat(), notes))
+            return cursor.lastrowid
+
+    def get_price_alerts(self, active_only: bool = True) -> List[Dict[str, Any]]:
+        """Get price alerts"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            if active_only:
+                cursor.execute("""
+                    SELECT * FROM price_alerts
+                    WHERE triggered = 0
+                    ORDER BY created_at DESC
+                """)
+            else:
+                cursor.execute("""
+                    SELECT * FROM price_alerts
+                    ORDER BY created_at DESC
+                """)
+            return [dict(row) for row in cursor.fetchall()]
+
+    def get_price_alert(self, alert_id: int) -> Optional[Dict[str, Any]]:
+        """Get a specific price alert"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM price_alerts WHERE id = ?", (alert_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def remove_price_alert(self, alert_id: int) -> bool:
+        """Remove a price alert"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM price_alerts WHERE id = ?", (alert_id,))
+            return cursor.rowcount > 0
+
+    def trigger_price_alert(self, alert_id: int) -> bool:
+        """Mark a price alert as triggered"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE price_alerts
+                SET triggered = 1, triggered_at = ?
+                WHERE id = ?
+            """, (datetime.now().isoformat(), alert_id))
+            return cursor.rowcount > 0
+
+    def mark_price_alert_notified(self, alert_id: int) -> bool:
+        """Mark a price alert as notified"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE price_alerts
+                SET notified = 1
+                WHERE id = ?
+            """, (alert_id,))
+            return cursor.rowcount > 0
+
+    def get_alerts_for_market(self, market_id: str) -> List[Dict[str, Any]]:
+        """Get all price alerts for a specific market"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT * FROM price_alerts
+                WHERE market_id = ? AND triggered = 0
+                ORDER BY target_price ASC
+            """, (market_id,))
+            return [dict(row) for row in cursor.fetchall()]
+
+    # Position tracking operations
+
+    def add_position(
+        self,
+        market_id: str,
+        title: str,
+        side: str,
+        shares: float,
+        entry_price: float,
+        platform: str = "polymarket",
+        notes: str = ""
+    ) -> int:
+        """Add a tracked position"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO positions (
+                    market_id, title, side, shares, entry_price,
+                    entry_date, platform, notes, status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open')
+            """, (market_id, title, side, shares, entry_price,
+                  datetime.now().isoformat(), platform, notes))
+            return cursor.lastrowid
+
+    def get_positions(self, status: str = None) -> List[Dict[str, Any]]:
+        """Get tracked positions"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            if status:
+                cursor.execute("""
+                    SELECT * FROM positions WHERE status = ?
+                    ORDER BY entry_date DESC
+                """, (status,))
+            else:
+                cursor.execute("""
+                    SELECT * FROM positions ORDER BY entry_date DESC
+                """)
+            return [dict(row) for row in cursor.fetchall()]
+
+    def get_position(self, position_id: int) -> Optional[Dict[str, Any]]:
+        """Get a specific position"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM positions WHERE id = ?", (position_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def close_position(self, position_id: int, exit_price: float, status: str = "closed") -> bool:
+        """Close a position with exit price"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE positions
+                SET exit_price = ?, exit_date = ?, status = ?
+                WHERE id = ?
+            """, (exit_price, datetime.now().isoformat(), status, position_id))
+            return cursor.rowcount > 0
+
+    def delete_position(self, position_id: int) -> bool:
+        """Delete a position"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM positions WHERE id = ?", (position_id,))
+            return cursor.rowcount > 0
+
+    def get_position_summary(self) -> Dict[str, Any]:
+        """Get summary of all positions"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            # Open positions
+            cursor.execute("SELECT COUNT(*), SUM(shares * entry_price) FROM positions WHERE status = 'open'")
+            open_row = cursor.fetchone()
+            open_count = open_row[0] or 0
+            open_value = open_row[1] or 0
+
+            # Closed positions
+            cursor.execute("""
+                SELECT COUNT(*),
+                       SUM((exit_price - entry_price) * shares) as total_pnl
+                FROM positions WHERE status = 'closed'
+            """)
+            closed_row = cursor.fetchone()
+            closed_count = closed_row[0] or 0
+            realized_pnl = closed_row[1] or 0
+
+            # Won/lost counts
+            cursor.execute("""
+                SELECT COUNT(*) FROM positions
+                WHERE status = 'closed' AND exit_price > entry_price
+            """)
+            wins = cursor.fetchone()[0] or 0
+
+            cursor.execute("""
+                SELECT COUNT(*) FROM positions
+                WHERE status = 'closed' AND exit_price <= entry_price
+            """)
+            losses = cursor.fetchone()[0] or 0
+
+            return {
+                'open_positions': open_count,
+                'open_value': open_value,
+                'closed_positions': closed_count,
+                'realized_pnl': realized_pnl,
+                'wins': wins,
+                'losses': losses,
+                'win_rate': (wins / closed_count * 100) if closed_count > 0 else 0,
+            }
+
+    # Market notes operations
+
+    def set_market_note(self, market_id: str, title: str, notes: str) -> bool:
+        """Set or update notes for a market"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            now = datetime.now().isoformat()
+            cursor.execute("""
+                INSERT INTO market_notes (market_id, title, notes, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(market_id) DO UPDATE SET
+                    notes = excluded.notes,
+                    updated_at = excluded.updated_at
+            """, (market_id, title, notes, now, now))
+            return True
+
+    def get_market_note(self, market_id: str) -> Optional[Dict[str, Any]]:
+        """Get notes for a market"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM market_notes WHERE market_id = ?", (market_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def get_all_market_notes(self) -> List[Dict[str, Any]]:
+        """Get all market notes"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM market_notes ORDER BY updated_at DESC")
+            return [dict(row) for row in cursor.fetchall()]
+
+    def delete_market_note(self, market_id: str) -> bool:
+        """Delete notes for a market"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM market_notes WHERE market_id = ?", (market_id,))
+            return cursor.rowcount > 0
+
+    # Screener preset operations
+
+    def save_screener_preset(self, name: str, filters: dict) -> int:
+        """Save a screener preset"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO screener_presets (name, filters, created_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(name) DO UPDATE SET
+                    filters = excluded.filters
+            """, (name, json.dumps(filters), datetime.now().isoformat()))
+            return cursor.lastrowid
+
+    def get_screener_presets(self) -> List[Dict[str, Any]]:
+        """Get all screener presets"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM screener_presets ORDER BY name")
+            results = []
+            for row in cursor.fetchall():
+                d = dict(row)
+                d['filters'] = json.loads(d['filters'])
+                results.append(d)
+            return results
+
+    def get_screener_preset(self, name: str) -> Optional[Dict[str, Any]]:
+        """Get a specific screener preset"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM screener_presets WHERE name = ?", (name,))
+            row = cursor.fetchone()
+            if row:
+                d = dict(row)
+                d['filters'] = json.loads(d['filters'])
+                return d
+            return None
+
+    def delete_screener_preset(self, name: str) -> bool:
+        """Delete a screener preset"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM screener_presets WHERE name = ?", (name,))
+            return cursor.rowcount > 0
 
     # Trade operations
 

@@ -11,6 +11,7 @@ from ...api.subgraph import SubgraphClient
 from ...core.analytics import AnalyticsEngine
 from ...utils.formatting import format_timestamp, format_volume
 from ...utils.json_output import print_json
+from ...utils.errors import handle_api_error, show_error
 
 
 @click.command()
@@ -84,7 +85,7 @@ def whales(ctx, min_amount, market, hours, limit, output_format):
             return
 
         if not whale_trades:
-            console.print("[yellow]No whale trades found[/yellow]")
+            show_error(console, "no_whales_found")
             return
 
         # Create table
@@ -124,7 +125,7 @@ def whales(ctx, min_amount, market, hours, limit, output_format):
         if output_format == 'json':
             print_json({'success': False, 'error': str(e)})
         else:
-            console.print(f"[red]Error: {e}[/red]")
+            handle_api_error(console, e, "tracking whale activity")
     finally:
         gamma_client.close()
         clob_client.close()
