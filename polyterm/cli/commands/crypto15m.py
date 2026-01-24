@@ -75,6 +75,39 @@ def search_markets_fallback(gamma_client: GammaClient, query: str, limit: int = 
         return []
 
 
+def find_crypto_markets(gamma_client: GammaClient, limit: int = 20) -> list:
+    """Find any crypto-related markets as fallback"""
+    try:
+        all_markets = gamma_client.get_markets(limit=500)
+        crypto_markets = []
+
+        # More specific crypto keywords - check title only, not description
+        crypto_keywords = ['bitcoin', 'btc $', '$btc', 'ethereum', 'eth $', '$eth',
+                          'solana', '$sol', 'xrp', 'crypto', 'microstrategy bitcoin',
+                          'coinbase', 'binance', 'chain', 'blockchain', 'satoshi']
+
+        # Keywords that indicate non-crypto markets to exclude
+        exclude_keywords = ['deport', 'trump', 'election', 'president', 'governor',
+                           'sports', 'nfl', 'nba', 'ncaa']
+
+        for market in all_markets:
+            title = market.get('question', market.get('title', '')).lower()
+
+            # Skip if has exclude keywords
+            if any(kw in title for kw in exclude_keywords):
+                continue
+
+            if any(kw in title for kw in crypto_keywords):
+                if not market.get('closed', True) and market.get('active', False):
+                    crypto_markets.append(market)
+                    if len(crypto_markets) >= limit:
+                        break
+
+        return crypto_markets
+    except Exception:
+        return []
+
+
 def find_15m_markets(gamma_client: GammaClient, crypto: str = None) -> list:
     """Find active 15-minute crypto markets"""
     markets = []
@@ -240,10 +273,8 @@ def crypto15m(ctx, crypto, refresh, interactive, output_format, once):
             markets = find_15m_markets(gamma_client, crypto_filter)
 
             if not markets:
-                table.add_row(
-                    "[dim]No active 15M markets found[/dim]",
-                    "", "", "", "", "", ""
-                )
+                # Return empty table - message will be shown separately
+                pass
             else:
                 for market in markets:
                     symbol = market.get('crypto_symbol', '?')
@@ -329,7 +360,26 @@ def crypto15m(ctx, crypto, refresh, interactive, output_format, once):
 
         if not markets:
             console.print("[yellow]No active 15-minute markets found.[/yellow]")
-            console.print("[dim]Try again in a few minutes - new markets open every 15 minutes.[/dim]")
+            console.print("[dim]15M markets may be between rounds or the API may not expose them directly.[/dim]")
+            console.print()
+
+            # Show other crypto markets as fallback
+            console.print("[bold]Other Crypto-Related Markets:[/bold]")
+            console.print()
+
+            crypto_markets = find_crypto_markets(gamma_client, limit=10)
+            if crypto_markets:
+                for i, m in enumerate(crypto_markets[:5], 1):
+                    title = m.get('question', m.get('title', ''))[:50]
+                    yes_prob, _ = get_market_probability(m)
+                    console.print(f"  [{i}] {title} ({yes_prob:.0%})")
+
+                console.print()
+                console.print("[dim]Use 'polyterm quicktrade' to analyze any market[/dim]")
+                console.print("[dim]Visit https://polymarket.com/crypto/15M for live 15M markets[/dim]")
+            else:
+                console.print("[dim]No crypto markets found[/dim]")
+
             gamma_client.close()
             clob_client.close()
             return
@@ -393,7 +443,24 @@ def crypto15m(ctx, crypto, refresh, interactive, output_format, once):
 
     # Run once mode
     if once:
-        console.print(generate_display())
+        markets = find_15m_markets(gamma_client, crypto_filter)
+        if markets:
+            console.print(generate_display())
+        else:
+            console.print()
+            console.print("[yellow]No active 15-minute markets found.[/yellow]")
+            console.print("[dim]15M markets may be between rounds. Check https://polymarket.com/crypto/15M[/dim]")
+            console.print()
+
+            # Show crypto markets as fallback
+            crypto_markets = find_crypto_markets(gamma_client, limit=5)
+            if crypto_markets:
+                console.print("[bold]Other Crypto Markets Available:[/bold]")
+                for m in crypto_markets:
+                    title = m.get('question', m.get('title', ''))[:55]
+                    yes_prob, _ = get_market_probability(m)
+                    console.print(f"  - {title} ({yes_prob:.0%})")
+
         gamma_client.close()
         clob_client.close()
         return
