@@ -57,7 +57,8 @@ def trade(ctx, search_term, amount, side, interactive, output_format):
     )
 
     clob_client = CLOBClient(
-        base_url=config.clob_base_url,
+        rest_endpoint=config.clob_rest_endpoint,
+        ws_endpoint=config.clob_endpoint,
     )
 
     try:
@@ -88,8 +89,21 @@ def trade(ctx, search_term, amount, side, interactive, output_format):
             no_price = 1 - yes_price
 
             # Get order book for slippage
-            clob_token = market.get('clobTokenIds', [''])[0] if market.get('clobTokenIds') else ''
-            orderbook = clob_client.get_orderbook(clob_token) if clob_token else None
+            clob_tokens = market.get('clobTokenIds', [])
+            # Handle string representation of list
+            if isinstance(clob_tokens, str):
+                import json
+                try:
+                    clob_tokens = json.loads(clob_tokens)
+                except Exception:
+                    clob_tokens = []
+            clob_token = clob_tokens[0] if clob_tokens and len(clob_tokens) > 0 else ''
+            orderbook = None
+            if clob_token:
+                try:
+                    orderbook = clob_client.get_order_book(clob_token)
+                except Exception:
+                    pass  # Orderbook not available
 
             # Calculate trade
             trade_analysis = _analyze_trade(
