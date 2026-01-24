@@ -259,7 +259,13 @@ class MarketRiskScorer:
         if end_date is None:
             return 50, "No end date specified"
 
-        now = datetime.now()
+        # Handle timezone-aware vs naive datetime comparison
+        if end_date.tzinfo is not None:
+            from datetime import timezone
+            now = datetime.now(timezone.utc)
+        else:
+            now = datetime.now()
+
         if end_date < now:
             return 0, "Market has ended"
 
