@@ -18,32 +18,44 @@ from ...utils.json_output import print_json
 from ...utils.errors import handle_api_error
 
 
-# 15-minute crypto market identifiers
+# Crypto market configurations
 CRYPTO_15M_MARKETS = {
     'BTC': {
         'name': 'Bitcoin',
         'symbol': 'BTC',
-        'search_terms': ['bitcoin 15m', 'btc 15 minute', 'bitcoin price'],
+        'search_terms': ['bitcoin 15m', 'btc 15 minute', 'bitcoin price', 'bitcoin above', 'btc above'],
         'color': 'yellow',
     },
     'ETH': {
         'name': 'Ethereum',
         'symbol': 'ETH',
-        'search_terms': ['ethereum 15m', 'eth 15 minute', 'ethereum price'],
+        'search_terms': ['ethereum 15m', 'eth 15 minute', 'ethereum price', 'ethereum above', 'eth above'],
         'color': 'cyan',
     },
     'SOL': {
         'name': 'Solana',
         'symbol': 'SOL',
-        'search_terms': ['solana 15m', 'sol 15 minute', 'solana price'],
+        'search_terms': ['solana 15m', 'sol 15 minute', 'solana price', 'solana above', 'sol above'],
         'color': 'magenta',
     },
     'XRP': {
         'name': 'XRP',
         'symbol': 'XRP',
-        'search_terms': ['xrp 15m', 'xrp 15 minute', 'xrp price'],
+        'search_terms': ['xrp 15m', 'xrp 15 minute', 'xrp price', 'xrp above'],
         'color': 'blue',
     },
+}
+
+# Direct links to Polymarket crypto pages
+POLYMARKET_CRYPTO_URLS = {
+    '15m': 'https://polymarket.com/crypto/15M',
+    'hourly': 'https://polymarket.com/crypto/hourly',
+    'daily': 'https://polymarket.com/crypto/daily',
+    'weekly': 'https://polymarket.com/crypto/weekly',
+    'btc': 'https://polymarket.com/crypto/bitcoin',
+    'eth': 'https://polymarket.com/crypto/ethereum',
+    'sol': 'https://polymarket.com/crypto/solana',
+    'xrp': 'https://polymarket.com/crypto/xrp',
 }
 
 
@@ -223,18 +235,23 @@ def format_time_remaining(end_date_str: str) -> str:
 @click.option("--interactive", "-i", is_flag=True, help="Interactive mode with trade analysis")
 @click.option("--format", "output_format", type=click.Choice(["table", "json"]), default="table")
 @click.option("--once", is_flag=True, help="Run once and exit (no live updates)")
+@click.option("--links", "-l", is_flag=True, help="Show direct Polymarket links")
 @click.pass_context
-def crypto15m(ctx, crypto, refresh, interactive, output_format, once):
+def crypto15m(ctx, crypto, refresh, interactive, output_format, once, links):
     """Monitor 15-minute crypto prediction markets (BTC, ETH, SOL, XRP)
 
     These markets resolve every 15 minutes based on whether the crypto price
     goes UP or DOWN. Resolution uses Chainlink price feeds.
+
+    Note: 15M markets may not always be available via API. Use --links to get
+    direct Polymarket URLs for live 15M trading.
 
     Examples:
         polyterm crypto15m                    # Monitor all 15M crypto markets
         polyterm crypto15m -c BTC             # Monitor Bitcoin 15M only
         polyterm crypto15m -c ETH --refresh 3 # Ethereum with 3s refresh
         polyterm crypto15m -i                 # Interactive mode
+        polyterm crypto15m --links            # Show direct Polymarket links
     """
     console = Console()
     config = ctx.obj["config"]
@@ -250,6 +267,37 @@ def crypto15m(ctx, crypto, refresh, interactive, output_format, once):
     )
 
     crypto_filter = None if crypto.lower() == "all" else crypto.upper()
+
+    # Show links mode
+    if links:
+        console.print()
+        console.print(Panel(
+            "[bold cyan]Polymarket Crypto Trading Links[/bold cyan]\n\n"
+            "Direct links to trade crypto prediction markets on Polymarket.",
+            border_style="cyan"
+        ))
+        console.print()
+
+        console.print("[bold]By Timeframe:[/bold]")
+        console.print(f"  [cyan]15 Minutes[/cyan]  {POLYMARKET_CRYPTO_URLS['15m']}")
+        console.print(f"  [cyan]Hourly[/cyan]      {POLYMARKET_CRYPTO_URLS['hourly']}")
+        console.print(f"  [cyan]Daily[/cyan]       {POLYMARKET_CRYPTO_URLS['daily']}")
+        console.print(f"  [cyan]Weekly[/cyan]      {POLYMARKET_CRYPTO_URLS['weekly']}")
+        console.print()
+
+        console.print("[bold]By Cryptocurrency:[/bold]")
+        console.print(f"  [yellow]Bitcoin[/yellow]   {POLYMARKET_CRYPTO_URLS['btc']}")
+        console.print(f"  [cyan]Ethereum[/cyan]  {POLYMARKET_CRYPTO_URLS['eth']}")
+        console.print(f"  [magenta]Solana[/magenta]    {POLYMARKET_CRYPTO_URLS['sol']}")
+        console.print(f"  [blue]XRP[/blue]       {POLYMARKET_CRYPTO_URLS['xrp']}")
+        console.print()
+
+        console.print("[dim]Tip: 15M markets resolve every 15 minutes using Chainlink oracles.[/dim]")
+        console.print("[dim]Markets track whether price goes UP or DOWN from the start of each interval.[/dim]")
+
+        gamma_client.close()
+        clob_client.close()
+        return
 
     def generate_display():
         """Generate the market display"""
@@ -359,13 +407,16 @@ def crypto15m(ctx, crypto, refresh, interactive, output_format, once):
             markets = find_15m_markets(gamma_client, crypto_filter)
 
         if not markets:
-            console.print("[yellow]No active 15-minute markets found.[/yellow]")
-            console.print("[dim]15M markets may be between rounds or the API may not expose them directly.[/dim]")
+            console.print("[yellow]No active 15-minute markets found via API.[/yellow]")
+            console.print()
+
+            # Show direct links
+            console.print("[bold]Trade 15M Markets Directly:[/bold]")
+            console.print(f"  [cyan]All 15M Markets:[/cyan] {POLYMARKET_CRYPTO_URLS['15m']}")
             console.print()
 
             # Show other crypto markets as fallback
-            console.print("[bold]Other Crypto-Related Markets:[/bold]")
-            console.print()
+            console.print("[bold]Other Crypto Markets Available:[/bold]")
 
             crypto_markets = find_crypto_markets(gamma_client, limit=10)
             if crypto_markets:
@@ -375,8 +426,9 @@ def crypto15m(ctx, crypto, refresh, interactive, output_format, once):
                     console.print(f"  [{i}] {title} ({yes_prob:.0%})")
 
                 console.print()
-                console.print("[dim]Use 'polyterm quicktrade' to analyze any market[/dim]")
-                console.print("[dim]Visit https://polymarket.com/crypto/15M for live 15M markets[/dim]")
+                console.print("[bold]Quick Actions:[/bold]")
+                console.print("  [cyan]polyterm quicktrade -m \"bitcoin\"[/cyan] - Analyze a trade")
+                console.print("  [cyan]polyterm crypto15m --links[/cyan]      - Show all crypto links")
             else:
                 console.print("[dim]No crypto markets found[/dim]")
 
@@ -448,18 +500,24 @@ def crypto15m(ctx, crypto, refresh, interactive, output_format, once):
             console.print(generate_display())
         else:
             console.print()
-            console.print("[yellow]No active 15-minute markets found.[/yellow]")
-            console.print("[dim]15M markets may be between rounds. Check https://polymarket.com/crypto/15M[/dim]")
+            console.print("[yellow]No active 15-minute markets found via API.[/yellow]")
+            console.print()
+
+            # Show direct link
+            console.print("[bold]Trade 15M Markets Directly:[/bold]")
+            console.print(f"  {POLYMARKET_CRYPTO_URLS['15m']}")
             console.print()
 
             # Show crypto markets as fallback
             crypto_markets = find_crypto_markets(gamma_client, limit=5)
             if crypto_markets:
-                console.print("[bold]Other Crypto Markets Available:[/bold]")
+                console.print("[bold]Other Crypto Markets:[/bold]")
                 for m in crypto_markets:
                     title = m.get('question', m.get('title', ''))[:55]
                     yes_prob, _ = get_market_probability(m)
                     console.print(f"  - {title} ({yes_prob:.0%})")
+                console.print()
+                console.print("[dim]Use --links for all crypto trading URLs[/dim]")
 
         gamma_client.close()
         clob_client.close()
