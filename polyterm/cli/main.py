@@ -35,6 +35,7 @@ from .commands import spread, history, streak, digest, timing
 from .commands import odds, health, scenario, summary, watchdog
 from .commands import volume, screener, backtest, report, liquidity
 from .commands import ev, calibrate, quick, leaderboard, notify
+from .commands import crypto15m, mywallet, quicktrade
 
 @click.command()
 def update():
@@ -177,6 +178,9 @@ cli.add_command(calibrate.calibrate)
 cli.add_command(quick.quick)
 cli.add_command(leaderboard.leaderboard)
 cli.add_command(notify.notify)
+cli.add_command(crypto15m.crypto15m)
+cli.add_command(mywallet.mywallet)
+cli.add_command(quicktrade.quicktrade)
 
 
 if __name__ == "__main__":

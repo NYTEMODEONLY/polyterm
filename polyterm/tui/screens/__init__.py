@@ -72,6 +72,9 @@ from .calibrate_screen import run_calibrate_screen
 from .quick_screen import run_quick_screen
 from .leaderboard_screen import run_leaderboard_screen
 from .notify_screen import run_notify_screen
+from .crypto15m_screen import run_crypto15m_screen
+from .mywallet_screen import run_mywallet_screen
+from .quicktrade_screen import run_quicktrade_screen
 
 __all__ = [
     "monitor_screen",
@@ -146,6 +149,9 @@ __all__ = [
     "run_quick_screen",
     "run_leaderboard_screen",
     "run_notify_screen",
+    "run_crypto15m_screen",
+    "run_mywallet_screen",
+    "run_quicktrade_screen",
 ]
 
 

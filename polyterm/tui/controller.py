@@ -78,6 +78,9 @@ from .screens import (
     run_quick_screen,
     run_leaderboard_screen,
     run_notify_screen,
+    run_crypto15m_screen,
+    run_mywallet_screen,
+    run_quicktrade_screen,
 )
 
 
@@ -295,6 +298,12 @@ class TUIController:
                     run_leaderboard_screen(self.console)
                 elif choice == 'nf' or choice == 'notify':
                     run_notify_screen(self.console)
+                elif choice == 'c15' or choice == 'crypto15m' or choice == '15m':
+                    run_crypto15m_screen(self.console)
+                elif choice == 'mw' or choice == 'mywallet' or choice == 'wallet':
+                    run_mywallet_screen(self.console)
+                elif choice == 'qt' or choice == 'quicktrade':
+                    run_quicktrade_screen(self.console)
                 elif choice == 'q' or choice == 'quit' or choice == 'exit':
                     self.quit()
                 else:

@@ -49,6 +49,9 @@ polyterm stats -m "bitcoin"           # Market statistics and technicals
 polyterm search --min-volume 100000   # Advanced market search
 polyterm monitor --show-quality       # Show volume quality indicators
 polyterm monitor --format json --once # JSON output mode (all commands support this)
+polyterm crypto15m -i                 # 15-minute crypto markets (BTC, ETH, SOL, XRP)
+polyterm mywallet -i                  # Connect/view your wallet (view-only)
+polyterm quicktrade -m "bitcoin" -s yes # Prepare trade with direct link
 ```
 
 ### Building & Publishing
@@ -136,6 +139,7 @@ pr  = presets        sent = sentiment     corr = correlate
 ex  = exitplan       dp  = depth          tr  = trade
 tl  = timeline       an  = analyze        jn  = journal
 hot = hot markets    pnl = profit/loss    u   = quick update
+c15 = 15m crypto     mw  = my wallet      qt  = quick trade
 h/? = help           q   = quit
 ```
 
@@ -290,3 +294,27 @@ Version is defined in TWO places (keep in sync):
 - Filter by resolution date (ending soon)
 - Multiple sort options (volume, liquidity, price, recent)
 - Interactive and CLI modes
+
+**15-Minute Crypto Markets** (`cli/commands/crypto15m.py`):
+- Monitor BTC, ETH, SOL, XRP short-term prediction markets
+- Markets resolve every 15 minutes based on price direction (UP/DOWN)
+- Uses Chainlink oracle price feeds for resolution
+- Interactive mode with trade analysis and order book view
+- Live monitoring with configurable refresh rate
+- Available via `polyterm crypto15m` or TUI shortcut `c15`
+
+**My Wallet** (`cli/commands/mywallet.py`):
+- Connect wallet address for VIEW-ONLY activity tracking
+- View open positions from on-chain data or local tracking
+- Trade history and P&L summary
+- No private keys required - purely observational
+- Wallet address stored in config (`~/.polyterm/config.toml`)
+- Available via `polyterm mywallet` or TUI shortcut `mw`
+
+**Quick Trade** (`cli/commands/quicktrade.py`):
+- Prepare trades and get direct Polymarket links
+- Trade analysis: entry price, shares, fees, P&L scenarios
+- Breakeven calculation and expected value
+- Opens Polymarket in browser with `-o` flag
+- Does NOT execute trades - provides analysis + direct link
+- Available via `polyterm quicktrade` or TUI shortcut `qt`
