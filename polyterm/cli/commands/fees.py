@@ -232,7 +232,7 @@ def _estimate_slippage(console: Console, config, market: str, amount: float, pri
             if not yes_token:
                 return {'error': 'Could not find YES token'}
 
-            orderbook = clob_client.get_orderbook(yes_token)
+            orderbook = clob_client.get_order_book(yes_token)
 
             if not orderbook:
                 return {'error': 'Order book not available'}

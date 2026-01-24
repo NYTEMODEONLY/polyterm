@@ -35,8 +35,8 @@ def spread(ctx, market_search, amount, output_format):
     )
 
     clob_client = CLOBClient(
-        base_url=config.clob_base_url,
-        api_key=config.clob_api_key,
+        rest_endpoint=config.clob_rest_endpoint,
+        ws_endpoint=config.clob_endpoint,
     )
 
     try:
@@ -60,13 +60,22 @@ def spread(ctx, market_search, amount, output_format):
 
             market = markets[0]
             title = market.get('question', market.get('title', ''))
-            token_id = market.get('clobTokenIds', [None])[0] if market.get('clobTokenIds') else None
+
+            # Get CLOB token
+            clob_tokens = market.get('clobTokenIds', [])
+            if isinstance(clob_tokens, str):
+                import json
+                try:
+                    clob_tokens = json.loads(clob_tokens)
+                except Exception:
+                    clob_tokens = []
+            token_id = clob_tokens[0] if clob_tokens and len(clob_tokens) > 0 else None
 
             # Get order book for spread data
             orderbook = None
             if token_id:
                 try:
-                    orderbook = clob_client.get_orderbook(token_id)
+                    orderbook = clob_client.get_order_book(token_id)
                 except Exception:
                     pass
 
@@ -186,8 +195,8 @@ def _calculate_spread(market: dict, orderbook: dict, amount: float) -> dict:
         price = _get_price(market)
         best_bid = max(0.01, price - 0.02)
         best_ask = min(0.99, price + 0.02)
-        total_bid_vol = market.get('liquidity', 10000) * 0.3
-        total_ask_vol = market.get('liquidity', 10000) * 0.3
+        total_bid_vol = float(market.get('liquidity', 10000) or 10000) * 0.3
+        total_ask_vol = float(market.get('liquidity', 10000) or 10000) * 0.3
 
     mid_price = (best_bid + best_ask) / 2
     spread_abs = best_ask - best_bid

@@ -46,7 +46,8 @@ def liquidity(ctx, category, min_volume, limit, sort, output_format):
     )
 
     clob_client = CLOBClient(
-        base_url=config.clob_base_url,
+        rest_endpoint=config.clob_rest_endpoint,
+        ws_endpoint=config.clob_endpoint,
     )
 
     try:
@@ -88,14 +89,21 @@ def liquidity(ctx, category, min_volume, limit, sort, output_format):
                 title = market.get('question', market.get('title', ''))[:45]
 
                 # Get CLOB token
-                clob_token = market.get('clobTokenIds', [''])[0] if market.get('clobTokenIds') else ''
+                clob_tokens = market.get('clobTokenIds', [])
+                if isinstance(clob_tokens, str):
+                    import json
+                    try:
+                        clob_tokens = json.loads(clob_tokens)
+                    except Exception:
+                        clob_tokens = []
+                clob_token = clob_tokens[0] if clob_tokens and len(clob_tokens) > 0 else ''
 
                 if not clob_token:
                     continue
 
                 # Get order book
                 try:
-                    orderbook = clob_client.get_orderbook(clob_token)
+                    orderbook = clob_client.get_order_book(clob_token)
                 except:
                     continue
 

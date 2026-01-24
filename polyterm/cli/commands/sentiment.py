@@ -45,7 +45,8 @@ def sentiment(ctx, search_term, interactive, output_format):
     )
 
     clob_client = CLOBClient(
-        base_url=config.clob_base_url,
+        rest_endpoint=config.clob_rest_endpoint,
+        ws_endpoint=config.clob_endpoint,
     )
 
     db = Database()
@@ -71,7 +72,17 @@ def sentiment(ctx, search_term, interactive, output_format):
 
             market = markets[0]
             market_id = market.get('id', market.get('condition_id', ''))
-            clob_token = market.get('clobTokenIds', [''])[0] if market.get('clobTokenIds') else ''
+
+            # Get CLOB token
+            clob_tokens = market.get('clobTokenIds', [])
+            if isinstance(clob_tokens, str):
+                import json
+                try:
+                    clob_tokens = json.loads(clob_tokens)
+                except Exception:
+                    clob_tokens = []
+            clob_token = clob_tokens[0] if clob_tokens and len(clob_tokens) > 0 else ''
+
             title = market.get('question', market.get('title', ''))[:60]
 
             # Collect sentiment signals
@@ -268,7 +279,7 @@ def _analyze_orderbook(clob_client: CLOBClient, token_id: str) -> dict:
         return None
 
     try:
-        orderbook = clob_client.get_orderbook(token_id)
+        orderbook = clob_client.get_order_book(token_id)
         if not orderbook:
             return None
 
