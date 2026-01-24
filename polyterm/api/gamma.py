@@ -153,16 +153,39 @@ class GammaClient:
     
     def search_markets(self, query: str, limit: int = 20) -> List[Dict[str, Any]]:
         """Search for markets by query
-        
+
         Args:
             query: Search query string
             limit: Maximum number of results
-        
+
         Returns:
             List of matching markets
         """
-        params = {"q": query, "limit": limit}
-        return self._request("GET", "/markets/search", params=params)
+        # Try search endpoint first
+        try:
+            params = {"q": query, "limit": limit}
+            results = self._request("GET", "/markets/search", params=params)
+            if results:
+                return results
+        except Exception:
+            pass
+
+        # Fallback: get markets and filter locally
+        try:
+            markets = self.get_markets(limit=200)
+            query_lower = query.lower()
+
+            matches = []
+            for market in markets:
+                title = market.get('question', market.get('title', '')).lower()
+                if query_lower in title:
+                    matches.append(market)
+                    if len(matches) >= limit:
+                        break
+
+            return matches
+        except Exception:
+            return []
     
     def get_trending_markets(self, limit: int = 10) -> List[Dict[str, Any]]:
         """Get trending markets by volume
