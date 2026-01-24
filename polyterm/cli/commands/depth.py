@@ -52,7 +52,8 @@ def depth(ctx, search_term, size, levels, interactive, output_format):
     )
 
     clob_client = CLOBClient(
-        base_url=config.clob_base_url,
+        rest_endpoint=config.clob_rest_endpoint,
+        ws_endpoint=config.clob_endpoint,
     )
 
     try:
@@ -79,7 +80,15 @@ def depth(ctx, search_term, size, levels, interactive, output_format):
             title = market.get('question', market.get('title', ''))[:60]
 
             # Get CLOB token
-            clob_token = market.get('clobTokenIds', [''])[0] if market.get('clobTokenIds') else ''
+            clob_tokens = market.get('clobTokenIds', [])
+            # Handle string representation of list
+            if isinstance(clob_tokens, str):
+                import json
+                try:
+                    clob_tokens = json.loads(clob_tokens)
+                except Exception:
+                    clob_tokens = []
+            clob_token = clob_tokens[0] if clob_tokens and len(clob_tokens) > 0 else ''
 
             if not clob_token:
                 if output_format == 'json':
@@ -89,7 +98,7 @@ def depth(ctx, search_term, size, levels, interactive, output_format):
                 return
 
             # Get order book
-            orderbook = clob_client.get_orderbook(clob_token)
+            orderbook = clob_client.get_order_book(clob_token)
 
             if not orderbook:
                 if output_format == 'json':
