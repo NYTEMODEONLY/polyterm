@@ -10,10 +10,12 @@ from packaging import version
 
 
 class MainMenu:
-    """Main menu display and input handler"""
-    
+    """Main menu display and input handler with pagination"""
+
     def __init__(self):
         self.console = Console()
+        self.current_page = 1
+        self.total_pages = 2
     
     def check_for_updates(self) -> tuple[str, str]:
         """Check if there's a newer version available on PyPI
@@ -178,160 +180,112 @@ class MainMenu:
             return False
     
     def display(self):
-        """Display main menu with all options, responsive to terminal width"""
-        # Get terminal width, fallback to 80 if not available
-        try:
-            width = self.console.size.width
-        except:
-            width = 80
-        
-        # Force narrow terminal for testing if COLUMNS env var is set
-        import os
-        if 'COLUMNS' in os.environ:
-            width = int(os.environ['COLUMNS'])
-        
+        """Display paginated main menu"""
         # Check for updates first
         update_indicator, latest_version = self.check_for_updates()
         has_update = bool(latest_version)
-        
-        # Adjust menu content based on terminal width
-        if width >= 80:
-            # Full descriptions for wide terminals
-            menu_items = [
-                ("1", "📊 Monitor Markets - Real-time market tracking"),
-                ("2", "🔴 Live Monitor - Dedicated terminal window"),
-                ("3", "🐋 Whale Activity - High-volume markets"),
-                ("4", "👁  Watch Market - Track specific market"),
-                ("5", "📈 Market Analytics - Trends and predictions"),
-                ("6", "💼 Portfolio - View your positions"),
-                ("7", "📤 Export Data - Export to JSON/CSV"),
-                ("8", "⚙️  Settings - Configuration"),
-                ("", ""),
-                ("9", "💰 Arbitrage - Scan for arbitrage opportunities"),
-                ("10", "📈 Predictions - Signal-based analysis"),
-                ("11", "👛 Wallets - Smart money tracking"),
-                ("12", "🔔 Alerts - Manage notifications"),
-                ("13", "📖 Order Book - Analyze market depth"),
-                ("14", "🛡️  Risk - Market risk assessment"),
-                ("15", "👥 Copy Trading - Follow wallets"),
-                ("16", "🎰 Parlay - Combine multiple bets"),
-                ("17", "🔖 Bookmarks - Saved markets"),
-                ("", ""),
-                ("c15", "₿ 15M Crypto - Short-term crypto markets"),
-                ("mw", "👛 My Wallet - Track your wallet activity"),
-                ("qt", "⚡ Quick Trade - Trade analysis + links"),
-                ("", ""),
-                ("d", "📊 Dashboard - Quick overview"),
-                ("t", "📚 Tutorial - Learn the basics"),
-                ("g", "📖 Glossary - Market terminology"),
-                ("sim", "🧮 Simulate - P&L calculator"),
-                ("h", "❓ Help - View documentation"),
-                ("q", "🚪 Quit - Exit PolyTerm")
-            ]
 
-            # Add quick update option if update is available
-            if has_update:
-                menu_items.insert(-5, ("u", f"🔄 Quick Update to v{latest_version}"))
-        elif width >= 60:
-            # Medium descriptions for medium terminals
-            menu_items = [
-                ("1", "📊 Monitor Markets"),
-                ("2", "🔴 Live Monitor"),
-                ("3", "🐋 Whale Activity"),
-                ("4", "👁  Watch Market"),
-                ("5", "📈 Market Analytics"),
-                ("6", "💼 Portfolio"),
-                ("7", "📤 Export Data"),
-                ("8", "⚙️  Settings"),
-                ("", ""),
-                ("9", "💰 Arbitrage"),
-                ("10", "📈 Predictions"),
-                ("11", "👛 Wallets"),
-                ("12", "🔔 Alerts"),
-                ("13", "📖 Order Book"),
-                ("14", "🛡️  Risk"),
-                ("15", "👥 Copy Trading"),
-                ("16", "🎰 Parlay"),
-                ("17", "🔖 Bookmarks"),
-                ("", ""),
-                ("c15", "₿ 15M Crypto"),
-                ("mw", "👛 My Wallet"),
-                ("qt", "⚡ Quick Trade"),
-                ("", ""),
-                ("d", "📊 Dashboard"),
-                ("t", "📚 Tutorial"),
-                ("g", "📖 Glossary"),
-                ("sim", "🧮 Simulate"),
-                ("h", "❓ Help"),
-                ("q", "🚪 Quit")
-            ]
+        # Page 1: Core Features (fits comfortably on screen)
+        page1_items = [
+            ("1", "📊 Monitor Markets", "Real-time market tracking"),
+            ("2", "🔴 Live Monitor", "Live trades in new window"),
+            ("3", "🐋 Whale Activity", "High-volume market moves"),
+            ("4", "👁  Watch Market", "Track specific market"),
+            ("5", "📈 Market Analytics", "Trends and predictions"),
+            ("6", "💼 Portfolio", "View your positions"),
+            ("7", "📤 Export Data", "Export to JSON/CSV"),
+            ("8", "⚙️  Settings", "Configuration"),
+            ("", "", ""),
+            ("d", "📊 Dashboard", "Quick overview"),
+            ("t", "📚 Tutorial", "Learn the basics"),
+            ("h", "❓ Help", "View documentation"),
+            ("q", "🚪 Quit", "Exit PolyTerm"),
+        ]
 
-            # Add quick update option if update is available
-            if has_update:
-                menu_items.insert(-5, ("u", f"🔄 Update to v{latest_version}"))
+        # Page 2: Advanced Features
+        page2_items = [
+            ("9", "💰 Arbitrage", "Scan for opportunities"),
+            ("10", "📈 Predictions", "Signal-based analysis"),
+            ("11", "👛 Wallets", "Smart money tracking"),
+            ("12", "🔔 Alerts", "Manage notifications"),
+            ("13", "📖 Order Book", "Analyze market depth"),
+            ("14", "🛡️  Risk", "Risk assessment"),
+            ("15", "👥 Copy Trading", "Follow wallets"),
+            ("16", "🎰 Parlay", "Combine multiple bets"),
+            ("17", "🔖 Bookmarks", "Saved markets"),
+            ("", "", ""),
+            ("c15", "₿ 15M Crypto", "Short-term crypto"),
+            ("mw", "👛 My Wallet", "Your wallet activity"),
+            ("qt", "⚡ Quick Trade", "Trade analysis + links"),
+            ("", "", ""),
+            ("g", "📖 Glossary", "Market terminology"),
+            ("sim", "🧮 Simulate", "P&L calculator"),
+        ]
+
+        # Add update option if available
+        if has_update:
+            page1_items.insert(-4, ("u", "🔄 Update", f"Update to v{latest_version}"))
+
+        # Select items for current page
+        if self.current_page == 1:
+            menu_items = page1_items
+            nav_hint = "[dim]Press [cyan]m[/cyan] for more options[/dim]"
         else:
-            # Compact menu for narrow terminals
-            menu_items = [
-                ("1", "📊 Monitor"),
-                ("2", "🔴 Live"),
-                ("3", "🐋 Whales"),
-                ("4", "👁  Watch"),
-                ("5", "📈 Analytics"),
-                ("6", "💼 Portfolio"),
-                ("7", "📤 Export"),
-                ("8", "⚙️  Settings"),
-                ("", ""),
-                ("9", "💰 Arbitrage"),
-                ("10", "📈 Predict"),
-                ("11", "👛 Wallets"),
-                ("12", "🔔 Alerts"),
-                ("13", "📖 Book"),
-                ("14", "🛡️  Risk"),
-                ("15", "👥 Copy"),
-                ("16", "🎰 Parlay"),
-                ("17", "🔖 Bookmarks"),
-                ("", ""),
-                ("c15", "₿ 15M Crypto"),
-                ("mw", "👛 My Wallet"),
-                ("qt", "⚡ Quick Trade"),
-                ("", ""),
-                ("d", "📊 Dash"),
-                ("t", "📚 Tutorial"),
-                ("g", "📖 Glossary"),
-                ("sim", "🧮 Simulate"),
-                ("h", "❓ Help"),
-                ("q", "🚪 Quit")
-            ]
+            menu_items = page2_items
+            nav_hint = "[dim]Press [cyan]b[/cyan] to go back[/dim]"
 
-            # Add quick update option if update is available
-            if has_update:
-                menu_items.insert(-5, ("u", f"🔄 Update"))
+        # Build menu table
+        menu = Table.grid(padding=(0, 2))
+        menu.add_column(style="cyan bold", justify="right", width=4)
+        menu.add_column(style="white bold", width=18)
+        menu.add_column(style="dim")
 
-        menu = Table.grid(padding=(0, 1))
-        menu.add_column(style="cyan bold", justify="right", width=3)
-        menu.add_column(style="white")
-        
-        for key, desc in menu_items:
-            menu.add_row(key, desc)
-        
-        # Display version and update indicator - force fresh import
+        for key, name, desc in menu_items:
+            menu.add_row(key, name, desc)
+
+        # Display version and update indicator
         import importlib
         importlib.reload(polyterm)
         version_text = f"[dim]PolyTerm v{polyterm.__version__}[/dim]{update_indicator}"
-        
-        # No panel borders - just print menu directly
-        self.console.print("[bold yellow]Main Menu[/bold yellow]")
+
+        # Print menu
+        self.console.print("[bold yellow]Main Menu[/bold yellow]", end="")
+        self.console.print(f"  [dim](Page {self.current_page}/{self.total_pages})[/dim]")
         self.console.print(version_text)
         self.console.print()
         self.console.print(menu)
         self.console.print()
+        self.console.print(nav_hint)
+        self.console.print()
     
     def get_choice(self) -> str:
-        """Get user menu choice
-        
+        """Get user menu choice, handling pagination navigation
+
         Returns:
-            User's choice as lowercase string
+            User's choice as lowercase string, or special values:
+            - "_next_page" to show next page
+            - "_prev_page" to show previous page
         """
-        return self.console.input("[bold cyan]Select an option:[/bold cyan] ").strip().lower()
+        choice = self.console.input("[bold cyan]Select an option:[/bold cyan] ").strip().lower()
+
+        # Handle pagination navigation
+        if choice in ('m', 'more', '+', 'next'):
+            if self.current_page < self.total_pages:
+                self.current_page += 1
+                return "_next_page"
+            # Already on last page, stay there
+            return "_next_page"
+        elif choice in ('b', 'back', '-', 'prev'):
+            if self.current_page > 1:
+                self.current_page -= 1
+                return "_prev_page"
+            # Already on first page, stay there
+            return "_prev_page"
+
+        return choice
+
+    def reset_page(self):
+        """Reset to first page"""
+        self.current_page = 1
 
 

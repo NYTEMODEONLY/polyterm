@@ -144,13 +144,19 @@ class TUIController:
             # Check for first-time user
             if self._check_first_run():
                 self._show_welcome()
-            
+
             while self.running:
                 self.menu.display()
                 choice = self.menu.get_choice()
-                
-                # Handle menu choices
-                if choice == '1' or choice == 'm':
+
+                # Handle pagination navigation (just redisplay menu)
+                if choice in ('_next_page', '_prev_page'):
+                    self.console.clear()
+                    display_logo(self.console)
+                    continue
+
+                # Handle menu choices (note: 'm' is now for pagination, use '1' or 'mon' for monitor)
+                if choice == '1' or choice == 'mon':
                     monitor_screen(self.console)
                 elif choice == '2' or choice == 'l':
                     live_monitor_screen(self.console)
@@ -314,6 +320,7 @@ class TUIController:
                     input("\nPress Enter to return to menu...")
                     self.console.clear()
                     display_logo(self.console)
+                    self.menu.reset_page()  # Reset to page 1 after any screen
         
         except KeyboardInterrupt:
             # Handle Ctrl+C gracefully
