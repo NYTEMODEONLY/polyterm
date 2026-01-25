@@ -208,10 +208,8 @@ class CLOBClient:
                         elif "_all" in self.subscriptions:
                             # Unfiltered callback for all trades
                             callback = self.subscriptions["_all"]
-                        elif self.subscriptions:
-                            # If we have any subscriptions, use the first one
-                            # (assumes single callback for all monitored markets)
-                            callback = next(iter(self.subscriptions.values()))
+                        # Note: If no match found and no "_all" subscription, skip this trade
+                        # This ensures we only show trades for markets we're actually monitoring
 
                         if callback:
                             # Pass the full data (with payload) to the callback
