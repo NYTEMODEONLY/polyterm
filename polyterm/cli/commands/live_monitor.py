@@ -491,14 +491,21 @@ class LiveMarketMonitor:
             # Connect to WebSocket
             await self.clob_client.connect_websocket()
             self.console.print("[green]✅ Connected to PolyMarket RTDS WebSocket[/green]")
-            
-            # Subscribe to trade feeds
-            await self.clob_client.subscribe_to_trades(market_slugs, lambda trade: self._handle_trade(trade, market_titles))
-            self.console.print(f"[green]✅ Subscribed to {len(market_slugs)} market feeds[/green]")
+
+            # When monitoring a category, subscribe to ALL trades and filter client-side
+            # This is because RTDS slugs may not match Gamma API slugs exactly
+            if self.category:
+                # Subscribe to all trades, we'll filter by category keywords
+                await self.clob_client.subscribe_to_trades([], lambda trade: self._handle_trade(trade, market_titles))
+                self.console.print(f"[green]✅ Monitoring {self.category.upper()} trades (keyword filtering)[/green]")
+            else:
+                # For specific markets or all markets, use slug-based subscription
+                await self.clob_client.subscribe_to_trades(market_slugs, lambda trade: self._handle_trade(trade, market_titles))
+                self.console.print(f"[green]✅ Subscribed to {len(market_slugs)} market feeds[/green]")
             self.console.print()
             self.console.print("[bold]🔴 LIVE TRADES (Real-time):[/bold]")
             self.console.print("=" * 80)
-            
+
             # Start listening for trades
             await self.clob_client.listen_for_trades()
             
@@ -527,8 +534,16 @@ class LiveMarketMonitor:
             market_title = (
                 market_titles.get(event_slug) or
                 market_titles.get(market_slug) or
-                payload.get("title", "Unknown Market")
+                payload.get("title", payload.get("question", "Unknown Market"))
             )
+
+            # If monitoring a category, filter trades by category keywords
+            if self.category:
+                # Create a fake market dict to use matches_category
+                fake_market = {"question": market_title, "title": market_title}
+                if not matches_category(fake_market, self.category):
+                    # Trade doesn't match our category, skip it
+                    return
 
             # Extract trade details
             size = float(payload.get("size", 0))
