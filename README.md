@@ -48,6 +48,13 @@ polyterm
 | Export Data | `polyterm export` | Export to JSON/CSV |
 | Historical Replay | `polyterm replay` | Replay market history |
 
+### Trading & Crypto
+| Feature | Command | Description |
+|---------|---------|-------------|
+| 15-Minute Crypto | `polyterm crypto15m` | Monitor BTC, ETH, SOL, XRP 15-minute markets |
+| My Wallet | `polyterm mywallet` | VIEW-ONLY wallet tracking (positions, P&L) |
+| Quick Trade | `polyterm quicktrade` | Trade analysis with direct Polymarket links |
+
 ### Premium Features
 | Feature | Command | Description |
 |---------|---------|-------------|
@@ -219,6 +226,82 @@ polyterm alerts --test-telegram
 polyterm alerts --test-discord
 ```
 
+### 15-Minute Crypto Markets
+```bash
+# Monitor all 15M crypto markets
+polyterm crypto15m
+
+# Monitor specific crypto
+polyterm crypto15m -c BTC          # Bitcoin only
+polyterm crypto15m -c ETH          # Ethereum only
+
+# Interactive mode with trade analysis
+polyterm crypto15m -i
+
+# Get direct Polymarket links
+polyterm crypto15m --links
+
+# JSON output
+polyterm crypto15m --format json --once
+```
+
+**Direct Polymarket Crypto Links:**
+- 15-Minute: https://polymarket.com/crypto/15M
+- Hourly: https://polymarket.com/crypto/hourly
+- Daily: https://polymarket.com/crypto/daily
+- By Coin: /crypto/bitcoin, /crypto/ethereum, /crypto/solana, /crypto/xrp
+
+**Supported Cryptocurrencies:** BTC, ETH, SOL, XRP
+
+### My Wallet (VIEW-ONLY)
+```bash
+# Connect your wallet (VIEW-ONLY - no private keys)
+polyterm mywallet --connect
+
+# View open positions
+polyterm mywallet -p
+
+# View trade history
+polyterm mywallet -h
+
+# View P&L summary
+polyterm mywallet --pnl
+
+# Interactive mode
+polyterm mywallet -i
+
+# View any wallet
+polyterm mywallet -a 0x123...
+
+# Disconnect wallet
+polyterm mywallet --disconnect
+```
+
+**Important:** This is a VIEW-ONLY feature. No private keys are stored or required. You simply provide your wallet address to track your Polymarket activity.
+
+### Quick Trade Preparation
+```bash
+# Prepare a trade with analysis
+polyterm quicktrade -m "bitcoin" -a 200 -s yes
+
+# Prepare and open browser
+polyterm quicktrade -m "trump" -a 50 -s no -o
+
+# Interactive mode
+polyterm quicktrade -i
+
+# JSON output
+polyterm quicktrade -m "bitcoin" --format json
+```
+
+**What you get:**
+- Entry price and share calculation
+- Profit/loss scenarios (win vs lose)
+- Fee calculation (2% taker fee)
+- ROI and breakeven analysis
+- Expected value calculation
+- Direct link to trade on Polymarket
+
 ### Watch Specific Markets
 ```bash
 # Watch with price threshold alerts
@@ -281,12 +364,16 @@ pr  = presets        sent = sentiment     corr = correlate
 ex  = exitplan       dp  = depth          tr  = trade
 tl  = timeline       an  = analyze        jn  = journal
 hot = hot markets    pnl = profit/loss    u   = quick update
+
+c15 = 15m crypto     mw  = my wallet      qt  = quick trade
+
 h/? = help           q   = quit
 ```
 
 ### Navigation
 - **Numbers**: Press `1-17` for numbered features
 - **Shortcuts**: Use the letter/abbreviation shortcuts shown above
+- **Trading**: `c15` for 15M crypto, `mw` for wallet, `qt` for quick trade
 - **Help**: Press `h` or `?` for documentation
 - **Tutorial**: Press `t` to launch the interactive tutorial
 - **Glossary**: Press `g` for prediction market terminology
