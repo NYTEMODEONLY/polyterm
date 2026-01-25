@@ -32,6 +32,54 @@ except ImportError:
     HAS_DATEUTIL = False
 
 
+# Category keywords for filtering (since API doesn't provide category field)
+CATEGORY_KEYWORDS = {
+    'sports': ['nfl', 'nba', 'mlb', 'nhl', 'super bowl', 'world series', 'playoffs',
+               'championship', 'soccer', 'football', 'baseball', 'basketball', 'hockey',
+               'tennis', 'golf', 'ufc', 'boxing', 'f1', 'formula 1', 'olympics', 'fifa',
+               'premier league', 'world cup', 'mvp', 'coach', 'draft pick', 'trade deadline'],
+    'crypto': ['bitcoin', 'btc ', ' btc', 'ethereum', ' eth ', ' eth?', 'solana', ' sol ',
+               ' xrp', 'crypto', 'blockchain', 'defi', ' nft', 'coinbase', 'binance', 'satoshi'],
+    'politics': ['trump', 'biden', 'president', 'election', 'congress', 'senate', 'house of rep',
+                 'republican', 'democrat', 'governor', 'mayor', 'cabinet', 'veto',
+                 'impeach', 'scotus', 'supreme court', 'primary', 'nominee'],
+}
+
+
+def matches_category(market: dict, category: str) -> bool:
+    """Check if market matches a category using keyword search"""
+    import re
+
+    if not category:
+        return True
+
+    category_lower = category.lower()
+
+    # First check if API provides category field
+    market_category = market.get('category')
+    if market_category and category_lower in market_category.lower():
+        return True
+
+    # Search in question/title - add spaces for word boundary matching
+    title = ' ' + market.get('question', market.get('title', '')).lower() + ' '
+
+    # If category is a predefined one, use keywords
+    if category_lower in CATEGORY_KEYWORDS:
+        for kw in CATEGORY_KEYWORDS[category_lower]:
+            # For short keywords (3 chars or less), use word boundary matching
+            if len(kw.strip()) <= 3:
+                pattern = r'\b' + re.escape(kw.strip()) + r'\b'
+                if re.search(pattern, title):
+                    return True
+            else:
+                if kw in title:
+                    return True
+        return False
+
+    # Otherwise, do a direct search
+    return category_lower in title
+
+
 class LiveMarketMonitor:
     """Enhanced live market monitor with color-coded indicators and real-time updates"""
     
@@ -160,13 +208,15 @@ class LiveMarketMonitor:
                 market_data = self.gamma_client.get_market(self.market_id)
                 return [market_data] if market_data else []
             elif self.category:
-                # Category-based monitoring - use GammaClient tag filtering directly
-                markets = self.gamma_client.get_markets(
-                    tag=self.category,
-                    limit=50,
+                # Category-based monitoring - fetch many markets and filter by keywords
+                # API tag parameter doesn't work reliably, so we filter locally
+                all_markets = self.gamma_client.get_markets(
+                    limit=200,
                     closed=False
                 )
-                return markets
+                # Filter by category using keyword matching
+                filtered = [m for m in all_markets if matches_category(m, self.category)]
+                return filtered[:50]  # Return top 50 matching markets
             else:
                 # All active markets
                 return self.aggregator.get_live_markets(
