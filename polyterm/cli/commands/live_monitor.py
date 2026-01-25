@@ -355,14 +355,15 @@ class LiveMarketMonitor:
     
     def run_live_monitor(self):
         """Run the live monitoring loop with real-time trade feeds"""
-        self.console.print(Panel(
-            "[bold red]🔴 LIVE TRADE MONITOR STARTED[/bold red]\n"
-            "[dim]Monitoring individual trades in real-time[/dim]\n"
-            "[dim]Press Ctrl+C to stop monitoring[/dim]",
-            style="red"
-        ))
-
         self._running = True
+
+        # Stats tracking
+        self.trade_count = 0
+        self.total_volume = 0.0
+        self.buy_count = 0
+        self.sell_count = 0
+        self.recent_trades = []  # Store last N trades for display
+        self.max_recent_trades = 50
 
         try:
             # Get markets to monitor
@@ -374,31 +375,86 @@ class LiveMarketMonitor:
             # Extract market slugs for RTDS WebSocket subscription
             market_slugs = []
             market_titles = {}
-            
+            market_prices = {}
+
             for market in markets_data:
                 market_slug = market.get("slug")
                 market_id = market.get("id")
+                title = market.get("question", market.get("title", "Unknown"))
                 if market_slug:
                     market_slugs.append(market_slug)
-                    market_titles[market_slug] = market.get("title", "Unknown")
-                    # Also store by ID for fallback
+                    market_titles[market_slug] = title
                     if market_id:
-                        market_titles[market_id] = market.get("title", "Unknown")
+                        market_titles[market_id] = title
 
-            self.console.print(f"[green]✅ Found {len(market_slugs)} markets to monitor[/green]")
-            self.console.print(f"[cyan]📊 Subscribing to RTDS live trade feeds...[/cyan]")
-            self.console.print("=" * 80)
+                # Store initial prices
+                outcome_prices = market.get('outcomePrices')
+                if isinstance(outcome_prices, str):
+                    import json
+                    try:
+                        outcome_prices = json.loads(outcome_prices)
+                    except:
+                        outcome_prices = None
+                if outcome_prices and len(outcome_prices) > 0:
+                    market_prices[market_slug or market_id] = float(outcome_prices[0])
+
+            self.market_titles = market_titles
+            self.market_prices = market_prices
+            self.markets_count = len(market_slugs)
+
+            # Print fixed header (this stays at top)
+            self._print_header()
 
             # Run async WebSocket monitoring with market slugs
             asyncio.run(self._run_websocket_monitor(market_slugs, market_titles))
 
         except KeyboardInterrupt:
-            self.console.print(f"\n[yellow]{datetime.now(timezone.utc).strftime('%H:%M:%S')} | 🔴 Live monitoring stopped by user[/yellow]")
+            self.console.print(f"\n[yellow]🔴 Live monitoring stopped[/yellow]")
         except Exception as e:
-            self.console.print(f"\n[red]{datetime.now(timezone.utc).strftime('%H:%M:%S')} | 🔴 Live monitoring error: {e}[/red]")
+            self.console.print(f"\n[red]🔴 Live monitoring error: {e}[/red]")
         finally:
             self._running = False
             self.cleanup()
+
+    def _print_header(self):
+        """Print the fixed header with metrics"""
+        self.console.clear()
+
+        # Category/market info
+        if self.category:
+            monitor_type = f"Category: {self.category.upper()}"
+        elif self.market_id:
+            monitor_type = f"Market: {self.market_id[:20]}..."
+        else:
+            monitor_type = "All Active Markets"
+
+        # Header panel
+        header = Panel(
+            f"[bold red]🔴 LIVE TRADE MONITOR[/bold red]\n"
+            f"[cyan]{monitor_type}[/cyan] | [green]{self.markets_count} markets[/green]\n"
+            f"[dim]Press Ctrl+C to stop[/dim]",
+            border_style="red",
+            padding=(0, 2),
+        )
+        self.console.print(header)
+
+        # Stats bar (will be updated)
+        self._print_stats_bar()
+
+        # Column headers
+        self.console.print()
+        self.console.print("[bold cyan]TIME     │ MARKET                      │ SIDE      │ SIZE      │ PRICE    │ TOTAL[/bold cyan]")
+        self.console.print("[dim]─" * 90 + "[/dim]")
+
+    def _print_stats_bar(self):
+        """Print/update the stats bar"""
+        stats = (
+            f"[bold]Trades:[/bold] {self.trade_count:,} | "
+            f"[bold]Volume:[/bold] ${self.total_volume:,.0f} | "
+            f"[green]Buys:[/green] {self.buy_count} | "
+            f"[red]Sells:[/red] {self.sell_count}"
+        )
+        self.console.print(f"[on black] {stats} [/on black]")
 
     async def _run_websocket_monitor(self, market_slugs: List[str], market_titles: Dict[str, str]):
         """Run WebSocket monitoring for live trades"""
@@ -431,56 +487,54 @@ class LiveMarketMonitor:
             timestamp = datetime.now(timezone.utc).strftime("%H:%M:%S")
 
             # RTDS format: {topic, type, payload: {eventSlug, slug, price, size, side, ...}}
-            # Extract payload - all trade details are inside the payload object
             payload = trade_data.get("payload", {})
             if not payload:
-                return  # No payload, skip this message
+                return
 
-            # Extract market identifiers from payload
+            # Extract market identifiers
             event_slug = payload.get("eventSlug", "")
             market_slug = payload.get("slug", "")
 
-            # Try to get market title from our titles dict or from payload
             market_title = (
                 market_titles.get(event_slug) or
                 market_titles.get(market_slug) or
                 payload.get("title", "Unknown Market")
             )
 
-            # Extract trade details from payload
+            # Extract trade details
             size = float(payload.get("size", 0))
             price = float(payload.get("price", 0))
-            side = payload.get("side", "unknown")  # BUY or SELL
-            outcome = payload.get("outcome", "")  # Yes/No outcome
-            trader_name = payload.get("name", payload.get("pseudonym", ""))
+            side = payload.get("side", "").upper()
+            outcome = payload.get("outcome", "")
 
-            # Calculate notional value
+            # Update stats
+            self.trade_count += 1
             notional = size * price
+            self.total_volume += notional
+            if side == "BUY":
+                self.buy_count += 1
+            else:
+                self.sell_count += 1
 
-            # Format trade display
-            side_symbol = "🟢 BUY" if side.upper() == "BUY" else "🔴 SELL"
-            side_color = "green" if side.upper() == "BUY" else "red"
-
-            # Format size and price
-            size_str = f"{size:.0f}" if size >= 1 else f"{size:.2f}"
-            price_str = f"${price:.4f}" if price < 1 else f"${price:.2f}"
-            notional_str = f"${notional:.0f}" if notional >= 1000 else f"${notional:.2f}"
-
-            # Truncate market title and trader name
-            title_short = market_title[:25] + "..." if len(market_title) > 25 else market_title
-            trader_short = trader_name[:10] + "..." if len(trader_name) > 10 else trader_name
+            # Format and display trade
+            side_color = "green" if side == "BUY" else "red"
+            side_icon = "🟢" if side == "BUY" else "🔴"
+            title_short = market_title[:27] + "..." if len(market_title) > 27 else market_title.ljust(30)
             outcome_str = f"({outcome})" if outcome else ""
 
-            # Print detailed trade information
-            self.console.print(
-                f"[{side_color}]{timestamp} | {title_short:<28} | {side_symbol} {outcome_str:<5} | "
-                f"{size_str:>8} @ {price_str:>8} | {notional_str:>8} | {trader_short}[/{side_color}]"
+            trade_line = (
+                f"[dim]{timestamp}[/dim] │ "
+                f"{title_short} │ "
+                f"[{side_color}]{side_icon} {side:<4} {outcome_str:<5}[/{side_color}] │ "
+                f"{size:>8,.0f} │ "
+                f"${price:>6.3f} │ "
+                f"[bold]${notional:>8,.0f}[/bold]"
             )
+            self.console.print(trade_line)
 
         except Exception as e:
-            self.console.print(f"[red]{datetime.now(timezone.utc).strftime('%H:%M:%S')} | ERROR processing trade: {e}[/red]")
-            # Debug: print the raw trade data keys
-            self.console.print(f"[dim]Raw trade data keys: {list(trade_data.keys())}[/dim]")
+            # Silently ignore parse errors for non-trade messages
+            pass
 
     async def _run_polling_monitor(self, market_slugs: List[str], market_titles: Dict[str, str]):
         """Fallback polling mode when WebSocket fails"""

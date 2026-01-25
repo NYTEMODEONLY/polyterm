@@ -29,7 +29,7 @@ def monitor_screen(console: RichConsole):
     console.print("[dim]Configure your market monitor:[/dim]")
     console.print()
 
-    limit = console.input("How many markets to display? [cyan][default: 10][/cyan] ").strip() or "10"
+    limit = console.input("How many markets to display? [cyan][default: 20][/cyan] ").strip() or "20"
 
     # Category selection menu
     console.print()
