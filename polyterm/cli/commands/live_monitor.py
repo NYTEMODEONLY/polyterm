@@ -32,17 +32,46 @@ except ImportError:
     HAS_DATEUTIL = False
 
 
-# Category keywords for filtering (since API doesn't provide category field)
+# Category keywords for filtering - main categories and sub-categories
 CATEGORY_KEYWORDS = {
+    # Main sports category
     'sports': ['nfl', 'nba', 'mlb', 'nhl', 'super bowl', 'world series', 'playoffs',
                'championship', 'soccer', 'football', 'baseball', 'basketball', 'hockey',
                'tennis', 'golf', 'ufc', 'boxing', 'f1', 'formula 1', 'olympics', 'fifa',
                'premier league', 'world cup', 'mvp', 'coach', 'draft pick', 'trade deadline'],
-    'crypto': ['bitcoin', 'btc ', ' btc', 'ethereum', ' eth ', ' eth?', 'solana', ' sol ',
-               ' xrp', 'crypto', 'blockchain', 'defi', ' nft', 'coinbase', 'binance', 'satoshi'],
-    'politics': ['trump', 'biden', 'president', 'election', 'congress', 'senate', 'house of rep',
-                 'republican', 'democrat', 'governor', 'mayor', 'cabinet', 'veto',
-                 'impeach', 'scotus', 'supreme court', 'primary', 'nominee'],
+
+    # Sports sub-categories
+    'nfl': ['nfl', 'super bowl', 'afc', 'nfc', 'touchdown', 'quarterback', 'patriots',
+            'chiefs', 'eagles', 'cowboys', 'packers', 'ravens', 'bills', 'dolphins',
+            'broncos', 'seahawks', 'rams', '49ers', 'lions', 'bears', 'jets', 'giants',
+            'steelers', 'bengals', 'browns', 'texans', 'colts', 'jaguars', 'titans',
+            'raiders', 'chargers', 'cardinals', 'falcons', 'panthers', 'saints', 'buccaneers',
+            'vikings', 'commanders', 'football'],
+    'nba': ['nba', 'basketball', 'lakers', 'celtics', 'warriors', 'nets', 'bucks',
+            'heat', 'suns', 'nuggets', 'clippers', 'knicks', 'mavericks', 'grizzlies'],
+    'mlb': ['mlb', 'baseball', 'world series', 'yankees', 'dodgers', 'red sox', 'cubs'],
+    'nhl': ['nhl', 'hockey', 'stanley cup', 'bruins', 'rangers', 'maple leafs'],
+    'soccer': ['soccer', 'premier league', 'world cup', 'fifa', 'champions league',
+               'manchester', 'liverpool', 'chelsea', 'arsenal', 'barcelona', 'real madrid'],
+    'golf': ['golf', 'pga', 'masters', 'us open', 'british open', 'ryder cup'],
+    'tennis': ['tennis', 'wimbledon', 'us open', 'french open', 'australian open', 'grand slam'],
+    'ufc': ['ufc', 'mma', 'boxing', 'fight', 'knockout'],
+    'f1': ['f1', 'formula 1', 'grand prix', 'nascar', 'racing'],
+
+    # Crypto categories
+    'crypto': ['bitcoin', 'btc ', ' btc', 'ethereum', ' eth ', 'solana', ' sol ',
+               ' xrp', 'crypto', 'blockchain', 'defi', ' nft', 'coinbase', 'binance'],
+    'bitcoin': ['bitcoin', 'btc ', ' btc', 'satoshi', 'btc etf'],
+    'ethereum': ['ethereum', ' eth ', ' eth?', 'vitalik', 'eth etf'],
+    'solana': ['solana', ' sol '],
+    'altcoins': [' xrp', 'ripple', 'cardano', ' ada', 'polkadot', 'avalanche'],
+
+    # Politics categories
+    'politics': ['trump', 'biden', 'president', 'election', 'congress', 'senate',
+                 'republican', 'democrat', 'governor', 'mayor', 'cabinet'],
+    'trump': ['trump', 'donald', 'maga', 'mar-a-lago'],
+    'elections': ['election', 'vote', 'ballot', 'primary', 'nominee', 'electoral'],
+    'congress': ['congress', 'senate', 'house of rep', 'speaker', 'filibuster'],
 }
 
 

@@ -20,10 +20,47 @@ CATEGORY_OPTIONS = [
      ['bitcoin', 'btc', 'ethereum', 'eth', 'solana', 'crypto']),
     ("politics", "🏛️ Politics", "Elections, Trump, Biden, Congress...",
      ['trump', 'biden', 'election', 'congress', 'senate', 'president']),
-    ("economics", "📈 Economics", "Fed, Interest rates, Inflation...",
-     ['fed', 'interest rate', 'inflation', 'gdp', 'recession', 'economy']),
-    ("entertainment", "🎬 Entertainment", "Movies, TV, Awards, Celebrities...",
-     ['oscar', 'grammy', 'emmy', 'movie', 'tv show', 'netflix', 'box office']),
+]
+
+# Sub-categories for drilling down
+SPORTS_SUBCATEGORIES = [
+    ("sports", "🏈 All Sports", "All sports markets",
+     ['nfl', 'nba', 'mlb', 'nhl', 'super bowl', 'championship']),
+    ("nfl", "🏈 NFL", "NFL games, Super Bowl, playoffs",
+     ['nfl', 'super bowl', 'afc', 'nfc', 'patriots', 'chiefs', 'eagles', 'cowboys', 'packers',
+      'broncos', 'seahawks', 'rams', '49ers', 'lions', 'ravens', 'bills', 'dolphins']),
+    ("nba", "🏀 NBA", "NBA games, championships",
+     ['nba', 'basketball', 'lakers', 'celtics', 'warriors', 'bucks', 'heat', 'nuggets']),
+    ("mlb", "⚾ MLB", "Baseball, World Series",
+     ['mlb', 'baseball', 'world series', 'yankees', 'dodgers', 'red sox']),
+    ("nhl", "🏒 NHL", "Hockey, Stanley Cup",
+     ['nhl', 'hockey', 'stanley cup', 'bruins', 'rangers']),
+    ("soccer", "⚽ Soccer", "Premier League, World Cup",
+     ['soccer', 'premier league', 'world cup', 'fifa', 'champions league', 'manchester']),
+    ("golf", "⛳ Golf", "PGA, Masters",
+     ['golf', 'pga', 'masters', 'us open']),
+    ("ufc", "🥊 UFC/Boxing", "MMA, boxing",
+     ['ufc', 'mma', 'boxing', 'fight']),
+]
+
+CRYPTO_SUBCATEGORIES = [
+    ("crypto", "💰 All Crypto", "All crypto markets",
+     ['bitcoin', 'btc', 'ethereum', 'eth', 'solana', 'crypto']),
+    ("bitcoin", "₿ Bitcoin", "BTC price, ETFs",
+     ['bitcoin', 'btc', 'satoshi']),
+    ("ethereum", "⟠ Ethereum", "ETH price, upgrades",
+     ['ethereum', 'eth', 'vitalik']),
+    ("solana", "◎ Solana", "SOL price",
+     ['solana', 'sol']),
+]
+
+POLITICS_SUBCATEGORIES = [
+    ("politics", "🏛️ All Politics", "All political markets",
+     ['trump', 'biden', 'election', 'congress', 'senate', 'president']),
+    ("trump", "🇺🇸 Trump", "Trump-related markets",
+     ['trump', 'donald', 'maga']),
+    ("elections", "🗳️ Elections", "Election predictions",
+     ['election', 'vote', 'ballot', 'primary', 'nominee']),
 ]
 
 
@@ -132,7 +169,7 @@ def live_monitor_screen(console: RichConsole):
         elif choice == "2":
             # Category selection with improved menu
             console.print()
-            console.print("[cyan]Category Selection:[/cyan]")
+            console.print("[cyan]Step 1: Select main category:[/cyan]")
             console.print()
 
             # Display category options in a nice table
@@ -150,16 +187,51 @@ def live_monitor_screen(console: RichConsole):
             try:
                 cat_choice = int(Prompt.ask(f"Select category (1-{len(CATEGORY_OPTIONS)})", default="1"))
                 if 1 <= cat_choice <= len(CATEGORY_OPTIONS):
-                    category, cat_name, _, keywords = CATEGORY_OPTIONS[cat_choice - 1]
+                    main_category, main_name, _, main_keywords = CATEGORY_OPTIONS[cat_choice - 1]
                 else:
-                    console.print("[red]Invalid choice. Using 'sports' as default.[/red]")
-                    category, cat_name, _, keywords = CATEGORY_OPTIONS[0]
+                    main_category, main_name, _, main_keywords = CATEGORY_OPTIONS[0]
             except ValueError:
-                console.print("[red]Invalid input. Using 'sports' as default.[/red]")
-                category, cat_name, _, keywords = CATEGORY_OPTIONS[0]
+                main_category, main_name, _, main_keywords = CATEGORY_OPTIONS[0]
+
+            # Get sub-categories for the selected main category
+            subcategories = None
+            if main_category == "sports":
+                subcategories = SPORTS_SUBCATEGORIES
+            elif main_category == "crypto":
+                subcategories = CRYPTO_SUBCATEGORIES
+            elif main_category == "politics":
+                subcategories = POLITICS_SUBCATEGORIES
+
+            # Show sub-category selection
+            if subcategories:
+                console.print()
+                console.print(f"[cyan]Step 2: Select specific {main_name}:[/cyan]")
+                console.print()
+
+                sub_table = Table(show_header=False, box=None, padding=(0, 2))
+                sub_table.add_column("#", style="cyan", width=3)
+                sub_table.add_column("Type", style="bold", width=18)
+                sub_table.add_column("Examples", style="dim")
+
+                for i, (key, name, desc, _) in enumerate(subcategories, 1):
+                    sub_table.add_row(str(i), name, desc)
+
+                console.print(sub_table)
+                console.print()
+
+                try:
+                    sub_choice = int(Prompt.ask(f"Select type (1-{len(subcategories)})", default="1"))
+                    if 1 <= sub_choice <= len(subcategories):
+                        category, cat_name, _, keywords = subcategories[sub_choice - 1]
+                    else:
+                        category, cat_name, keywords = main_category, main_name, main_keywords
+                except ValueError:
+                    category, cat_name, keywords = main_category, main_name, main_keywords
+            else:
+                category, cat_name, keywords = main_category, main_name, main_keywords
 
             # Verify category has markets using keyword matching
-            console.print(f"\n[dim]Checking for {category} markets...[/dim]")
+            console.print(f"\n[dim]Checking for {cat_name} markets...[/dim]")
             market_count = verify_category_markets(gamma_client, category, keywords)
 
             if market_count == 0:
@@ -168,7 +240,7 @@ def live_monitor_screen(console: RichConsole):
                 if not Confirm.ask("Continue anyway?"):
                     return
             else:
-                console.print(f"[green]Found {market_count} {category} markets![/green]")
+                console.print(f"[green]Found {market_count} {cat_name} markets![/green]")
 
             console.print(f"\n[green]Selected:[/green] {cat_name}")
             launch_live_monitor(console, category=category)
