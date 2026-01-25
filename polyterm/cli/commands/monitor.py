@@ -26,17 +26,58 @@ except ImportError:
 
 
 # Category keywords for filtering (since API doesn't provide category field)
-# Keywords that need word boundary matching (short words that could be substrings)
+# Main categories and sub-categories for granular filtering
 CATEGORY_KEYWORDS = {
+    # Main sports category
     'sports': ['nfl', 'nba', 'mlb', 'nhl', 'super bowl', 'world series', 'playoffs',
                'championship', 'soccer', 'football', 'baseball', 'basketball', 'hockey',
                'tennis', 'golf', 'ufc', 'boxing', 'f1', 'formula 1', 'olympics', 'fifa',
-               'premier league', 'world cup', 'mvp', 'coach', 'draft pick', 'trade deadline'],
+               'premier league', 'world cup', 'mvp', 'coach', 'draft pick', 'trade deadline',
+               'stanley cup', 'masters', 'pga', 'wimbledon', 'us open'],
+
+    # Sports sub-categories
+    'nfl': ['nfl', 'super bowl', 'afc', 'nfc', 'touchdown', 'quarterback', 'patriots',
+            'chiefs', 'eagles', 'cowboys', 'packers', 'ravens', 'bills', 'dolphins',
+            'broncos', 'seahawks', 'rams', '49ers', 'lions', 'bears', 'jets', 'giants',
+            'steelers', 'bengals', 'browns', 'texans', 'colts', 'jaguars', 'titans',
+            'raiders', 'chargers', 'cardinals', 'falcons', 'panthers', 'saints', 'buccaneers',
+            'vikings', 'commanders', 'football'],
+    'nba': ['nba', 'basketball', 'lakers', 'celtics', 'warriors', 'nets', 'bucks',
+            'heat', 'suns', 'nuggets', 'clippers', 'knicks', 'mavericks', 'grizzlies',
+            'playoffs', 'finals', 'mvp', 'all-star'],
+    'mlb': ['mlb', 'baseball', 'world series', 'yankees', 'dodgers', 'red sox', 'cubs',
+            'mets', 'braves', 'astros', 'phillies', 'padres', 'mariners'],
+    'nhl': ['nhl', 'hockey', 'stanley cup', 'bruins', 'rangers', 'maple leafs', 'canadiens',
+            'penguins', 'blackhawks', 'oilers', 'avalanche', 'lightning', 'panthers'],
+    'soccer': ['soccer', 'football', 'premier league', 'world cup', 'fifa', 'champions league',
+               'manchester', 'liverpool', 'chelsea', 'arsenal', 'barcelona', 'real madrid',
+               'messi', 'ronaldo', 'la liga', 'bundesliga', 'serie a'],
+    'golf': ['golf', 'pga', 'masters', 'us open', 'british open', 'ryder cup', 'tour'],
+    'tennis': ['tennis', 'wimbledon', 'us open', 'french open', 'australian open',
+               'grand slam', 'atp', 'wta'],
+    'ufc': ['ufc', 'mma', 'boxing', 'fight', 'knockout', 'heavyweight', 'lightweight'],
+    'f1': ['f1', 'formula 1', 'formula one', 'grand prix', 'nascar', 'racing', 'indy'],
+
+    # Main crypto category
     'crypto': ['bitcoin', 'btc ', ' btc', 'ethereum', ' eth ', ' eth?', 'solana', ' sol ',
                ' xrp', 'crypto', 'blockchain', 'defi', ' nft', 'coinbase', 'binance', 'satoshi'],
+
+    # Crypto sub-categories
+    'bitcoin': ['bitcoin', 'btc ', ' btc', 'satoshi', 'btc etf', 'bitcoin etf'],
+    'ethereum': ['ethereum', ' eth ', ' eth?', ' eth ', 'vitalik', 'eth etf'],
+    'solana': ['solana', ' sol '],
+    'altcoins': [' xrp', 'ripple', 'cardano', ' ada', 'polkadot', 'avalanche', 'chainlink',
+                 'dogecoin', 'shiba', 'polygon', 'matic'],
+
+    # Main politics category
     'politics': ['trump', 'biden', 'president', 'election', 'congress', 'senate', 'house of rep',
                  'republican', 'democrat', 'governor', 'mayor', 'cabinet', 'veto',
                  'impeach', 'scotus', 'supreme court', 'primary', 'nominee'],
+
+    # Politics sub-categories
+    'trump': ['trump', 'donald', 'maga', 'mar-a-lago'],
+    'elections': ['election', 'vote', 'ballot', 'primary', 'nominee', 'electoral', 'swing state'],
+    'congress': ['congress', 'senate', 'house of rep', 'speaker', 'filibuster', 'bill pass'],
 }
 
 
