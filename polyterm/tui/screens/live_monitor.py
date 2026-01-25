@@ -7,8 +7,38 @@ from rich.prompt import Prompt, Confirm
 import subprocess
 import sys
 import os
+import re
 from polyterm.api.gamma import GammaClient
 from polyterm.utils.config import Config
+
+
+# Category options with descriptions and keywords for verification
+CATEGORY_OPTIONS = [
+    ("sports", "🏈 Sports", "NFL, NBA, Super Bowl, Championships...",
+     ['nfl', 'nba', 'mlb', 'nhl', 'super bowl', 'championship', 'playoffs']),
+    ("crypto", "💰 Crypto", "Bitcoin, Ethereum, Solana, XRP...",
+     ['bitcoin', 'btc', 'ethereum', 'eth', 'solana', 'crypto']),
+    ("politics", "🏛️ Politics", "Elections, Trump, Biden, Congress...",
+     ['trump', 'biden', 'election', 'congress', 'senate', 'president']),
+    ("economics", "📈 Economics", "Fed, Interest rates, Inflation...",
+     ['fed', 'interest rate', 'inflation', 'gdp', 'recession', 'economy']),
+    ("entertainment", "🎬 Entertainment", "Movies, TV, Awards, Celebrities...",
+     ['oscar', 'grammy', 'emmy', 'movie', 'tv show', 'netflix', 'box office']),
+]
+
+
+def verify_category_markets(gamma_client: GammaClient, category: str, keywords: list) -> int:
+    """Verify markets exist for category using keyword matching"""
+    try:
+        markets = gamma_client.get_markets(limit=100, closed=False)
+        count = 0
+        for m in markets:
+            title = ' ' + m.get('question', '').lower() + ' '
+            if any(kw in title for kw in keywords):
+                count += 1
+        return count
+    except:
+        return 0
 
 
 def live_monitor_screen(console: RichConsole):
@@ -100,46 +130,48 @@ def live_monitor_screen(console: RichConsole):
                 return
         
         elif choice == "2":
-            # Category selection
+            # Category selection with improved menu
             console.print()
             console.print("[cyan]Category Selection:[/cyan]")
             console.print()
-            
-            categories = ["crypto", "politics", "sports", "economics", "entertainment", "other"]
-            
-            console.print("Popular categories:")
-            for i, cat in enumerate(categories, 1):
-                console.print(f"  {i}. {cat}")
+
+            # Display category options in a nice table
+            table = Table(show_header=False, box=None, padding=(0, 2))
+            table.add_column("#", style="cyan", width=3)
+            table.add_column("Category", style="bold", width=18)
+            table.add_column("Examples", style="dim")
+
+            for i, (key, name, desc, _) in enumerate(CATEGORY_OPTIONS, 1):
+                table.add_row(str(i), name, desc)
+
+            console.print(table)
             console.print()
-            
+
             try:
-                cat_choice = int(Prompt.ask("Select category (1-6)", default="1"))
-                if 1 <= cat_choice <= len(categories):
-                    category = categories[cat_choice - 1]
+                cat_choice = int(Prompt.ask(f"Select category (1-{len(CATEGORY_OPTIONS)})", default="1"))
+                if 1 <= cat_choice <= len(CATEGORY_OPTIONS):
+                    category, cat_name, _, keywords = CATEGORY_OPTIONS[cat_choice - 1]
                 else:
-                    console.print("[red]Invalid choice. Using 'crypto' as default.[/red]")
-                    category = "crypto"
+                    console.print("[red]Invalid choice. Using 'sports' as default.[/red]")
+                    category, cat_name, _, keywords = CATEGORY_OPTIONS[0]
             except ValueError:
-                console.print("[red]Invalid input. Using 'crypto' as default.[/red]")
-                category = "crypto"
-            
-            # Verify category has markets
-            try:
-                markets = gamma_client.get_markets(tag=category, closed=False, limit=5)
-                
-                if not markets:
-                    console.print(f"[yellow]No active markets found for category: {category}[/yellow]")
-                    console.print("[dim]You can still proceed - new markets may appear[/dim]")
-                    if not Confirm.ask("Continue anyway?"):
-                        return
-                
-                console.print(f"\n[green]Selected category:[/green] {category}")
-                launch_live_monitor(console, category=category)
-                
-            except Exception as e:
-                console.print(f"[yellow]Could not verify category: {e}[/yellow]")
-                console.print("[dim]Proceeding anyway...[/dim]")
-                launch_live_monitor(console, category=category)
+                console.print("[red]Invalid input. Using 'sports' as default.[/red]")
+                category, cat_name, _, keywords = CATEGORY_OPTIONS[0]
+
+            # Verify category has markets using keyword matching
+            console.print(f"\n[dim]Checking for {category} markets...[/dim]")
+            market_count = verify_category_markets(gamma_client, category, keywords)
+
+            if market_count == 0:
+                console.print(f"[yellow]No active markets found for: {cat_name}[/yellow]")
+                console.print("[dim]You can still proceed - markets may appear[/dim]")
+                if not Confirm.ask("Continue anyway?"):
+                    return
+            else:
+                console.print(f"[green]Found {market_count} {category} markets![/green]")
+
+            console.print(f"\n[green]Selected:[/green] {cat_name}")
+            launch_live_monitor(console, category=category)
         
         else:
             # All markets
