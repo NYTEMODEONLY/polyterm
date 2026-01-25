@@ -25,6 +25,56 @@ except ImportError:
     HAS_DATEUTIL = False
 
 
+# Category keywords for filtering (since API doesn't provide category field)
+# Keywords that need word boundary matching (short words that could be substrings)
+CATEGORY_KEYWORDS = {
+    'sports': ['nfl', 'nba', 'mlb', 'nhl', 'super bowl', 'world series', 'playoffs',
+               'championship', 'soccer', 'football', 'baseball', 'basketball', 'hockey',
+               'tennis', 'golf', 'ufc', 'boxing', 'f1', 'formula 1', 'olympics', 'fifa',
+               'premier league', 'world cup', 'mvp', 'coach', 'draft pick', 'trade deadline'],
+    'crypto': ['bitcoin', 'btc ', ' btc', 'ethereum', ' eth ', ' eth?', 'solana', ' sol ',
+               ' xrp', 'crypto', 'blockchain', 'defi', ' nft', 'coinbase', 'binance', 'satoshi'],
+    'politics': ['trump', 'biden', 'president', 'election', 'congress', 'senate', 'house of rep',
+                 'republican', 'democrat', 'governor', 'mayor', 'cabinet', 'veto',
+                 'impeach', 'scotus', 'supreme court', 'primary', 'nominee'],
+}
+
+
+def matches_category(market: dict, category: str) -> bool:
+    """Check if market matches a category using keyword search"""
+    import re
+
+    if not category:
+        return True
+
+    category_lower = category.lower()
+
+    # First check if API provides category field
+    market_category = market.get('category')
+    if market_category and category_lower in market_category.lower():
+        return True
+
+    # Search in question/title - add spaces for word boundary matching
+    title = ' ' + market.get('question', market.get('title', '')).lower() + ' '
+
+    # If category is a predefined one, use keywords
+    if category_lower in CATEGORY_KEYWORDS:
+        for kw in CATEGORY_KEYWORDS[category_lower]:
+            # For short keywords (3 chars or less), use word boundary matching
+            if len(kw.strip()) <= 3:
+                # Use regex word boundary for short keywords
+                pattern = r'\b' + re.escape(kw.strip()) + r'\b'
+                if re.search(pattern, title):
+                    return True
+            else:
+                if kw in title:
+                    return True
+        return False
+
+    # Otherwise, do a direct search
+    return category_lower in title
+
+
 @click.command()
 @click.option("--limit", default=20, help="Maximum number of markets to display")
 @click.option("--category", default=None, help="Filter by category (politics, crypto, sports)")
@@ -76,20 +126,24 @@ def monitor(ctx, limit, category, refresh, active_only, sort, output_format, onc
         table.add_column("Ends", justify="right", style="dim")
         
         try:
+            # When filtering by category, fetch more markets since we filter after
+            fetch_limit = limit * 10 if category else limit
+
             # Get live markets from aggregator with validation
             if sort == 'volume':
                 # Use dedicated method for volume-sorted markets
-                markets = aggregator.get_top_markets_by_volume(limit=limit, min_volume=0.01)
+                markets = aggregator.get_top_markets_by_volume(limit=fetch_limit, min_volume=0.01)
             else:
                 markets = aggregator.get_live_markets(
-                    limit=limit,
+                    limit=fetch_limit,
                     require_volume=True,
                     min_volume=0.01
                 )
 
-            # Filter by category if specified
+            # Filter by category if specified (uses keyword matching)
             if category:
-                markets = [m for m in markets if m.get('category') == category]
+                markets = [m for m in markets if matches_category(m, category)]
+                markets = markets[:limit]  # Apply limit after filtering
 
             # Filter by active status
             if active_only:
@@ -208,17 +262,21 @@ def monitor(ctx, limit, category, refresh, active_only, sort, output_format, onc
     def get_markets_data():
         """Get filtered and sorted markets data"""
         try:
+            # When filtering by category, fetch more markets since we filter after
+            fetch_limit = limit * 10 if category else limit
+
             if sort == 'volume':
-                markets = aggregator.get_top_markets_by_volume(limit=limit, min_volume=0.01)
+                markets = aggregator.get_top_markets_by_volume(limit=fetch_limit, min_volume=0.01)
             else:
                 markets = aggregator.get_live_markets(
-                    limit=limit,
+                    limit=fetch_limit,
                     require_volume=True,
                     min_volume=0.01
                 )
 
             if category:
-                markets = [m for m in markets if m.get('category') == category]
+                markets = [m for m in markets if matches_category(m, category)]
+                markets = markets[:limit]  # Apply limit after filtering
 
             if active_only:
                 markets = [m for m in markets if m.get('active', False) and not m.get('closed', True)]
