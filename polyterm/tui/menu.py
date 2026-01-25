@@ -229,16 +229,16 @@ class MainMenu:
         # Select items for current page
         if self.current_page == 1:
             menu_items = page1_items
-            nav_hint = "[dim]Press [cyan]m[/cyan] for more options[/dim]"
+            nav_hint = "[yellow]Press [bold cyan]m[/bold cyan] for more options →[/yellow]"
         else:
             menu_items = page2_items
-            nav_hint = "[dim]Press [cyan]b[/cyan] to go back[/dim]"
+            nav_hint = "[yellow]← Press [bold cyan]b[/bold cyan] to go back[/yellow]"
 
         # Build menu table
         menu = Table.grid(padding=(0, 2))
         menu.add_column(style="cyan bold", justify="right", width=4)
-        menu.add_column(style="white bold", width=18)
-        menu.add_column(style="dim")
+        menu.add_column(style="white bold", width=22, no_wrap=True)
+        menu.add_column(style="bright_black")
 
         for key, name, desc in menu_items:
             menu.add_row(key, name, desc)
