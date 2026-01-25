@@ -126,8 +126,9 @@ def monitor(ctx, limit, category, refresh, active_only, sort, output_format, onc
         table.add_column("Ends", justify="right", style="dim")
         
         try:
-            # When filtering by category, fetch more markets since we filter after
-            fetch_limit = limit * 10 if category else limit
+            # When filtering by category, fetch many more markets since we filter after
+            # Need at least 100 to find enough category-specific markets
+            fetch_limit = max(100, limit * 10) if category else limit
 
             # Get live markets from aggregator with validation
             if sort == 'volume':
@@ -262,8 +263,8 @@ def monitor(ctx, limit, category, refresh, active_only, sort, output_format, onc
     def get_markets_data():
         """Get filtered and sorted markets data"""
         try:
-            # When filtering by category, fetch more markets since we filter after
-            fetch_limit = limit * 10 if category else limit
+            # When filtering by category, fetch many more markets since we filter after
+            fetch_limit = max(100, limit * 10) if category else limit
 
             if sort == 'volume':
                 markets = aggregator.get_top_markets_by_volume(limit=fetch_limit, min_volume=0.01)
