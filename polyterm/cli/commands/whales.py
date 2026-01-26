@@ -101,7 +101,14 @@ def whales(ctx, min_amount, market, hours, limit, output_format):
             market_name = trade.data.get('_market_title', trade.market_id)[:50]
 
             # Format trend/outcome
-            trend_style = "green" if trade.outcome == "YES" else "red" if trade.outcome == "NO" else "dim"
+            if trade.outcome == "YES":
+                trend_style = "green"
+            elif trade.outcome == "NO":
+                trend_style = "red"
+            elif trade.outcome == "MIXED":
+                trend_style = "yellow"
+            else:
+                trend_style = "dim"
             trend_text = f"[{trend_style}]{trade.outcome}[/{trend_style}]"
 
             table.add_row(

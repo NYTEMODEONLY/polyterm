@@ -90,29 +90,62 @@ class AnalyticsEngine:
                 
                 # If significant volume in last 24hrs, could indicate whale activity
                 if volume_24hr >= min_notional:
-                    # Get nested market data for price info
-                    nested_markets = market.get('markets', [])
-                    last_price = 0
+                    # Get price info - check direct fields first (from /markets endpoint)
+                    # then fall back to nested markets (from /events endpoint)
+                    last_price = float(market.get('lastTradePrice', 0) or 0)
+                    prices = market.get('outcomePrices', [])
                     outcome = "Unknown"
-                    
-                    if nested_markets:
-                        nested = nested_markets[0]
-                        last_price = float(nested.get('lastTradePrice', 0) or 0)
-                        prices = nested.get('outcomePrices', [])
-                        
-                        # Handle outcomePrices which might be a JSON string
-                        if isinstance(prices, str):
-                            import json
-                            try:
-                                prices = json.loads(prices)
-                            except:
-                                prices = []
-                        
-                        if prices and len(prices) > 0:
-                            try:
-                                outcome = "YES" if float(prices[0]) > 0.5 else "NO"
-                            except:
-                                outcome = "Unknown"
+
+                    # Handle outcomePrices which might be a JSON string
+                    if isinstance(prices, str):
+                        import json
+                        try:
+                            prices = json.loads(prices)
+                        except:
+                            prices = []
+
+                    # Determine trend based on YES price (first outcome)
+                    if prices and len(prices) > 0:
+                        try:
+                            yes_price = float(prices[0])
+                            # Use price thresholds to determine market direction
+                            if yes_price > 0.65:
+                                outcome = "YES"  # Leaning YES
+                            elif yes_price < 0.35:
+                                outcome = "NO"   # Leaning NO
+                            else:
+                                outcome = "MIXED"  # Uncertain/competitive
+                            # Also use this as last_price if not already set
+                            if last_price == 0:
+                                last_price = yes_price
+                        except:
+                            pass
+
+                    # Fall back to nested markets if no direct price data
+                    if last_price == 0 or outcome == "Unknown":
+                        nested_markets = market.get('markets', [])
+                        if nested_markets:
+                            nested = nested_markets[0]
+                            if last_price == 0:
+                                last_price = float(nested.get('lastTradePrice', 0) or 0)
+                            nested_prices = nested.get('outcomePrices', [])
+                            if isinstance(nested_prices, str):
+                                import json
+                                try:
+                                    nested_prices = json.loads(nested_prices)
+                                except:
+                                    nested_prices = []
+                            if nested_prices and len(nested_prices) > 0 and outcome == "Unknown":
+                                try:
+                                    yes_price = float(nested_prices[0])
+                                    if yes_price > 0.65:
+                                        outcome = "YES"
+                                    elif yes_price < 0.35:
+                                        outcome = "NO"
+                                    else:
+                                        outcome = "MIXED"
+                                except:
+                                    pass
                     
                     # Store market title for display
                     market_title = market.get('title', market.get('question', 'Unknown'))
