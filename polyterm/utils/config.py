@@ -130,8 +130,36 @@ class Config:
                 return default
         return value
     
+    # Validation rules: key -> (type, min, max)
+    VALIDATION_RULES = {
+        "alerts.probability_threshold": (float, 0.1, 100.0),
+        "alerts.volume_threshold": (float, 0.0, 10000.0),
+        "alerts.check_interval": (int, 5, 3600),
+        "display.max_markets": (int, 1, 200),
+        "display.refresh_rate": (int, 1, 60),
+        "whale_tracking.min_whale_trade": (float, 100, 10000000),
+        "whale_tracking.min_smart_money_win_rate": (float, 0.0, 1.0),
+        "whale_tracking.min_smart_money_trades": (int, 1, 10000),
+        "whale_tracking.insider_alert_threshold": (int, 0, 100),
+        "arbitrage.min_spread": (float, 0.001, 1.0),
+        "arbitrage.polymarket_fee": (float, 0.0, 0.5),
+        "arbitrage.kalshi_fee": (float, 0.0, 0.5),
+        "data_validation.max_market_age_hours": (int, 1, 720),
+        "data_validation.min_volume_threshold": (float, 0.0, 1000000),
+    }
+
     def set(self, key: str, value: Any) -> None:
-        """Set configuration value using dot notation"""
+        """Set configuration value using dot notation with validation"""
+        # Validate if rules exist for this key
+        if key in self.VALIDATION_RULES:
+            expected_type, min_val, max_val = self.VALIDATION_RULES[key]
+            try:
+                value = expected_type(value)
+            except (ValueError, TypeError):
+                raise ValueError(f"Invalid type for {key}: expected {expected_type.__name__}")
+            if value < min_val or value > max_val:
+                raise ValueError(f"Value for {key} must be between {min_val} and {max_val}")
+
         keys = key.split(".")
         config = self.config
         for k in keys[:-1]:

@@ -558,6 +558,20 @@ python -m twine upload dist/*
 
 ---
 
+## What's New in v0.7.3
+
+### Performance
+- **Added compound database indexes** - New indexes on trades(market_id,timestamp), market_snapshots(market_id,timestamp), positions(entry_date), and alerts(acknowledged) for faster queries
+
+### Reliability
+- **Config validation** - All threshold settings now have type checking and range validation (e.g., probability_threshold must be 0.1-100.0, min_smart_money_win_rate must be 0.0-1.0)
+- **Subgraph deprecation warning** - SubgraphClient now logs a clear deprecation warning directing users to GammaClient/CLOBClient
+
+### Test Suite
+- **183/183 tests passing** (2 skipped for deprecated endpoints)
+
+---
+
 ## What's New in v0.7.2
 
 ### Bug Fixes

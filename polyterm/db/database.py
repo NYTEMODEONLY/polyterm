@@ -225,6 +225,13 @@ class Database:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_positions_market ON positions(market_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_positions_status ON positions(status)")
 
+            # Compound indexes for common query patterns
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_trades_market_ts ON trades(market_id, timestamp)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_snapshots_market_ts ON market_snapshots(market_id, timestamp)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_price_alerts_created ON price_alerts(created_at)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_positions_entry ON positions(entry_date)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_alerts_ack ON alerts(acknowledged)")
+
     # Wallet operations
 
     def upsert_wallet(self, wallet: Wallet) -> None:

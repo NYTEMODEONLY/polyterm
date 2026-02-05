@@ -1,6 +1,14 @@
-"""Subgraph GraphQL API client for on-chain data"""
+"""Subgraph GraphQL API client for on-chain data
 
+NOTE: The PolyMarket Subgraph endpoint has been deprecated by The Graph.
+This client is kept for backward compatibility but will return empty results
+for most queries. Use GammaClient or CLOBClient instead.
+"""
+
+import logging
 from typing import Dict, List, Optional, Any
+
+logger = logging.getLogger(__name__)
 
 try:
     from gql import gql, Client
@@ -9,18 +17,32 @@ try:
 except ImportError:
     HAS_GQL = False
 
+_DEPRECATION_WARNED = False
+
 
 class SubgraphClient:
-    """Client for PolyMarket Subgraph (The Graph Protocol)"""
-    
+    """Client for PolyMarket Subgraph (The Graph Protocol)
+
+    DEPRECATED: This endpoint has been removed by The Graph.
+    Use GammaClient for market data or CLOBClient for order book data.
+    """
+
     def __init__(
         self,
         endpoint: str = "https://api.thegraph.com/subgraphs/name/polymarket/matic-markets",
     ):
+        global _DEPRECATION_WARNED
         self.endpoint = endpoint
+        self._deprecated = True
+        if not _DEPRECATION_WARNED:
+            logger.warning(
+                "SubgraphClient is deprecated: The PolyMarket Subgraph endpoint "
+                "has been removed. Use GammaClient or CLOBClient instead."
+            )
+            _DEPRECATION_WARNED = True
         if HAS_GQL:
             transport = RequestsHTTPTransport(url=endpoint)
-            # Don't fetch schema - endpoint may be deprecated
+            # Don't fetch schema - endpoint is deprecated
             self.client = Client(transport=transport, fetch_schema_from_transport=False)
         else:
             self.client = None
