@@ -454,26 +454,18 @@ class Database:
     # Recently viewed operations
 
     def track_market_view(self, market_id: str, title: str, probability: float = 0.0) -> bool:
-        """Track a market view (upsert with view count)"""
+        """Track a market view (atomic upsert with view count)"""
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            # Check if already exists
-            cursor.execute("SELECT view_count FROM recently_viewed WHERE market_id = ?", (market_id,))
-            row = cursor.fetchone()
-
-            if row:
-                # Update existing
-                cursor.execute("""
-                    UPDATE recently_viewed
-                    SET title = ?, probability = ?, viewed_at = ?, view_count = view_count + 1
-                    WHERE market_id = ?
-                """, (title, probability, datetime.now().isoformat(), market_id))
-            else:
-                # Insert new
-                cursor.execute("""
-                    INSERT INTO recently_viewed (market_id, title, probability, viewed_at, view_count)
-                    VALUES (?, ?, ?, ?, 1)
-                """, (market_id, title, probability, datetime.now().isoformat()))
+            cursor.execute("""
+                INSERT INTO recently_viewed (market_id, title, probability, viewed_at, view_count)
+                VALUES (?, ?, ?, ?, 1)
+                ON CONFLICT(market_id) DO UPDATE SET
+                    title = excluded.title,
+                    probability = excluded.probability,
+                    viewed_at = excluded.viewed_at,
+                    view_count = view_count + 1
+            """, (market_id, title, probability, datetime.now().isoformat()))
 
             # Keep only last 50 viewed markets
             cursor.execute("""
@@ -1163,11 +1155,15 @@ class Database:
 
     def get_database_stats(self) -> Dict[str, int]:
         """Get database statistics"""
+        VALID_TABLES = {'wallets', 'trades', 'alerts', 'market_snapshots', 'arbitrage_opportunities'}
+
         with self._get_connection() as conn:
             cursor = conn.cursor()
             stats = {}
 
-            for table in ['wallets', 'trades', 'alerts', 'market_snapshots', 'arbitrage_opportunities']:
+            for table in VALID_TABLES:
+                if table not in VALID_TABLES:
+                    continue
                 cursor.execute(f"SELECT COUNT(*) FROM {table}")
                 stats[table] = cursor.fetchone()[0]
 

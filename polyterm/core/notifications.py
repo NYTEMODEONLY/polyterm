@@ -10,6 +10,7 @@ Supports:
 """
 
 import os
+import subprocess
 import sys
 import json
 import asyncio
@@ -278,12 +279,12 @@ class NotificationManager:
                     'critical': 'Basso',
                 }
                 sound_name = sounds.get(level, 'Pop')
-                os.system(f'afplay /System/Library/Sounds/{sound_name}.aiff 2>/dev/null &')
+                subprocess.Popen(['afplay', f'/System/Library/Sounds/{sound_name}.aiff'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 return True
 
             elif sys.platform.startswith('linux'):
                 # Try paplay (PulseAudio)
-                os.system('paplay /usr/share/sounds/freedesktop/stereo/message.oga 2>/dev/null &')
+                subprocess.Popen(['paplay', '/usr/share/sounds/freedesktop/stereo/message.oga'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 return True
 
             return False
@@ -296,9 +297,9 @@ class NotificationManager:
         """Play a custom sound file"""
         try:
             if sys.platform == 'darwin':
-                os.system(f'afplay "{filepath}" 2>/dev/null &')
+                subprocess.Popen(['afplay', filepath], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             elif sys.platform.startswith('linux'):
-                os.system(f'aplay "{filepath}" 2>/dev/null &')
+                subprocess.Popen(['aplay', filepath], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             elif sys.platform == 'win32':
                 import winsound
                 winsound.PlaySound(filepath, winsound.SND_FILENAME | winsound.SND_ASYNC)

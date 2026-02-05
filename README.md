@@ -558,6 +558,26 @@ python -m twine upload dist/*
 
 ---
 
+## What's New in v0.7.8
+
+### Security
+- **Eliminated shell injection in notifications** - Replaced 4 `os.system()` calls with `subprocess.Popen()` using list arguments, preventing shell injection through sound file paths
+- **SQL injection hardening** - Added explicit VALID_TABLES whitelist in `get_database_stats()` before f-string SQL
+
+### Critical Fixes
+- **WebSocket callback crash fixed** - Live monitor callbacks were `await`ed but weren't async, causing `TypeError` at runtime. Now handles both sync and async callbacks
+- **Database race condition eliminated** - `track_market_view()` replaced SELECT+INSERT/UPDATE pattern with atomic `INSERT ... ON CONFLICT DO UPDATE`
+
+### Improvements
+- **WebSocket cleanup** - Subscriptions cleared on permanent connection failure to prevent stale state
+- **Cross-platform compatibility** - Replaced Unix-only `which` command with `shutil.which()` for path detection
+- **Removed unused typer dependency** - Project uses Click, not Typer; removed unnecessary install
+
+### Test Suite
+- **183/183 tests passing** (2 skipped for deprecated endpoints)
+
+---
+
 ## What's New in v0.7.7
 
 ### Critical Fixes
