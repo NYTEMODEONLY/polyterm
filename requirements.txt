@@ -8,7 +8,6 @@ gql[all]>=3.5.0
 
 # CLI framework
 click>=8.1.7
-typer>=0.9.0
 
 # Terminal UI
 rich>=13.7.0

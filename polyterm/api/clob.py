@@ -264,7 +264,10 @@ class CLOBClient:
                                 callback = self.subscriptions["_all"]
 
                             if callback:
-                                await callback(data)
+                                result = callback(data)
+                                # Support both sync and async callbacks
+                                if hasattr(result, '__await__'):
+                                    await result
 
                     except json.JSONDecodeError:
                         continue
@@ -283,6 +286,9 @@ class CLOBClient:
                 if reconnect_attempts <= max_reconnects:
                     continue
                 break
+
+        # Clear subscriptions on permanent failure
+        self.subscriptions.clear()
     
     async def close_websocket(self):
         """Close WebSocket connection"""

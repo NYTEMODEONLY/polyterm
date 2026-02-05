@@ -8,6 +8,7 @@ import subprocess
 import sys
 import os
 import re
+import shutil
 from polyterm.api.gamma import GammaClient
 from polyterm.utils.config import Config
 
@@ -342,10 +343,9 @@ monitor.run_live_monitor()
                 if "/.local/pipx/venvs/polyterm/bin/python" in sys.executable:
                     pipx_python = sys.executable
                 else:
-                    # Try to find pipx Python path
-                    result = subprocess.run(["which", "polyterm"], capture_output=True, text=True)
-                    if result.returncode == 0:
-                        polyterm_path = result.stdout.strip()
+                    # Try to find pipx Python path (cross-platform)
+                    polyterm_path = shutil.which("polyterm")
+                    if polyterm_path:
                         # Extract Python path from polyterm script
                         with open(polyterm_path, 'r') as f:
                             first_line = f.readline()
