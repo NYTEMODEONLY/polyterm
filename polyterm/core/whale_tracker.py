@@ -70,9 +70,10 @@ class WhaleTracker:
             return None
 
         # Parse trade details
-        price = float(trade_data.get('price', 0))
-        size = float(trade_data.get('size', trade_data.get('amount', 0)))
-        notional = price * size if price and size else float(trade_data.get('notional', 0))
+        from ..utils.json_output import safe_float
+        price = safe_float(trade_data.get('price', 0))
+        size = safe_float(trade_data.get('size', trade_data.get('amount', 0)))
+        notional = price * size if price and size else safe_float(trade_data.get('notional', 0))
 
         # Get or create trade timestamp
         timestamp = trade_data.get('timestamp')
@@ -102,16 +103,16 @@ class WhaleTracker:
             taker_address=taker_address,
         )
 
-        # Store trade in database
+        # Update wallet profile first (ensures wallet exists for FK constraint)
+        wallet = await self._update_wallet(wallet_address, trade)
+
+        # Store trade in database (after wallet exists)
         self.db.insert_trade(trade)
 
         # Update recent trades cache
         self.recent_trades.append(trade)
         if len(self.recent_trades) > self.max_recent_trades:
             self.recent_trades = self.recent_trades[-self.max_recent_trades:]
-
-        # Update wallet profile
-        wallet = await self._update_wallet(wallet_address, trade)
 
         # Check for whale activity
         if notional >= self.min_whale_trade:

@@ -16,17 +16,19 @@ class MainMenu:
         self.console = Console()
         self.current_page = 1
         self.total_pages = 2
-    
+        self._update_cache = None  # Cached update check result
+
     def check_for_updates(self) -> tuple[str, str]:
         """Check if there's a newer version available on PyPI
-        
+
         Returns:
             Tuple of (update_indicator_string, latest_version)
         """
+        # Return cached result if available (only check once per session)
+        if self._update_cache is not None:
+            return self._update_cache
+
         try:
-            # Get current version - force fresh import to avoid caching issues
-            import importlib
-            importlib.reload(polyterm)
             current_version = polyterm.__version__
             
             # Get latest version from PyPI
@@ -37,12 +39,15 @@ class MainMenu:
                 
                 # Compare versions
                 if version.parse(latest_version) > version.parse(current_version):
-                    return f" [bold green]🔄 Update Available: v{latest_version}[/bold green]", latest_version
-            
+                    result = f" [bold green]🔄 Update Available: v{latest_version}[/bold green]", latest_version
+                    self._update_cache = result
+                    return result
+
         except Exception:
             # If update check fails, silently continue
             pass
-        
+
+        self._update_cache = ("", "")
         return "", ""
     
     def _get_installed_version_pipx(self) -> str:
@@ -244,8 +249,6 @@ class MainMenu:
             menu.add_row(key, name, desc)
 
         # Display version and update indicator
-        import importlib
-        importlib.reload(polyterm)
         version_text = f"[dim]PolyTerm v{polyterm.__version__}[/dim]{update_indicator}"
 
         # Print menu

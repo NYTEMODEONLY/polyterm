@@ -213,14 +213,17 @@ def _calculate_pnl_metrics(positions: list) -> dict:
             temp_win = 0
             worst_loss_streak = max(worst_loss_streak, temp_loss)
 
-    # Current streak
+    # Current streak (skip breakeven trades)
     if pnls:
         last_pnl = pnls[-1]
-        for p in reversed(pnls):
-            if (p > 0) == (last_pnl > 0):
-                current_streak += 1 if last_pnl > 0 else -1
-            else:
-                break
+        if last_pnl != 0:
+            for p in reversed(pnls):
+                if p == 0:
+                    break
+                if (p > 0) == (last_pnl > 0):
+                    current_streak += 1 if last_pnl > 0 else -1
+                else:
+                    break
 
     return {
         'total_pnl': total_pnl,

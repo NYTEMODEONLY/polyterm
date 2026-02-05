@@ -185,9 +185,12 @@ def depth(ctx, search_term, size, levels, interactive, output_format):
         size_table.add_column("Sell Slippage", width=12, justify="center")
         size_table.add_column("Rating", width=10, justify="center")
 
+        parsed_asks = [{'price': float(a.get('price', 0)), 'size': float(a.get('size', 0))} for a in asks if float(a.get('price', 0)) > 0]
+        parsed_bids = [{'price': float(b.get('price', 0)), 'size': float(b.get('size', 0))} for b in bids if float(b.get('price', 0)) > 0]
+
         for test_size in [100, 500, 1000, 5000, 10000]:
-            buy_test = _calculate_slippage(asks, test_size, analysis['mid_price'], 'buy')
-            sell_test = _calculate_slippage(bids, test_size, analysis['mid_price'], 'sell')
+            buy_test = _calculate_slippage(parsed_asks, test_size, analysis['mid_price'], 'buy')
+            sell_test = _calculate_slippage(parsed_bids, test_size, analysis['mid_price'], 'sell')
 
             avg_slip = (buy_test['slippage_pct'] + sell_test['slippage_pct']) / 2
 

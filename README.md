@@ -558,6 +558,39 @@ python -m twine upload dist/*
 
 ---
 
+## What's New in v0.8.1
+
+### Critical Bug Fixes
+- **Sentiment analysis broken**: Fixed wrong method name (`get_unacked_alerts` → `get_unacknowledged_alerts`) and dict access on Alert objects — whale signal was silently never working
+- **Quick update watch broken**: Fixed nonexistent `db.query()`/`db.execute()` methods and missing `watchlist` table — now uses bookmarks system
+- **Arbitrage division by zero**: Fixed `ZeroDivisionError` when market price is exactly $0.00 in correlated and cross-platform scans
+- **Arbitrage wrong fee calc**: Cross-platform fees now correctly calculated as percentage of winnings (not flat amounts)
+- **Arbitrage wrong market data**: Fixed NO prices assigned from wrong market when buy/sell sides swap in correlated scan
+- **Database P&L wrong for NO positions**: Position summary now correctly calculates profit/loss for NO-side positions (price falling = profit)
+- **Whale tracker FK violation**: Trade insert now happens after wallet creation to prevent foreign key constraint failures
+- **Depth chart crash**: Fixed `TypeError` when raw string order book data passed to slippage calculator
+- **Hot markets sort crash**: `volume_24h` now cast to `float()` to prevent string comparison errors
+
+### Logic Fixes
+- **Prediction momentum always zero**: Fixed self-comparison bug when dataset has 5-7 prices (minimum lookback now 2)
+- **Prediction accuracy too lenient**: Tightened neutral/correct threshold from 1.0 to 0.5 percentage points
+- **Momentum description missing**: `one_day_change` of exactly 0.0 now correctly shown in description
+- **P&L streak logic**: Breakeven trades now correctly produce zero streak instead of inflated negative streak
+- **Sentiment meter indicator hidden**: Fixed display bug where neutral score hid the position indicator
+
+### Security & Performance
+- **Live monitor code injection**: Sanitized market_id/category inputs in generated Python scripts
+- **Menu update check**: Cached PyPI update check (was blocking HTTP request on every menu display)
+- **Removed unnecessary importlib.reload**: Eliminated unnecessary module reloads that could cause mid-session import failures
+
+### Data Integrity
+- **Screener preset JSON guard**: Corrupt JSON in preset filters no longer crashes preset listing
+- **Whale tracker safe_float**: API data now uses `safe_float()` for defensive float conversion
+
+### Tests
+- 26 new tests: position P&L with side awareness (10), prediction accuracy (5), P&L streak logic (11)
+- Total: 297 tests passing
+
 ## What's New in v0.8.0
 
 ### Bug Fixes

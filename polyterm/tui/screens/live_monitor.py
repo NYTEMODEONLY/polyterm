@@ -285,6 +285,10 @@ def launch_live_monitor(console: RichConsole, market_id: str = None, market_titl
     else:
         monitor_type = "All Active Markets"
     
+    # Sanitize inputs for script generation (prevent code injection)
+    safe_market_id = (market_id or '').replace('\\', '\\\\').replace('"', '\\"').replace("'", "\\'")
+    safe_category = (category or '').replace('\\', '\\\\').replace('"', '\\"').replace("'", "\\'")
+
     # Create temporary script for the new terminal
     script_content = f'''
 import sys
@@ -298,7 +302,7 @@ from polyterm.utils.config import Config
 config = Config()
 
 # Create and run monitor
-monitor = LiveMarketMonitor(config, market_id="{market_id or ''}", category="{category or ''}")
+monitor = LiveMarketMonitor(config, market_id="{safe_market_id}", category="{safe_category}")
 monitor.run_live_monitor()
 '''
     

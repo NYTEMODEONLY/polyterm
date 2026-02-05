@@ -1,4 +1,4 @@
 """PolyTerm - Terminal-based monitoring for PolyMarket"""
 
-__version__ = "0.8.0"
+__version__ = "0.8.1"
 
