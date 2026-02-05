@@ -1,6 +1,7 @@
 """TUI Screen for Quick Actions"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -48,4 +49,4 @@ def run_quick_screen(console: Console):
     action = action_map.get(choice, "price")
 
     console.print()
-    subprocess.run(["polyterm", "quick", action, market])
+    subprocess.run([sys.executable, "-m", "polyterm.cli.main", "quick", action, market])

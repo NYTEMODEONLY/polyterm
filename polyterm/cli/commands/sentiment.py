@@ -201,12 +201,16 @@ def _analyze_price_momentum(market: dict) -> dict:
     reason = "No momentum data"
 
     # Try to get price changes
-    price_change_24h = market.get('priceChange24h', 0)
+    price_change_24h = float(market.get('priceChange24h', 0) or 0)
     if not price_change_24h:
         # Calculate from other fields if available
         current = _get_current_price(market)
         prev = market.get('price24hAgo', current)
-        if prev and prev > 0:
+        try:
+            prev = float(prev) if prev else 0
+        except (ValueError, TypeError):
+            prev = 0
+        if prev > 0:
             price_change_24h = (current - prev) / prev
 
     if price_change_24h:

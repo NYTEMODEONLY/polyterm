@@ -1,6 +1,7 @@
 """Centralized error handling for user-friendly error messages"""
 
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from typing import Optional
 
@@ -43,13 +44,13 @@ def display_error(
     details: str = None,
 ):
     """Display a user-friendly error message"""
-    content = f"[red]{message}[/red]"
+    content = f"[red]{escape(message)}[/red]"
 
     if details:
-        content += f"\n\n[dim]Details: {details}[/dim]"
+        content += f"\n\n[dim]Details: {escape(details)}[/dim]"
 
     if suggestion:
-        content += f"\n\n[yellow]Suggestion:[/yellow] {suggestion}"
+        content += f"\n\n[yellow]Suggestion:[/yellow] {escape(suggestion)}"
 
     console.print()
     console.print(Panel(

@@ -233,7 +233,7 @@ class ASCIIChart:
 
         for i in range(count):
             val = max_val - (i * step)
-            labels.append(f"{val*100:.0f}%")
+            labels.append(f"{val:.0f}%")
 
         return labels
 

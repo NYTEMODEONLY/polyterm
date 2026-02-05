@@ -1,6 +1,7 @@
 """TUI Screen for Quick Trade Calculator"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -23,4 +24,4 @@ def run_trade_screen(console: Console):
         side = Prompt.ask("[cyan]Side[/cyan]", choices=["yes", "no"], default="yes")
         amount = Prompt.ask("[cyan]Trade amount ($)[/cyan]", default="100")
         console.print()
-        subprocess.run(["polyterm", "trade", "--market", search, "--side", side, "--amount", amount])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "trade", "--market", search, "--side", side, "--amount", amount])

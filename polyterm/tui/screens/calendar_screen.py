@@ -1,6 +1,7 @@
 """Calendar Screen - View upcoming market resolutions"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -26,6 +27,6 @@ def run_calendar_screen(console: Console):
     console.print()
 
     try:
-        subprocess.run(["polyterm", "calendar", "--days", days])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "calendar", "--days", days])
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")

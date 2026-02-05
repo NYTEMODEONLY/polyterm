@@ -1,6 +1,7 @@
 """TUI Screen for Expected Value Calculator"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -31,7 +32,7 @@ def run_ev_screen(console: Console):
     console.print()
 
     if choice == "1":
-        subprocess.run(["polyterm", "ev", "-i"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "ev", "-i"])
 
     elif choice == "2":
         market = Prompt.ask("[cyan]Market name[/cyan]")
@@ -42,4 +43,4 @@ def run_ev_screen(console: Console):
         if not prob:
             return
 
-        subprocess.run(["polyterm", "ev", "-m", market, "-p", prob])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "ev", "-m", market, "-p", prob])

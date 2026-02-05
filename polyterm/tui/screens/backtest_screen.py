@@ -1,6 +1,7 @@
 """TUI Screen for Strategy Backtesting"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -34,12 +35,12 @@ def run_backtest_screen(console: Console):
     console.print()
 
     if choice == "1":
-        subprocess.run(["polyterm", "backtest", "-i"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "backtest", "-i"])
     elif choice == "2":
-        subprocess.run(["polyterm", "backtest", "-s", "momentum", "-p", "30d"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "backtest", "-s", "momentum", "-p", "30d"])
     elif choice == "3":
-        subprocess.run(["polyterm", "backtest", "-s", "mean-reversion", "-p", "30d"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "backtest", "-s", "mean-reversion", "-p", "30d"])
     elif choice == "4":
-        subprocess.run(["polyterm", "backtest", "-s", "whale-follow", "-p", "30d"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "backtest", "-s", "whale-follow", "-p", "30d"])
     elif choice == "5":
-        subprocess.run(["polyterm", "backtest", "-s", "contrarian", "-p", "30d"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "backtest", "-s", "contrarian", "-p", "30d"])

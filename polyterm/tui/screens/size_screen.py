@@ -1,6 +1,7 @@
 """Size Screen - Position size calculator"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 
@@ -21,6 +22,6 @@ def run_size_screen(console: Console):
     console.print()
 
     try:
-        subprocess.run(["polyterm", "size", "-i"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "size", "-i"])
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")

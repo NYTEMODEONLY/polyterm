@@ -1,6 +1,7 @@
 """TUI Screen for P&L Tracker"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -35,4 +36,4 @@ def run_pnl_screen(console: Console):
     period = periods.get(choice, "month")
 
     console.print()
-    subprocess.run(["polyterm", "pnl", "--period", period, "--detailed"])
+    subprocess.run([sys.executable, "-m", "polyterm.cli.main", "pnl", "--period", period, "--detailed"])

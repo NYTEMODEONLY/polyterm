@@ -1,6 +1,7 @@
 """TUI Screen for Scenario Analysis"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -30,10 +31,10 @@ def run_scenario_screen(console: Console):
 
     if choice == "1":
         console.print()
-        subprocess.run(["polyterm", "scenario", "--portfolio"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "scenario", "--portfolio"])
 
     elif choice == "2":
         console.print()
         market = Prompt.ask("[cyan]Enter market name[/cyan]")
         if market:
-            subprocess.run(["polyterm", "scenario", "--market", market])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "scenario", "--market", market])

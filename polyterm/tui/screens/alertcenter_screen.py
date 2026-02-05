@@ -1,6 +1,7 @@
 """TUI Screen for Alert Center"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -32,16 +33,16 @@ def run_alertcenter_screen(console: Console):
 
     if choice == "1":
         console.print()
-        subprocess.run(["polyterm", "center"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "center"])
 
     elif choice == "2":
         console.print()
-        subprocess.run(["polyterm", "center", "--check"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "center", "--check"])
 
     elif choice == "3":
         console.print()
-        subprocess.run(["polyterm", "center", "--all"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "center", "--all"])
 
     elif choice == "4":
         console.print()
-        subprocess.run(["polyterm", "center", "--clear"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "center", "--clear"])

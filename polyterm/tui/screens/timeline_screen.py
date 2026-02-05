@@ -1,6 +1,7 @@
 """TUI Screen for Event Timeline"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -32,16 +33,16 @@ def run_timeline_screen(console: Console):
 
     if choice == "1":
         console.print()
-        subprocess.run(["polyterm", "timeline", "--days", "7"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "timeline", "--days", "7"])
 
     elif choice == "2":
         console.print()
-        subprocess.run(["polyterm", "timeline", "--days", "30"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "timeline", "--days", "30"])
 
     elif choice == "3":
         console.print()
-        subprocess.run(["polyterm", "timeline", "--days", "90"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "timeline", "--days", "90"])
 
     elif choice == "4":
         console.print()
-        subprocess.run(["polyterm", "timeline", "--bookmarked"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "timeline", "--bookmarked"])

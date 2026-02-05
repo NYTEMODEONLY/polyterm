@@ -273,6 +273,8 @@ class OrderBookAnalyzer:
                 'available': size - remaining,
             }
 
+        if size <= 0:
+            return {'error': 'Invalid size', 'available': 0}
         avg_price = total_cost / size
         best_price = parsed[0].price
         slippage = abs(avg_price - best_price)
@@ -435,15 +437,20 @@ class OrderBookAnalyzer:
         for side, levels in [('bid', bids), ('ask', asks)]:
             size_counts = {}
             for level in levels:
-                if isinstance(level, list) and len(level) >= 2:
+                if isinstance(level, dict):
+                    size = safe_float(level.get('size', level.get('amount', 0)))
+                    price = safe_float(level.get('price', 0))
+                elif isinstance(level, list) and len(level) >= 2:
                     size = safe_float(level[1])
                     price = safe_float(level[0])
+                else:
+                    continue
 
-                    # Round size to detect similar sizes
-                    rounded = round(size, -2)  # Round to nearest 100
-                    if rounded not in size_counts:
-                        size_counts[rounded] = []
-                    size_counts[rounded].append(price)
+                # Round size to detect similar sizes
+                rounded = round(size, -2)  # Round to nearest 100
+                if rounded not in size_counts:
+                    size_counts[rounded] = []
+                size_counts[rounded].append(price)
 
             # Flag sizes that appear multiple times
             for size, prices in size_counts.items():

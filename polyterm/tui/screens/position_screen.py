@@ -1,6 +1,7 @@
 """TUI Screen for Position Tracking"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -35,22 +36,22 @@ def run_position_screen(console: Console):
     if choice == "1":
         # List all positions
         console.print()
-        subprocess.run(["polyterm", "position", "--list"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "position", "--list"])
 
     elif choice == "2":
         # Open positions
         console.print()
-        subprocess.run(["polyterm", "position", "--list", "--open"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "position", "--list", "--open"])
 
     elif choice == "3":
         # Closed positions
         console.print()
-        subprocess.run(["polyterm", "position", "--list", "--closed"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "position", "--list", "--closed"])
 
     elif choice == "4":
         # Add position interactively
         console.print()
-        subprocess.run(["polyterm", "position", "--interactive"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "position", "--interactive"])
 
     elif choice == "5":
         # Close position
@@ -58,11 +59,11 @@ def run_position_screen(console: Console):
         pos_id = Prompt.ask("[cyan]Position ID to close[/cyan]", default="")
         if pos_id:
             try:
-                subprocess.run(["polyterm", "position", "--close", pos_id])
+                subprocess.run([sys.executable, "-m", "polyterm.cli.main", "position", "--close", pos_id])
             except ValueError:
                 console.print("[red]Invalid position ID[/red]")
 
     elif choice == "6":
         # P&L summary
         console.print()
-        subprocess.run(["polyterm", "position", "--summary"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "position", "--summary"])

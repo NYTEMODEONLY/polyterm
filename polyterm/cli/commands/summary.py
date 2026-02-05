@@ -48,11 +48,15 @@ def summary(ctx, market_search, output_format):
     title = market.get('question', market.get('title', ''))
     price = _get_price(market)
     volume_24h = market.get('volume24hr', market.get('volume24h', 0)) or 0
-    change = market.get('priceChange24h', 0)
+    change = float(market.get('priceChange24h', 0) or 0)
 
     if not change:
         prev = market.get('price24hAgo', 0)
-        if prev and prev > 0:
+        try:
+            prev = float(prev) if prev else 0
+        except (ValueError, TypeError):
+            prev = 0
+        if prev > 0:
             change = (price - prev) / prev
 
     if output_format == 'json':

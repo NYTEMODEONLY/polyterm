@@ -1,6 +1,7 @@
 """Compare Screen - Compare markets side by side"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 
@@ -20,6 +21,6 @@ def run_compare_screen(console: Console):
     console.print()
 
     try:
-        subprocess.run(["polyterm", "compare", "-i"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "compare", "-i"])
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")

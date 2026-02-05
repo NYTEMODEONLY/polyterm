@@ -1,6 +1,7 @@
 """TUI Screen for Market Snapshots"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -33,28 +34,28 @@ def run_snapshot_screen(console: Console):
 
     if choice == "1":
         console.print()
-        subprocess.run(["polyterm", "snapshot", "--list"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "snapshot", "--list"])
 
     elif choice == "2":
         console.print()
         market = Prompt.ask("[cyan]Market to snapshot[/cyan]")
         if market:
-            subprocess.run(["polyterm", "snapshot", "--save", market])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "snapshot", "--save", market])
 
     elif choice == "3":
         console.print()
         snap_id = Prompt.ask("[cyan]Snapshot ID[/cyan]")
         if snap_id:
-            subprocess.run(["polyterm", "snapshot", "--view", snap_id])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "snapshot", "--view", snap_id])
 
     elif choice == "4":
         console.print()
         snap_id = Prompt.ask("[cyan]Snapshot ID to compare[/cyan]")
         if snap_id:
-            subprocess.run(["polyterm", "snapshot", "--compare", snap_id])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "snapshot", "--compare", snap_id])
 
     elif choice == "5":
         console.print()
         snap_id = Prompt.ask("[cyan]Snapshot ID to delete[/cyan]")
         if snap_id:
-            subprocess.run(["polyterm", "snapshot", "--delete", snap_id])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "snapshot", "--delete", snap_id])

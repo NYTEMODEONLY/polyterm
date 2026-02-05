@@ -374,7 +374,7 @@ class MarketRiskScorer:
             'A': 'green',
             'B': 'bright_green',
             'C': 'yellow',
-            'D': 'orange1',
+            'D': 'bright_red',
             'F': 'red',
         }
         return colors.get(grade, 'white')

@@ -1,6 +1,7 @@
 """TUI Screen for Portfolio Health"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -30,8 +31,8 @@ def run_health_screen(console: Console):
 
     if choice == "1":
         console.print()
-        subprocess.run(["polyterm", "health"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "health"])
 
     elif choice == "2":
         console.print()
-        subprocess.run(["polyterm", "health", "--detailed"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "health", "--detailed"])

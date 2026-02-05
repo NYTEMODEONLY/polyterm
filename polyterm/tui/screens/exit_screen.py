@@ -1,6 +1,7 @@
 """TUI Screen for Exit Strategy Planner"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -30,8 +31,8 @@ def run_exit_screen(console: Console):
 
     if choice == "1":
         console.print()
-        subprocess.run(["polyterm", "exit", "--interactive"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "exit", "--interactive"])
 
     elif choice == "2":
         console.print()
-        subprocess.run(["polyterm", "exit", "--list"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "exit", "--list"])

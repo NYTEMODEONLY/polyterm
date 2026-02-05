@@ -1,6 +1,7 @@
 """TUI Screen for Leaderboard"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -34,7 +35,7 @@ def run_leaderboard_screen(console: Console):
     console.print()
 
     if choice == "5":
-        subprocess.run(["polyterm", "leaderboard", "--me"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "leaderboard", "--me"])
         return
 
     type_map = {
@@ -64,4 +65,4 @@ def run_leaderboard_screen(console: Console):
     period = period_map.get(period_choice, "7d")
 
     console.print()
-    subprocess.run(["polyterm", "leaderboard", "-t", board_type, "-p", period])
+    subprocess.run([sys.executable, "-m", "polyterm.cli.main", "leaderboard", "-t", board_type, "-p", period])

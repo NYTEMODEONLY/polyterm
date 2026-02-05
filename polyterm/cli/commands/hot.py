@@ -170,12 +170,19 @@ def _get_price_change(market: dict) -> float:
     """Get 24h price change"""
     price_change = market.get('priceChange24h', 0)
     if price_change:
-        return price_change
+        try:
+            return float(price_change)
+        except (ValueError, TypeError):
+            pass
 
     # Try calculating from other fields
     current = _get_price(market)
     prev = market.get('price24hAgo', 0)
-    if prev and prev > 0:
+    try:
+        prev = float(prev) if prev else 0
+    except (ValueError, TypeError):
+        prev = 0
+    if prev > 0:
         return (current - prev) / prev
 
     return 0

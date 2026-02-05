@@ -316,11 +316,15 @@ def _analyze_liquidity(liquidity: float, volume_24h: float) -> tuple:
 
 def _analyze_momentum(market: dict) -> tuple:
     """Analyze momentum factor"""
-    change = market.get('priceChange24h', 0)
+    change = float(market.get('priceChange24h', 0) or 0)
     if not change:
         current = _get_price(market)
         prev = market.get('price24hAgo', 0)
-        if prev and prev > 0:
+        try:
+            prev = float(prev) if prev else 0
+        except (ValueError, TypeError):
+            prev = 0
+        if prev > 0:
             change = (current - prev) / prev
 
     if abs(change) < 0.02:
