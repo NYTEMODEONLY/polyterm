@@ -120,16 +120,16 @@ def _interactive_mode(console: Console):
 def _calculate_sizes(bankroll: float, probability: float, odds: float, kelly_fraction: float) -> dict:
     """Calculate position sizes using various strategies"""
 
-    # Calculate edge
-    # Edge = P(win) * payout - P(loss) * stake
-    # For binary markets: payout on YES = (1 - odds) / odds
-    payout_ratio = (1 - odds) / odds  # How much you win per dollar risked
+    # Calculate edge (net of 2% fee on winnings)
+    # For binary markets: payout on YES = (1 - odds) / odds, net of fee
+    fee_rate = 0.02
+    payout_ratio = (1 - odds) * (1 - fee_rate) / odds  # Net payout per dollar risked
 
     # Expected value
     ev_per_dollar = (probability * payout_ratio) - (1 - probability)
 
     # Kelly Criterion: f* = (bp - q) / b
-    # Where b = odds received on win, p = probability of win, q = probability of loss
+    # Where b = net odds received on win, p = probability of win, q = probability of loss
     kelly_full = (probability * (1 + payout_ratio) - 1) / payout_ratio if payout_ratio > 0 else 0
     kelly_full = max(0, kelly_full)  # Can't be negative
 
@@ -148,7 +148,8 @@ def _calculate_sizes(bankroll: float, probability: float, odds: float, kelly_fra
     # Potential outcomes for fractional Kelly bet
     if fractional_kelly_amount > 0:
         shares_bought = fractional_kelly_amount / odds
-        profit_if_win = shares_bought * (1 - odds)  # Each share pays $1, cost was odds
+        gross_profit = shares_bought * (1 - odds)  # Each share pays $1, cost was odds
+        profit_if_win = gross_profit * (1 - fee_rate)  # Net of 2% fee on winnings
         loss_if_lose = fractional_kelly_amount
         roi_if_win = (profit_if_win / fractional_kelly_amount) * 100 if fractional_kelly_amount > 0 else 0
     else:

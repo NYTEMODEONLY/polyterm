@@ -77,7 +77,7 @@ def calculate_trade(amount: float, price: float, side: str) -> dict:
     loss = -amount  # Lose entire stake if wrong
 
     roi = (net_profit / amount) * 100 if amount > 0 else 0
-    breakeven = price * 1.02  # Need to beat price by fee amount
+    breakeven = price / (0.98 + 0.02 * price)  # Exact breakeven accounting for 2% fee on winnings
 
     # Expected value (assuming market price = fair probability)
     prob = price

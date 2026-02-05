@@ -581,9 +581,11 @@ def _display_trade_analysis(console: Console, market: dict, clob_client: CLOBCli
 
     amount = 100
 
-    # UP scenario
+    # UP scenario (net of 2% fee on winnings)
     up_shares = amount / yes_prob if yes_prob > 0 else 0
-    up_win = up_shares - amount
+    up_gross = up_shares - amount
+    up_fee = max(0, up_gross) * 0.02
+    up_win = up_gross - up_fee
     up_lose = -amount
     up_roi = (up_win / amount) * 100 if amount > 0 else 0
 
@@ -596,9 +598,11 @@ def _display_trade_analysis(console: Console, market: dict, clob_client: CLOBCli
         f"[green]+{up_roi:.0f}%[/green]",
     )
 
-    # DOWN scenario
+    # DOWN scenario (net of 2% fee on winnings)
     down_shares = amount / no_prob if no_prob > 0 else 0
-    down_win = down_shares - amount
+    down_gross = down_shares - amount
+    down_fee = max(0, down_gross) * 0.02
+    down_win = down_gross - down_fee
     down_lose = -amount
     down_roi = (down_win / amount) * 100 if amount > 0 else 0
 

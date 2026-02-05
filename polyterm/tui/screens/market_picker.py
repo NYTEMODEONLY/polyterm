@@ -25,11 +25,13 @@ def fetch_markets(limit: int = 20) -> List[Dict[str, Any]]:
             base_url=config.gamma_base_url,
             api_key=config.gamma_api_key,
         )
-        markets = gamma_client.get_markets(limit=limit)
-        # Filter to active markets
-        markets = [m for m in markets if m.get('active') and not m.get('closed')]
-        gamma_client.close()
-        return markets
+        try:
+            markets = gamma_client.get_markets(limit=limit)
+            # Filter to active markets
+            markets = [m for m in markets if m.get('active') and not m.get('closed')]
+            return markets
+        finally:
+            gamma_client.close()
     except Exception:
         return []
 

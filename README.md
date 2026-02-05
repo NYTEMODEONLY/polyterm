@@ -558,6 +558,23 @@ python -m twine upload dist/*
 
 ---
 
+## What's New in v0.8.2
+
+### Financial Calculation Fixes
+- **Kelly Criterion now accounts for 2% fee**: Position sizing tool (EV, edge, Kelly fraction, profit projections) now uses net payout ratios after Polymarket's 2% fee on winnings — prevents overbetting recommendations
+- **Breakeven formula corrected**: Quick trade breakeven now uses exact formula `price / (0.98 + 0.02 * price)` instead of the approximation `price * 1.02` which was up to 1.6pp wrong at high prices
+- **Crypto 15m trade analysis**: UP/DOWN scenario profits now deduct 2% fee on winnings instead of showing gross figures
+
+### Data Integrity Fixes
+- **JSON double-encoding fixed**: `Wallet.to_dict()` and `Alert.to_dict()` no longer `json.dumps()` nested fields — JSON output now shows proper arrays/objects instead of escaped strings
+- **Tips system**: Just-shown tip preserved after history clear instead of being forgotten
+- **Live monitor crash**: Fixed `TypeError` when `market_title` is None
+- **Market picker resource leak**: `GammaClient` HTTP session now always closed via `try/finally`
+
+### Tests
+- 20 new tests: breakeven formula (6), Kelly with fees (4), crypto fee deduction (2), model serialization (9)
+- Total: 317 tests passing
+
 ## What's New in v0.8.1
 
 ### Critical Bug Fixes
