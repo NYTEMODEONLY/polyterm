@@ -558,6 +558,18 @@ python -m twine upload dist/*
 
 ---
 
+## What's New in v0.7.6
+
+### Bug Fixes
+- **Notification config schema mismatch** - The `notify` command used flat config keys (`notifications.desktop`) that didn't match the default config structure. Added missing defaults so settings persist correctly across sessions
+- **Position command crash** - Missing try-except around JSON parsing of outcome prices in interactive position tracking
+- **Predictions RSI cleanup** - Removed misleading `0.001` fallback for avg_loss in RSI calculation; now correctly uses 0 with the existing guard clause
+
+### Test Suite
+- **183/183 tests passing** (2 skipped for deprecated endpoints)
+
+---
+
 ## What's New in v0.7.5
 
 ### Critical Fixes

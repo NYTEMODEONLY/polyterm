@@ -388,7 +388,7 @@ class PredictionEngine:
         # RSI calculation (14-period)
         period = min(14, len(gains))
         avg_gain = sum(gains[-period:]) / period if gains else 0
-        avg_loss = sum(losses[-period:]) / period if losses else 0.001
+        avg_loss = sum(losses[-period:]) / period if losses else 0
 
         rs = avg_gain / avg_loss if avg_loss > 0 else 100
         rsi = 100 - (100 / (1 + rs))
