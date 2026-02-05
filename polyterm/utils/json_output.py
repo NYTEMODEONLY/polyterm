@@ -7,6 +7,14 @@ from datetime import datetime
 from dataclasses import asdict, is_dataclass
 
 
+def safe_float(value, default=0.0):
+    """Safely convert a value to float, returning default on failure"""
+    try:
+        return float(value) if value else default
+    except (ValueError, TypeError):
+        return default
+
+
 class JSONEncoder(json.JSONEncoder):
     """Custom JSON encoder for PolyTerm data types"""
 
@@ -61,8 +69,8 @@ def format_market_json(market: Dict[str, Any]) -> Dict[str, Any]:
         except Exception:
             outcome_prices = []
 
-    yes_price = float(outcome_prices[0]) if outcome_prices else 0
-    no_price = float(outcome_prices[1]) if len(outcome_prices) > 1 else 1 - yes_price
+    yes_price = safe_float(outcome_prices[0]) if outcome_prices else 0
+    no_price = safe_float(outcome_prices[1]) if len(outcome_prices) > 1 else 1 - yes_price
 
     return {
         'id': market.get('id', market.get('conditionId', '')),
@@ -73,8 +81,8 @@ def format_market_json(market: Dict[str, Any]) -> Dict[str, Any]:
         'yes_price': yes_price,
         'no_price': no_price,
         'probability': yes_price * 100,
-        'volume_24h': float(market.get('volume24hr', market.get('volume24Hr', 0)) or 0),
-        'liquidity': float(market.get('liquidity', 0) or 0),
+        'volume_24h': safe_float(market.get('volume24hr', market.get('volume24Hr', 0))),
+        'liquidity': safe_float(market.get('liquidity', 0)),
         'end_date': market.get('endDate', ''),
         'active': market.get('active', False),
         'closed': market.get('closed', False),
@@ -103,9 +111,9 @@ def format_trade_json(trade: Dict[str, Any]) -> Dict[str, Any]:
         'wallet_address': trade.get('wallet_address', trade.get('maker_address', '')),
         'side': trade.get('side', ''),
         'outcome': trade.get('outcome', ''),
-        'price': float(trade.get('price', 0)),
-        'size': float(trade.get('size', trade.get('amount', 0))),
-        'notional': float(trade.get('notional', 0)),
+        'price': safe_float(trade.get('price', 0)),
+        'size': safe_float(trade.get('size', trade.get('amount', 0))),
+        'notional': safe_float(trade.get('notional', 0)),
         'timestamp': trade.get('timestamp', ''),
         'tx_hash': trade.get('tx_hash', trade.get('transactionHash', '')),
     }
