@@ -558,6 +558,17 @@ python -m twine upload dist/*
 
 ---
 
+## What's New in v0.7.9
+
+### Bug Fixes
+- **Simulator crash prevention** - Interactive mode now validates price bounds (0.01-0.99) preventing ZeroDivisionError when users enter invalid prices
+- **Fee calculator crash prevention** - Added price validation in interactive mode and defense-in-depth guard in calculation function to prevent division by zero on NO-side trades
+
+### Test Suite
+- **183/183 tests passing** (2 skipped for deprecated endpoints)
+
+---
+
 ## What's New in v0.7.8
 
 ### Security
