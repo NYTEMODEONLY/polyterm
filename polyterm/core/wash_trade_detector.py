@@ -146,7 +146,7 @@ class WashTradeDetector:
                 total_weight += weight
             overall_score = int(weighted_score / total_weight) if total_weight > 0 else 0
         else:
-            overall_score = 20  # Default low score if no indicators
+            overall_score = 40  # Default uncertain score when no data available
 
         # Determine risk level
         if overall_score <= 25:

@@ -1162,8 +1162,6 @@ class Database:
             stats = {}
 
             for table in VALID_TABLES:
-                if table not in VALID_TABLES:
-                    continue
                 cursor.execute(f"SELECT COUNT(*) FROM {table}")
                 stats[table] = cursor.fetchone()[0]
 

@@ -217,9 +217,9 @@ def _show_market_details(console: Console, config, db: Database, market_id: str,
 
         # Quick actions
         console.print("[bold yellow]Quick Actions[/bold yellow]")
-        console.print("  [dim]polyterm chart -m \"{title[:30]}\"[/dim] - View price history")
-        console.print("  [dim]polyterm orderbook -m \"{title[:30]}\"[/dim] - View order book")
-        console.print("  [dim]polyterm bookmarks --add \"{market_id}\"[/dim] - Bookmark this market")
+        console.print(f"  [dim]polyterm chart -m \"{title[:30]}\"[/dim] - View price history")
+        console.print(f"  [dim]polyterm orderbook -m \"{title[:30]}\"[/dim] - View order book")
+        console.print(f"  [dim]polyterm bookmarks --add \"{market_id}\"[/dim] - Bookmark this market")
         console.print()
 
     except Exception as e:

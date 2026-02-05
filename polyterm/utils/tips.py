@@ -143,7 +143,8 @@ class TipTracker:
         """Load previously shown tips"""
         try:
             if self.tip_file.exists():
-                self.shown_tips = set(self.tip_file.read_text().strip().split('\n'))
+                content = self.tip_file.read_text().strip()
+                self.shown_tips = set(line for line in content.split('\n') if line)
         except Exception:
             pass
 
@@ -184,9 +185,9 @@ class TipTracker:
         tip = random.choice(available)
         self.shown_tips.add(tip)
 
-        # Keep only last 20 tips in memory
+        # Reset if too many tips tracked (sets are unordered, so just clear)
         if len(self.shown_tips) > 20:
-            self.shown_tips = set(list(self.shown_tips)[-20:])
+            self.shown_tips.clear()
 
         self._save_shown()
         return tip

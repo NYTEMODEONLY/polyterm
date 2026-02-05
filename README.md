@@ -558,6 +558,24 @@ python -m twine upload dist/*
 
 ---
 
+## What's New in v0.8.0
+
+### Bug Fixes
+- **Stats duplicate momentum row** - Removed erroneous duplicate "Momentum" row in Volatility & Trend table that showed trend direction instead of actual momentum
+- **Recent markets quick actions** - Fixed missing f-string interpolation in quick action suggestions (showed literal `{title}` instead of market name)
+- **Bookmarks interactive probability** - Interactive bookmark mode now extracts real probability from market data instead of hardcoding 0%
+- **Compare input validation** - Hours input in interactive compare now handles non-numeric input gracefully instead of crashing
+- **Wash trade detector default score** - Changed default score when no indicators available from 20 (Low) to 40 (Medium/uncertain) to avoid false safety signals
+
+### Code Quality
+- **Database dead code removed** - Removed always-false condition in `get_database_stats()`
+- **Tips tracker fixes** - Fixed empty string bug in tip file loading and replaced meaningless set trimming with proper reset logic
+
+### Test Suite
+- **183/183 tests passing** (2 skipped for deprecated endpoints)
+
+---
+
 ## What's New in v0.7.9
 
 ### Bug Fixes

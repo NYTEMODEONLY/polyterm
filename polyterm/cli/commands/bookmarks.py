@@ -245,8 +245,18 @@ def _interactive_mode(console: Console, db: Database, config):
                         if db.is_bookmarked(market_id):
                             console.print("[yellow]Already bookmarked.[/yellow]")
                         else:
+                            # Extract probability from outcomePrices
+                            outcome_prices = selected.get('outcomePrices', [])
+                            if isinstance(outcome_prices, str):
+                                import json
+                                try:
+                                    outcome_prices = json.loads(outcome_prices)
+                                except (json.JSONDecodeError, ValueError):
+                                    outcome_prices = []
+                            probability = float(outcome_prices[0]) if outcome_prices else 0
+
                             notes = Prompt.ask("[cyan]Add notes (optional)[/cyan]", default="")
-                            db.bookmark_market(market_id, title, selected.get('category', ''), 0, notes)
+                            db.bookmark_market(market_id, title, selected.get('category', ''), probability, notes)
                             console.print(f"[green]Bookmarked: {title[:40]}[/green]")
                 finally:
                     gamma_client.close()

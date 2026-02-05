@@ -364,7 +364,6 @@ def _display_stats(console: Console, title: str, stats_data: dict, snapshots: li
 
     vt_table.add_row("Volatility", f"[{vol_color}]{volatility['level']}[/{vol_color}] ({volatility['std_dev']:.1f}%)")
     vt_table.add_row("Trend", f"[{trend_color}]{trend['direction']}[/{trend_color}] ({trend['daily_change_est']:+.2f}%/day)")
-    vt_table.add_row("Momentum", trend['direction'])
 
     console.print(vt_table)
     console.print()
