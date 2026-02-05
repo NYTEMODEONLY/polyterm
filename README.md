@@ -558,6 +558,25 @@ python -m twine upload dist/*
 
 ---
 
+## What's New in v0.7.5
+
+### Critical Fixes
+- **Arbitrage fee calculations corrected** - Intra-market arb was overcharging fees (2% on full $1 payout instead of 2% on winnings only). Correlated market arb was double-charging fees on both sides instead of just the winning position
+- **Correlation engine now functional** - `find_correlated_markets()` was completely broken due to an empty market_ids placeholder; now queries database for all tracked markets
+- **Prediction signals: buy/sell classification fixed** - Whale and smart money signals were misclassifying trades using OR logic (`side == 'BUY' or outcome == 'YES'`), counting every YES-outcome trade as a buy regardless of actual direction
+
+### Bug Fixes
+- **Charts Y-axis labels fixed** - Probabilities >= 100% were displayed as raw values (e.g., "1%" instead of "100%")
+- **Orderbook slippage division-by-zero** - Added guard when best_price is 0
+- **TUI screen crash protection** - Screen errors now return to menu instead of crashing the entire TUI
+- **Live monitor cleanup** - Replaced `os._exit(0)` with proper `sys.exit(0)` to prevent resource leaks and zombie processes
+- **Menu pagination** - Fixed unnecessary redraws when pressing next on last page or back on first page
+
+### Test Suite
+- **183/183 tests passing** (2 skipped for deprecated endpoints)
+
+---
+
 ## What's New in v0.7.4
 
 ### Critical Fixes

@@ -249,7 +249,13 @@ class TUIController:
                     self.quit()
                 # Dispatch to screen via lookup table
                 elif choice in SCREEN_ROUTES:
-                    SCREEN_ROUTES[choice](self.console)
+                    try:
+                        SCREEN_ROUTES[choice](self.console)
+                    except KeyboardInterrupt:
+                        self.console.print("\n[yellow]Interrupted.[/yellow]")
+                    except Exception as e:
+                        self.console.print(f"\n[red]Error: {e}[/red]")
+
                 else:
                     self.console.print("[red]Invalid choice. Try again.[/red]")
 

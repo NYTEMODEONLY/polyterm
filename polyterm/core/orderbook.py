@@ -275,7 +275,7 @@ class OrderBookAnalyzer:
         avg_price = total_cost / size
         best_price = parsed[0].price
         slippage = abs(avg_price - best_price)
-        slippage_pct = (slippage / best_price) * 100
+        slippage_pct = (slippage / best_price) * 100 if best_price > 0 else 0
 
         return {
             'side': side,

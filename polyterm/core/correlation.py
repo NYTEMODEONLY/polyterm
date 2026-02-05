@@ -283,10 +283,11 @@ class CorrelationEngine:
         # Get all markets with snapshot data
         all_snapshots = self.db.get_market_history(market_id, hours=hours * 24)
 
-        # Get unique market IDs from database
-        # In a real implementation, we'd query for all markets
-        market_ids = set()
-        # This is a placeholder - in production you'd get all tracked markets
+        # Get unique market IDs from database snapshots
+        with self.db._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT DISTINCT market_id FROM market_snapshots")
+            market_ids = {row[0] for row in cursor.fetchall()}
 
         for other_id in market_ids:
             if other_id == market_id:
