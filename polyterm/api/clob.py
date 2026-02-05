@@ -46,7 +46,10 @@ class CLOBClient:
                     wait = min(2 ** attempt * 2, 30)
                     retry_after = response.headers.get('Retry-After')
                     if retry_after:
-                        wait = min(int(retry_after), 60)
+                        try:
+                            wait = min(int(retry_after), 60)
+                        except (ValueError, TypeError):
+                            pass  # Keep default exponential backoff
                     _time.sleep(wait)
                     continue
 
@@ -66,7 +69,7 @@ class CLOBClient:
                     continue
                 raise
 
-        return response
+        raise Exception(f"API request failed after {retries} retries: {url}")
 
     # REST API Methods
 
@@ -108,9 +111,9 @@ class CLOBClient:
             Ticker with last price, volume, etc.
         """
         url = f"{self.rest_endpoint}/ticker/{market_id}"
-        
+
         try:
-            response = self.session.get(url)
+            response = self._request("GET", url)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
@@ -130,7 +133,7 @@ class CLOBClient:
         params = {"limit": limit}
         
         try:
-            response = self.session.get(url, params=params)
+            response = self._request("GET", url, params=params)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
@@ -148,7 +151,7 @@ class CLOBClient:
         url = f"{self.rest_endpoint}/depth/{market_id}"
         
         try:
-            response = self.session.get(url)
+            response = self._request("GET", url)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
@@ -344,7 +347,7 @@ class CLOBClient:
         params = {"limit": limit}
         
         try:
-            response = self.session.get(url, params=params)
+            response = self._request("GET", url, params=params)
             response.raise_for_status()
             data = response.json()
             return data.get('data', [])

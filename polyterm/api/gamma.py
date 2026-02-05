@@ -58,7 +58,10 @@ class GammaClient:
                     wait_time = min(2 ** attempt * 2, 30)
                     retry_after = response.headers.get('Retry-After')
                     if retry_after:
-                        wait_time = min(int(retry_after), 60)
+                        try:
+                            wait_time = min(int(retry_after), 60)
+                        except (ValueError, TypeError):
+                            pass  # Keep default exponential backoff
                     import time
                     time.sleep(wait_time)
                     continue

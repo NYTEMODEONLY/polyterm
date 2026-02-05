@@ -15,7 +15,7 @@ import sys
 import json
 import asyncio
 from typing import Optional, Dict, Any, List
-from datetime import datetime
+from datetime import datetime, timezone
 from dataclasses import dataclass
 import threading
 
@@ -78,6 +78,7 @@ class NotificationConfig:
                 'smtp_host': self.smtp_host,
                 'smtp_port': self.smtp_port,
                 'smtp_user': self.smtp_user,
+                'smtp_password': self.smtp_password,
                 'email_to': self.email_to,
             },
         }
@@ -171,7 +172,13 @@ class NotificationManager:
                 'critical': '🚨',
             }.get(level, 'ℹ️')
 
-            text = f"{level_emoji} *{title}*\n\n{message}"
+            # Escape Markdown special characters in dynamic content
+            def _escape_md(s: str) -> str:
+                for ch in ('_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!'):
+                    s = s.replace(ch, f'\\{ch}')
+                return s
+
+            text = f"{level_emoji} *{_escape_md(title)}*\n\n{_escape_md(message)}"
 
             url = f"https://api.telegram.org/bot{self.config.telegram_bot_token}/sendMessage"
             payload = {
@@ -210,7 +217,7 @@ class NotificationManager:
                 'title': title,
                 'description': message,
                 'color': colors.get(level, 0x3498db),
-                'timestamp': datetime.utcnow().isoformat(),
+                'timestamp': datetime.now(timezone.utc).isoformat(),
                 'footer': {'text': 'PolyTerm Alert'},
             }
 
