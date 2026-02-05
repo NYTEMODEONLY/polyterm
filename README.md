@@ -558,6 +558,18 @@ python -m twine upload dist/*
 
 ---
 
+## What's New in v0.7.4
+
+### Critical Fixes
+- **MyWallet: Removed broken SubgraphClient dependency** - The PolyMarket Subgraph was deprecated by The Graph, leaving `mywallet` completely non-functional. Now uses local database for position/trade tracking instead
+- **Chart: Fixed misleading synthetic data** - When no price history exists, charts now show an honest flat line at current price instead of fabricating a fake dip-recovery pattern
+- **Market freshness: Fixed perpetual market detection** - Open-ended markets without end dates (e.g., "Will X happen?") were incorrectly flagged as stale; now checks the `active` flag as fallback
+
+### Test Suite
+- **183/183 tests passing** (2 skipped for deprecated endpoints)
+
+---
+
 ## What's New in v0.7.3
 
 ### Performance

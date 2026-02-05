@@ -99,15 +99,13 @@ def chart(ctx, market, time_hours, width, height, sparkline, output_format):
         # Get price history from database
         snapshots = db.get_market_history(market_id, hours=time_hours)
 
-        # If no history in DB, generate simulated data from current price
+        # If no history in DB, show flat line at current price
         if not snapshots or len(snapshots) < 2:
-            console.print("[yellow]Limited price history available. Showing current data.[/yellow]")
+            console.print("[yellow]No price history available. Showing current price only.[/yellow]")
 
-            # Create minimal chart data (using current_price from above)
             now = datetime.now()
             prices = [
-                (now - timedelta(hours=time_hours), current_price * 0.98),
-                (now - timedelta(hours=time_hours//2), current_price),
+                (now - timedelta(hours=time_hours), current_price),
                 (now, current_price),
             ]
         else:

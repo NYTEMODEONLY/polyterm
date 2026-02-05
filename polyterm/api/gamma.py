@@ -265,7 +265,10 @@ class GammaClient:
         try:
             end_date_str = market.get('endDate', market.get('end_date_iso', ''))
             if not end_date_str:
-                # No date info and no flags - consider stale
+                # No date info - check if market has active flag as fallback
+                # Perpetual/open-ended markets may not have end dates
+                if is_active is not None:
+                    return bool(is_active)
                 return False
 
             # Parse ISO date
