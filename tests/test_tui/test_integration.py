@@ -37,24 +37,32 @@ def test_tui_quit_command(mock_console_class, mock_display_logo):
 
 
 @patch('polyterm.tui.controller.display_logo')
-@patch('polyterm.tui.controller.help_screen')
 @patch('polyterm.tui.controller.Console')
-def test_tui_help_command(mock_console_class, mock_help_screen, mock_display_logo):
+def test_tui_help_command(mock_console_class, mock_display_logo):
     """Test TUI shows help on 'h' command"""
+    from polyterm.tui.controller import SCREEN_ROUTES
     mock_console = Mock()
     mock_console_class.return_value = mock_console
-    
+
     mock_menu = Mock()
     mock_menu.get_choice.side_effect = ['h', 'q']
-    
-    # Mock input to return to menu
-    with patch('builtins.input', return_value=''):
-        controller = TUIController()
-        controller.menu = mock_menu
-        controller.run()
-    
-    # Should have called help screen
-    assert mock_help_screen.called
+
+    mock_help = Mock()
+    original = SCREEN_ROUTES['h']
+    SCREEN_ROUTES['h'] = mock_help
+    SCREEN_ROUTES['?'] = mock_help
+    try:
+        # Mock input to return to menu
+        with patch('builtins.input', return_value=''):
+            controller = TUIController()
+            controller.menu = mock_menu
+            controller.run()
+
+        # Should have called help screen
+        assert mock_help.called
+    finally:
+        SCREEN_ROUTES['h'] = original
+        SCREEN_ROUTES['?'] = original
 
 
 @patch('polyterm.tui.controller.display_logo')
@@ -98,30 +106,36 @@ def test_tui_keyboard_interrupt(mock_console_class, mock_display_logo):
 
 
 @patch('polyterm.tui.controller.display_logo')
-@patch('polyterm.tui.controller.monitor_screen')
 @patch('polyterm.tui.controller.Console')
-def test_tui_monitor_navigation(mock_console_class, mock_monitor_screen, mock_display_logo):
+def test_tui_monitor_navigation(mock_console_class, mock_display_logo):
     """Test TUI navigates to monitor screen"""
+    from polyterm.tui.controller import SCREEN_ROUTES
     mock_console = Mock()
     mock_console_class.return_value = mock_console
-    
+
     mock_menu = Mock()
     mock_menu.get_choice.side_effect = ['1', 'q']
-    
-    with patch('builtins.input', return_value=''):
-        controller = TUIController()
-        controller.menu = mock_menu
-        controller.run()
-    
-    # Should have called monitor screen
-    assert mock_monitor_screen.called
+
+    mock_monitor = Mock()
+    original = SCREEN_ROUTES['1']
+    SCREEN_ROUTES['1'] = mock_monitor
+    try:
+        with patch('builtins.input', return_value=''):
+            controller = TUIController()
+            controller.menu = mock_menu
+            controller.run()
+
+        # Should have called monitor screen
+        assert mock_monitor.called
+    finally:
+        SCREEN_ROUTES['1'] = original
 
 
 @patch('polyterm.tui.controller.display_logo')
-@patch('polyterm.tui.controller.whales_screen')
 @patch('polyterm.tui.controller.Console')
-def test_tui_whales_navigation(mock_console_class, mock_whales_screen, mock_display_logo):
+def test_tui_whales_navigation(mock_console_class, mock_display_logo):
     """Test TUI navigates to whales screen"""
+    from polyterm.tui.controller import SCREEN_ROUTES
     mock_console = Mock()
     mock_console_class.return_value = mock_console
 
@@ -129,32 +143,44 @@ def test_tui_whales_navigation(mock_console_class, mock_whales_screen, mock_disp
     # Whales is now option 3 (option 2 is live monitor)
     mock_menu.get_choice.side_effect = ['3', 'q']
 
-    with patch('builtins.input', return_value=''):
-        controller = TUIController()
-        controller.menu = mock_menu
-        controller.run()
+    mock_whales = Mock()
+    original = SCREEN_ROUTES['3']
+    SCREEN_ROUTES['3'] = mock_whales
+    try:
+        with patch('builtins.input', return_value=''):
+            controller = TUIController()
+            controller.menu = mock_menu
+            controller.run()
 
-    # Should have called whales screen
-    assert mock_whales_screen.called
+        # Should have called whales screen
+        assert mock_whales.called
+    finally:
+        SCREEN_ROUTES['3'] = original
 
 
 @patch('polyterm.tui.controller.display_logo')
 @patch('polyterm.tui.controller.Console')
 def test_tui_alternative_shortcuts(mock_console_class, mock_display_logo):
     """Test TUI accepts alternative shortcuts"""
+    from polyterm.tui.controller import SCREEN_ROUTES
     mock_console = Mock()
     mock_console_class.return_value = mock_console
-    
+
     mock_menu = Mock()
-    
+
     # Test 'mon' for monitor ('m' is now used for menu pagination)
-    with patch('polyterm.tui.controller.monitor_screen') as mock_monitor:
+    mock_monitor = Mock()
+    original = SCREEN_ROUTES['mon']
+    SCREEN_ROUTES['mon'] = mock_monitor
+    try:
         mock_menu.get_choice.side_effect = ['mon', 'q']
-        
+
         with patch('builtins.input', return_value=''):
             controller = TUIController()
             controller.menu = mock_menu
             controller.run()
-        
+
         assert mock_monitor.called
+    finally:
+        SCREEN_ROUTES['mon'] = original
 

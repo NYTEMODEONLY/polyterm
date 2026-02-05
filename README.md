@@ -558,6 +558,23 @@ python -m twine upload dist/*
 
 ---
 
+## What's New in v0.7.1
+
+### Architecture Improvements
+- **TUI dispatch table refactor** - Replaced 77-line elif chain with O(1) dictionary dispatch for all 80+ screen routes
+- **Database auto-cleanup** - Automatic pruning of old records (>30 days) when database exceeds 10,000 rows, preventing unbounded growth
+- **WebSocket auto-reconnection** - Live monitor reconnects automatically with exponential backoff (up to 5 attempts) and re-subscribes to trade feeds
+
+### Bug Fixes
+- **Fixed order book depth calculation** - Now correctly shows share depth (not notional value) in `bid_depth`/`ask_depth` fields, with separate notional tracking
+- **Fixed UMA tracker timezone crash** - Resolved `TypeError` when comparing timezone-aware and naive datetimes in resolution risk analysis
+
+### Test Suite
+- **183/183 tests passing** (2 skipped for deprecated endpoints)
+- Updated TUI integration tests to work with new dispatch table pattern
+
+---
+
 ## What's New in v0.7.0
 
 ### Bug Fixes

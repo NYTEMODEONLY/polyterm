@@ -21,6 +21,7 @@ class Database:
 
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
+        self._auto_cleanup()
 
     @contextmanager
     def _get_connection(self):
@@ -1106,6 +1107,20 @@ class Database:
 
         wallet.updated_at = datetime.now()
         self.upsert_wallet(wallet)
+
+    def _auto_cleanup(self):
+        """Run cleanup on startup if database has grown large"""
+        try:
+            stats = self.get_database_stats()
+            total_rows = sum(stats.values())
+            # Only run cleanup if database has significant data (>10k rows)
+            if total_rows > 10000:
+                deleted = self.cleanup_old_data(days=30)
+                if deleted > 0:
+                    import logging
+                    logging.getLogger(__name__).info(f"Auto-cleanup removed {deleted} old records")
+        except Exception:
+            pass  # Don't fail startup over cleanup
 
     def cleanup_old_data(self, days: int = 30) -> int:
         """Clean up old data to prevent database bloat"""
