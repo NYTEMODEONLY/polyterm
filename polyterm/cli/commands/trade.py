@@ -247,7 +247,7 @@ def _get_yes_price(market: dict) -> float:
             return float(prices[0]) if prices else 0.5
         except Exception:
             pass
-    return market.get('bestAsk', market.get('lastTradePrice', 0.5))
+    return float(market.get('bestAsk', market.get('lastTradePrice', 0.5)) or 0.5)
 
 
 def _analyze_trade(amount: float, side: str, yes_price: float, orderbook: dict) -> dict:

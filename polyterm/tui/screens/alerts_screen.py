@@ -1,6 +1,7 @@
 """Alerts Screen - View and manage alerts"""
 
 import subprocess
+import sys
 from rich.panel import Panel
 from rich.console import Console as RichConsole
 from rich.table import Table
@@ -50,7 +51,7 @@ def alerts_screen(console: RichConsole):
 
         console.print("[green]Fetching alerts...[/green]")
         console.print()
-        cmd = ["polyterm", "alerts", f"--limit={limit}"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "alerts", f"--limit={limit}"]
 
     elif choice == '2':
         # Unread only
@@ -64,7 +65,7 @@ def alerts_screen(console: RichConsole):
 
         console.print("[green]Fetching unread alerts...[/green]")
         console.print()
-        cmd = ["polyterm", "alerts", "--unread", f"--limit={limit}"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "alerts", "--unread", f"--limit={limit}"]
 
     elif choice == '3':
         # Filter by type
@@ -88,7 +89,7 @@ def alerts_screen(console: RichConsole):
 
         console.print(f"[green]Fetching {alert_type} alerts...[/green]")
         console.print()
-        cmd = ["polyterm", "alerts", f"--type={alert_type}", f"--limit={limit}"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "alerts", f"--type={alert_type}", f"--limit={limit}"]
 
     elif choice == '4':
         # Acknowledge alert
@@ -104,19 +105,19 @@ def alerts_screen(console: RichConsole):
             console.print("[red]Invalid alert ID[/red]")
             return
 
-        cmd = ["polyterm", "alerts", f"--ack={alert_id}"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "alerts", f"--ack={alert_id}"]
 
     elif choice == '5':
         # Test Telegram
         console.print("[green]Sending Telegram test notification...[/green]")
         console.print()
-        cmd = ["polyterm", "alerts", "--test-telegram"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "alerts", "--test-telegram"]
 
     elif choice == '6':
         # Test Discord
         console.print("[green]Sending Discord test notification...[/green]")
         console.print()
-        cmd = ["polyterm", "alerts", "--test-discord"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "alerts", "--test-discord"]
 
     elif choice == 'b':
         return

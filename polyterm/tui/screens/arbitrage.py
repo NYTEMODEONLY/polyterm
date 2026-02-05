@@ -1,6 +1,7 @@
 """Arbitrage Screen - Scan for arbitrage opportunities"""
 
 import subprocess
+import sys
 from rich.panel import Panel
 from rich.console import Console as RichConsole
 from rich.table import Table
@@ -54,7 +55,7 @@ def arbitrage_screen(console: RichConsole):
     console.print()
 
     # Build and run command
-    cmd = ["polyterm", "arbitrage", f"--min-spread={min_spread}", f"--limit={limit}"]
+    cmd = [sys.executable, "-m", "polyterm.cli.main", "arbitrage", f"--min-spread={min_spread}", f"--limit={limit}"]
     if include_kalshi:
         cmd.append("--include-kalshi")
 

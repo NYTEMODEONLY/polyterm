@@ -558,6 +558,25 @@ python -m twine upload dist/*
 
 ---
 
+## What's New in v0.8.4
+
+### Critical TUI Fixes
+- **Watch screen crash fixed**: Subprocess passed market ID as positional arg (rejected by Click) and used `--refresh` instead of `--interval` — every Watch screen invocation was broken
+- **13 TUI screens fixed**: Alerts, wallets, risk, crypto15m, dashboard, quicktrade, orderbook, bookmarks, follow, parlay, chart, arbitrage, and mywallet screens all used bare `polyterm` command instead of `sys.executable -m polyterm.cli.main` — crashed when polyterm wasn't on system PATH (e.g., virtualenv installs)
+- **Watch screen input validation**: Non-numeric threshold/refresh values now fall back to defaults instead of crashing
+
+### _get_price String-to-Float Bug (21 files)
+- **Fixed across all CLI commands**: The `_get_price()` fallback returned raw API strings (e.g., `"0.65"`) instead of floats — caused `TypeError` on comparisons like `price > 0.7` and `ValueError` on format strings like `f"{price:.0%}"`. Fixed in: ladder, history, alertcenter, snapshot, similar, odds, timing, lookup, hot, exit, spread, summary, analytics, scenario, digest, pin, signals, sentiment, watchdog, trade, groups, correlate, timeline
+
+### Database P&L Fix
+- **Position side case sensitivity**: SQL queries in `get_position_summary` compared `side = 'no'` (lowercase) but positions are stored as `'NO'` (uppercase) — all NO position P&L was calculated inverted. Fixed with `LOWER(side)` and added `exit_price IS NOT NULL` guard
+
+### Other Fixes
+- **Correlation engine**: Removed dead code that fetched snapshots with wrong `hours*24` multiplier and never used the result
+- **Presets command**: Fixed bare `polyterm` subprocess call to use `sys.executable`
+
+---
+
 ## What's New in v0.8.3
 
 ### API Reliability

@@ -1,6 +1,7 @@
 """Dashboard TUI screen"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.prompt import Prompt
 
@@ -9,7 +10,7 @@ def run_dashboard_screen(console: Console):
     """Quick dashboard overview screen"""
     console.clear()
 
-    cmd = ["polyterm", "dashboard"]
+    cmd = [sys.executable, "-m", "polyterm.cli.main", "dashboard"]
 
     try:
         subprocess.run(cmd, capture_output=False)

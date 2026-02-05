@@ -280,9 +280,6 @@ class CorrelationEngine:
         """
         correlations = []
 
-        # Get all markets with snapshot data
-        all_snapshots = self.db.get_market_history(market_id, hours=hours * 24)
-
         # Get unique market IDs from database snapshots
         with self.db._get_connection() as conn:
             cursor = conn.cursor()

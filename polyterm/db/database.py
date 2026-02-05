@@ -670,10 +670,10 @@ class Database:
             cursor.execute("""
                 SELECT COUNT(*),
                        SUM(CASE
-                           WHEN side = 'no' THEN (entry_price - exit_price) * shares
+                           WHEN LOWER(side) = 'no' THEN (entry_price - exit_price) * shares
                            ELSE (exit_price - entry_price) * shares
                        END) as total_pnl
-                FROM positions WHERE status = 'closed'
+                FROM positions WHERE status = 'closed' AND exit_price IS NOT NULL
             """)
             closed_row = cursor.fetchone()
             closed_count = closed_row[0] or 0
@@ -682,18 +682,18 @@ class Database:
             # Won/lost counts (account for side)
             cursor.execute("""
                 SELECT COUNT(*) FROM positions
-                WHERE status = 'closed' AND (
-                    (side != 'no' AND exit_price > entry_price) OR
-                    (side = 'no' AND exit_price < entry_price)
+                WHERE status = 'closed' AND exit_price IS NOT NULL AND (
+                    (LOWER(side) != 'no' AND exit_price > entry_price) OR
+                    (LOWER(side) = 'no' AND exit_price < entry_price)
                 )
             """)
             wins = cursor.fetchone()[0] or 0
 
             cursor.execute("""
                 SELECT COUNT(*) FROM positions
-                WHERE status = 'closed' AND (
-                    (side != 'no' AND exit_price <= entry_price) OR
-                    (side = 'no' AND exit_price >= entry_price)
+                WHERE status = 'closed' AND exit_price IS NOT NULL AND (
+                    (LOWER(side) != 'no' AND exit_price <= entry_price) OR
+                    (LOWER(side) = 'no' AND exit_price >= entry_price)
                 )
             """)
             losses = cursor.fetchone()[0] or 0

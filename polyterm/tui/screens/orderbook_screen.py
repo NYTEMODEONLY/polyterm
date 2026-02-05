@@ -1,6 +1,7 @@
 """Orderbook Screen - Order book analysis and visualization"""
 
 import subprocess
+import sys
 from rich.panel import Panel
 from rich.console import Console as RichConsole
 from rich.table import Table
@@ -146,7 +147,7 @@ def orderbook_screen(console: RichConsole):
     console.print()
 
     # Build and run command
-    cmd = ["polyterm", "orderbook", market_id, f"--depth={depth}"]
+    cmd = [sys.executable, "-m", "polyterm.cli.main", "orderbook", market_id, f"--depth={depth}"]
     if show_chart:
         cmd.append("--chart")
     if slippage:

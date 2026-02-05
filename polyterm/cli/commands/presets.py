@@ -2,6 +2,8 @@
 
 import click
 import json
+import subprocess
+import sys
 from datetime import datetime
 from rich.console import Console
 from rich.panel import Panel
@@ -210,7 +212,6 @@ def _view_preset(console: Console, db: Database, name: str, output_format: str):
 
 def _run_preset(console: Console, db: Database, name: str, output_format: str):
     """Run a saved preset"""
-    import subprocess
 
     preset = db.get_screener_preset(name)
 
@@ -224,7 +225,7 @@ def _run_preset(console: Console, db: Database, name: str, output_format: str):
     filters = json.loads(preset['filters']) if isinstance(preset['filters'], str) else preset['filters']
 
     # Build search command
-    cmd = ["polyterm", "search"]
+    cmd = [sys.executable, "-m", "polyterm.cli.main", "search"]
 
     if filters.get('query'):
         cmd.extend(["--query", filters['query']])
