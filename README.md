@@ -571,13 +571,18 @@ python -m twine upload dist/*
 - **Position tracker price validation** - Entry and exit prices now validated (0.01-0.99) in interactive position mode
 - **Monitor title fallback** - Markets with missing titles now display "Unknown Market" instead of blank rows
 
+### Robustness
+- **Config set() type safety** - Fixed crash when config key path traverses a non-dict value
+- **Safe float conversion** - Added `safe_float()` helper for defensive API data parsing; applied across JSON output utilities
+
 ### Code Quality
 - **Database dead code removed** - Removed always-false condition in `get_database_stats()`
 - **Tips tracker fixes** - Fixed empty string bug in tip file loading and replaced meaningless set trimming with proper reset logic
 - **Live monitor temp file** - Uses PID-based temp file path instead of hardcoded `/tmp/polyterm_live_monitor.py`
 
 ### Test Suite
-- **183/183 tests passing** (2 skipped for deprecated endpoints)
+- **271/271 tests passing** (2 skipped for deprecated endpoints)
+- Added 88 new tests: risk scoring (18), charts (17), wash trade detection (18), config (10), JSON output (25)
 
 ---
 
