@@ -1,6 +1,7 @@
 """TUI Screen for Spread Analysis"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -23,4 +24,4 @@ def run_spread_screen(console: Console):
     amount = Prompt.ask("[cyan]Trade amount (USD)[/cyan]", default="100")
 
     console.print()
-    subprocess.run(["polyterm", "spread", market, "--amount", amount])
+    subprocess.run([sys.executable, "-m", "polyterm.cli.main", "spread", market, "--amount", amount])

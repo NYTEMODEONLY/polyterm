@@ -1,6 +1,7 @@
 """TUI Screen for Watchdog Monitoring"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -33,7 +34,7 @@ def run_watchdog_screen(console: Console):
         default="4"
     )
 
-    args = ["polyterm", "watchdog", "-m", market]
+    args = [sys.executable, "-m", "polyterm.cli.main", "watchdog", "-m", market]
 
     if cond_choice == "1":
         threshold = Prompt.ask("[cyan]Alert when above (e.g., 0.70)[/cyan]")

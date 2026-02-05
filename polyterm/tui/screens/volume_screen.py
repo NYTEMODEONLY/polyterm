@@ -1,6 +1,7 @@
 """TUI Screen for Volume Profile Analysis"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -22,4 +23,4 @@ def run_volume_screen(console: Console):
     levels = Prompt.ask("[cyan]Number of price levels[/cyan]", default="10")
 
     console.print()
-    subprocess.run(["polyterm", "volume", "-m", market, "-l", levels])
+    subprocess.run([sys.executable, "-m", "polyterm.cli.main", "volume", "-m", market, "-l", levels])

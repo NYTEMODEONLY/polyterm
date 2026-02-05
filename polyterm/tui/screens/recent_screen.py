@@ -1,6 +1,7 @@
 """Recent Screen - View recently viewed markets"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 
@@ -17,6 +18,6 @@ def run_recent_screen(console: Console):
     console.print()
 
     try:
-        subprocess.run(["polyterm", "recent"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "recent"])
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")

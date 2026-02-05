@@ -1,6 +1,7 @@
 """TUI Screen for Hot Markets"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -32,16 +33,16 @@ def run_hot_screen(console: Console):
 
     if choice == "1":
         console.print()
-        subprocess.run(["polyterm", "hot"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "hot"])
 
     elif choice == "2":
         console.print()
-        subprocess.run(["polyterm", "hot", "--gainers"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "hot", "--gainers"])
 
     elif choice == "3":
         console.print()
-        subprocess.run(["polyterm", "hot", "--losers"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "hot", "--losers"])
 
     elif choice == "4":
         console.print()
-        subprocess.run(["polyterm", "hot", "--volume"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "hot", "--volume"])

@@ -1,6 +1,7 @@
 """TUI Screen for Watchlist Groups"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -34,36 +35,36 @@ def run_groups_screen(console: Console):
 
     if choice == "1":
         console.print()
-        subprocess.run(["polyterm", "groups", "--list"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "groups", "--list"])
 
     elif choice == "2":
         console.print()
         name = Prompt.ask("[cyan]Group name[/cyan]")
         if name:
-            subprocess.run(["polyterm", "groups", "--create", name])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "groups", "--create", name])
 
     elif choice == "3":
         console.print()
         name = Prompt.ask("[cyan]Group name to view[/cyan]")
         if name:
-            subprocess.run(["polyterm", "groups", "--view", name])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "groups", "--view", name])
 
     elif choice == "4":
         console.print()
         group = Prompt.ask("[cyan]Group name[/cyan]")
         market = Prompt.ask("[cyan]Market to add[/cyan]")
         if group and market:
-            subprocess.run(["polyterm", "groups", "--add", group, "-m", market])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "groups", "--add", group, "-m", market])
 
     elif choice == "5":
         console.print()
         group = Prompt.ask("[cyan]Group name[/cyan]")
         market = Prompt.ask("[cyan]Market to remove[/cyan]")
         if group and market:
-            subprocess.run(["polyterm", "groups", "--remove", group, "-m", market])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "groups", "--remove", group, "-m", market])
 
     elif choice == "6":
         console.print()
         name = Prompt.ask("[cyan]Group name to delete[/cyan]")
         if name:
-            subprocess.run(["polyterm", "groups", "--delete", name])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "groups", "--delete", name])

@@ -1,6 +1,7 @@
 """TUI Screen for Screener Presets"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -34,30 +35,30 @@ def run_presets_screen(console: Console):
     if choice == "1":
         # List presets
         console.print()
-        subprocess.run(["polyterm", "presets", "--list"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "presets", "--list"])
 
     elif choice == "2":
         # Create preset interactively
         console.print()
-        subprocess.run(["polyterm", "presets", "--interactive"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "presets", "--interactive"])
 
     elif choice == "3":
         # Run preset
         console.print()
         name = Prompt.ask("[cyan]Preset name to run[/cyan]", default="")
         if name:
-            subprocess.run(["polyterm", "presets", "--run", name])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "presets", "--run", name])
 
     elif choice == "4":
         # View preset
         console.print()
         name = Prompt.ask("[cyan]Preset name to view[/cyan]", default="")
         if name:
-            subprocess.run(["polyterm", "presets", "--view", name])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "presets", "--view", name])
 
     elif choice == "5":
         # Delete preset
         console.print()
         name = Prompt.ask("[cyan]Preset name to delete[/cyan]", default="")
         if name:
-            subprocess.run(["polyterm", "presets", "--delete", name])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "presets", "--delete", name])

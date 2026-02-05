@@ -72,11 +72,9 @@ class APIAggregator:
             
             if current_markets:
                 logger.info(f"Retrieved {len(current_markets)} markets from CLOB fallback")
-                # Note: CLOB doesn't have volume, so we can't filter by it
-                if not require_volume:
-                    return current_markets
-                else:
-                    logger.warning("CLOB markets don't have volume data")
+                if require_volume:
+                    logger.warning("CLOB markets may lack volume data, returning anyway as fallback")
+                return current_markets
         except Exception as e:
             logger.error(f"CLOB API failed: {e}")
         

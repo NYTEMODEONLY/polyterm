@@ -1,6 +1,7 @@
 """TUI Screen for Liquidity Depth Analyzer"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -23,6 +24,6 @@ def run_depth_screen(console: Console):
         size = Prompt.ask("[cyan]Trade size to analyze ($)[/cyan]", default="1000")
         console.print()
         try:
-            subprocess.run(["polyterm", "depth", "--market", search, "--size", size])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "depth", "--market", search, "--size", size])
         except Exception:
-            subprocess.run(["polyterm", "depth", "--market", search])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "depth", "--market", search])

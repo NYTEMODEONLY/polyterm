@@ -1,5 +1,6 @@
 """Configuration management for PolyTerm"""
 
+import copy
 import os
 import toml
 from pathlib import Path
@@ -104,14 +105,14 @@ class Config:
                 with open(self.config_path, "r") as f:
                     user_config = toml.load(f)
                 # Merge with defaults
-                config = self.DEFAULT_CONFIG.copy()
+                config = copy.deepcopy(self.DEFAULT_CONFIG)
                 self._deep_merge(config, user_config)
                 return config
             except Exception as e:
                 print(f"Warning: Could not load config from {self.config_path}: {e}")
-                return self.DEFAULT_CONFIG.copy()
+                return copy.deepcopy(self.DEFAULT_CONFIG)
         else:
-            return self.DEFAULT_CONFIG.copy()
+            return copy.deepcopy(self.DEFAULT_CONFIG)
     
     def _deep_merge(self, base: Dict, update: Dict) -> None:
         """Deep merge update dict into base dict"""

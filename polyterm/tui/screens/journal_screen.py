@@ -1,6 +1,7 @@
 """TUI Screen for Trade Journal"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -32,20 +33,20 @@ def run_journal_screen(console: Console):
 
     if choice == "1":
         console.print()
-        subprocess.run(["polyterm", "journal", "--list"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "journal", "--list"])
 
     elif choice == "2":
         console.print()
-        subprocess.run(["polyterm", "journal", "--add"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "journal", "--add"])
 
     elif choice == "3":
         query = Prompt.ask("[cyan]Search query[/cyan]", default="")
         if query:
             console.print()
-            subprocess.run(["polyterm", "journal", "--search", query])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "journal", "--search", query])
 
     elif choice == "4":
         tag = Prompt.ask("[cyan]Tag to filter[/cyan]", default="")
         if tag:
             console.print()
-            subprocess.run(["polyterm", "journal", "--tag", tag])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "journal", "--tag", tag])

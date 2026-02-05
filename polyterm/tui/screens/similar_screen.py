@@ -1,6 +1,7 @@
 """TUI Screen for Similar Markets"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -36,4 +37,4 @@ def run_similar_screen(console: Console):
     selected_type = type_map.get(match_type, "all")
 
     console.print()
-    subprocess.run(["polyterm", "similar", market, "--type", selected_type])
+    subprocess.run([sys.executable, "-m", "polyterm.cli.main", "similar", market, "--type", selected_type])

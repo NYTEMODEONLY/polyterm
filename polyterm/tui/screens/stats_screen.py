@@ -1,6 +1,7 @@
 """Stats Screen - View detailed market statistics"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -30,6 +31,6 @@ def run_stats_screen(console: Console):
     console.print()
 
     try:
-        subprocess.run(["polyterm", "stats", "-m", market])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "stats", "-m", market])
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")

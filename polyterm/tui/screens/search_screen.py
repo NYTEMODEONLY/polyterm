@@ -1,6 +1,7 @@
 """Search Screen - Advanced market search with filters"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 
@@ -16,6 +17,6 @@ def run_search_screen(console: Console):
     console.print()
 
     try:
-        subprocess.run(["polyterm", "search", "-i"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "search", "-i"])
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")

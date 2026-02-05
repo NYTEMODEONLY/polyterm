@@ -1,6 +1,7 @@
 """TUI Screen for Timing Analysis"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -20,4 +21,4 @@ def run_timing_screen(console: Console):
         return
 
     console.print()
-    subprocess.run(["polyterm", "timing", market])
+    subprocess.run([sys.executable, "-m", "polyterm.cli.main", "timing", market])

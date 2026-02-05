@@ -1,6 +1,7 @@
 """TUI Screen for Report Generation"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -33,15 +34,15 @@ def run_report_screen(console: Console):
     console.print()
 
     if choice == "1":
-        subprocess.run(["polyterm", "report", "-t", "daily"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "report", "-t", "daily"])
 
     elif choice == "2":
-        subprocess.run(["polyterm", "report", "-t", "weekly"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "report", "-t", "weekly"])
 
     elif choice == "3":
-        subprocess.run(["polyterm", "report", "-t", "portfolio"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "report", "-t", "portfolio"])
 
     elif choice == "4":
         market = Prompt.ask("[cyan]Enter market name[/cyan]")
         if market:
-            subprocess.run(["polyterm", "report", "-t", "market", "-m", market])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "report", "-t", "market", "-m", market])

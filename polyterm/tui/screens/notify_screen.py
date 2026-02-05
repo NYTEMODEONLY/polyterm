@@ -1,6 +1,7 @@
 """TUI Screen for Notification Settings"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -35,29 +36,29 @@ def run_notify_screen(console: Console):
     console.print()
 
     if choice == "1":
-        subprocess.run(["polyterm", "notify", "--status"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "notify", "--status"])
 
     elif choice == "2":
-        subprocess.run(["polyterm", "notify", "--configure"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "notify", "--configure"])
 
     elif choice == "3":
-        subprocess.run(["polyterm", "notify", "--test"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "notify", "--test"])
 
     elif choice == "4":
         action = Prompt.ask("[cyan]Enable or disable?[/cyan]", choices=["enable", "disable"])
         if action == "enable":
-            subprocess.run(["polyterm", "notify", "--enable", "desktop"])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "notify", "--enable", "desktop"])
         else:
-            subprocess.run(["polyterm", "notify", "--disable", "desktop"])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "notify", "--disable", "desktop"])
 
     elif choice == "5":
         action = Prompt.ask("[cyan]Enable or disable?[/cyan]", choices=["enable", "disable"])
         if action == "enable":
-            subprocess.run(["polyterm", "notify", "--enable", "sound"])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "notify", "--enable", "sound"])
         else:
-            subprocess.run(["polyterm", "notify", "--disable", "sound"])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "notify", "--disable", "sound"])
 
     elif choice == "6":
         url = Prompt.ask("[cyan]Webhook URL[/cyan]")
         if url:
-            subprocess.run(["polyterm", "notify", "--webhook", url])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "notify", "--webhook", url])

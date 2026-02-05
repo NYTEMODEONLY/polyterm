@@ -1,6 +1,7 @@
 """TUI Screen for Market Screener"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -33,10 +34,10 @@ def run_screener_screen(console: Console):
     console.print()
 
     if choice == "1":
-        subprocess.run(["polyterm", "screener", "-i"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "screener", "-i"])
     elif choice == "2":
-        subprocess.run(["polyterm", "screener", "-v", "10000", "-s", "volume"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "screener", "-v", "10000", "-s", "volume"])
     elif choice == "3":
-        subprocess.run(["polyterm", "screener", "--min-change", "5", "-s", "change"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "screener", "--min-change", "5", "-s", "change"])
     elif choice == "4":
-        subprocess.run(["polyterm", "screener", "--ending-within", "7", "-s", "end_date"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "screener", "--ending-within", "7", "-s", "end_date"])

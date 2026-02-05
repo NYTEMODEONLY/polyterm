@@ -558,6 +558,23 @@ python -m twine upload dist/*
 
 ---
 
+## What's New in v0.8.5
+
+### Final Sweep Fixes
+- **All 62 TUI screens fixed**: Every remaining screen using bare `subprocess.run(["polyterm", ...])` now uses `sys.executable -m polyterm.cli.main` — zero bare `polyterm` subprocess calls remain in the entire codebase. Prevents FileNotFoundError in virtualenv/pipx installs
+- **_get_price_change string-to-float**: 8 files with `priceChange24h`/`price24hAgo` API string values now properly convert to float — prevents TypeError on numeric comparisons and arithmetic
+- **Order book slippage div-by-zero**: `calculate_slippage(size=0)` now returns error dict instead of crashing with `ZeroDivisionError`
+- **Iceberg detection**: Now handles dict-format order book levels (the actual API format) in addition to list format — previously silently returned empty results
+- **Chart Y-axis labels**: `generate_price_chart` no longer shows labels 100x too large (was multiplying price percentage by 100 twice)
+- **Config shallow copy mutation**: `Config._load_config` now uses `copy.deepcopy(DEFAULT_CONFIG)` instead of `dict.copy()` — prevents user config from permanently mutating class defaults in the same process
+- **Aggregator CLOB fallback**: `get_live_markets(require_volume=True)` now returns CLOB data as fallback when Gamma is down — previously discarded valid data and returned empty list
+- **Whale tracker timezone crash**: Insider scoring datetime arithmetic now uses timezone-aware `datetime.now(timezone.utc)` — prevents TypeError when wallet `first_seen` is timezone-aware from API
+- **Rich markup escaping**: `display_error()` now escapes dynamic content with `rich.markup.escape()` — prevents MarkupError when error messages contain bracket characters
+- **Risk score color**: Changed `orange1` extended color to `bright_red` for terminal compatibility
+- **Correlation dead code**: Removed unused snapshot query with wrong `hours*24` multiplier
+
+---
+
 ## What's New in v0.8.4
 
 ### Critical TUI Fixes

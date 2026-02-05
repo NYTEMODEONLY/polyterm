@@ -3,7 +3,7 @@
 import asyncio
 import json
 from typing import Dict, List, Optional, Any, Callable
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 
 from ..db.database import Database
@@ -78,14 +78,14 @@ class WhaleTracker:
         # Get or create trade timestamp
         timestamp = trade_data.get('timestamp')
         if isinstance(timestamp, (int, float)):
-            timestamp = datetime.fromtimestamp(timestamp)
+            timestamp = datetime.fromtimestamp(timestamp, tz=timezone.utc)
         elif isinstance(timestamp, str):
             try:
                 timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
             except Exception:
-                timestamp = datetime.now()
+                timestamp = datetime.now(timezone.utc)
         else:
-            timestamp = datetime.now()
+            timestamp = datetime.now(timezone.utc)
 
         # Create trade record
         trade = Trade(
@@ -291,7 +291,7 @@ class InsiderDetector:
         score = 0
 
         # 1. Wallet age score (newer = riskier)
-        wallet_age_days = (datetime.now() - wallet.first_seen).days
+        wallet_age_days = (datetime.now(timezone.utc) - wallet.first_seen.replace(tzinfo=wallet.first_seen.tzinfo or timezone.utc)).days
         if wallet_age_days < 1:
             score += 25  # Brand new wallet
         elif wallet_age_days < 7:
@@ -335,7 +335,7 @@ class InsiderDetector:
         risk_factors = []
 
         # Check each factor
-        wallet_age_days = (datetime.now() - wallet.first_seen).days
+        wallet_age_days = (datetime.now(timezone.utc) - wallet.first_seen.replace(tzinfo=wallet.first_seen.tzinfo or timezone.utc)).days
         if wallet_age_days < 7:
             risk_factors.append(f"New wallet ({wallet_age_days} days old)")
 
@@ -400,7 +400,7 @@ class InsiderDetector:
         severity = 0
 
         # Signal 1: Fresh wallet with large bet
-        wallet_age_days = (datetime.now() - wallet.first_seen).days
+        wallet_age_days = (datetime.now(timezone.utc) - wallet.first_seen.replace(tzinfo=wallet.first_seen.tzinfo or timezone.utc)).days
         if wallet_age_days < 3 and trade.notional >= 10000:
             signals.append("Fresh wallet with large bet")
             severity += 30

@@ -1,6 +1,7 @@
 """TUI Screen for Market History"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -37,4 +38,4 @@ def run_history_screen(console: Console):
     period = period_map.get(period_choice, "week")
 
     console.print()
-    subprocess.run(["polyterm", "history", market, "--period", period, "--chart"])
+    subprocess.run([sys.executable, "-m", "polyterm.cli.main", "history", market, "--period", period, "--chart"])

@@ -1,6 +1,7 @@
 """TUI Screen for Market Correlation Finder"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -23,6 +24,6 @@ def run_correlate_screen(console: Console):
         limit = Prompt.ask("[cyan]Number of results[/cyan]", default="10")
         console.print()
         try:
-            subprocess.run(["polyterm", "correlate", "--market", search, "--limit", limit])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "correlate", "--market", search, "--limit", limit])
         except Exception:
-            subprocess.run(["polyterm", "correlate", "--market", search])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "correlate", "--market", search])

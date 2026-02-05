@@ -234,11 +234,15 @@ def _get_market_highlights(gamma_client: GammaClient) -> dict:
             title = market.get('question', market.get('title', ''))
 
             # Price change
-            change = market.get('priceChange24h', 0)
+            change = float(market.get('priceChange24h', 0) or 0)
             if not change:
                 current = _get_price(market)
                 prev = market.get('price24hAgo', 0)
-                if prev and prev > 0:
+                try:
+                    prev = float(prev) if prev else 0
+                except (ValueError, TypeError):
+                    prev = 0
+                if prev > 0:
                     change = (current - prev) / prev
 
             if abs(change) > 0.03:

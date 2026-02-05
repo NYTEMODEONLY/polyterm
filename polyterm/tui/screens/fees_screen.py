@@ -1,6 +1,7 @@
 """Fees Screen - Calculate trading fees and slippage"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 
@@ -16,6 +17,6 @@ def run_fees_screen(console: Console):
     console.print()
 
     try:
-        subprocess.run(["polyterm", "fees", "-i"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "fees", "-i"])
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")

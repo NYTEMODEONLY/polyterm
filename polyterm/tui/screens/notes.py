@@ -1,6 +1,7 @@
 """TUI Screen for Market Notes"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -33,25 +34,25 @@ def run_notes_screen(console: Console):
     if choice == "1":
         # List all notes
         console.print()
-        subprocess.run(["polyterm", "notes", "--list"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "notes", "--list"])
 
     elif choice == "2":
         # Add note
         console.print()
         search = Prompt.ask("[cyan]Search for market[/cyan]", default="")
         if search:
-            subprocess.run(["polyterm", "notes", "--add", search])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "notes", "--add", search])
 
     elif choice == "3":
         # View note
         console.print()
         search = Prompt.ask("[cyan]Market ID or search term[/cyan]", default="")
         if search:
-            subprocess.run(["polyterm", "notes", "--view", search])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "notes", "--view", search])
 
     elif choice == "4":
         # Delete note
         console.print()
         market_id = Prompt.ask("[cyan]Market ID to delete note[/cyan]", default="")
         if market_id:
-            subprocess.run(["polyterm", "notes", "--delete", market_id])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "notes", "--delete", market_id])

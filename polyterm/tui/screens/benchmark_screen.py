@@ -1,6 +1,7 @@
 """TUI Screen for Performance Benchmark"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -41,4 +42,4 @@ def run_benchmark_screen(console: Console):
 
     period = period_map.get(choice, "month")
     console.print()
-    subprocess.run(["polyterm", "benchmark", "--period", period, "--detailed"])
+    subprocess.run([sys.executable, "-m", "polyterm.cli.main", "benchmark", "--period", period, "--detailed"])

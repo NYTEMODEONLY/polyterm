@@ -1,6 +1,7 @@
 """TUI Screen for Liquidity Comparison"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -33,15 +34,15 @@ def run_liquidity_screen(console: Console):
     console.print()
 
     if choice == "1":
-        subprocess.run(["polyterm", "liquidity", "-s", "score"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "liquidity", "-s", "score"])
 
     elif choice == "2":
-        subprocess.run(["polyterm", "liquidity", "-s", "spread"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "liquidity", "-s", "spread"])
 
     elif choice == "3":
         category = Prompt.ask("[cyan]Enter category[/cyan]")
         if category:
-            subprocess.run(["polyterm", "liquidity", "-c", category])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "liquidity", "-c", category])
 
     elif choice == "4":
-        subprocess.run(["polyterm", "liquidity", "-v", "10000", "-s", "score"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "liquidity", "-v", "10000", "-s", "score"])

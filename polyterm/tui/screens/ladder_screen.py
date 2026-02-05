@@ -1,6 +1,7 @@
 """TUI Screen for Price Ladder"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -36,4 +37,4 @@ def run_ladder_screen(console: Console):
     selected_side = side_map.get(side_choice, "both")
 
     console.print()
-    subprocess.run(["polyterm", "ladder", market, "--side", selected_side])
+    subprocess.run([sys.executable, "-m", "polyterm.cli.main", "ladder", market, "--side", selected_side])

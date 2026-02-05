@@ -1,6 +1,7 @@
 """TUI Screen for Odds Converter"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -35,26 +36,26 @@ def run_odds_screen(console: Console):
         console.print()
         value = Prompt.ask("[cyan]Enter probability (e.g., 0.65 or 65%)[/cyan]")
         if value:
-            subprocess.run(["polyterm", "odds", value])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "odds", value])
 
     elif choice == "2":
         console.print()
         value = Prompt.ask("[cyan]Enter decimal odds (e.g., 2.5)[/cyan]")
         if value:
-            subprocess.run(["polyterm", "odds", value, "--from", "decimal"])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "odds", value, "--from", "decimal"])
 
     elif choice == "3":
         console.print()
         value = Prompt.ask("[cyan]Enter American odds (e.g., +150)[/cyan]")
         if value:
-            subprocess.run(["polyterm", "odds", value, "--from", "american"])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "odds", value, "--from", "american"])
 
     elif choice == "4":
         console.print()
         market = Prompt.ask("[cyan]Enter market name[/cyan]")
         if market:
-            subprocess.run(["polyterm", "odds", "--market", market])
+            subprocess.run([sys.executable, "-m", "polyterm.cli.main", "odds", "--market", market])
 
     elif choice == "5":
         console.print()
-        subprocess.run(["polyterm", "odds", "-i"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "odds", "-i"])

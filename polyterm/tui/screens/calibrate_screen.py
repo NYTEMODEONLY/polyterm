@@ -1,6 +1,7 @@
 """TUI Screen for Probability Calibration"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -33,13 +34,13 @@ def run_calibrate_screen(console: Console):
     console.print()
 
     if choice == "1":
-        subprocess.run(["polyterm", "calibrate", "--stats"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "calibrate", "--stats"])
 
     elif choice == "2":
-        subprocess.run(["polyterm", "calibrate", "--add"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "calibrate", "--add"])
 
     elif choice == "3":
-        subprocess.run(["polyterm", "calibrate", "--resolve"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "calibrate", "--resolve"])
 
     elif choice == "4":
-        subprocess.run(["polyterm", "calibrate", "--list"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "calibrate", "--list"])

@@ -1,6 +1,7 @@
 """TUI Screen for Portfolio Analytics"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 
@@ -16,4 +17,4 @@ def run_analyze_screen(console: Console):
     console.print("[dim]and recommendations for portfolio balance.[/dim]")
     console.print()
 
-    subprocess.run(["polyterm", "analyze"])
+    subprocess.run([sys.executable, "-m", "polyterm.cli.main", "analyze"])

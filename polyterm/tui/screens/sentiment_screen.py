@@ -1,6 +1,7 @@
 """TUI Screen for Market Sentiment Analysis"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -20,4 +21,4 @@ def run_sentiment_screen(console: Console):
 
     if search:
         console.print()
-        subprocess.run(["polyterm", "sentiment", "--market", search])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "sentiment", "--market", search])

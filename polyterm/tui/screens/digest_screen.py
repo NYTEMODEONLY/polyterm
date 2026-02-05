@@ -1,6 +1,7 @@
 """TUI Screen for Digest Summary"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -39,4 +40,4 @@ def run_digest_screen(console: Console):
 
     period = period_map.get(choice, "today")
     console.print()
-    subprocess.run(["polyterm", "digest", "--period", period])
+    subprocess.run([sys.executable, "-m", "polyterm.cli.main", "digest", "--period", period])

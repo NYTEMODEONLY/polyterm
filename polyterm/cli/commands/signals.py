@@ -361,12 +361,16 @@ def _volume_signal(volume_24h: float, total_volume: float) -> dict:
 
 def _momentum_signal(market: dict) -> dict:
     """Analyze price momentum"""
-    price_change = market.get('priceChange24h', 0)
+    price_change = float(market.get('priceChange24h', 0) or 0)
 
     if not price_change:
         current = _get_price(market)
         prev = market.get('price24hAgo', 0)
-        if prev and prev > 0:
+        try:
+            prev = float(prev) if prev else 0
+        except (ValueError, TypeError):
+            prev = 0
+        if prev > 0:
             price_change = (current - prev) / prev
 
     if price_change > 0.10:  # >10% up
