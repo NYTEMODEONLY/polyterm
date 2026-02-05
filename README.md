@@ -558,6 +558,23 @@ python -m twine upload dist/*
 
 ---
 
+## What's New in v0.8.3
+
+### API Reliability
+- **CLOB retry/timeout on all endpoints**: `get_market_depth` and `get_current_markets` now use `_request()` with retry logic, exponential backoff, and 15s timeout — previously bypassed retries entirely via raw `session.get()`
+- **Retry-After header hardened**: Both CLOB and Gamma clients now safely parse the `Retry-After` HTTP header with `try/except (ValueError, TypeError)` — non-integer values (e.g. HTTP-date format) no longer crash the retry loop
+
+### Notification Fixes
+- **smtp_password preserved in config**: `NotificationConfig.to_dict()` now includes `smtp_password` — previously omitted, causing email notifications to fail after config save/restore round-trip
+- **Telegram Markdown escaping**: Title and message content now escape all Markdown special characters (`_*[]()~>#+-.!=|{}`) before sending — prevents `400 Bad Request` from Telegram API when market titles contain underscores or brackets
+- **Discord UTC timestamp**: Replaced deprecated `datetime.utcnow()` with `datetime.now(timezone.utc)` for timezone-aware ISO timestamps in Discord embeds
+
+### Tests
+- 154 new tests: CLOB client (53), Gamma client (54), notifications (47)
+- Total: 440 tests passing, 2 skipped
+
+---
+
 ## What's New in v0.8.2
 
 ### Financial Calculation Fixes
