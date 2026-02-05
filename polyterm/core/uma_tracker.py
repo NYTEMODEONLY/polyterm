@@ -274,8 +274,15 @@ class UMADisputeTracker:
         if not end_date:
             return 50, "No end date specified"
 
-        now = datetime.now(end_date.tzinfo) if end_date.tzinfo else datetime.now()
-        days_until = (end_date - now).days
+        # Normalize both to naive datetimes to avoid timezone mismatch
+        if end_date.tzinfo is not None:
+            from datetime import timezone
+            now = datetime.now(timezone.utc)
+            # Compare both as UTC
+            days_until = (end_date - now).days
+        else:
+            now = datetime.now()
+            days_until = (end_date - now).days
 
         if days_until < 0:
             return 30, "Market has ended"

@@ -83,6 +83,91 @@ from .screens import (
     run_quicktrade_screen,
 )
 
+# Screen dispatch table: maps shortcut keys to screen functions
+# Each screen function takes a single Console argument
+SCREEN_ROUTES = {
+    # Core screens (numbered)
+    '1': monitor_screen, 'mon': monitor_screen,
+    '2': live_monitor_screen, 'l': live_monitor_screen,
+    '3': whales_screen, 'w': whales_screen,
+    '4': watch_screen,
+    '5': analytics_screen, 'a': analytics_screen,
+    '6': portfolio_screen, 'p': portfolio_screen,
+    '7': export_screen, 'e': export_screen,
+    '8': settings_screen, 's': settings_screen,
+    '9': arbitrage_screen, 'arb': arbitrage_screen,
+    '10': predictions_screen, 'pred': predictions_screen,
+    '11': wallets_screen, 'wal': wallets_screen,
+    '12': alerts_screen, 'alert': alerts_screen,
+    '13': orderbook_screen, 'ob': orderbook_screen,
+    '14': run_risk_screen, 'risk': run_risk_screen,
+    '15': run_follow_screen, 'follow': run_follow_screen, 'copy': run_follow_screen,
+    '16': run_parlay_screen, 'parlay': run_parlay_screen,
+    '17': run_bookmarks_screen, 'bm': run_bookmarks_screen, 'bookmarks': run_bookmarks_screen,
+    # Help and learning
+    'h': help_screen, '?': help_screen,
+    't': tutorial_screen, 'tut': tutorial_screen, 'tutorial': tutorial_screen,
+    'g': glossary_screen, 'gloss': glossary_screen, 'glossary': glossary_screen,
+    'sim': simulate_screen, 'simulate': simulate_screen,
+    # Dashboard and tools
+    'd': run_dashboard_screen, 'dash': run_dashboard_screen, 'dashboard': run_dashboard_screen,
+    'ch': run_chart_screen, 'chart': run_chart_screen,
+    'cmp': run_compare_screen, 'compare': run_compare_screen,
+    'sz': run_size_screen, 'size': run_size_screen,
+    'rec': run_recent_screen, 'recent': run_recent_screen,
+    'pa': run_pricealert_screen, 'pricealert': run_pricealert_screen,
+    'cal': run_calendar_screen, 'calendar': run_calendar_screen,
+    'fee': run_fees_screen, 'fees': run_fees_screen,
+    'st': run_stats_screen, 'stats': run_stats_screen,
+    'sr': run_search_screen, 'search': run_search_screen,
+    'nt': run_notes_screen, 'notes': run_notes_screen,
+    'pos': run_position_screen, 'position': run_position_screen,
+    'pr': run_presets_screen, 'presets': run_presets_screen,
+    'sent': run_sentiment_screen, 'sentiment': run_sentiment_screen,
+    'corr': run_correlate_screen, 'correlate': run_correlate_screen,
+    'ex': run_exit_screen, 'exitplan': run_exit_screen,
+    'dp': run_depth_screen, 'depth': run_depth_screen,
+    'tr': run_trade_screen, 'trade': run_trade_screen,
+    'tl': run_timeline_screen, 'timeline': run_timeline_screen,
+    'an': run_analyze_screen, 'analyze': run_analyze_screen,
+    'jn': run_journal_screen, 'journal': run_journal_screen,
+    'hot': run_hot_screen,
+    'pnl': run_pnl_screen,
+    'ac': run_alertcenter_screen, 'center': run_alertcenter_screen, 'alertcenter': run_alertcenter_screen,
+    'gr': run_groups_screen, 'groups': run_groups_screen,
+    'attr': run_attribution_screen, 'attribution': run_attribution_screen,
+    'snap': run_snapshot_screen, 'snapshot': run_snapshot_screen,
+    'sig': run_signals_screen, 'signals': run_signals_screen,
+    'sml': run_similar_screen, 'similar': run_similar_screen,
+    'lad': run_ladder_screen, 'ladder': run_ladder_screen,
+    'bench': run_benchmark_screen, 'benchmark': run_benchmark_screen,
+    'pin': run_pin_screen, 'pinned': run_pin_screen,
+    'sp': run_spread_screen, 'spread': run_spread_screen,
+    'hist': run_history_screen, 'history': run_history_screen,
+    'stk': run_streak_screen, 'streak': run_streak_screen,
+    'dig': run_digest_screen, 'digest': run_digest_screen,
+    'tm': run_timing_screen, 'timing': run_timing_screen,
+    'od': run_odds_screen, 'odds': run_odds_screen,
+    'hp': run_health_screen, 'health': run_health_screen,
+    'sc': run_scenario_screen, 'scenario': run_scenario_screen,
+    'wd': run_watchdog_screen, 'watchdog': run_watchdog_screen,
+    'vol': run_volume_screen, 'volume': run_volume_screen,
+    'scr': run_screener_screen, 'screener': run_screener_screen,
+    'bt': run_backtest_screen, 'backtest': run_backtest_screen,
+    'rp': run_report_screen, 'report': run_report_screen,
+    'liq': run_liquidity_screen, 'liquidity': run_liquidity_screen,
+    'ev': run_ev_screen,
+    'cb': run_calibrate_screen, 'calibrate': run_calibrate_screen,
+    'qk': run_quick_screen, 'quick': run_quick_screen,
+    'lb': run_leaderboard_screen, 'leaderboard': run_leaderboard_screen,
+    'nf': run_notify_screen, 'notify': run_notify_screen,
+    'c15': run_crypto15m_screen, 'crypto15m': run_crypto15m_screen, '15m': run_crypto15m_screen,
+    'mw': run_mywallet_screen, 'mywallet': run_mywallet_screen, 'wallet': run_mywallet_screen,
+    'qt': run_quicktrade_screen, 'quicktrade': run_quicktrade_screen,
+}
+
+QUIT_COMMANDS = {'q', 'quit', 'exit'}
+
 
 class TUIController:
     """Main TUI controller and event loop"""
@@ -155,182 +240,33 @@ class TUIController:
                     display_logo(self.console)
                     continue
 
-                # Handle menu choices (note: 'm' is now for pagination, use '1' or 'mon' for monitor)
-                if choice == '1' or choice == 'mon':
-                    monitor_screen(self.console)
-                elif choice == '2' or choice == 'l':
-                    live_monitor_screen(self.console)
-                elif choice == '3' or choice == 'w':
-                    whales_screen(self.console)
-                elif choice == '4':
-                    watch_screen(self.console)
-                elif choice == '5' or choice == 'a':
-                    analytics_screen(self.console)
-                elif choice == '6' or choice == 'p':
-                    portfolio_screen(self.console)
-                elif choice == '7' or choice == 'e':
-                    export_screen(self.console)
-                elif choice == '8' or choice == 's':
-                    settings_screen(self.console)
-                elif choice == '9' or choice == 'arb':
-                    arbitrage_screen(self.console)
-                elif choice == '10' or choice == 'pred':
-                    predictions_screen(self.console)
-                elif choice == '11' or choice == 'wal':
-                    wallets_screen(self.console)
-                elif choice == '12' or choice == 'alert':
-                    alerts_screen(self.console)
-                elif choice == '13' or choice == 'ob':
-                    orderbook_screen(self.console)
-                elif choice == 'u' or choice == 'update':
-                    # Quick update option
+                # Handle update command (needs special import)
+                if choice in ('u', 'update'):
                     from .screens.settings import update_polyterm
                     update_polyterm(self.console)
-                elif choice == 'h' or choice == '?':
-                    help_screen(self.console)
-                elif choice == 't' or choice == 'tut' or choice == 'tutorial':
-                    tutorial_screen(self.console)
-                elif choice == 'g' or choice == 'gloss' or choice == 'glossary':
-                    glossary_screen(self.console)
-                elif choice == 'sim' or choice == 'simulate':
-                    simulate_screen(self.console)
-                elif choice == 'risk' or choice == '14':
-                    run_risk_screen(self.console)
-                elif choice == 'follow' or choice == 'copy' or choice == '15':
-                    run_follow_screen(self.console)
-                elif choice == 'parlay' or choice == '16':
-                    run_parlay_screen(self.console)
-                elif choice == 'bm' or choice == 'bookmarks' or choice == '17':
-                    run_bookmarks_screen(self.console)
-                elif choice == 'd' or choice == 'dash' or choice == 'dashboard':
-                    run_dashboard_screen(self.console)
-                elif choice == 'ch' or choice == 'chart':
-                    run_chart_screen(self.console)
-                elif choice == 'cmp' or choice == 'compare':
-                    run_compare_screen(self.console)
-                elif choice == 'sz' or choice == 'size':
-                    run_size_screen(self.console)
-                elif choice == 'rec' or choice == 'recent':
-                    run_recent_screen(self.console)
-                elif choice == 'pa' or choice == 'pricealert':
-                    run_pricealert_screen(self.console)
-                elif choice == 'cal' or choice == 'calendar':
-                    run_calendar_screen(self.console)
-                elif choice == 'fee' or choice == 'fees':
-                    run_fees_screen(self.console)
-                elif choice == 'st' or choice == 'stats':
-                    run_stats_screen(self.console)
-                elif choice == 'sr' or choice == 'search':
-                    run_search_screen(self.console)
-                elif choice == 'nt' or choice == 'notes':
-                    run_notes_screen(self.console)
-                elif choice == 'pos' or choice == 'position':
-                    run_position_screen(self.console)
-                elif choice == 'pr' or choice == 'presets':
-                    run_presets_screen(self.console)
-                elif choice == 'sent' or choice == 'sentiment':
-                    run_sentiment_screen(self.console)
-                elif choice == 'corr' or choice == 'correlate':
-                    run_correlate_screen(self.console)
-                elif choice == 'ex' or choice == 'exitplan':
-                    run_exit_screen(self.console)
-                elif choice == 'dp' or choice == 'depth':
-                    run_depth_screen(self.console)
-                elif choice == 'tr' or choice == 'trade':
-                    run_trade_screen(self.console)
-                elif choice == 'tl' or choice == 'timeline':
-                    run_timeline_screen(self.console)
-                elif choice == 'an' or choice == 'analyze':
-                    run_analyze_screen(self.console)
-                elif choice == 'jn' or choice == 'journal':
-                    run_journal_screen(self.console)
-                elif choice == 'hot':
-                    run_hot_screen(self.console)
-                elif choice == 'pnl':
-                    run_pnl_screen(self.console)
-                elif choice == 'ac' or choice == 'center' or choice == 'alertcenter':
-                    run_alertcenter_screen(self.console)
-                elif choice == 'gr' or choice == 'groups':
-                    run_groups_screen(self.console)
-                elif choice == 'attr' or choice == 'attribution':
-                    run_attribution_screen(self.console)
-                elif choice == 'snap' or choice == 'snapshot':
-                    run_snapshot_screen(self.console)
-                elif choice == 'sig' or choice == 'signals':
-                    run_signals_screen(self.console)
-                elif choice == 'sml' or choice == 'similar':
-                    run_similar_screen(self.console)
-                elif choice == 'lad' or choice == 'ladder':
-                    run_ladder_screen(self.console)
-                elif choice == 'bench' or choice == 'benchmark':
-                    run_benchmark_screen(self.console)
-                elif choice == 'pin' or choice == 'pinned':
-                    run_pin_screen(self.console)
-                elif choice == 'sp' or choice == 'spread':
-                    run_spread_screen(self.console)
-                elif choice == 'hist' or choice == 'history':
-                    run_history_screen(self.console)
-                elif choice == 'stk' or choice == 'streak':
-                    run_streak_screen(self.console)
-                elif choice == 'dig' or choice == 'digest':
-                    run_digest_screen(self.console)
-                elif choice == 'tm' or choice == 'timing':
-                    run_timing_screen(self.console)
-                elif choice == 'od' or choice == 'odds':
-                    run_odds_screen(self.console)
-                elif choice == 'hp' or choice == 'health':
-                    run_health_screen(self.console)
-                elif choice == 'sc' or choice == 'scenario':
-                    run_scenario_screen(self.console)
-                elif choice == 'wd' or choice == 'watchdog':
-                    run_watchdog_screen(self.console)
-                elif choice == 'vol' or choice == 'volume':
-                    run_volume_screen(self.console)
-                elif choice == 'scr' or choice == 'screener':
-                    run_screener_screen(self.console)
-                elif choice == 'bt' or choice == 'backtest':
-                    run_backtest_screen(self.console)
-                elif choice == 'rp' or choice == 'report':
-                    run_report_screen(self.console)
-                elif choice == 'liq' or choice == 'liquidity':
-                    run_liquidity_screen(self.console)
-                elif choice == 'ev':
-                    run_ev_screen(self.console)
-                elif choice == 'cb' or choice == 'calibrate':
-                    run_calibrate_screen(self.console)
-                elif choice == 'qk' or choice == 'quick':
-                    run_quick_screen(self.console)
-                elif choice == 'lb' or choice == 'leaderboard':
-                    run_leaderboard_screen(self.console)
-                elif choice == 'nf' or choice == 'notify':
-                    run_notify_screen(self.console)
-                elif choice == 'c15' or choice == 'crypto15m' or choice == '15m':
-                    run_crypto15m_screen(self.console)
-                elif choice == 'mw' or choice == 'mywallet' or choice == 'wallet':
-                    run_mywallet_screen(self.console)
-                elif choice == 'qt' or choice == 'quicktrade':
-                    run_quicktrade_screen(self.console)
-                elif choice == 'q' or choice == 'quit' or choice == 'exit':
+                # Handle quit
+                elif choice in QUIT_COMMANDS:
                     self.quit()
+                # Dispatch to screen via lookup table
+                elif choice in SCREEN_ROUTES:
+                    SCREEN_ROUTES[choice](self.console)
                 else:
                     self.console.print("[red]Invalid choice. Try again.[/red]")
-                
+
                 # Return to menu (unless quitting)
-                if self.running and choice != 'q' and choice != 'quit' and choice != 'exit':
+                if self.running and choice not in QUIT_COMMANDS:
                     input("\nPress Enter to return to menu...")
                     self.console.clear()
                     display_logo(self.console)
                     self.menu.reset_page()  # Reset to page 1 after any screen
-        
+
         except KeyboardInterrupt:
             # Handle Ctrl+C gracefully
             self.console.print("\n\n[yellow]Interrupted. Exiting...[/yellow]")
             self.running = False
-    
+
     def quit(self):
         """Exit TUI with farewell message"""
         self.console.print("\n[yellow]Thanks for using PolyTerm! 📊[/yellow]")
         self.console.print("[dim]Happy trading![/dim]\n")
         self.running = False
-
-

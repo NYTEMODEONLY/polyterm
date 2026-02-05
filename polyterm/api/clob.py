@@ -200,66 +200,89 @@ class CLOBClient:
         if not market_slugs:
             self.subscriptions["_all"] = callback
     
-    async def listen_for_trades(self):
-        """Listen for incoming trade messages from RTDS"""
-        if not self.ws_connection:
-            raise Exception("WebSocket not connected")
+    async def listen_for_trades(self, max_reconnects: int = 5):
+        """Listen for incoming trade messages from RTDS with auto-reconnection"""
+        reconnect_attempts = 0
 
-        try:
-            async for message in self.ws_connection:
-                try:
-                    # Handle ping messages
-                    if message == "PING":
-                        await self.ws_connection.send("PONG")
+        while reconnect_attempts <= max_reconnects:
+            if not self.ws_connection:
+                if reconnect_attempts > 0:
+                    # Exponential backoff for reconnection
+                    import asyncio as _asyncio
+                    wait = min(2 ** reconnect_attempts, 30)
+                    _asyncio.get_event_loop()  # verify loop exists
+                    await _asyncio.sleep(wait)
+                    try:
+                        await self.connect_websocket()
+                        # Re-subscribe after reconnecting
+                        if self.subscriptions:
+                            subscribe_msg = {
+                                "action": "subscribe",
+                                "subscriptions": [{"topic": "activity", "type": "trades"}]
+                            }
+                            await self.ws_connection.send(json.dumps(subscribe_msg))
+                    except Exception:
+                        reconnect_attempts += 1
+                        continue
+                else:
+                    raise Exception("WebSocket not connected")
+
+            try:
+                async for message in self.ws_connection:
+                    # Reset reconnect counter on successful message
+                    reconnect_attempts = 0
+
+                    try:
+                        # Handle ping messages
+                        if message == "PING":
+                            await self.ws_connection.send("PONG")
+                            continue
+
+                        # Skip empty messages
+                        if not message or message.strip() == "":
+                            continue
+
+                        data = json.loads(message)
+
+                        # Only process messages with payload (actual trade data)
+                        if "payload" not in data:
+                            continue
+
+                        # Handle RTDS trade messages
+                        if data.get("topic") == "activity" and data.get("type") == "trades":
+                            payload = data.get("payload", {})
+
+                            event_slug = payload.get("eventSlug", "")
+                            market_slug = payload.get("slug", "")
+
+                            callback = None
+                            if event_slug and event_slug in self.subscriptions:
+                                callback = self.subscriptions[event_slug]
+                            elif market_slug and market_slug in self.subscriptions:
+                                callback = self.subscriptions[market_slug]
+                            elif "_all" in self.subscriptions:
+                                callback = self.subscriptions["_all"]
+
+                            if callback:
+                                await callback(data)
+
+                    except json.JSONDecodeError:
+                        continue
+                    except Exception:
                         continue
 
-                    # Skip empty messages
-                    if not message or message.strip() == "":
-                        continue
-
-                    data = json.loads(message)
-
-                    # Only process messages with payload (actual trade data)
-                    if "payload" not in data:
-                        continue
-
-                    # Handle RTDS trade messages
-                    # RTDS format: {topic, type, payload: {eventSlug, slug, price, size, side, ...}}
-                    if data.get("topic") == "activity" and data.get("type") == "trades":
-                        payload = data.get("payload", {})
-
-                        # Extract market identifiers from payload (not top level!)
-                        event_slug = payload.get("eventSlug", "")
-                        market_slug = payload.get("slug", "")
-
-                        # Check if we have a callback for this market
-                        callback = None
-
-                        # Try to find matching callback by eventSlug or slug
-                        if event_slug and event_slug in self.subscriptions:
-                            callback = self.subscriptions[event_slug]
-                        elif market_slug and market_slug in self.subscriptions:
-                            callback = self.subscriptions[market_slug]
-                        elif "_all" in self.subscriptions:
-                            # Unfiltered callback for all trades
-                            callback = self.subscriptions["_all"]
-                        # Note: If no match found and no "_all" subscription, skip this trade
-                        # This ensures we only show trades for markets we're actually monitoring
-
-                        if callback:
-                            # Pass the full data (with payload) to the callback
-                            await callback(data)
-
-                except json.JSONDecodeError:
+            except websockets.exceptions.ConnectionClosed:
+                self.ws_connection = None
+                reconnect_attempts += 1
+                if reconnect_attempts <= max_reconnects:
                     continue
-                except Exception as e:
-                    print(f"Error processing message: {e}")
+                break
+            except Exception:
+                self.ws_connection = None
+                reconnect_attempts += 1
+                if reconnect_attempts <= max_reconnects:
                     continue
-
-        except websockets.exceptions.ConnectionClosed:
-            print("WebSocket connection closed")
-        except Exception as e:
-            print(f"WebSocket error: {e}")
+                break
     
     async def close_websocket(self):
         """Close WebSocket connection"""

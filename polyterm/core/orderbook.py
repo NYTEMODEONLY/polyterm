@@ -105,17 +105,21 @@ class OrderBookAnalyzer:
         mid_price = (best_bid + best_ask) / 2 if best_bid and best_ask else 0
         spread_pct = (spread / mid_price * 100) if mid_price else 0
 
-        # Calculate depth
-        bid_depth = sum(level.size * level.price for level in bid_levels)
-        ask_depth = sum(level.size * level.price for level in ask_levels)
+        # Calculate depth (share count) and notional value
+        bid_depth = sum(level.size for level in bid_levels)
+        ask_depth = sum(level.size for level in ask_levels)
         total_depth = bid_depth + ask_depth
         imbalance = (bid_depth - ask_depth) / total_depth if total_depth else 0
+
+        # Notional values for display purposes
+        bid_notional = sum(level.size * level.price for level in bid_levels)
+        ask_notional = sum(level.size * level.price for level in ask_levels)
 
         # Find support/resistance levels
         support_levels = self._find_support_levels(bid_levels)
         resistance_levels = self._find_resistance_levels(ask_levels)
 
-        # Find large orders
+        # Find large orders (by notional value)
         large_bids = [l for l in bid_levels if l.size * l.price >= self.large_order_threshold]
         large_asks = [l for l in ask_levels if l.size * l.price >= self.large_order_threshold]
 
