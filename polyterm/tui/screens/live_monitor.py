@@ -74,7 +74,7 @@ def verify_category_markets(gamma_client: GammaClient, category: str, keywords: 
             if any(kw in title for kw in keywords):
                 count += 1
         return count
-    except:
+    except Exception:
         return 0
 
 
@@ -120,7 +120,7 @@ def live_monitor_screen(console: RichConsole):
                     market_id = market_data.get("id")
                     market_title = market_data.get("question")
                     console.print(f"\n[green]Found market:[/green] {market_title}")
-                except:
+                except Exception:
                     # Search by term
                     console.print(f"\n[yellow]Searching for markets containing: {market_search}[/yellow]")
                     results = gamma_client.search_markets(market_search, limit=10)
@@ -260,7 +260,7 @@ def live_monitor_screen(console: RichConsole):
     finally:
         try:
             gamma_client.close()
-        except:
+        except Exception:
             pass
 
 
@@ -323,7 +323,7 @@ monitor.run_live_monitor()
             if len(f.read()) != len(script_content):
                 console.print("[red]❌ Script file incomplete[/red]")
                 return
-    except:
+    except Exception:
         console.print("[red]❌ Cannot read script file[/red]")
         return
 

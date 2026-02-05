@@ -14,7 +14,7 @@ def display_logo(console: Console):
     # Get terminal width, fallback to 80 if not available
     try:
         width = console.size.width
-    except:
+    except Exception:
         width = 80
     
     # Force narrow terminal for testing if COLUMNS env var is set

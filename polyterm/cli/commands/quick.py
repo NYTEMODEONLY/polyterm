@@ -95,7 +95,7 @@ def quick(ctx, action, market, output_format):
                 try:
                     yes_price = float(token.get('price', 0.5))
                     no_price = 1 - yes_price
-                except:
+                except Exception:
                     pass
                 break
 

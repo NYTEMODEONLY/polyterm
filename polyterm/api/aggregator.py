@@ -116,7 +116,7 @@ class APIAggregator:
             if order_book:
                 enriched['order_book'] = order_book
                 enriched['spread'] = self.clob_client.calculate_spread(order_book)
-        except:
+        except Exception:
             pass
         
         # Try to add on-chain stats from Subgraph
@@ -125,7 +125,7 @@ class APIAggregator:
             if stats:
                 enriched['on_chain_volume'] = stats.get('totalVolume', 0)
                 enriched['trade_count'] = stats.get('tradeCount', 0)
-        except:
+        except Exception:
             pass
         
         # Add data source metadata

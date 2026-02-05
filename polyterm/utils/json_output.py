@@ -58,7 +58,7 @@ def format_market_json(market: Dict[str, Any]) -> Dict[str, Any]:
     if isinstance(outcome_prices, str):
         try:
             outcome_prices = json.loads(outcome_prices)
-        except:
+        except Exception:
             outcome_prices = []
 
     yes_price = float(outcome_prices[0]) if outcome_prices else 0

@@ -106,7 +106,7 @@ class ArbitrageScanner:
                     import json
                     try:
                         outcome_prices = json.loads(outcome_prices)
-                    except:
+                    except Exception:
                         continue
 
                 if len(outcome_prices) < 2:
@@ -299,7 +299,7 @@ class ArbitrageScanner:
             import json
             try:
                 outcome_prices = json.loads(outcome_prices)
-            except:
+            except Exception:
                 return None
 
         if len(outcome_prices) < 2:
@@ -581,7 +581,7 @@ class KalshiArbitrageScanner:
             import json
             try:
                 outcome_prices = json.loads(outcome_prices)
-            except:
+            except Exception:
                 return None
 
         if len(outcome_prices) < 2:

@@ -57,7 +57,7 @@ def display_market_list(console: RichConsole, markets: List[Dict[str, Any]]) -> 
             try:
                 import json
                 price = json.loads(price)
-            except:
+            except Exception:
                 price = []
         yes_price = float(price[0]) if price else 0
         price_str = f"{yes_price:.0%}" if yes_price else "-"

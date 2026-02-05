@@ -355,7 +355,7 @@ class PortfolioAnalytics:
                 markets = self.gamma.get_markets(limit=1, market_id=market_id)
                 if markets:
                     return markets[0].get('title', markets[0].get('question', market_id))
-            except:
+            except Exception:
                 pass
         return market_id[:30]
 

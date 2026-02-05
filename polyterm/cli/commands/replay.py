@@ -42,7 +42,7 @@ def replay(ctx, market, hours, speed, trades):
             market_data = gamma_client.get_market(market)
             market_id = market_data.get("id")
             market_title = market_data.get("question")
-        except:
+        except Exception:
             results = gamma_client.search_markets(market, limit=1)
             if not results:
                 console.print(f"[red]Market not found: {market}[/red]")

@@ -81,7 +81,7 @@ class WhaleTracker:
         elif isinstance(timestamp, str):
             try:
                 timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-            except:
+            except Exception:
                 timestamp = datetime.now()
         else:
             timestamp = datetime.now()

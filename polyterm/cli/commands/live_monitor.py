@@ -307,7 +307,7 @@ class LiveMarketMonitor:
                 import json
                 try:
                     outcome_prices = json.loads(outcome_prices)
-                except:
+                except Exception:
                     outcome_prices = None
             
             if outcome_prices and isinstance(outcome_prices, list) and len(outcome_prices) > 0:
@@ -359,7 +359,7 @@ class LiveMarketMonitor:
                         status_text = f"[yellow]{int(hours_until)}h left[/yellow]"
                     else:
                         status_text = "[red]ENDED[/red]"
-                except:
+                except Exception:
                     status_text = "[dim]?[/dim]"
             else:
                 status_text = "[green]ACTIVE[/green]"
@@ -422,7 +422,7 @@ class LiveMarketMonitor:
                     import json
                     try:
                         outcome_prices = json.loads(outcome_prices)
-                    except:
+                    except Exception:
                         outcome_prices = None
                 if outcome_prices and len(outcome_prices) > 0:
                     market_prices[market_slug or market_id] = float(outcome_prices[0])
@@ -654,7 +654,7 @@ class LiveMarketMonitor:
             try:
                 if os.path.exists(script_path):
                     os.remove(script_path)
-            except:
+            except Exception:
                 pass
 
             # Force garbage collection
@@ -668,7 +668,7 @@ class LiveMarketMonitor:
         # Force exit to ensure complete termination
         try:
             os._exit(0)
-        except:
+        except Exception:
             sys.exit(0)
 
     def _get_market_values(self, market):
@@ -689,7 +689,7 @@ class LiveMarketMonitor:
                     import json
                     try:
                         outcome_prices = json.loads(outcome_prices)
-                    except:
+                    except Exception:
                         outcome_prices = None
                 if outcome_prices and isinstance(outcome_prices, list) and len(outcome_prices) > 0:
                     price = float(outcome_prices[0])
@@ -715,7 +715,7 @@ class LiveMarketMonitor:
                 return "📊 VOL+"
             else:
                 return "→ SAME"
-        except:
+        except Exception:
             return "→ CHG"
 
     def _print_market_update(self, market, timestamp, direction):
@@ -804,7 +804,7 @@ def live_monitor(ctx, market, category, interactive):
                     market_data = gamma_client.get_market(market_search)
                     market_id = market_data.get("id")
                     market_title = market_data.get("question")
-                except:
+                except Exception:
                     # Search by term
                     results = gamma_client.search_markets(market_search, limit=10)
                     if not results:

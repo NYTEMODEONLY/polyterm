@@ -198,7 +198,7 @@ def screener(ctx, min_volume, max_volume, min_price, max_price, min_liquidity,
                         days_until = (end_dt - now).days
                         if days_until < 0 or days_until > ending_within:
                             continue
-                    except:
+                    except Exception:
                         pass
 
                 filtered.append({

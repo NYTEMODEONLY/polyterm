@@ -42,7 +42,7 @@ def watch(ctx, market, threshold, volume_threshold, interval, notify):
         market_data = gamma_client.get_market(market)
         market_id = market_data.get("id")
         market_title = market_data.get("question")
-    except:
+    except Exception:
         # Search by term
         results = gamma_client.search_markets(market, limit=5)
         if not results:

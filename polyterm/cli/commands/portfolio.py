@@ -88,7 +88,7 @@ def portfolio(ctx, wallet):
             try:
                 market_data = gamma_client.get_market(market_id)
                 market_name = market_data.get("question", "Unknown")[:50]
-            except:
+            except Exception:
                 market_name = market_id[:30]
             
             value = shares * avg_price

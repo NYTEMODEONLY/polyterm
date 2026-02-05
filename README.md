@@ -558,6 +558,19 @@ python -m twine upload dist/*
 
 ---
 
+## What's New in v0.7.2
+
+### Bug Fixes
+- **Fixed division-by-zero in whales command** - Empty whale trade results no longer crash when calculating average volume per market
+
+### Code Quality
+- **Eliminated all 44 bare `except:` handlers** - Replaced with `except Exception:` across 24 files (CLI commands, core modules, TUI screens, API layer, utilities) for better debugging and proper exception handling
+
+### Test Suite
+- **183/183 tests passing** (2 skipped for deprecated endpoints)
+
+---
+
 ## What's New in v0.7.1
 
 ### Architecture Improvements
