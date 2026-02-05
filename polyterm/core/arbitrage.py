@@ -235,11 +235,15 @@ class ArbitrageScanner:
                             sell_market = market2
                             buy_price = m1_prices['yes']
                             sell_price = m2_prices['yes']
+                            buy_prices = m1_prices
+                            sell_prices = m2_prices
                         else:
                             buy_market = market2
                             sell_market = market1
                             buy_price = m2_prices['yes']
                             sell_price = m1_prices['yes']
+                            buy_prices = m2_prices
+                            sell_prices = m1_prices
 
                         spread = sell_price - buy_price
                         # Fee on winning position's profit (assumes the buy-side wins)
@@ -254,11 +258,11 @@ class ArbitrageScanner:
                                 market1_title=buy_market.get('title', ''),
                                 market2_title=sell_market.get('title', ''),
                                 market1_yes_price=buy_price,
-                                market1_no_price=m1_prices['no'],
+                                market1_no_price=buy_prices['no'],
                                 market2_yes_price=sell_price,
-                                market2_no_price=m2_prices['no'],
+                                market2_no_price=sell_prices['no'],
                                 spread=spread,
-                                expected_profit_pct=(gross_profit / buy_price) * 100,
+                                expected_profit_pct=(gross_profit / buy_price * 100) if buy_price > 0 else 0,
                                 expected_profit_usd=gross_profit * 100,
                                 fees=fee_cost * 100,
                                 net_profit=gross_profit * 100,
@@ -543,8 +547,10 @@ class KalshiArbitrageScanner:
                     buy_price = kalshi_price
                     sell_price = pm_prices['yes']
 
-                # Calculate profit after fees
-                total_fees = self.polymarket_fee + self.kalshi_fee
+                # Calculate profit after fees (percentage-based on winnings)
+                pm_fee = self.polymarket_fee * (1.0 - buy_price)
+                kalshi_fee_cost = self.kalshi_fee * (1.0 - buy_price)
+                total_fees = pm_fee + kalshi_fee_cost
                 gross_profit = price_diff - total_fees
 
                 if gross_profit > 0:
@@ -559,7 +565,7 @@ class KalshiArbitrageScanner:
                         market2_yes_price=sell_price,
                         market2_no_price=1 - sell_price,
                         spread=price_diff,
-                        expected_profit_pct=(gross_profit / buy_price) * 100,
+                        expected_profit_pct=(gross_profit / buy_price * 100) if buy_price > 0 else 0,
                         expected_profit_usd=gross_profit * 100,
                         fees=total_fees * 100,
                         net_profit=gross_profit * 100,

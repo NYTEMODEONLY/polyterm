@@ -373,8 +373,8 @@ def _analyze_whale_activity(db: Database, market_id: str) -> dict:
     """Analyze whale activity from tracked wallets"""
     try:
         # Get recent whale alerts for this market
-        alerts = db.get_unacked_alerts()
-        whale_alerts = [a for a in alerts if a.get('market_id') == market_id and 'whale' in a.get('alert_type', '').lower()]
+        alerts = db.get_unacknowledged_alerts()
+        whale_alerts = [a for a in alerts if a.market_id == market_id and 'whale' in (a.alert_type or '').lower()]
 
         if not whale_alerts:
             return None
@@ -384,13 +384,18 @@ def _analyze_whale_activity(db: Database, market_id: str) -> dict:
         bearish = 0
 
         for alert in whale_alerts[-10:]:  # Last 10 whale alerts
-            data = alert.get('data', {})
+            data = alert.data if hasattr(alert, 'data') else {}
+            if data is None:
+                data = {}
             if isinstance(data, str):
                 import json
-                data = json.loads(data)
+                try:
+                    data = json.loads(data)
+                except (json.JSONDecodeError, ValueError):
+                    data = {}
 
-            side = data.get('side', '').lower()
-            size = data.get('size', 0)
+            side = data.get('side', '').lower() if isinstance(data, dict) else ''
+            size = data.get('size', 0) if isinstance(data, dict) else 0
 
             if side == 'buy' or side == 'yes':
                 bullish += size
@@ -480,10 +485,10 @@ def _display_sentiment_meter(console: Console, score: float):
 
     meter = ""
     for i in range(21):
-        if i == 10:
-            meter += "|"  # Center
-        elif i == normalized:
+        if i == normalized:
             meter += "[bold bright_white]O[/bold bright_white]"
+        elif i == 10:
+            meter += "|"  # Center
         elif i < 10:
             meter += "[red]-[/red]"
         else:

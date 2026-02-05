@@ -666,26 +666,35 @@ class Database:
             open_count = open_row[0] or 0
             open_value = open_row[1] or 0
 
-            # Closed positions
+            # Closed positions (account for side: YES profits when price rises, NO profits when price falls)
             cursor.execute("""
                 SELECT COUNT(*),
-                       SUM((exit_price - entry_price) * shares) as total_pnl
+                       SUM(CASE
+                           WHEN side = 'no' THEN (entry_price - exit_price) * shares
+                           ELSE (exit_price - entry_price) * shares
+                       END) as total_pnl
                 FROM positions WHERE status = 'closed'
             """)
             closed_row = cursor.fetchone()
             closed_count = closed_row[0] or 0
             realized_pnl = closed_row[1] or 0
 
-            # Won/lost counts
+            # Won/lost counts (account for side)
             cursor.execute("""
                 SELECT COUNT(*) FROM positions
-                WHERE status = 'closed' AND exit_price > entry_price
+                WHERE status = 'closed' AND (
+                    (side != 'no' AND exit_price > entry_price) OR
+                    (side = 'no' AND exit_price < entry_price)
+                )
             """)
             wins = cursor.fetchone()[0] or 0
 
             cursor.execute("""
                 SELECT COUNT(*) FROM positions
-                WHERE status = 'closed' AND exit_price <= entry_price
+                WHERE status = 'closed' AND (
+                    (side != 'no' AND exit_price <= entry_price) OR
+                    (side = 'no' AND exit_price >= entry_price)
+                )
             """)
             losses = cursor.fetchone()[0] or 0
 
@@ -759,7 +768,10 @@ class Database:
             results = []
             for row in cursor.fetchall():
                 d = dict(row)
-                d['filters'] = json.loads(d['filters'])
+                try:
+                    d['filters'] = json.loads(d['filters'])
+                except (json.JSONDecodeError, TypeError):
+                    d['filters'] = {}
                 results.append(d)
             return results
 
@@ -771,7 +783,10 @@ class Database:
             row = cursor.fetchone()
             if row:
                 d = dict(row)
-                d['filters'] = json.loads(d['filters'])
+                try:
+                    d['filters'] = json.loads(d['filters'])
+                except (json.JSONDecodeError, TypeError):
+                    d['filters'] = {}
                 return d
             return None
 

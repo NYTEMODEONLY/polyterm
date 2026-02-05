@@ -197,9 +197,9 @@ class PredictionEngine:
         # Calculate short-term and long-term price changes
         prices = [s.probability for s in snapshots]
 
-        # Short-term: last 6 hours
-        recent_count = min(6, len(prices) // 4)
-        short_term_change = (prices[-1] - prices[-recent_count]) if recent_count > 0 else 0
+        # Short-term: last 6 hours (minimum lookback of 2 to avoid self-comparison)
+        recent_count = max(2, min(6, len(prices) // 4))
+        short_term_change = prices[-1] - prices[-recent_count]
 
         # Long-term: full period
         long_term_change = prices[-1] - prices[0]
@@ -479,7 +479,7 @@ class PredictionEngine:
             strength=strength,
             confidence=confidence,
             value=momentum,
-            description=f"Price momentum: {momentum:+.1%} (1d: {one_day_change:+.1%})" if one_day_change else f"Price momentum: {momentum:+.1%}",
+            description=f"Price momentum: {momentum:+.1%} (1d: {one_day_change:+.1%})" if one_day_change is not None else f"Price momentum: {momentum:+.1%}",
         )
 
     def _calculate_volume_signal_from_api(self, market_data: Dict[str, Any]) -> Optional[Signal]:
@@ -674,7 +674,7 @@ class PredictionEngine:
         correct = (
             (prediction.probability_change > 0 and actual_change > 0) or
             (prediction.probability_change < 0 and actual_change < 0) or
-            (abs(prediction.probability_change) < 1 and abs(actual_change) < 1)
+            (abs(prediction.probability_change) < 0.5 and abs(actual_change) < 0.5)
         )
 
         self.accuracy_history.append({

@@ -292,30 +292,25 @@ def _quick_info(console: Console, market: dict, price: float, volume: float, liq
 
 
 def _quick_watch(console: Console, title: str, market_id: str, price: float):
-    """Quick add to watchlist"""
+    """Quick add to bookmarks (watchlist)"""
     from ...db.database import Database
 
     db = Database()
 
-    # Check if already watching
-    existing = db.query("""
-        SELECT id FROM watchlist WHERE market_id = ?
-    """, (market_id,))
+    # Check if already bookmarked
+    bookmarks = db.get_bookmarks()
+    existing = any(b.get('market_id') == market_id for b in bookmarks)
 
     if existing:
         console.print()
-        console.print(f"[yellow]Already watching: {title[:50]}[/yellow]")
+        console.print(f"[yellow]Already bookmarked: {title[:50]}[/yellow]")
         console.print()
         return
 
-    # Add to watchlist
-    from datetime import datetime
-    db.execute("""
-        INSERT INTO watchlist (market_id, market_name, added_at, initial_price)
-        VALUES (?, ?, ?, ?)
-    """, (market_id, title, datetime.now().isoformat(), price))
+    # Add to bookmarks
+    db.bookmark_market(market_id, title, '', price, 'Added via quick update')
 
     console.print()
-    console.print(f"[green]Added to watchlist: {title[:50]}[/green]")
+    console.print(f"[green]Bookmarked: {title[:50]}[/green]")
     console.print(f"[dim]Current price: {price:.0%}[/dim]")
     console.print()

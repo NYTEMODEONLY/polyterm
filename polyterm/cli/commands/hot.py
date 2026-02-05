@@ -60,7 +60,7 @@ def hot(ctx, limit, category, gainers, losers, volume, output_format):
             for market in markets:
                 price_change = _get_price_change(market)
                 current_price = _get_price(market)
-                volume_24h = market.get('volume24hr', market.get('volume24h', 0)) or 0
+                volume_24h = float(market.get('volume24hr', market.get('volume24h', 0)) or 0)
 
                 # Filter by direction
                 if gainers and price_change <= 0:
