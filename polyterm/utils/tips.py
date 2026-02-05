@@ -185,9 +185,10 @@ class TipTracker:
         tip = random.choice(available)
         self.shown_tips.add(tip)
 
-        # Reset if too many tips tracked (sets are unordered, so just clear)
+        # Reset if too many tips tracked (preserve current tip)
         if len(self.shown_tips) > 20:
             self.shown_tips.clear()
+            self.shown_tips.add(tip)
 
         self._save_shown()
         return tip

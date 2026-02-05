@@ -33,12 +33,12 @@ class Wallet:
             'total_volume': self.total_volume,
             'win_rate': self.win_rate,
             'avg_position_size': self.avg_position_size,
-            'tags': json.dumps(self.tags),
+            'tags': self.tags,
             'updated_at': self.updated_at.isoformat(),
             'total_wins': self.total_wins,
             'total_losses': self.total_losses,
             'largest_trade': self.largest_trade,
-            'favorite_markets': json.dumps(self.favorite_markets),
+            'favorite_markets': self.favorite_markets,
             'risk_score': self.risk_score,
         }
 
@@ -175,7 +175,7 @@ class Alert:
             'wallet_address': self.wallet_address,
             'severity': self.severity,
             'message': self.message,
-            'data': json.dumps(self.data),
+            'data': self.data,
             'created_at': self.created_at.isoformat(),
             'acknowledged': self.acknowledged,
         }

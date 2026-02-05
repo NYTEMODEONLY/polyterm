@@ -278,7 +278,7 @@ def launch_live_monitor(console: RichConsole, market_id: str = None, market_titl
     
     if market_id:
         cmd_args.extend(["--market", market_id])
-        monitor_type = f"Market: {market_title[:50]}"
+        monitor_type = f"Market: {(market_title or 'Unknown')[:50]}"
     elif category:
         cmd_args.extend(["--category", category])
         monitor_type = f"Category: {category.title()}"
