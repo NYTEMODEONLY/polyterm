@@ -177,7 +177,12 @@ def _interactive_mode(console: Console, config, db: Database, default_hours: int
             "[cyan]Hours of history to compare[/cyan]",
             default=str(default_hours)
         )
-        time_hours = int(hours_input)
+        try:
+            time_hours = int(hours_input)
+            if time_hours <= 0:
+                time_hours = default_hours
+        except ValueError:
+            time_hours = default_hours
 
         return selected_markets, time_hours
 
