@@ -78,11 +78,17 @@ def _get_interactive_inputs(console: Console, price, amount, side):
             console.print("[bold]What's the current price?[/bold]")
             console.print("[dim]Enter a value between 0.01 and 0.99 (e.g., 0.65 for 65%)[/dim]")
             price = FloatPrompt.ask("[cyan]Price[/cyan]", default=0.50)
+            if not 0.01 <= price <= 0.99:
+                console.print("[red]Price must be between 0.01 and 0.99[/red]")
+                return None, None, None
 
         if amount is None:
             console.print()
             console.print("[bold]How much do you want to invest (in USD)?[/bold]")
             amount = FloatPrompt.ask("[cyan]Amount ($)[/cyan]", default=100.0)
+            if amount <= 0:
+                console.print("[red]Amount must be positive[/red]")
+                return None, None, None
 
         return price, amount, side
 

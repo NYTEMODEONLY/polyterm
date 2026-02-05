@@ -107,6 +107,9 @@ def _interactive_mode(console: Console, config):
         console.print("[dim]Current YES price (or your limit price)[/dim]")
         price_input = FloatPrompt.ask("[cyan]Price (e.g., 65 for 65%)[/cyan]", default=50.0)
         price = price_input / 100 if price_input > 1 else price_input
+        if not 0.01 <= price <= 0.99:
+            console.print("[red]Price must be between 0.01 and 0.99 (1% to 99%)[/red]")
+            return
         console.print()
 
         # Get side
@@ -135,6 +138,9 @@ def _interactive_mode(console: Console, config):
 
 def _calculate_fees(amount: float, price: float, side: str) -> dict:
     """Calculate fees for a trade"""
+    # Guard against invalid prices
+    if price <= 0 or price >= 1:
+        return {'error': 'Price must be between 0.01 and 0.99'}
 
     # Shares purchased
     shares = amount / price
