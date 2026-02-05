@@ -237,7 +237,10 @@ def _add_position(console: Console, config, db: Database, search_term: str, outp
         import json
         outcome_prices = selected.get('outcomePrices', [])
         if isinstance(outcome_prices, str):
-            outcome_prices = json.loads(outcome_prices)
+            try:
+                outcome_prices = json.loads(outcome_prices)
+            except (json.JSONDecodeError, ValueError):
+                outcome_prices = []
         current_price = float(outcome_prices[0]) if outcome_prices else 0.5
 
         console.print()

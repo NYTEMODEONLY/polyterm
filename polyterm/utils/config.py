@@ -42,6 +42,14 @@ class Config:
             "enable_api_fallback": True,
         },
         "notifications": {
+            "desktop": True,
+            "sound": False,
+            "webhook": False,
+            "webhook_url": "",
+            "quiet_hours_start": "",
+            "quiet_hours_end": "",
+            "min_change": 5,
+            "min_volume": 1000,
             "telegram": {
                 "enabled": False,
                 "bot_token": "",
@@ -54,7 +62,7 @@ class Config:
             "system": {
                 "enabled": True,
             },
-            "sound": {
+            "sound_file": {
                 "enabled": True,
                 "file": "",
             },
