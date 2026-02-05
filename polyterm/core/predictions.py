@@ -285,8 +285,8 @@ class PredictionEngine:
             return None
 
         # Analyze whale direction
-        buy_volume = sum(t.notional for t in market_trades if t.side == 'BUY' or t.outcome == 'YES')
-        sell_volume = sum(t.notional for t in market_trades if t.side == 'SELL' or t.outcome == 'NO')
+        buy_volume = sum(t.notional for t in market_trades if t.side == 'BUY' or (not t.side and t.outcome == 'YES'))
+        sell_volume = sum(t.notional for t in market_trades if t.side == 'SELL' or (not t.side and t.outcome == 'NO'))
         total_volume = buy_volume + sell_volume
 
         if total_volume == 0:
@@ -331,8 +331,8 @@ class PredictionEngine:
             return None
 
         # Analyze smart money direction
-        buy_volume = sum(t.notional for t in smart_trades if t.side == 'BUY' or t.outcome == 'YES')
-        sell_volume = sum(t.notional for t in smart_trades if t.side == 'SELL' or t.outcome == 'NO')
+        buy_volume = sum(t.notional for t in smart_trades if t.side == 'BUY' or (not t.side and t.outcome == 'YES'))
+        sell_volume = sum(t.notional for t in smart_trades if t.side == 'SELL' or (not t.side and t.outcome == 'NO'))
         total = buy_volume + sell_volume
 
         if total == 0:

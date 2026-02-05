@@ -128,8 +128,9 @@ class ArbitrageScanner:
 
                     # Calculate net profit after fees
                     # You buy both sides for $total, get $1 back
-                    # Pay 2% fee on the winning side's profit ($1 payout)
-                    fee_on_winning = self.polymarket_fee * 1.0  # fee on $1 payout
+                    # Fee is 2% on winnings of the winning contract
+                    # Worst case: the cheaper side wins (highest individual profit)
+                    fee_on_winning = self.polymarket_fee * (1.0 - min(yes_price, no_price))
                     net_profit = spread - fee_on_winning
 
                     if net_profit > 0:
@@ -241,8 +242,8 @@ class ArbitrageScanner:
                             sell_price = m1_prices['yes']
 
                         spread = sell_price - buy_price
-                        # Fee is percentage-based: pay fee on each side's winnings
-                        fee_cost = (sell_price * self.polymarket_fee) + (buy_price * self.polymarket_fee)
+                        # Fee on winning position's profit (assumes the buy-side wins)
+                        fee_cost = self.polymarket_fee * (1.0 - buy_price)
                         gross_profit = spread - fee_cost
 
                         if gross_profit > 0:
@@ -259,7 +260,7 @@ class ArbitrageScanner:
                                 spread=spread,
                                 expected_profit_pct=(gross_profit / buy_price) * 100,
                                 expected_profit_usd=gross_profit * 100,
-                                fees=self.polymarket_fee * 200,
+                                fees=fee_cost * 100,
                                 net_profit=gross_profit * 100,
                                 confidence='low',  # Correlated arb is riskier
                             )

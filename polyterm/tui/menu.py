@@ -272,14 +272,10 @@ class MainMenu:
         if choice in ('m', 'more', '+', 'next'):
             if self.current_page < self.total_pages:
                 self.current_page += 1
-                return "_next_page"
-            # Already on last page, stay there
             return "_next_page"
         elif choice in ('b', 'back', '-', 'prev'):
             if self.current_page > 1:
                 self.current_page -= 1
-                return "_prev_page"
-            # Already on first page, stay there
             return "_prev_page"
 
         return choice

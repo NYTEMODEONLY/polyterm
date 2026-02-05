@@ -665,11 +665,8 @@ class LiveMarketMonitor:
             # Don't let cleanup errors prevent termination
             pass
 
-        # Force exit to ensure complete termination
-        try:
-            os._exit(0)
-        except Exception:
-            sys.exit(0)
+        # Use sys.exit for proper cleanup
+        sys.exit(0)
 
     def _get_market_values(self, market):
         """Get comparable values from market data"""
