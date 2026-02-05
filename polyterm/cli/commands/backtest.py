@@ -262,7 +262,7 @@ def _run_backtest(markets: list, strategy: str, days: int, capital: float, posit
             if token.get('outcome', '').upper() == 'YES':
                 try:
                     base_price = float(token.get('price', 0.5))
-                except:
+                except Exception:
                     pass
                 break
 

@@ -104,7 +104,7 @@ def liquidity(ctx, category, min_volume, limit, sort, output_format):
                 # Get order book
                 try:
                     orderbook = clob_client.get_order_book(clob_token)
-                except:
+                except Exception:
                     continue
 
                 if not orderbook:

@@ -124,7 +124,7 @@ def _generate_daily_report(gamma: GammaClient) -> dict:
             if t.get('outcome', '').upper() == 'YES':
                 try:
                     price = float(t.get('price', 0.5))
-                except:
+                except Exception:
                     pass
                 break
 
@@ -220,7 +220,7 @@ def _generate_portfolio_report(gamma: GammaClient, config) -> dict:
             if t.get('outcome', '').upper() == 'YES':
                 try:
                     price = float(t.get('price', 0.5))
-                except:
+                except Exception:
                     pass
                 break
         market_prices[title.lower()[:30]] = price
@@ -284,7 +284,7 @@ def _generate_market_report(gamma: GammaClient, search: str) -> dict:
         if t.get('outcome', '').upper() == 'YES':
             try:
                 price = float(t.get('price', 0.5))
-            except:
+            except Exception:
                 pass
             break
 

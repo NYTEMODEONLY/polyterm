@@ -66,7 +66,7 @@ def _display_trending_markets(console: RichConsole, limit: int = 10):
                 import json
                 try:
                     outcome_prices = json.loads(outcome_prices)
-                except:
+                except Exception:
                     outcome_prices = None
 
             if outcome_prices and isinstance(outcome_prices, list) and len(outcome_prices) > 0:

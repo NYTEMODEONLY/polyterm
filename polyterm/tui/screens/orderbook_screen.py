@@ -57,7 +57,7 @@ def orderbook_screen(console: RichConsole):
             try:
                 import json
                 clob_ids = json.loads(clob_ids)
-            except:
+            except Exception:
                 clob_ids = []
 
         if clob_ids:

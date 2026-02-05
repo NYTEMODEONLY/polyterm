@@ -126,7 +126,10 @@ def whales(ctx, min_amount, market, hours, limit, output_format):
         console.print(f"\n[bold]Summary:[/bold]")
         console.print(f"  High-volume markets: {len(whale_trades)}")
         console.print(f"  Total 24hr volume: ${total_volume:,.0f}")
-        console.print(f"  Average per market: ${total_volume/len(whale_trades):,.0f}" if whale_trades else "N/A")
+        if whale_trades:
+            console.print(f"  Average per market: ${total_volume/len(whale_trades):,.0f}")
+        else:
+            console.print("  Average per market: N/A")
 
     except Exception as e:
         if output_format == 'json':

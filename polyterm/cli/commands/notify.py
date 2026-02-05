@@ -305,7 +305,7 @@ def _play_alert_sound():
         # Try paplay (PulseAudio) or aplay (ALSA)
         try:
             subprocess.run(["paplay", "/usr/share/sounds/freedesktop/stereo/complete.oga"], check=True)
-        except:
+        except Exception:
             subprocess.run(["aplay", "/usr/share/sounds/alsa/Front_Center.wav"], check=True)
 
     elif system == "Windows":

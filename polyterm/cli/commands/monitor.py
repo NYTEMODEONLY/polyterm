@@ -201,7 +201,7 @@ def monitor(ctx, limit, category, refresh, active_only, sort, output_format, onc
                         import json
                         try:
                             outcome_prices = json.loads(outcome_prices)
-                        except:
+                        except Exception:
                             return 0
                     if outcome_prices and isinstance(outcome_prices, list) and len(outcome_prices) > 0:
                         return float(outcome_prices[0])
@@ -225,7 +225,7 @@ def monitor(ctx, limit, category, refresh, active_only, sort, output_format, onc
                     import json
                     try:
                         outcome_prices = json.loads(outcome_prices)
-                    except:
+                    except Exception:
                         outcome_prices = None
                 
                 if outcome_prices and isinstance(outcome_prices, list) and len(outcome_prices) > 0:
@@ -331,7 +331,7 @@ def monitor(ctx, limit, category, refresh, active_only, sort, output_format, onc
                     if isinstance(outcome_prices, str):
                         try:
                             outcome_prices = json.loads(outcome_prices)
-                        except:
+                        except Exception:
                             return 0
                     if outcome_prices and isinstance(outcome_prices, list) and len(outcome_prices) > 0:
                         return float(outcome_prices[0])

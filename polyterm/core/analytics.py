@@ -101,7 +101,7 @@ class AnalyticsEngine:
                         import json
                         try:
                             prices = json.loads(prices)
-                        except:
+                        except Exception:
                             prices = []
 
                     # Determine trend based on YES price (first outcome)
@@ -118,7 +118,7 @@ class AnalyticsEngine:
                             # Also use this as last_price if not already set
                             if last_price == 0:
                                 last_price = yes_price
-                        except:
+                        except Exception:
                             pass
 
                     # Fall back to nested markets if no direct price data
@@ -133,7 +133,7 @@ class AnalyticsEngine:
                                 import json
                                 try:
                                     nested_prices = json.loads(nested_prices)
-                                except:
+                                except Exception:
                                     nested_prices = []
                             if nested_prices and len(nested_prices) > 0 and outcome == "Unknown":
                                 try:
@@ -144,7 +144,7 @@ class AnalyticsEngine:
                                         outcome = "NO"
                                     else:
                                         outcome = "MIXED"
-                                except:
+                                except Exception:
                                     pass
                     
                     # Store market title for display

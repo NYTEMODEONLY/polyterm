@@ -306,7 +306,7 @@ class HistoricalDataAPI:
                 markets = self.gamma.get_markets(limit=1, market_id=market_id)
                 if markets:
                     market_title = markets[0].get('title', market_id)
-            except:
+            except Exception:
                 pass
 
         data = HistoricalData(

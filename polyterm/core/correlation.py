@@ -255,7 +255,7 @@ class CorrelationEngine:
             try:
                 # This is a simplified lookup
                 return market_id[:30]
-            except:
+            except Exception:
                 pass
         return market_id
 
