@@ -558,6 +558,20 @@ python -m twine upload dist/*
 
 ---
 
+## What's New in v0.7.7
+
+### Critical Fixes
+- **Trending markets endpoint fixed** - `get_trending_markets()` was calling a non-existent `/markets/trending` API endpoint. Now correctly uses `/markets?order=volume24hr&ascending=false` to sort by 24hr volume
+
+### Features
+- **Tips system activated** - Context-aware tips now appear ~30% of the time after returning from TUI screens, helping users discover features and learn prediction market concepts
+- **Consistent error messages** - Predict and monitor commands now use centralized error panels with helpful suggestions instead of plain text messages
+
+### Test Suite
+- **183/183 tests passing** (2 skipped for deprecated endpoints)
+
+---
+
 ## What's New in v0.7.6
 
 ### Bug Fixes

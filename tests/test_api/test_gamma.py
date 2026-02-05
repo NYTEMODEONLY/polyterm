@@ -139,17 +139,17 @@ class TestGammaClient:
     
     @responses.activate
     def test_get_trending_markets(self, client):
-        """Test getting trending markets"""
+        """Test getting trending markets (sorted by volume24hr)"""
         responses.add(
             responses.GET,
-            "https://test-api.polymarket.com/markets/trending",
+            "https://test-api.polymarket.com/markets",
             json=[
                 {"id": "1", "question": "Trending Market 1", "volume": 100000},
                 {"id": "2", "question": "Trending Market 2", "volume": 80000},
             ],
             status=200,
         )
-        
+
         trending = client.get_trending_markets(limit=10)
         assert len(trending) == 2
         assert trending[0]["volume"] == 100000
