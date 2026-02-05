@@ -10,7 +10,6 @@ from rich.prompt import Prompt, Confirm
 
 from ...api.gamma import GammaClient
 from ...api.clob import CLOBClient
-from ...api.subgraph import SubgraphClient
 from ...db.database import Database
 from ...utils.json_output import print_json
 from ...utils.config import Config
@@ -33,22 +32,30 @@ def is_valid_ethereum_address(address: str) -> bool:
         return False
 
 
-def get_wallet_positions(subgraph_client: SubgraphClient, address: str) -> list:
-    """Get wallet positions from subgraph"""
+def get_wallet_positions(db: Database, address: str) -> list:
+    """Get wallet positions from local database.
+
+    On-chain position tracking via the Subgraph has been deprecated.
+    Positions are now sourced from locally tracked data (added via
+    'polyterm position --add' or captured during monitoring sessions).
+    """
     try:
-        positions = subgraph_client.get_user_positions(address)
+        positions = db.get_positions(status='open')
         return positions if positions else []
     except Exception:
         return []
 
 
-def get_wallet_trades(subgraph_client: SubgraphClient, address: str, limit: int = 50) -> list:
-    """Get wallet trade history"""
+def get_wallet_trades(db: Database, address: str, limit: int = 50) -> list:
+    """Get wallet trade history from local database.
+
+    Trades are captured when running whale monitoring or live-monitor
+    sessions. Use 'polyterm whales' or 'polyterm live-monitor' to
+    collect trade data for this wallet.
+    """
     try:
-        # Try to get trades where the wallet is involved
-        trades = []
-        # Subgraph client may have different methods
-        return trades
+        trades = db.get_trades_by_wallet(address, limit=limit)
+        return trades if trades else []
     except Exception:
         return []
 
@@ -98,8 +105,6 @@ def mywallet(ctx, address, connect, disconnect, positions, show_history, pnl, in
         ws_endpoint=config.clob_endpoint,
     )
 
-    subgraph_client = SubgraphClient(endpoint=config.subgraph_endpoint)
-
     try:
         # Connect new wallet
         if connect:
@@ -137,7 +142,7 @@ def mywallet(ctx, address, connect, disconnect, positions, show_history, pnl, in
 
         # Interactive mode
         if interactive:
-            _interactive_mode(console, config, db, gamma_client, clob_client, subgraph_client)
+            _interactive_mode(console, config, db, gamma_client, clob_client)
             return
 
         # No wallet connected
@@ -169,28 +174,28 @@ def mywallet(ctx, address, connect, disconnect, positions, show_history, pnl, in
 
         # View positions
         if positions:
-            _show_positions(console, wallet_address, subgraph_client, db, output_format)
+            _show_positions(console, wallet_address, db, output_format)
             return
 
         # View history
         if show_history:
-            _show_history(console, wallet_address, subgraph_client, db, output_format)
+            _show_history(console, wallet_address, db, output_format)
             return
 
         # View P&L
         if pnl:
-            _show_pnl(console, wallet_address, subgraph_client, db, output_format)
+            _show_pnl(console, wallet_address, db, output_format)
             return
 
         # Default: show summary
-        _show_summary(console, wallet_address, subgraph_client, db, output_format)
+        _show_summary(console, wallet_address, db, output_format)
 
     finally:
         gamma_client.close()
         clob_client.close()
 
 
-def _interactive_mode(console, config, db, gamma_client, clob_client, subgraph_client):
+def _interactive_mode(console, config, db, gamma_client, clob_client):
     """Interactive wallet management mode"""
     console.print()
     console.print(Panel(
@@ -237,19 +242,19 @@ def _interactive_mode(console, config, db, gamma_client, clob_client, subgraph_c
 
         elif choice == "2":
             if saved_address:
-                _show_positions(console, saved_address, subgraph_client, db, "table")
+                _show_positions(console, saved_address, db, "table")
             else:
                 console.print("[yellow]Connect a wallet first[/yellow]")
 
         elif choice == "3":
             if saved_address:
-                _show_history(console, saved_address, subgraph_client, db, "table")
+                _show_history(console, saved_address, db, "table")
             else:
                 console.print("[yellow]Connect a wallet first[/yellow]")
 
         elif choice == "4":
             if saved_address:
-                _show_pnl(console, saved_address, subgraph_client, db, "table")
+                _show_pnl(console, saved_address, db, "table")
             else:
                 console.print("[yellow]Connect a wallet first[/yellow]")
 
@@ -264,8 +269,8 @@ def _interactive_mode(console, config, db, gamma_client, clob_client, subgraph_c
         console.print()
 
 
-def _show_positions(console, address, subgraph_client, db, output_format):
-    """Show wallet positions"""
+def _show_positions(console, address, db, output_format):
+    """Show wallet positions from local database"""
     console.print("[bold]Open Positions[/bold]")
     console.print()
 
@@ -277,25 +282,21 @@ def _show_positions(console, address, subgraph_client, db, output_format):
     ) as progress:
         progress.add_task("Fetching positions...", total=None)
 
-        positions = get_wallet_positions(subgraph_client, address)
-
-        # Also check locally tracked positions
-        local_positions = db.get_positions(status='open')
+        positions = get_wallet_positions(db, address)
 
     if output_format == 'json':
         print_json({
             'success': True,
             'wallet': address,
             'positions': positions,
-            'local_positions': local_positions,
         })
         return
 
-    if not positions and not local_positions:
+    if not positions:
         console.print("[dim]No open positions found[/dim]")
         console.print()
-        console.print("[dim]Note: On-chain position data may be limited.[/dim]")
-        console.print("[dim]Use 'polyterm position --add' to manually track positions.[/dim]")
+        console.print("[dim]Positions are tracked locally via 'polyterm position --add'.[/dim]")
+        console.print("[dim]On-chain position tracking (Subgraph) has been deprecated.[/dim]")
         return
 
     table = Table(show_header=True, header_style="bold")
@@ -304,41 +305,21 @@ def _show_positions(console, address, subgraph_client, db, output_format):
     table.add_column("Shares", justify="right", width=10)
     table.add_column("Entry", justify="right", width=10)
     table.add_column("Value", justify="right", width=12)
-    table.add_column("Source", width=10)
 
-    # Show on-chain positions
     for pos in positions:
-        market_title = pos.get('market', {}).get('question', 'Unknown')[:35]
-        side = pos.get('outcome', 'YES')
-        shares = float(pos.get('shares', 0))
-        entry = float(pos.get('avgPrice', 0))
-        value = shares * entry
-
-        table.add_row(
-            market_title,
-            f"[green]{side}[/green]" if side == "YES" else f"[red]{side}[/red]",
-            f"{shares:,.1f}",
-            f"${entry:.3f}",
-            f"${value:,.2f}",
-            "[cyan]Chain[/cyan]",
-        )
-
-    # Show locally tracked positions
-    for pos in local_positions:
         table.add_row(
             pos['title'][:35],
             f"[green]{pos['side'].upper()}[/green]" if pos['side'].lower() == "yes" else f"[red]{pos['side'].upper()}[/red]",
             f"{pos['shares']:,.1f}",
             f"${pos['entry_price']:.3f}",
             f"${pos['shares'] * pos['entry_price']:,.2f}",
-            "[dim]Local[/dim]",
         )
 
     console.print(table)
     console.print()
 
 
-def _show_history(console, address, subgraph_client, db, output_format):
+def _show_history(console, address, db, output_format):
     """Show wallet trade history"""
     console.print("[bold]Recent Trade History[/bold]")
     console.print()
@@ -387,7 +368,7 @@ def _show_history(console, address, subgraph_client, db, output_format):
     console.print()
 
 
-def _show_pnl(console, address, subgraph_client, db, output_format):
+def _show_pnl(console, address, db, output_format):
     """Show P&L summary"""
     console.print("[bold]P&L Summary[/bold]")
     console.print()
@@ -442,12 +423,11 @@ def _show_pnl(console, address, subgraph_client, db, output_format):
         console.print()
 
 
-def _show_summary(console, address, subgraph_client, db, output_format):
+def _show_summary(console, address, db, output_format):
     """Show wallet summary"""
 
-    # Get all data
-    positions = get_wallet_positions(subgraph_client, address)
-    local_positions = db.get_positions(status='open')
+    # Get all data from local database
+    positions = get_wallet_positions(db, address)
     wallet = db.get_wallet(address)
     summary = db.get_position_summary()
 
@@ -455,14 +435,14 @@ def _show_summary(console, address, subgraph_client, db, output_format):
         print_json({
             'success': True,
             'wallet': address,
-            'positions_count': len(positions) + len(local_positions),
+            'positions_count': len(positions),
             'position_summary': summary,
             'wallet_stats': wallet.to_dict() if wallet else None,
         })
         return
 
     # Summary panel
-    total_positions = len(positions) + len(local_positions)
+    total_positions = len(positions)
 
     console.print("[bold]Wallet Summary[/bold]")
     console.print()
