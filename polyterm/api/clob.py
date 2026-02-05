@@ -32,9 +32,44 @@ class CLOBClient:
         self.session = requests.Session()
         self.ws_connection = None
         self.subscriptions = {}
-    
+
+    def _request(self, method: str, url: str, retries: int = 3, **kwargs) -> requests.Response:
+        """Make request with retry logic and backoff"""
+        import time as _time
+        kwargs.setdefault('timeout', 15)
+
+        for attempt in range(retries):
+            try:
+                response = self.session.request(method, url, **kwargs)
+
+                if response.status_code == 429:
+                    wait = min(2 ** attempt * 2, 30)
+                    retry_after = response.headers.get('Retry-After')
+                    if retry_after:
+                        wait = min(int(retry_after), 60)
+                    _time.sleep(wait)
+                    continue
+
+                if response.status_code >= 500 and attempt < retries - 1:
+                    _time.sleep(2 ** attempt)
+                    continue
+
+                return response
+            except requests.exceptions.Timeout:
+                if attempt < retries - 1:
+                    _time.sleep(2 ** attempt)
+                    continue
+                raise
+            except requests.exceptions.ConnectionError:
+                if attempt < retries - 1:
+                    _time.sleep(2 ** attempt)
+                    continue
+                raise
+
+        return response
+
     # REST API Methods
-    
+
     def get_order_book(self, token_id: str, depth: int = 20) -> Dict[str, Any]:
         """Get order book for a market
 
@@ -49,7 +84,7 @@ class CLOBClient:
         params = {"token_id": token_id}
 
         try:
-            response = self.session.get(url, params=params)
+            response = self._request("GET", url, params=params)
             response.raise_for_status()
             data = response.json()
 

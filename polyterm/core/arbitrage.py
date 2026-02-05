@@ -124,13 +124,13 @@ class ArbitrageScanner:
                 if total < (1.0 - self.min_spread):
                     # Buying YES + NO costs less than $1, guaranteed profit
                     spread = 1.0 - total
-                    gross_profit_pct = spread / total * 100
+                    gross_profit_pct = (spread / total) * 100
 
                     # Calculate net profit after fees
-                    # You win one side, pay fee on winnings
-                    # If you buy both for $total, you get $1 back
-                    # But pay 2% fee on the winning side
-                    net_profit = spread - (self.polymarket_fee * 1.0)
+                    # You buy both sides for $total, get $1 back
+                    # Pay 2% fee on the winning side's profit ($1 payout)
+                    fee_on_winning = self.polymarket_fee * 1.0  # fee on $1 payout
+                    net_profit = spread - fee_on_winning
 
                     if net_profit > 0:
                         result = ArbitrageResult(
@@ -241,7 +241,9 @@ class ArbitrageScanner:
                             sell_price = m1_prices['yes']
 
                         spread = sell_price - buy_price
-                        gross_profit = spread - (self.polymarket_fee * 2)  # Fees on both sides
+                        # Fee is percentage-based: pay fee on each side's winnings
+                        fee_cost = (sell_price * self.polymarket_fee) + (buy_price * self.polymarket_fee)
+                        gross_profit = spread - fee_cost
 
                         if gross_profit > 0:
                             result = ArbitrageResult(

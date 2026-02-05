@@ -147,9 +147,9 @@ def test_tui_alternative_shortcuts(mock_console_class, mock_display_logo):
     
     mock_menu = Mock()
     
-    # Test 'm' for monitor
+    # Test 'mon' for monitor ('m' is now used for menu pagination)
     with patch('polyterm.tui.controller.monitor_screen') as mock_monitor:
-        mock_menu.get_choice.side_effect = ['m', 'q']
+        mock_menu.get_choice.side_effect = ['mon', 'q']
         
         with patch('builtins.input', return_value=''):
             controller = TUIController()

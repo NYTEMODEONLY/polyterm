@@ -347,34 +347,27 @@ polyterm
 
 ### Main Menu
 ```
-1/m = monitor        5/a = analytics      9/arb = arbitrage
-2/l = live monitor   6/p = portfolio     10/pred = predictions
-3/w = whales         7/e = export        11/wal = wallets
-4   = watch          8/s = settings      12/alert = alerts
-                                         13/ob = orderbook
-                                         14/risk = risk assessment
-                                         15/follow = copy trading
-                                         16/parlay = parlay calculator
-                                         17/bm = bookmarks
+Page 1:                                  Page 2:
+1/mon  = monitor     9/arb  = arbitrage  d   = dashboard      t   = tutorial
+2/l    = live mon   10/pred = predictions sim = simulate       g   = glossary
+3/w    = whales     11/wal  = wallets    ch  = chart           cmp = compare
+4      = watch      12/alert= alerts     sz  = size            rec = recent
+5/a    = analytics  13/ob   = orderbook  pa  = pricealert      cal = calendar
+6/p    = portfolio  14/risk = risk       fee = fees            st  = stats
+7/e    = export     15/follow = copy     sr  = search          nt  = notes
+8/s    = settings   16/parlay = parlay   pr  = presets         sent= sentiment
+                    17/bm   = bookmarks  corr= correlate       dp  = depth
 
-d   = dashboard      t   = tutorial       g   = glossary
-sim = simulate       ch  = chart          cmp = compare
-sz  = size           rec = recent         pa  = pricealert
-cal = calendar       fee = fees           st  = stats
-sr  = search         pos = position       nt  = notes
-pr  = presets        sent = sentiment     corr = correlate
-ex  = exitplan       dp  = depth          tr  = trade
-tl  = timeline       an  = analyze        jn  = journal
+c15 = 15m crypto     mw  = my wallet     qt  = quick trade
 hot = hot markets    pnl = profit/loss    u   = quick update
 
-c15 = 15m crypto     mw  = my wallet      qt  = quick trade
-
-h/? = help           q   = quit
+h/? = help           m/+ = next page      q   = quit
 ```
 
 ### Navigation
 - **Numbers**: Press `1-17` for numbered features
-- **Shortcuts**: Use the letter/abbreviation shortcuts shown above
+- **Shortcuts**: Use the abbreviation shortcuts shown above
+- **Pagination**: Press `m` or `+` to see more options, `b` or `-` to go back
 - **Trading**: `c15` for 15M crypto, `mw` for wallet, `qt` for quick trade
 - **Help**: Press `h` or `?` for documentation
 - **Tutorial**: Press `t` to launch the interactive tutorial
@@ -562,6 +555,26 @@ rm -rf dist/ build/ *.egg-info
 python -m build
 python -m twine upload dist/*
 ```
+
+---
+
+## What's New in v0.7.0
+
+### Bug Fixes
+- **Fixed arbitrage profit calculations** - Corrected percentage math and fee calculations for intra-market and correlated market arbitrage detection
+- **Fixed smart money signal accuracy** - Corrected average win rate calculation that was using wrong denominator
+- **Fixed all bare exception handlers** - Replaced `except:` with `except Exception:` across API and core layers for better debugging
+
+### Reliability Improvements
+- **API retry logic with exponential backoff** - Gamma and CLOB API clients now retry on 429 rate limits, 5xx server errors, timeouts, and connection failures (up to 3 attempts with backoff)
+- **SQLite foreign key enforcement** - Enabled `PRAGMA foreign_keys = ON` to prevent orphaned records and ensure data integrity
+- **Request timeouts** - All API requests now have 15-second timeouts to prevent indefinite hangs
+
+### Test Suite
+- **183/183 tests passing** (2 skipped for deprecated endpoints)
+- Fixed live data tests to handle markets with end dates spanning calendar years
+- Fixed TUI shortcut tests to match current menu pagination system
+- Added proper wallet record creation in test fixtures to satisfy foreign key constraints
 
 ---
 

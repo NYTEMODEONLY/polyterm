@@ -43,18 +43,50 @@ class GammaClient:
         if api_key:
             self.session.headers.update({"Authorization": f"Bearer {api_key}"})
     
-    def _request(self, method: str, endpoint: str, **kwargs) -> Dict[str, Any]:
-        """Make rate-limited request to API"""
+    def _request(self, method: str, endpoint: str, retries: int = 3, **kwargs) -> Dict[str, Any]:
+        """Make rate-limited request to API with retry logic"""
         self.rate_limiter.wait_if_needed()
-        
+
         url = f"{self.base_url}{endpoint}"
-        
-        try:
-            response = self.session.request(method, url, **kwargs)
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"API request failed: {e}")
+
+        for attempt in range(retries):
+            try:
+                response = self.session.request(method, url, timeout=15, **kwargs)
+
+                # Handle rate limiting with exponential backoff
+                if response.status_code == 429:
+                    wait_time = min(2 ** attempt * 2, 30)
+                    retry_after = response.headers.get('Retry-After')
+                    if retry_after:
+                        wait_time = min(int(retry_after), 60)
+                    import time
+                    time.sleep(wait_time)
+                    continue
+
+                # Retry on server errors
+                if response.status_code >= 500 and attempt < retries - 1:
+                    import time
+                    time.sleep(2 ** attempt)
+                    continue
+
+                response.raise_for_status()
+                return response.json()
+            except requests.exceptions.Timeout:
+                if attempt < retries - 1:
+                    import time
+                    time.sleep(2 ** attempt)
+                    continue
+                raise Exception(f"API request timed out after {retries} attempts: {url}")
+            except requests.exceptions.ConnectionError:
+                if attempt < retries - 1:
+                    import time
+                    time.sleep(2 ** attempt)
+                    continue
+                raise Exception(f"Connection failed after {retries} attempts: {url}")
+            except requests.exceptions.RequestException as e:
+                raise Exception(f"API request failed: {e}")
+
+        raise Exception(f"API request failed after {retries} attempts: {url}")
     
     def get_markets(
         self,
