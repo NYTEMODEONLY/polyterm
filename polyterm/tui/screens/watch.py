@@ -40,8 +40,17 @@ def watch_screen(console: RichConsole):
         console.print("[red]No market ID provided[/red]")
         return
     
-    threshold = console.input("Alert on probability change > [cyan][default: 5%][/cyan] ").strip() or "5"
-    refresh = console.input("Check interval in seconds? [cyan][default: 10][/cyan] ").strip() or "10"
+    threshold_input = console.input("Alert on probability change > [cyan][default: 5%][/cyan] ").strip() or "5"
+    refresh_input = console.input("Check interval in seconds? [cyan][default: 10][/cyan] ").strip() or "10"
+
+    try:
+        threshold = str(float(threshold_input))
+    except ValueError:
+        threshold = "5"
+    try:
+        refresh = str(int(refresh_input))
+    except ValueError:
+        refresh = "10"
     
     console.print()
     console.print(f"[green]Watching market {market_id[:8]}...[/green]")
@@ -51,9 +60,9 @@ def watch_screen(console: RichConsole):
     # Build command
     cmd = [
         sys.executable, "-m", "polyterm.cli.main", "watch",
-        market_id,
+        "--market", market_id,
         "--threshold", threshold,
-        "--refresh", refresh,
+        "--interval", refresh,
     ]
     
     # Launch watch command

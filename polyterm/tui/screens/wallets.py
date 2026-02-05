@@ -1,6 +1,7 @@
 """Wallets Screen - Smart money and whale wallet tracking"""
 
 import subprocess
+import sys
 from rich.panel import Panel
 from rich.console import Console as RichConsole
 from rich.table import Table
@@ -50,7 +51,7 @@ def wallets_screen(console: RichConsole):
 
         console.print("[green]Fetching whale wallets...[/green]")
         console.print()
-        cmd = ["polyterm", "wallets", "--type=whales", f"--limit={limit}"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "wallets", "--type=whales", f"--limit={limit}"]
 
     elif choice == '2':
         # Smart money
@@ -64,7 +65,7 @@ def wallets_screen(console: RichConsole):
 
         console.print("[green]Fetching smart money wallets...[/green]")
         console.print()
-        cmd = ["polyterm", "wallets", "--type=smart", f"--limit={limit}"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "wallets", "--type=smart", f"--limit={limit}"]
 
     elif choice == '3':
         # Suspicious
@@ -78,7 +79,7 @@ def wallets_screen(console: RichConsole):
 
         console.print("[green]Fetching suspicious wallets...[/green]")
         console.print()
-        cmd = ["polyterm", "wallets", "--type=suspicious", f"--limit={limit}"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "wallets", "--type=suspicious", f"--limit={limit}"]
 
     elif choice == '4':
         # Analyze specific wallet
@@ -91,7 +92,7 @@ def wallets_screen(console: RichConsole):
 
         console.print("[green]Analyzing wallet...[/green]")
         console.print()
-        cmd = ["polyterm", "wallets", f"--analyze={address}"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "wallets", f"--analyze={address}"]
 
     elif choice == '5':
         # Track wallet
@@ -102,7 +103,7 @@ def wallets_screen(console: RichConsole):
             console.print("[red]No address provided[/red]")
             return
 
-        cmd = ["polyterm", "wallets", f"--track={address}"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "wallets", f"--track={address}"]
 
     elif choice == '6':
         # Untrack wallet
@@ -113,7 +114,7 @@ def wallets_screen(console: RichConsole):
             console.print("[red]No address provided[/red]")
             return
 
-        cmd = ["polyterm", "wallets", f"--untrack={address}"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "wallets", f"--untrack={address}"]
 
     elif choice == 'b':
         return

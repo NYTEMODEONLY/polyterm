@@ -1,6 +1,7 @@
 """15-Minute Crypto Markets TUI Screen"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -34,17 +35,17 @@ def run_crypto15m_screen(console: Console):
         return
 
     if choice == "1":
-        cmd = ["polyterm", "crypto15m"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "crypto15m"]
     elif choice == "2":
-        cmd = ["polyterm", "crypto15m", "-c", "BTC"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "crypto15m", "-c", "BTC"]
     elif choice == "3":
-        cmd = ["polyterm", "crypto15m", "-c", "ETH"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "crypto15m", "-c", "ETH"]
     elif choice == "4":
-        cmd = ["polyterm", "crypto15m", "-c", "SOL"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "crypto15m", "-c", "SOL"]
     elif choice == "5":
-        cmd = ["polyterm", "crypto15m", "-c", "XRP"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "crypto15m", "-c", "XRP"]
     elif choice == "6":
-        cmd = ["polyterm", "crypto15m", "-i"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "crypto15m", "-i"]
 
     console.print()
     console.print("[dim]Launching 15M crypto monitor...[/dim]")

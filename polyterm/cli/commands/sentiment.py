@@ -192,7 +192,7 @@ def _get_current_price(market: dict) -> float:
             return float(prices[0]) if prices else 0.5
         except Exception:
             pass
-    return market.get('bestAsk', market.get('lastTradePrice', 0.5))
+    return float(market.get('bestAsk', market.get('lastTradePrice', 0.5)) or 0.5)
 
 
 def _analyze_price_momentum(market: dict) -> dict:

@@ -342,4 +342,4 @@ def _get_price(market: dict) -> float:
             return float(prices[0]) if prices else 0
         except Exception:
             pass
-    return market.get('bestAsk', market.get('lastTradePrice', 0))
+    return float(market.get('bestAsk', market.get('lastTradePrice', 0)) or 0)

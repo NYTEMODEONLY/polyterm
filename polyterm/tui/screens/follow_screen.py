@@ -1,6 +1,7 @@
 """Copy trading / wallet following TUI screen"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -34,7 +35,7 @@ def run_follow_screen(console: Console):
 
     if choice == "1":
         # List followed wallets
-        cmd = ["polyterm", "follow", "--list"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "follow", "--list"]
     elif choice == "2":
         # Follow a new wallet
         console.print()
@@ -48,7 +49,7 @@ def run_follow_screen(console: Console):
             console.print("[yellow]Invalid address.[/yellow]")
             Prompt.ask("[dim]Press Enter to return to menu[/dim]")
             return
-        cmd = ["polyterm", "follow", "--add", address]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "follow", "--add", address]
     elif choice == "3":
         # Unfollow a wallet
         console.print()
@@ -57,10 +58,10 @@ def run_follow_screen(console: Console):
             console.print("[yellow]Invalid address.[/yellow]")
             Prompt.ask("[dim]Press Enter to return to menu[/dim]")
             return
-        cmd = ["polyterm", "follow", "--remove", address]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "follow", "--remove", address]
     else:
         # Interactive mode
-        cmd = ["polyterm", "follow"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "follow"]
 
     console.print()
     console.print(f"[dim]Running: {' '.join(cmd)}[/dim]")

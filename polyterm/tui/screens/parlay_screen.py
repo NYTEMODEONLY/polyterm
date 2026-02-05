@@ -1,6 +1,7 @@
 """Parlay calculator TUI screen"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -36,7 +37,7 @@ def run_parlay_screen(console: Console):
 
     if choice == "1":
         # Interactive mode
-        cmd = ["polyterm", "parlay", "-i"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "parlay", "-i"]
     else:
         # Quick calculation
         console.print()
@@ -71,7 +72,7 @@ def run_parlay_screen(console: Console):
         except ValueError:
             amount = 100.0
 
-        cmd = ["polyterm", "parlay", "--markets", markets, "--amount", str(amount)]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "parlay", "--markets", markets, "--amount", str(amount)]
 
     console.print()
     console.print(f"[dim]Running: {' '.join(cmd)}[/dim]")

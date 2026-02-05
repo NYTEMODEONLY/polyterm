@@ -1,6 +1,7 @@
 """Chart Screen - View price history charts"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -42,7 +43,7 @@ def run_chart_screen(console: Console):
     console.print()
 
     # Build command
-    cmd = ["polyterm", "chart", "-m", market, "-h", hours]
+    cmd = [sys.executable, "-m", "polyterm.cli.main", "chart", "-m", market, "-h", hours]
     if view_type == "sparkline":
         cmd.append("--sparkline")
 

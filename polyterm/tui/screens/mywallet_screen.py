@@ -1,6 +1,7 @@
 """My Wallet TUI Screen"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -34,19 +35,19 @@ def run_mywallet_screen(console: Console):
         return
 
     if choice == "1":
-        cmd = ["polyterm", "mywallet", "--connect"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "mywallet", "--connect"]
     elif choice == "2":
-        cmd = ["polyterm", "mywallet"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "mywallet"]
     elif choice == "3":
-        cmd = ["polyterm", "mywallet", "-p"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "mywallet", "-p"]
     elif choice == "4":
-        cmd = ["polyterm", "mywallet", "-h"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "mywallet", "-h"]
     elif choice == "5":
-        cmd = ["polyterm", "mywallet", "--pnl"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "mywallet", "--pnl"]
     elif choice == "6":
-        cmd = ["polyterm", "mywallet", "-i"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "mywallet", "-i"]
     elif choice == "7":
-        cmd = ["polyterm", "mywallet", "--disconnect"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "mywallet", "--disconnect"]
 
     console.print()
 

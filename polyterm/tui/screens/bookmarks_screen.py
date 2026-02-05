@@ -1,6 +1,7 @@
 """Bookmarks TUI screen"""
 
 import subprocess
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -31,7 +32,7 @@ def run_bookmarks_screen(console: Console):
         return
 
     if choice == "1":
-        cmd = ["polyterm", "bookmarks", "--list"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "bookmarks", "--list"]
     elif choice == "2":
         console.print()
         search = Prompt.ask("[cyan]Enter market name to bookmark[/cyan]")
@@ -39,9 +40,9 @@ def run_bookmarks_screen(console: Console):
             console.print("[yellow]No market specified.[/yellow]")
             Prompt.ask("[dim]Press Enter to return to menu[/dim]")
             return
-        cmd = ["polyterm", "bookmarks", "--add", search]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "bookmarks", "--add", search]
     else:
-        cmd = ["polyterm", "bookmarks"]
+        cmd = [sys.executable, "-m", "polyterm.cli.main", "bookmarks"]
 
     console.print()
     console.print(f"[dim]Running: {' '.join(cmd)}[/dim]")
