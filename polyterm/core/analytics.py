@@ -8,6 +8,7 @@ from collections import defaultdict
 from ..api.gamma import GammaClient
 from ..api.clob import CLOBClient
 from ..api.subgraph import SubgraphClient
+from ..utils.json_output import safe_float
 
 
 class WhaleActivity:
@@ -18,9 +19,9 @@ class WhaleActivity:
         self.trader = trade_data.get("trader", "")
         self.market_id = trade_data.get("market", "")
         self.outcome = trade_data.get("outcome", "")
-        self.shares = float(trade_data.get("shares", 0))
-        self.price = float(trade_data.get("price", 0))
-        self.notional = float(trade_data.get("notional", self.shares * self.price))
+        self.shares = safe_float(trade_data.get("shares", 0))
+        self.price = safe_float(trade_data.get("price", 0))
+        self.notional = safe_float(trade_data.get("notional", self.shares * self.price))
         self.timestamp = int(trade_data.get("timestamp", 0))
         self.tx_hash = trade_data.get("transactionHash", "")
     
@@ -320,7 +321,7 @@ class AnalyticsEngine:
             ]
             
             # Calculate trend metrics
-            total_volume = sum(float(t.get("shares", 0)) * float(t.get("price", 0)) for t in recent_trades)
+            total_volume = sum(safe_float(t.get("shares", 0)) * safe_float(t.get("price", 0)) for t in recent_trades)
             avg_trade_size = total_volume / len(recent_trades) if recent_trades else 0
             
             # Price trend

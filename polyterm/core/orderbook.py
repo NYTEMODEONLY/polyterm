@@ -15,6 +15,7 @@ from datetime import datetime
 import math
 
 from ..api.clob import CLOBClient
+from ..utils.json_output import safe_float
 
 
 @dataclass
@@ -160,11 +161,11 @@ class OrderBookAnalyzer:
 
         for level in levels:
             if isinstance(level, list) and len(level) >= 2:
-                price = float(level[0])
-                size = float(level[1])
+                price = safe_float(level[0])
+                size = safe_float(level[1])
             elif isinstance(level, dict):
-                price = float(level.get('price', 0))
-                size = float(level.get('size', level.get('amount', 0)))
+                price = safe_float(level.get('price', 0))
+                size = safe_float(level.get('size', level.get('amount', 0)))
             else:
                 continue
 
@@ -435,8 +436,8 @@ class OrderBookAnalyzer:
             size_counts = {}
             for level in levels:
                 if isinstance(level, list) and len(level) >= 2:
-                    size = float(level[1])
-                    price = float(level[0])
+                    size = safe_float(level[1])
+                    price = safe_float(level[0])
 
                     # Round size to detect similar sizes
                     rounded = round(size, -2)  # Round to nearest 100

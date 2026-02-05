@@ -8,6 +8,7 @@ from datetime import datetime
 
 from ..api.gamma import GammaClient
 from ..api.clob import CLOBClient
+from ..utils.json_output import safe_float
 from ..api.subgraph import SubgraphClient
 from ..api.aggregator import APIAggregator
 
@@ -117,13 +118,13 @@ class MarketScanner:
             aggregated_data = {
                 "market_id": market_id,
                 "title": gamma_data.get("question", ""),
-                "probability": float(gamma_prices.get("price", 0)) * 100,
-                "price": float(gamma_prices.get("price", 0)),
-                "volume": float(gamma_data.get("volume", 0)),
-                "liquidity": float(gamma_data.get("liquidity", 0)),
-                "last_trade_price": float(clob_ticker.get("last", 0)) if clob_ticker else 0,
+                "probability": safe_float(gamma_prices.get("price", 0)) * 100,
+                "price": safe_float(gamma_prices.get("price", 0)),
+                "volume": safe_float(gamma_data.get("volume", 0)),
+                "liquidity": safe_float(gamma_data.get("liquidity", 0)),
+                "last_trade_price": safe_float(clob_ticker.get("last", 0)) if clob_ticker else 0,
                 "spread": self.clob_client.calculate_spread(clob_book) if clob_book else 0,
-                "on_chain_volume": float(subgraph_stats.get("totalVolume", 0)),
+                "on_chain_volume": safe_float(subgraph_stats.get("totalVolume", 0)),
                 "trade_count": int(subgraph_stats.get("tradeCount", 0)),
             }
             
