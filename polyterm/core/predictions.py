@@ -348,7 +348,9 @@ class PredictionEngine:
             direction = Direction.NEUTRAL
 
         # Higher confidence for smart money signal
-        avg_win_rate = sum(w.win_rate for w in smart_wallets if w.address in {t.wallet_address for t in smart_trades}) / max(1, len(smart_trades))
+        smart_trade_wallets = {t.wallet_address for t in smart_trades}
+        matching_wallets = [w for w in smart_wallets if w.address in smart_trade_wallets]
+        avg_win_rate = sum(w.win_rate for w in matching_wallets) / max(1, len(matching_wallets))
 
         return Signal(
             signal_type=SignalType.SMART_MONEY,

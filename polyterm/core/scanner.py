@@ -103,14 +103,14 @@ class MarketScanner:
             try:
                 clob_ticker = self.clob_client.get_ticker(market_id)
                 clob_book = self.clob_client.get_order_book(market_id)
-            except:
+            except Exception:
                 clob_ticker = {}
                 clob_book = {}
-            
-            # Get on-chain data
+
+            # Get on-chain data (subgraph may be deprecated)
             try:
                 subgraph_stats = self.subgraph_client.get_market_statistics(market_id)
-            except:
+            except Exception:
                 subgraph_stats = {}
             
             # Aggregate data

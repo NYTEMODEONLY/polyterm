@@ -48,6 +48,18 @@ def populated_db(temp_db):
         )
         temp_db.insert_snapshot(snapshot)
 
+    # Create wallet records first (foreign key constraint)
+    for w in range(5):
+        wallet = Wallet(
+            address=f"0xwallet{w}",
+            first_seen=base_time - timedelta(days=10),
+            total_trades=10,
+            total_volume=5000,
+            win_rate=0.6,
+            avg_position_size=500,
+        )
+        temp_db.upsert_wallet(wallet)
+
     # Add some trades
     for i in range(30):
         trade = Trade(

@@ -107,7 +107,7 @@ class APIAggregator:
                 if gamma_market:
                     enriched['volume'] = gamma_market.get('volume', 0)
                     enriched['volume24hr'] = gamma_market.get('volume24hr', 0)
-            except:
+            except Exception:
                 pass
         
         # Try to add order book data from CLOB
@@ -209,7 +209,7 @@ class APIAggregator:
                     year = int(end_date[:4])
                     if year < report['oldest_market_year']:
                         report['oldest_market_year'] = year
-            except:
+            except Exception:
                 pass
         
         # Add warnings

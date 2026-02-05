@@ -127,6 +127,17 @@ class TestDatabase:
 
     def test_trade_operations(self, temp_db):
         """Test trade CRUD operations"""
+        # Create wallet first (foreign key constraint)
+        wallet = Wallet(
+            address="0xtrader",
+            first_seen=datetime.now(),
+            total_trades=0,
+            total_volume=0,
+            win_rate=0.0,
+            avg_position_size=0,
+        )
+        temp_db.upsert_wallet(wallet)
+
         trade = Trade(
             market_id="market1",
             wallet_address="0xtrader",
@@ -152,6 +163,18 @@ class TestDatabase:
 
     def test_large_trades(self, temp_db):
         """Test getting large (whale) trades"""
+        # Create wallets first (foreign key constraint)
+        for addr in ["0xsmall", "0xlarge"]:
+            wallet = Wallet(
+                address=addr,
+                first_seen=datetime.now(),
+                total_trades=0,
+                total_volume=0,
+                win_rate=0.0,
+                avg_position_size=0,
+            )
+            temp_db.upsert_wallet(wallet)
+
         # Small trade
         small = Trade(
             market_id="market1",
