@@ -220,16 +220,22 @@ class GammaClient:
             return []
     
     def get_trending_markets(self, limit: int = 10) -> List[Dict[str, Any]]:
-        """Get trending markets by volume
+        """Get trending markets by 24hr volume
         
         Args:
             limit: Maximum number of markets
         
         Returns:
-            List of trending market dictionaries
+            List of trending market dictionaries sorted by 24hr volume
         """
-        params = {"limit": limit}
-        return self._request("GET", "/markets/trending", params=params)
+        params = {
+            "limit": limit,
+            "active": "true",
+            "closed": "false",
+            "order": "volume24hr",
+            "ascending": "false",
+        }
+        return self._request("GET", "/markets", params=params)
     
     def get_market_liquidity(self, market_id: str) -> Dict[str, Any]:
         """Get liquidity information for a market

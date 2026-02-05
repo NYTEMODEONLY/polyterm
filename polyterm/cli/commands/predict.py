@@ -94,7 +94,7 @@ def predict(ctx, market, limit, horizon, min_confidence, output_format):
             return
 
         if not predictions:
-            console.print("[yellow]No predictions generated above confidence threshold[/yellow]")
+            show_error(console, "no_predictions")
             return
 
         # Create table

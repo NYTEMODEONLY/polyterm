@@ -261,6 +261,21 @@ class TUIController:
 
                 # Return to menu (unless quitting)
                 if self.running and choice not in QUIT_COMMANDS:
+                    # Occasionally show a helpful tip
+                    from ..utils.tips import should_show_tip, get_random_tip, format_tip
+                    if should_show_tip():
+                        tip_contexts = {
+                            '1': 'monitor', 'mon': 'monitor',
+                            '3': 'whales', 'w': 'whales',
+                            '9': 'arbitrage', 'arb': 'arbitrage',
+                            '10': 'predict', 'pred': 'predict',
+                            '13': 'orderbook', 'ob': 'orderbook',
+                            '12': 'alerts', 'alert': 'alerts',
+                        }
+                        context = tip_contexts.get(choice)
+                        tip = get_random_tip(context)
+                        self.console.print(f"\n{format_tip(tip)}")
+
                     input("\nPress Enter to return to menu...")
                     self.console.clear()
                     display_logo(self.console)

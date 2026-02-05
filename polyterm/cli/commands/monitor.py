@@ -364,7 +364,10 @@ def monitor(ctx, limit, category, refresh, active_only, sort, output_format, onc
 
     # Run once mode (for scripting)
     if once:
-        console.print(generate_table())
+        table = generate_table()
+        console.print(table)
+        if table.row_count == 0:
+            show_error(console, 'no_markets_found')
         gamma_client.close()
         clob_client.close()
         return
