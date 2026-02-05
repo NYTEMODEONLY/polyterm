@@ -9,6 +9,7 @@ import sys
 import os
 import re
 import shutil
+import tempfile
 from polyterm.api.gamma import GammaClient
 from polyterm.utils.config import Config
 
@@ -302,7 +303,7 @@ monitor.run_live_monitor()
 '''
     
     # Write temporary script with proper synchronization
-    script_path = "/tmp/polyterm_live_monitor.py"
+    script_path = os.path.join(tempfile.gettempdir(), f"polyterm_live_monitor_{os.getpid()}.py")
 
     # Create script with forced disk sync
     with open(script_path, 'w') as f:

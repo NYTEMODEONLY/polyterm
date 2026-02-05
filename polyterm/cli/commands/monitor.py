@@ -212,7 +212,7 @@ def monitor(ctx, limit, category, refresh, active_only, sort, output_format, onc
             
             for market in markets:
                 market_id = market.get("id")
-                title = market.get("question", market.get("title", ""))[:45]
+                title = market.get("question", market.get("title", "Unknown Market"))[:45]
                 
                 # Get probability and volume from market data
                 # outcomePrices can be at top level or nested in markets[0]

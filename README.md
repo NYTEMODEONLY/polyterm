@@ -567,9 +567,14 @@ python -m twine upload dist/*
 - **Compare input validation** - Hours input in interactive compare now handles non-numeric input gracefully instead of crashing
 - **Wash trade detector default score** - Changed default score when no indicators available from 20 (Low) to 40 (Medium/uncertain) to avoid false safety signals
 
+### Input Validation
+- **Position tracker price validation** - Entry and exit prices now validated (0.01-0.99) in interactive position mode
+- **Monitor title fallback** - Markets with missing titles now display "Unknown Market" instead of blank rows
+
 ### Code Quality
 - **Database dead code removed** - Removed always-false condition in `get_database_stats()`
 - **Tips tracker fixes** - Fixed empty string bug in tip file loading and replaced meaningless set trimming with proper reset logic
+- **Live monitor temp file** - Uses PID-based temp file path instead of hardcoded `/tmp/polyterm_live_monitor.py`
 
 ### Test Suite
 - **183/183 tests passing** (2 skipped for deprecated endpoints)

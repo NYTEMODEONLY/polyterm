@@ -262,6 +262,9 @@ def _add_position(console: Console, config, db: Database, search_term: str, outp
             default=current_price * 100
         )
         entry_price = entry_input / 100 if entry_input > 1 else entry_input
+        if not 0.01 <= entry_price <= 0.99:
+            console.print("[red]Price must be between 0.01 and 0.99 (1% to 99%)[/red]")
+            return
 
         platform = Prompt.ask(
             "[cyan]Platform[/cyan]",
@@ -369,6 +372,9 @@ def _close_position(console: Console, config, db: Database, position_id: int, ou
         default=current_price * 100
     )
     exit_price = exit_input / 100 if exit_input > 1 else exit_input
+    if not 0.01 <= exit_price <= 0.99:
+        console.print("[red]Price must be between 0.01 and 0.99 (1% to 99%)[/red]")
+        return
 
     # Calculate P&L
     if position['side'] == 'YES':
