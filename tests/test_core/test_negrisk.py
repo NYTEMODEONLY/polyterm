@@ -315,6 +315,22 @@ class TestNegRiskAnalyzeEvent:
 
         assert result['outcomes'][0]['token_id'] == 'token_456'
 
+    def test_handles_empty_clob_token_id_list(self, analyzer):
+        """Should not crash when clobTokenIds is an empty list."""
+        market = create_market('m1', 'Test', 0.30)
+        market['clobTokenIds'] = []
+
+        event = create_event('e1', 'Event', [
+            market,
+            create_market('m2', 'B', 0.30),
+            create_market('m3', 'C', 0.30),
+        ])
+
+        result = analyzer.analyze_event(event)
+
+        assert result is not None
+        assert result['outcomes'][0]['token_id'] == ''
+
 
 class TestNegRiskScanAll:
     """Test scanning all events for opportunities"""

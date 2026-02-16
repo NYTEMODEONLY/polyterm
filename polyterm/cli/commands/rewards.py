@@ -34,11 +34,19 @@ def rewards(ctx, wallet, output_format):
 
     try:
         # Get positions from database
-        db_positions = db.get_positions(status='open')
+        if wallet_address:
+            db_positions = db.get_positions(status='open', wallet_address=wallet_address)
+        else:
+            db_positions = db.get_positions(status='open')
 
         if not db_positions:
             if output_format == 'json':
-                print_json({'success': True, 'positions': [], 'rewards': calc.estimate_holding_rewards([])})
+                print_json({
+                    'success': True,
+                    'wallet': wallet_address,
+                    'positions': [],
+                    'rewards': calc.estimate_holding_rewards([]),
+                })
                 return
             console.print()
             console.print("[yellow]No open positions found[/yellow]")
@@ -75,7 +83,12 @@ def rewards(ctx, wallet, output_format):
         result = calc.estimate_holding_rewards(positions)
 
         if output_format == 'json':
-            print_json({'success': True, 'rewards': result, 'positions': len(positions)})
+            print_json({
+                'success': True,
+                'wallet': wallet_address,
+                'rewards': result,
+                'positions': len(positions),
+            })
             return
 
         console.print()

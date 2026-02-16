@@ -49,6 +49,20 @@ class NegRiskAnalyzer:
 
         return str(event_key), event_data
 
+    def _extract_token_id(self, market):
+        """Extract first CLOB token id safely from list or JSON string."""
+        token_ids = market.get("clobTokenIds", [])
+        if isinstance(token_ids, list):
+            return str(token_ids[0]) if token_ids else ""
+        if isinstance(token_ids, str):
+            try:
+                parsed = json.loads(token_ids)
+            except Exception:
+                return ""
+            if isinstance(parsed, list) and parsed:
+                return str(parsed[0])
+        return ""
+
     def find_multi_outcome_events(self, limit=50):
         """Find events with 3+ outcome markets (NegRisk candidates)
 
@@ -136,13 +150,7 @@ class NegRiskAnalyzer:
 
             yes_price = safe_float(outcome_prices[0])
             question = market.get('question', market.get('groupItemTitle', ''))
-            token_id = market.get('clobTokenIds', [''])[0] if isinstance(market.get('clobTokenIds', []), list) else ''
-            if isinstance(market.get('clobTokenIds', ''), str):
-                try:
-                    ids = json.loads(market.get('clobTokenIds', '[]'))
-                    token_id = ids[0] if ids else ''
-                except Exception:
-                    token_id = ''
+            token_id = self._extract_token_id(market)
 
             outcomes.append({
                 'question': question[:60],

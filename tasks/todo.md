@@ -59,3 +59,24 @@
 - `gamma` fix validation: `./.venv/bin/pytest tests/test_api/test_gamma.py -k search_markets` => `6 passed, 50 deselected`.
 - Full regression validation: `./.venv/bin/pytest` => `633 passed, 2 skipped, 1 warning`.
 - Residual risk: live upstream API payload contracts can still evolve; current tests now cover both nested and flat market/event shapes used by the reviewed paths.
+
+## PR #1 Review Remediation Round 2 (2026-02-16)
+
+- [x] 1. Re-validate new Codex review comments and map each to code paths/tests.
+- [x] 2. VERIFY: Confirm both new findings are reproducible from current source behavior.
+- [x] 3. Fix `polyterm/core/negrisk.py` to handle empty/malformed `clobTokenIds` without crashing scans.
+- [x] 4. VERIFY: Run `./.venv/bin/pytest tests/test_core/test_negrisk.py` and confirm new token-id edge-case regression passes.
+- [x] 5. Implement wallet-scoped position retrieval for rewards (`--wallet` and saved wallet config) in DB + command path.
+- [x] 6. VERIFY: Run focused DB/CLI tests for wallet-scoped rewards behavior.
+- [x] 7. Run full regression suite `./.venv/bin/pytest`.
+- [x] 8. VERIFY: Confirm full pass counts and no regressions.
+- [ ] 9. Update PR comments/threads with fix details and validation evidence.
+
+### PR #1 Round 2 Results
+
+- New review findings revalidated from GitHub API: 2 inline findings (`negrisk` empty token list crash risk, `rewards` wallet filter ignored).
+- `negrisk` fix validation: `./.venv/bin/pytest tests/test_core/test_negrisk.py` => `28 passed`.
+- Wallet-scope DB validation: `./.venv/bin/pytest tests/test_db/test_positions.py` => `12 passed`.
+- Wallet-scope CLI validation: `./.venv/bin/pytest tests/test_cli/test_rewards_command.py` => `3 passed`.
+- Full regression validation: `./.venv/bin/pytest` => `639 passed, 2 skipped, 1 warning`.
+- Residual risk: existing manually tracked positions created before wallet tagging may have empty `wallet_address` and will not appear in wallet-scoped rewards views until re-tagged or recreated.
