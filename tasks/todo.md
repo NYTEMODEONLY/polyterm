@@ -70,7 +70,7 @@
 - [x] 6. VERIFY: Run focused DB/CLI tests for wallet-scoped rewards behavior.
 - [x] 7. Run full regression suite `./.venv/bin/pytest`.
 - [x] 8. VERIFY: Confirm full pass counts and no regressions.
-- [ ] 9. Update PR comments/threads with fix details and validation evidence.
+- [x] 9. Update PR comments/threads with fix details and validation evidence.
 
 ### PR #1 Round 2 Results
 
