@@ -39,6 +39,7 @@ class GammaClient:
         self.api_key = api_key
         self.rate_limiter = RateLimiter(requests_per_minute=60)
         self.session = requests.Session()
+        self._search_endpoint_supported = True
         
         if api_key:
             self.session.headers.update({"Authorization": f"Bearer {api_key}"})
@@ -196,14 +197,18 @@ class GammaClient:
         Returns:
             List of matching markets
         """
-        # Try search endpoint first
-        try:
-            params = {"q": query, "limit": limit}
-            results = self._request("GET", "/markets/search", params=params)
-            if results:
-                return results
-        except Exception:
-            pass
+        # Try search endpoint first when supported.
+        # Gamma currently returns 422 for this endpoint in some environments.
+        if self._search_endpoint_supported:
+            try:
+                params = {"q": query, "limit": limit}
+                results = self._request("GET", "/markets/search", params=params)
+                if results:
+                    return results
+            except Exception as exc:
+                err = str(exc)
+                if " 422 " in err or " 404 " in err or "/markets/search" in err:
+                    self._search_endpoint_supported = False
 
         # Fallback: get markets and filter locally
         try:
@@ -341,4 +346,3 @@ class GammaClient:
     def close(self):
         """Close the session"""
         self.session.close()
-

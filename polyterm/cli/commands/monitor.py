@@ -9,9 +9,7 @@ from rich.live import Live
 
 from ...api.gamma import GammaClient
 from ...api.clob import CLOBClient
-from ...api.subgraph import SubgraphClient
 from ...api.aggregator import APIAggregator
-from ...core.scanner import MarketScanner
 from ...utils.formatting import format_probability_rich, format_volume
 from ...utils.json_output import print_json, format_markets_json
 from ...utils.errors import handle_api_error, show_error
@@ -141,18 +139,8 @@ def monitor(ctx, limit, category, refresh, active_only, sort, output_format, onc
         rest_endpoint=config.clob_rest_endpoint,
         ws_endpoint=config.clob_endpoint,
     )
-    subgraph_client = SubgraphClient(endpoint=config.subgraph_endpoint)
-    
     # Initialize aggregator for live data
-    aggregator = APIAggregator(gamma_client, clob_client, subgraph_client)
-    
-    # Initialize scanner
-    scanner = MarketScanner(
-        gamma_client,
-        clob_client,
-        subgraph_client,
-        check_interval=refresh,
-    )
+    aggregator = APIAggregator(gamma_client, clob_client, None)
     
     def generate_table():
         """Generate market table"""
@@ -384,4 +372,3 @@ def monitor(ctx, limit, category, refresh, active_only, sort, output_format, onc
     finally:
         gamma_client.close()
         clob_client.close()
-

@@ -1,0 +1,38 @@
+# PolyTerm Audit Todo (2026-02-16)
+
+- [x] 1. Establish audit baseline and environment details.
+- [x] 2. VERIFY: Confirm clean git state and collect project/test inventory.
+- [x] 3. Run full automated tests (`pytest`) for all modules.
+- [x] 4. VERIFY: Capture pass/fail counts and failing test identifiers.
+- [x] 5. Run coverage audit to detect untested production modules.
+- [x] 6. VERIFY: Export per-file coverage and identify zero/low coverage files.
+- [x] 7. Run packaging and CLI smoke checks (`pip install -e .`, `polyterm --help`, key command help paths).
+- [x] 8. VERIFY: Confirm commands execute without runtime/import errors.
+- [x] 9. Investigate failures and regressions to root cause with minimal reproductions.
+- [x] 10. VERIFY: Re-run affected tests/commands and confirm findings are reproducible.
+- [x] 11. Review architecture/test alignment for non-monolithic maintainability risks.
+- [x] 12. VERIFY: Document concrete evidence and file-level references for each risk.
+- [x] 13. Final report with severity-ranked findings, broken features list, and next fixes.
+- [x] 14. VERIFY: Ensure report includes exact paths/lines, reproduction steps, and residual risks.
+
+## Review Notes
+
+- Automated tests: `623 passed`, `2 skipped`, `0 failed`.
+- Coverage: `26%` total (`coverage.xml`), with many CLI/TUI/core modules at very low or zero coverage.
+- CLI registration smoke: `81` command help paths validated, `0` failures.
+- Import sweep: `208` modules imported, `0` import failures.
+- Reproduced defects:
+  - `crypto15m --once --format json` takes ~58s when no 15m matches are found due repeated fallback search cycles.
+  - `whales --format json` emits non-JSON text before JSON payload (breaks parser workflows).
+  - `mywallet --format json` emits non-JSON text before JSON payload in multiple flows and emits plain text for missing wallet.
+  - Portfolio live wallet analytics degraded: command returns “Subgraph API endpoint has been removed”.
+- Fix implementation completed on branch `codex/fix-json-portfolio-crypto15m`:
+  - `whales --format json` now emits pure JSON only.
+  - `mywallet --format json` now emits pure JSON for success and error paths.
+  - Portfolio analytics now use Data API when Subgraph is unavailable; command no longer depends on deprecated Subgraph path.
+  - `crypto15m --once --format json` discovery logic was rewritten to bounded API calls and now returns in ~1.9s in empty-market scenarios.
+  - Subgraph initialization removed from monitor/whales code paths that do not require it.
+- Verification after fixes:
+  - Full suite: `630 passed`, `2 skipped`, `0 failed` (`./.venv/bin/pytest`).
+  - New regression tests added for JSON output contracts, crypto15m bounded-call behavior, Data API portfolio path, and Gamma search-endpoint fallback behavior.
+  - Runtime smoke checks: JSON outputs validated with `python -m json.tool`; no stderr deprecation noise on monitor/whales; portfolio command no longer surfaces Subgraph deprecation error for wallet lookup.

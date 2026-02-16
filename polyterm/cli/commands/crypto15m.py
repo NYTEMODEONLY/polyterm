@@ -60,29 +60,9 @@ POLYMARKET_CRYPTO_URLS = {
 
 
 def search_markets_fallback(gamma_client: GammaClient, query: str, limit: int = 10) -> list:
-    """Search markets with fallback to filtering get_markets results"""
-    # Try search endpoint first
+    """Search markets using GammaClient's built-in fallback behavior."""
     try:
-        results = gamma_client.search_markets(query, limit=limit)
-        if results:
-            return results
-    except Exception:
-        pass
-
-    # Fallback: get all markets and filter locally
-    try:
-        markets = gamma_client.get_markets(limit=200)
-        query_lower = query.lower()
-
-        matches = []
-        for market in markets:
-            title = market.get('question', market.get('title', '')).lower()
-            if query_lower in title:
-                matches.append(market)
-                if len(matches) >= limit:
-                    break
-
-        return matches
+        return gamma_client.search_markets(query, limit=limit)
     except Exception:
         return []
 
@@ -120,57 +100,62 @@ def find_crypto_markets(gamma_client: GammaClient, limit: int = 20) -> list:
         return []
 
 
-def find_15m_markets(gamma_client: GammaClient, crypto: str = None) -> list:
-    """Find active 15-minute crypto markets"""
-    markets = []
+def _is_15m_title(title: str) -> bool:
+    """Return True when a title looks like a 15-minute market."""
+    return "15" in title and ("minute" in title or "min" in title or "15m" in title)
 
-    # First, try to get all markets and filter for 15M crypto
-    try:
-        all_markets = gamma_client.get_markets(limit=300)
-        for market in all_markets:
-            title = market.get('question', market.get('title', '')).lower()
 
-            # Check if this is a 15-minute market
-            if '15' in title and ('minute' in title or 'min' in title or '15m' in title):
-                # Check which crypto it is
-                for symbol, info in CRYPTO_15M_MARKETS.items():
-                    if crypto and symbol != crypto.upper():
-                        continue
-                    if any(s.lower() in title for s in [symbol.lower(), info['name'].lower()]):
-                        market_id = market.get('id', market.get('condition_id', ''))
-                        if market_id and not any(m.get('id') == market_id for m in markets):
-                            market['crypto_symbol'] = symbol
-                            market['crypto_name'] = info['name']
-                            markets.append(market)
-                            break
-    except Exception:
-        pass
+def _collect_15m_matches(source_markets: list, crypto: str = None, existing_ids: set = None) -> list:
+    """Collect and annotate 15m crypto markets from a source list."""
+    matches = []
+    seen_ids = existing_ids if existing_ids is not None else set()
+    cryptos_to_check = [crypto.upper()] if crypto else list(CRYPTO_15M_MARKETS.keys())
 
-    # If no markets found via get_markets, try search
-    if not markets:
-        cryptos_to_search = [crypto.upper()] if crypto else CRYPTO_15M_MARKETS.keys()
+    for market in source_markets or []:
+        title = market.get('question', market.get('title', '')).lower()
+        if not _is_15m_title(title):
+            continue
 
-        for symbol in cryptos_to_search:
-            if symbol not in CRYPTO_15M_MARKETS:
+        market_id = market.get('id', market.get('condition_id', ''))
+        if not market_id or market_id in seen_ids:
+            continue
+
+        for symbol in cryptos_to_check:
+            info = CRYPTO_15M_MARKETS.get(symbol)
+            if not info:
                 continue
+            if symbol.lower() in title or info['name'].lower() in title:
+                annotated = dict(market)
+                annotated['crypto_symbol'] = symbol
+                annotated['crypto_name'] = info['name']
+                matches.append(annotated)
+                seen_ids.add(market_id)
+                break
 
-            info = CRYPTO_15M_MARKETS[symbol]
+    return matches
 
-            for term in info['search_terms']:
-                try:
-                    results = search_markets_fallback(gamma_client, term, limit=10)
-                    for market in results:
-                        title = market.get('question', market.get('title', '')).lower()
-                        # Filter for 15-minute markets
-                        if '15' in title and ('minute' in title or 'min' in title or '15m' in title):
-                            if any(s.lower() in title for s in [symbol, info['name'].lower()]):
-                                market_id = market.get('id', market.get('condition_id', ''))
-                                if market_id and not any(m.get('id') == market_id for m in markets):
-                                    market['crypto_symbol'] = symbol
-                                    market['crypto_name'] = info['name']
-                                    markets.append(market)
-                except Exception:
-                    continue
+
+def find_15m_markets(gamma_client: GammaClient, crypto: str = None) -> list:
+    """Find active 15-minute crypto markets with bounded API calls."""
+    markets = []
+    seen_ids = set()
+
+    # Fast pass over the primary market window.
+    try:
+        primary_markets = gamma_client.get_markets(limit=300)
+    except Exception:
+        primary_markets = []
+    markets.extend(_collect_15m_matches(primary_markets, crypto, seen_ids))
+
+    if markets:
+        return markets
+
+    # Secondary pass over a larger window for sparse periods.
+    try:
+        expanded_markets = gamma_client.get_markets(limit=1000)
+    except Exception:
+        expanded_markets = []
+    markets.extend(_collect_15m_matches(expanded_markets, crypto, seen_ids))
 
     return markets
 

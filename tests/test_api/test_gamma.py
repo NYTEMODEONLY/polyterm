@@ -396,6 +396,38 @@ class TestGammaSearchMarkets:
         assert len(results) == 1
         assert "Bitcoin" in results[0]["question"]
 
+    @responses.activate
+    def test_search_markets_disables_search_endpoint_after_422(self, client):
+        """Test that search endpoint is disabled after a 422 response."""
+        responses.add(
+            responses.GET,
+            f"{GAMMA_ENDPOINT}/markets/search",
+            status=422,
+            json={"error": "unprocessable"},
+        )
+        responses.add(
+            responses.GET,
+            f"{GAMMA_ENDPOINT}/markets",
+            json=[{"id": "1", "question": "Bitcoin market alpha"}],
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            f"{GAMMA_ENDPOINT}/markets",
+            json=[{"id": "2", "question": "Bitcoin market beta"}],
+            status=200,
+        )
+
+        first = client.search_markets("bitcoin", limit=5)
+        second = client.search_markets("bitcoin", limit=5)
+
+        assert len(first) == 1
+        assert len(second) == 1
+        assert len(responses.calls) == 3
+        assert "/markets/search" in responses.calls[0].request.url
+        assert "/markets?" in responses.calls[1].request.url
+        assert "/markets?" in responses.calls[2].request.url
+
 
 class TestGammaGetTrendingMarkets:
     """Test get_trending_markets method"""
