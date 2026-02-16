@@ -51,6 +51,17 @@ def create_market(market_id, question, yes_price, no_price=None):
     }
 
 
+def create_flat_market(market_id, question, yes_price, event_id, event_title, no_price=None):
+    """Create flat Gamma /markets row with event metadata."""
+    market = create_market(market_id, question, yes_price, no_price=no_price)
+    market['events'] = [{
+        'id': event_id,
+        'title': event_title,
+        'slug': f'{event_id}-slug',
+    }]
+    return market
+
+
 def create_event(event_id, title, markets):
     """Create mock event dict"""
     return {
@@ -117,6 +128,24 @@ class TestNegRiskFindMultiOutcomeEvents:
 
         assert len(result) == 1
         assert result[0]['id'] == 'e2'
+
+    def test_groups_flat_market_payload_by_event(self, analyzer, mock_gamma_client):
+        """Should group flat /markets rows by event and return 3+ outcome events."""
+        flat_markets = [
+            create_flat_market('m1', 'A', 0.31, 'event_1', 'Event 1'),
+            create_flat_market('m2', 'B', 0.29, 'event_1', 'Event 1'),
+            create_flat_market('m3', 'C', 0.28, 'event_1', 'Event 1'),
+            create_flat_market('m4', 'X', 0.60, 'event_2', 'Event 2'),
+            create_flat_market('m5', 'Y', 0.35, 'event_2', 'Event 2'),
+        ]
+        mock_gamma_client.get_markets.return_value = flat_markets
+
+        result = analyzer.find_multi_outcome_events(limit=10)
+
+        assert len(result) == 1
+        assert result[0]['id'] == 'event_1'
+        assert result[0]['title'] == 'Event 1'
+        assert len(result[0]['markets']) == 3
 
 
 class TestNegRiskAnalyzeEvent:

@@ -24,20 +24,89 @@ class NegRiskAnalyzer:
         self.clob = clob_client
         self.polymarket_fee = polymarket_fee
 
+    def _extract_event_reference(self, market):
+        """Extract event key and metadata from a flat market row."""
+        event_data = {}
+        events = market.get("events")
+        if isinstance(events, list) and events:
+            first_event = events[0]
+            if isinstance(first_event, dict):
+                event_data = first_event
+        elif isinstance(market.get("event"), dict):
+            event_data = market.get("event", {})
+
+        event_key = (
+            event_data.get("id")
+            or market.get("eventId")
+            or market.get("event_id")
+            or event_data.get("slug")
+            or market.get("eventSlug")
+            or market.get("event_slug")
+        )
+
+        if event_key is None:
+            return None, {}
+
+        return str(event_key), event_data
+
     def find_multi_outcome_events(self, limit=50):
         """Find events with 3+ outcome markets (NegRisk candidates)
 
         Returns list of events that have 3+ markets (multi-outcome)
         """
-        events = self.gamma.get_markets(limit=limit * 3, active=True, closed=False)
+        rows = self.gamma.get_markets(limit=limit * 3, active=True, closed=False)
         multi = []
-        for event in events:
+
+        # Backward-compatible path for callers/tests that already pass nested
+        # event payloads with `event["markets"]`.
+        for event in rows:
             markets = event.get('markets', [])
-            if len(markets) >= 3:
+            if isinstance(markets, list) and len(markets) >= 3:
+                multi.append(event)
+            if len(multi) >= limit:
+                return multi
+
+        # Production Gamma `/markets` payload is flat: group markets by event.
+        grouped_events = {}
+        for market in rows:
+            if not isinstance(market, dict):
+                continue
+            if isinstance(market.get("markets"), list):
+                continue
+
+            event_key, event_data = self._extract_event_reference(market)
+            if event_key is None:
+                continue
+
+            if event_key not in grouped_events:
+                grouped_events[event_key] = {
+                    "id": event_data.get("id")
+                    or market.get("eventId")
+                    or market.get("event_id")
+                    or event_key,
+                    "title": event_data.get("title")
+                    or market.get("eventTitle")
+                    or market.get("event_title")
+                    or market.get("title")
+                    or market.get("question", ""),
+                    "markets": [],
+                }
+
+            grouped_events[event_key]["markets"].append(market)
+            if not grouped_events[event_key]["title"]:
+                grouped_events[event_key]["title"] = (
+                    event_data.get("title")
+                    or market.get("title")
+                    or market.get("question", "")
+                )
+
+        for event in grouped_events.values():
+            if len(event.get("markets", [])) >= 3:
                 multi.append(event)
             if len(multi) >= limit:
                 break
-        return multi
+
+        return multi[:limit]
 
     def analyze_event(self, event):
         """Analyze a multi-outcome event for NegRisk arbitrage

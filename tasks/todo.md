@@ -36,3 +36,26 @@
   - Full suite: `630 passed`, `2 skipped`, `0 failed` (`./.venv/bin/pytest`).
   - New regression tests added for JSON output contracts, crypto15m bounded-call behavior, Data API portfolio path, and Gamma search-endpoint fallback behavior.
   - Runtime smoke checks: JSON outputs validated with `python -m json.tool`; no stderr deprecation noise on monitor/whales; portfolio command no longer surfaces Subgraph deprecation error for wallet lookup.
+
+## PR #1 Review Remediation (2026-02-16)
+
+- [x] 1. Re-validate open PR review comments and map each to source/tests.
+- [x] 2. VERIFY: Capture current behavior and confirm each finding is reproducible from code inspection/tests.
+- [x] 3. Fix `polyterm/core/negrisk.py` multi-outcome discovery for flat `/markets` payloads.
+- [x] 4. VERIFY: Run `./.venv/bin/pytest tests/test_core/test_negrisk.py` and confirm flat payload regression passes.
+- [x] 5. Fix `polyterm/core/news.py` datetime normalization to prevent naive/aware sort errors.
+- [x] 6. VERIFY: Run `./.venv/bin/pytest tests/test_core/test_news.py` and confirm mixed-date sorting regression passes.
+- [x] 7. Fix `polyterm/api/gamma.py` search-endpoint disable caching to only disable on permanent unsupported statuses.
+- [x] 8. VERIFY: Run `./.venv/bin/pytest tests/test_api/test_gamma.py -k search_markets` and confirm transient 500 does not disable endpoint.
+- [x] 9. Run full regression suite `./.venv/bin/pytest`.
+- [x] 10. VERIFY: Confirm full pass counts and no new failures.
+- [x] 11. Update `tasks/todo.md` review notes with concrete results and residual risks.
+
+### PR #1 Review Remediation Results
+
+- PR feedback revalidated from GitHub API: 3 inline findings (negrisk flat payload grouping, news mixed datetime sorting, gamma transient search fallback caching).
+- `negrisk` fix validation: `./.venv/bin/pytest tests/test_core/test_negrisk.py` => `27 passed`.
+- `news` fix validation: `./.venv/bin/pytest tests/test_core/test_news.py` => `24 passed`.
+- `gamma` fix validation: `./.venv/bin/pytest tests/test_api/test_gamma.py -k search_markets` => `6 passed, 50 deselected`.
+- Full regression validation: `./.venv/bin/pytest` => `633 passed, 2 skipped, 1 warning`.
+- Residual risk: live upstream API payload contracts can still evolve; current tests now cover both nested and flat market/event shapes used by the reviewed paths.

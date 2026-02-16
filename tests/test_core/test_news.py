@@ -67,10 +67,10 @@ RSS_FEED_MIXED_DATES = """<?xml version="1.0" encoding="UTF-8"?>
       <description>GMT date format</description>
     </item>
     <item>
-      <title>ISO Format Article</title>
+      <title>Offset Format Article</title>
       <link>https://example.com/5</link>
-      <pubDate>2026-02-03T10:00:00Z</pubDate>
-      <description>ISO date format</description>
+      <pubDate>Mon, 03 Feb 2026 10:00:00 +0000</pubDate>
+      <description>Offset date format</description>
     </item>
   </channel>
 </rss>"""
@@ -235,6 +235,8 @@ class TestParsing:
         # Both should have parsed dates
         assert articles[0]['published_dt'] is not None
         assert articles[1]['published_dt'] is not None
+        assert articles[0]['published_dt'].tzinfo is not None
+        assert articles[1]['published_dt'].tzinfo is not None
 
     @responses.activate
     def test_html_stripping_from_summary(self):
@@ -323,6 +325,23 @@ class TestFetchAll:
         for i in range(len(articles) - 1):
             if articles[i]['published_dt'] and articles[i+1]['published_dt']:
                 assert articles[i]['published_dt'] >= articles[i+1]['published_dt']
+
+    @responses.activate
+    def test_sorts_mixed_naive_and_aware_dates(self):
+        """Should normalize mixed date formats before sorting."""
+        responses.add(
+            responses.GET,
+            "https://test.com/feed.xml",
+            body=RSS_FEED_MIXED_DATES,
+            status=200,
+        )
+
+        aggregator = NewsAggregator(feeds=[("Test", "https://test.com/feed.xml")])
+        articles = aggregator.fetch_all()
+
+        assert len(articles) == 2
+        assert all(a['published_dt'].tzinfo is not None for a in articles if a['published_dt'])
+        assert articles[0]['published_dt'] >= articles[1]['published_dt']
 
     @responses.activate
     def test_handles_partial_feed_failures(self):

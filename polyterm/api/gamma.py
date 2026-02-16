@@ -207,7 +207,7 @@ class GammaClient:
                     return results
             except Exception as exc:
                 err = str(exc)
-                if " 422 " in err or " 404 " in err or "/markets/search" in err:
+                if "422 Client Error" in err or "404 Client Error" in err or " 422 " in err or " 404 " in err:
                     self._search_endpoint_supported = False
 
         # Fallback: get markets and filter locally

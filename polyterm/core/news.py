@@ -7,7 +7,7 @@ articles to prediction markets by keyword overlap.
 import time
 import xml.etree.ElementTree as ET
 from typing import Dict, List, Optional, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import requests
 
@@ -126,6 +126,7 @@ class NewsAggregator:
                         continue
             except Exception:
                 pass
+        published_dt = self._normalize_datetime(published_dt)
 
         # Clean summary (strip HTML tags)
         clean_summary = ''
@@ -143,6 +144,14 @@ class NewsAggregator:
             'summary': clean_summary,
             'source': source_name,
         }
+
+    def _normalize_datetime(self, dt):
+        """Normalize datetimes to UTC and make them timezone-aware."""
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
 
     def _get_text(self, element, tag):
         """Safely get text from an XML element, including nested tags"""
@@ -176,8 +185,6 @@ class NewsAggregator:
             all_articles.extend(articles)
 
         # Sort by published date (newest first)
-        # Use timezone-aware datetime.min for comparison
-        from datetime import timezone
         min_dt = datetime.min.replace(tzinfo=timezone.utc)
         all_articles.sort(
             key=lambda a: a.get('published_dt') or min_dt,
@@ -267,21 +274,14 @@ class NewsAggregator:
             List of recent article dicts
         """
         all_articles = self.fetch_all()
-        cutoff = datetime.now() - timedelta(hours=hours)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
 
         recent = []
         for article in all_articles:
-            pub_dt = article.get('published_dt')
+            pub_dt = self._normalize_datetime(article.get('published_dt'))
             if pub_dt:
-                # Handle timezone-naive comparison
-                if pub_dt.tzinfo:
-                    from datetime import timezone
-                    cutoff_aware = cutoff.replace(tzinfo=timezone.utc)
-                    if pub_dt >= cutoff_aware:
-                        recent.append(article)
-                else:
-                    if pub_dt >= cutoff:
-                        recent.append(article)
+                if pub_dt >= cutoff:
+                    recent.append(article)
             else:
                 # No date, include it (might be recent)
                 recent.append(article)
