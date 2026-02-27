@@ -116,26 +116,7 @@ class NewsAggregator:
         if not title:
             return None
 
-        # Parse published date
-        published_dt = None
-        if pub_date:
-            try:
-                # Try common formats
-                for fmt in [
-                    "%a, %d %b %Y %H:%M:%S %z",
-                    "%a, %d %b %Y %H:%M:%S GMT",
-                    "%Y-%m-%dT%H:%M:%S%z",
-                    "%Y-%m-%dT%H:%M:%SZ",
-                    "%Y-%m-%d %H:%M:%S",
-                ]:
-                    try:
-                        published_dt = datetime.strptime(pub_date.strip(), fmt)
-                        break
-                    except ValueError:
-                        continue
-            except Exception:
-                pass
-        published_dt = self._normalize_datetime(published_dt)
+        published_dt = self._parse_published_datetime(pub_date)
 
         # Clean summary (strip HTML tags)
         clean_summary = ''
@@ -161,6 +142,33 @@ class NewsAggregator:
         if dt.tzinfo is None:
             return dt.replace(tzinfo=timezone.utc)
         return dt.astimezone(timezone.utc)
+
+    def _parse_published_datetime(self, pub_date):
+        """Parse published date strings across RSS/Atom formats."""
+        if not pub_date:
+            return None
+
+        text = str(pub_date).strip()
+
+        for fmt in [
+            "%a, %d %b %Y %H:%M:%S %z",
+            "%a, %d %b %Y %H:%M:%S GMT",
+            "%Y-%m-%dT%H:%M:%S.%f%z",
+            "%Y-%m-%dT%H:%M:%S%z",
+            "%Y-%m-%dT%H:%M:%S.%fZ",
+            "%Y-%m-%dT%H:%M:%SZ",
+            "%Y-%m-%d %H:%M:%S",
+        ]:
+            try:
+                return self._normalize_datetime(datetime.strptime(text, fmt))
+            except ValueError:
+                continue
+
+        try:
+            normalized = text[:-1] + "+00:00" if text.endswith("Z") else text
+            return self._normalize_datetime(datetime.fromisoformat(normalized))
+        except ValueError:
+            return None
 
     def _get_text(self, element, tag):
         """Safely get text from an XML element, including nested tags"""

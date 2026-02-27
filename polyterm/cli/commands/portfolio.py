@@ -32,7 +32,9 @@ def _extract_position_fields(position):
     if explicit_pnl is not None:
         total_pnl = safe_float(explicit_pnl)
     else:
-        total_pnl = safe_float(position.get("realizedPnL", 0)) + safe_float(position.get("unrealizedPnL", 0))
+        realized = position.get("realizedPnL", position.get("realizedPnl", 0))
+        unrealized = position.get("unrealizedPnL", position.get("unrealizedPnl", 0))
+        total_pnl = safe_float(realized) + safe_float(unrealized)
 
     if avg_price == 0 and shares > 0:
         initial_value = safe_float(position.get("initialValue", position.get("costBasis", 0)))

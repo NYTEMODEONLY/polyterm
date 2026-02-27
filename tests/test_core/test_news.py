@@ -744,3 +744,30 @@ class TestGetBreakingNews:
         articles = aggregator.get_breaking_news(hours=6, limit=3)
 
         assert len(articles) <= 3
+
+    @responses.activate
+    def test_fractional_second_atom_dates_respect_hours_filter(self):
+        """Should parse fractional-second Atom timestamps for recency filtering."""
+        old_iso = (datetime.now(timezone.utc) - timedelta(hours=25)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        atom_feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Atom Test Feed</title>
+  <entry>
+    <title>Old Atom Article</title>
+    <link href="https://example.com/atom-old" />
+    <published>{old_iso}</published>
+    <summary>Old summary</summary>
+  </entry>
+</feed>"""
+
+        responses.add(
+            responses.GET,
+            "https://test.com/feed.xml",
+            body=atom_feed,
+            status=200,
+        )
+
+        aggregator = NewsAggregator(feeds=[("Test", "https://test.com/feed.xml")])
+        articles = aggregator.get_breaking_news(hours=6, limit=20)
+
+        assert articles == []
