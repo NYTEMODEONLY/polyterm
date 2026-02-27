@@ -452,6 +452,35 @@ class TestDetectClusters:
         assert 'risk' in results[0]
         assert 'signals' in results[0]
 
+    def test_reuses_precomputed_timing_during_scoring(self):
+        """Should not recompute expensive timing scan per wallet pair."""
+        db = MagicMock()
+        now = datetime.now()
+
+        timing_trades = []
+        for i in range(3):
+            timing_trades.extend([
+                Trade(wallet_address="0xAAA", market_id=f"m{i}", timestamp=now + timedelta(minutes=i), size=100.0, price=0.5),
+                Trade(wallet_address="0xBBB", market_id=f"m{i}", timestamp=now + timedelta(minutes=i, seconds=5), size=100.0, price=0.5),
+            ])
+        db.get_recent_trades.return_value = timing_trades
+
+        db.get_all_wallets.return_value = [
+            Wallet(address="0xAAA", first_seen=now),
+            Wallet(address="0xBBB", first_seen=now),
+        ]
+        db.get_trades_by_wallet.side_effect = lambda addr, limit: [
+            Trade(wallet_address=addr, market_id="m1", timestamp=now, size=100.0, price=0.5),
+            Trade(wallet_address=addr, market_id="m2", timestamp=now, size=200.0, price=0.5),
+            Trade(wallet_address=addr, market_id="m3", timestamp=now, size=300.0, price=0.5),
+        ]
+
+        detector = WalletClusterDetector(db)
+        results = detector.detect_clusters(min_score=0)
+
+        assert len(results) > 0
+        assert db.get_recent_trades.call_count == 1
+
     def test_filters_by_min_score(self):
         """Should filter clusters below minimum score"""
         db = MagicMock()

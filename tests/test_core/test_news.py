@@ -130,6 +130,31 @@ class TestFetchFeed:
         assert articles == []
 
     @responses.activate
+    def test_transient_failure_does_not_cache_empty_results(self):
+        """Should retry immediately after a transient fetch failure."""
+        responses.add(
+            responses.GET,
+            "https://test.com/feed.xml",
+            body="Network error",
+            status=500,
+        )
+        responses.add(
+            responses.GET,
+            "https://test.com/feed.xml",
+            body=RSS_FEED_VALID,
+            status=200,
+        )
+
+        aggregator = NewsAggregator(feeds=[("Test", "https://test.com/feed.xml")], cache_ttl=300)
+
+        first = aggregator.fetch_feed("Test", "https://test.com/feed.xml")
+        second = aggregator.fetch_feed("Test", "https://test.com/feed.xml")
+
+        assert first == []
+        assert len(second) == 2
+        assert len(responses.calls) == 2
+
+    @responses.activate
     def test_cache_behavior(self):
         """Should use cache on second call"""
         responses.add(
@@ -192,6 +217,35 @@ class TestFetchFeed:
 
         # Should return empty list on parse error
         assert articles == []
+
+    @responses.activate
+    def test_keeps_stale_cache_on_transient_failure(self):
+        """Should return stale cached data if refresh attempt fails."""
+        responses.add(
+            responses.GET,
+            "https://test.com/feed.xml",
+            body=RSS_FEED_VALID,
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "https://test.com/feed.xml",
+            body="Network error",
+            status=500,
+        )
+
+        aggregator = NewsAggregator(feeds=[("Test", "https://test.com/feed.xml")], cache_ttl=1)
+        first = aggregator.fetch_feed("Test", "https://test.com/feed.xml")
+        cached_time, _ = aggregator.cache["https://test.com/feed.xml"]
+
+        with patch('time.time') as mock_time:
+            mock_time.return_value = cached_time + 2
+            second = aggregator.fetch_feed("Test", "https://test.com/feed.xml")
+
+        assert len(first) == 2
+        assert len(second) == 2
+        assert len(responses.calls) == 2
+        assert aggregator.cache["https://test.com/feed.xml"][0] == cached_time
 
 
 class TestParsing:
