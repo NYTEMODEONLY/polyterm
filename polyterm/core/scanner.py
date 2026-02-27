@@ -63,7 +63,7 @@ class MarketScanner:
         self,
         gamma_client: GammaClient,
         clob_client: CLOBClient,
-        subgraph_client: SubgraphClient,
+        subgraph_client: Optional[SubgraphClient] = None,
         check_interval: int = 60,
     ):
         self.gamma_client = gamma_client
@@ -109,9 +109,12 @@ class MarketScanner:
                 clob_book = {}
 
             # Get on-chain data (subgraph may be deprecated)
-            try:
-                subgraph_stats = self.subgraph_client.get_market_statistics(market_id)
-            except Exception:
+            if self.subgraph_client is not None:
+                try:
+                    subgraph_stats = self.subgraph_client.get_market_statistics(market_id)
+                except Exception:
+                    subgraph_stats = {}
+            else:
                 subgraph_stats = {}
             
             # Aggregate data
@@ -332,4 +335,3 @@ class MarketScanner:
         mean = sum(prob_changes) / len(prob_changes)
         variance = sum((x - mean) ** 2 for x in prob_changes) / len(prob_changes)
         return variance ** 0.5
-

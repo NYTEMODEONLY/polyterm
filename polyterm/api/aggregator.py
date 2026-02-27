@@ -17,7 +17,7 @@ class APIAggregator:
         self,
         gamma_client: GammaClient,
         clob_client: CLOBClient,
-        subgraph_client: SubgraphClient,
+        subgraph_client: Optional[SubgraphClient] = None,
     ):
         self.gamma_client = gamma_client
         self.clob_client = clob_client
@@ -117,14 +117,15 @@ class APIAggregator:
         except Exception:
             pass
         
-        # Try to add on-chain stats from Subgraph
-        try:
-            stats = self.subgraph_client.get_market_statistics(market_id)
-            if stats:
-                enriched['on_chain_volume'] = stats.get('totalVolume', 0)
-                enriched['trade_count'] = stats.get('tradeCount', 0)
-        except Exception:
-            pass
+        # Try to add on-chain stats from Subgraph when available
+        if self.subgraph_client is not None:
+            try:
+                stats = self.subgraph_client.get_market_statistics(market_id)
+                if stats:
+                    enriched['on_chain_volume'] = stats.get('totalVolume', 0)
+                    enriched['trade_count'] = stats.get('tradeCount', 0)
+            except Exception:
+                pass
         
         # Add data source metadata
         enriched['_data_sources'] = []
@@ -218,4 +219,3 @@ class APIAggregator:
             report['issues'].append("CRITICAL: No markets have volume data!")
         
         return report
-

@@ -38,6 +38,21 @@ polyterm
 
 ---
 
+## Why PolyTerm
+
+PolyTerm is an analytics and intelligence layer for Polymarket — not just an API wrapper.
+
+- **20+ analytics features** no other CLI has: whale tracking, insider detection scoring, arbitrage scanning (including cross-platform vs Kalshi), AI-powered multi-factor predictions, wash trade detection, UMA dispute risk analysis, and market risk grading (A-F).
+- **73+ interactive TUI screens** with menu navigation, contextual help, and an onboarding tutorial. No other Polymarket terminal tool has a TUI.
+- **Terminal-native visualization**: ASCII line charts, sparklines, depth charts, and side-by-side market comparison — all without leaving the terminal.
+- **Stateful local database** (SQLite): bookmarks, price alerts, trade journal, position tracking, recently viewed markets, screener presets. Your research accumulates value over time.
+- **Zero custody risk**: PolyTerm never touches private keys. Wallet features are view-only. No attack surface for key theft.
+- **440+ tests** across API, core logic, CLI, TUI, and database layers.
+
+For a detailed comparison with the official Polymarket CLI, see [docs/COMPETITIVE_GAP.md](docs/COMPETITIVE_GAP.md).
+
+---
+
 ## Features Overview
 
 ### Core Features

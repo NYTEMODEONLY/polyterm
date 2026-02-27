@@ -52,6 +52,10 @@ polyterm monitor --format json --once # JSON output mode (all commands support t
 polyterm crypto15m -i                 # 15-minute crypto markets (BTC, ETH, SOL, XRP)
 polyterm mywallet -i                  # Connect/view your wallet (view-only)
 polyterm quicktrade -m "bitcoin" -s yes # Prepare trade with direct link
+polyterm negrisk --min-spread 0.03     # Multi-outcome NegRisk arbitrage scan
+polyterm rewards -w 0xABC...           # Holding & liquidity rewards estimates
+polyterm clusters --min-score 70       # Detect wallet clusters (same entity)
+polyterm news --hours 12 --limit 15    # Market-relevant news headlines
 ```
 
 ### Building & Publishing
@@ -73,18 +77,23 @@ python -m twine upload dist/*
 polyterm/
 ├── api/              # Data layer - API clients
 │   ├── gamma.py          # Primary: Gamma REST API (/events endpoint)
-│   ├── clob.py           # CLOB REST + WebSocket (wss://ws-live-data.polymarket.com)
+│   ├── clob.py           # CLOB REST + WebSocket (RTDS + order book)
+│   ├── data_api.py       # Data API client (wallet positions, activity, trades)
 │   └── aggregator.py     # Multi-source aggregator with fallback
 ├── core/             # Business logic
 │   ├── scanner.py        # Market monitoring & shift detection
 │   ├── whale_tracker.py  # Whale tracking + InsiderDetector class
 │   ├── arbitrage.py      # Arbitrage scanner (intra-market, correlated, Kalshi)
+│   ├── negrisk.py        # NegRisk multi-outcome arbitrage detection
 │   ├── orderbook.py      # Order book analysis with ASCII charts
 │   ├── predictions.py    # AI-powered multi-factor predictions
 │   ├── risk_score.py     # Market risk scoring system (A-F grades)
 │   ├── uma_tracker.py    # UMA oracle dispute risk analysis
 │   ├── wash_trade_detector.py  # Wash trade detection indicators
 │   ├── charts.py         # ASCII chart generation (line, bar, sparkline)
+│   ├── cluster_detector.py # Wallet cluster detection (same-entity analysis)
+│   ├── rewards.py        # Holding & liquidity rewards calculator
+│   ├── news.py           # RSS news aggregation engine
 │   └── notifications.py  # Multi-channel notifications
 ├── db/               # Database layer (SQLite at ~/.polyterm/data.db)
 │   ├── database.py       # SQLite database manager
@@ -140,7 +149,8 @@ ex  = exitplan       dp  = depth          tr  = trade
 tl  = timeline       an  = analyze        jn  = journal
 hot = hot markets    pnl = profit/loss    u   = quick update
 c15 = 15m crypto     mw  = my wallet      qt  = quick trade
-h/? = help           q   = quit
+nr  = negrisk arb    cl  = clusters       rw  = rewards
+nw  = news           h/? = help           q   = quit
 ```
 
 ## Testing Notes
@@ -318,3 +328,54 @@ Version is defined in TWO places (keep in sync):
 - Opens Polymarket in browser with `-o` flag
 - Does NOT execute trades - provides analysis + direct link
 - Available via `polyterm quicktrade` or TUI shortcut `qt`
+
+**Data API Client** (`api/data_api.py`):
+- `DataAPIClient` for `data-api.polymarket.com`
+- Real wallet positions, activity, and trade history
+- Profit/loss summary aggregation
+- Same retry pattern as CLOBClient (429/500/timeout backoff)
+- Replaces deprecated Subgraph for wallet data
+
+**CLOB Historical Prices** (`api/clob.py` — `get_price_history()`):
+- `/prices-history` endpoint for real market price data
+- Configurable interval (1m, 1h, 6h, 1d, max) and fidelity
+- Used by chart command for real CLOB data instead of DB snapshots
+- Falls back to DB snapshots if CLOB data unavailable
+
+**CLOB Order Book WebSocket** (`api/clob.py` — WebSocket methods):
+- `wss://ws-subscriptions-clob.polymarket.com/ws/market`
+- Real-time order book streaming (book, last_trade_price, price_change)
+- Auto-reconnection with exponential backoff
+- Separate from existing RTDS WebSocket (which handles trade feeds)
+
+**NegRisk Multi-Outcome Arbitrage** (`core/negrisk.py`, `cli/commands/negrisk.py`):
+- Detects arbitrage in multi-outcome (NegRisk) markets
+- When sum of all YES prices < $1.00, buying all guarantees profit
+- Calculates fee-adjusted profit (2% on winnings)
+- Filters by configurable minimum spread
+- Available via `polyterm negrisk` or TUI shortcut `nr`
+
+**Wallet Cluster Detection** (`core/cluster_detector.py`, `cli/commands/clusters.py`):
+- Identifies wallets likely controlled by the same entity
+- Three detection signals:
+  - Timing correlation (trades within 30 seconds)
+  - Market overlap (Jaccard similarity of traded markets)
+  - Size patterns (identical trade sizes across accounts)
+- Combined 0-100 confidence score
+- Risk levels: High (70+), Medium (40-69), Low (0-39)
+- Available via `polyterm clusters` or TUI shortcut `cl`
+
+**Holding & Liquidity Rewards** (`core/rewards.py`, `cli/commands/rewards.py`):
+- Estimates 4% APY holding rewards on qualifying positions
+- Qualifying criteria: price 20-80 cents, held 24+ hours
+- Daily/weekly/monthly/yearly reward projections
+- Liquidity provision eligibility analysis
+- Available via `polyterm rewards` or TUI shortcut `rw`
+
+**News Integration** (`core/news.py`, `cli/commands/news.py`):
+- RSS feed aggregation from The Block, CoinDesk, Decrypt
+- Article-to-market matching by keyword overlap
+- 5-minute cache to reduce API calls
+- Breaking news filtering by hours
+- Market-specific news search
+- Available via `polyterm news` or TUI shortcut `nw`

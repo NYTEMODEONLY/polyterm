@@ -4,6 +4,7 @@ from .gamma import GammaClient
 from .clob import CLOBClient
 from .subgraph import SubgraphClient
 from .aggregator import APIAggregator
+from .data_api import DataAPIClient
 
-__all__ = ["GammaClient", "CLOBClient", "SubgraphClient", "APIAggregator"]
+__all__ = ["GammaClient", "CLOBClient", "SubgraphClient", "APIAggregator", "DataAPIClient"]
 

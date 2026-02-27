@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  static-checks:
+    name: Static checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install package
+        run: pip install -e .
+
+      - name: Syntax check (all Python files)
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+
+          roots = [Path("polyterm"), Path("tests")]
+          errors = []
+          parsed = 0
+
+          for root in roots:
+            for path in root.rglob("*.py"):
+              try:
+                source = path.read_text(encoding="utf-8")
+                ast.parse(source, filename=str(path))
+                parsed += 1
+              except SyntaxError as error:
+                errors.append(f"{path}: {error}")
+
+          print(f"Parsed {parsed} files OK")
+          if errors:
+            print(f"{len(errors)} syntax errors found")
+            for error in errors:
+              print(error)
+            raise SystemExit(1)
+          print("All files have valid syntax")
+          PY
+
+      - name: Import smoke test
+        run: |
+          python - <<'PY'
+          from polyterm.cli.main import cli
+          from polyterm.tui.controller import TUIController
+          from polyterm.api.gamma import GammaClient
+          from polyterm.core.scanner import MarketScanner
+          from polyterm.db.database import Database
+
+          # Assert import side-effects stay valid for top-level entry points.
+          assert cli and TUIController and GammaClient and MarketScanner and Database
+          print("Import smoke tests passed")
+          PY
+
+  tests:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install package
+        run: pip install -e .
+
+      - name: Run pytest
+        run: |
+          python -m pytest tests \
+            --ignore=tests/test_live_data \
+            --ignore=tests/test_tui/test_integration.py \
+            --tb=short \
+            -q
