@@ -31,6 +31,7 @@ class CLOBClient:
         self.ws_endpoint = ws_endpoint
         self.session = requests.Session()
         self.ws_connection = None
+        self.clob_ws = None
         self.subscriptions = {}
 
     def _request(self, method: str, url: str, retries: int = 3, **kwargs) -> requests.Response:
@@ -72,6 +73,41 @@ class CLOBClient:
         raise Exception(f"API request failed after {retries} retries: {url}")
 
     # REST API Methods
+
+    def get_price_history(
+        self,
+        token_id: str,
+        interval: str = "1h",
+        fidelity: int = 60,
+        start_ts: Optional[int] = None,
+        end_ts: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """Get historical prices from CLOB API
+
+        Args:
+            token_id: CLOB token ID
+            interval: Time interval (max, 1d, 6h, 1h, 1m — maps to start timestamps)
+            fidelity: Seconds between data points (60=1min, 3600=1hr)
+            start_ts: Unix timestamp start (optional, derived from interval)
+            end_ts: Unix timestamp end (optional, defaults to now)
+
+        Returns:
+            List of {"t": unix_timestamp, "p": price_string} dicts
+        """
+        url = f"{self.rest_endpoint}/prices-history"
+        params = {"market": token_id, "interval": interval, "fidelity": fidelity}
+        if start_ts is not None:
+            params["startTs"] = start_ts
+        if end_ts is not None:
+            params["endTs"] = end_ts
+
+        try:
+            response = self._request("GET", url, params=params)
+            response.raise_for_status()
+            data = response.json()
+            return data.get("history", [])
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"Failed to get price history: {e}")
 
     def get_order_book(self, token_id: str, depth: int = 20) -> Dict[str, Any]:
         """Get order book for a market
@@ -294,17 +330,146 @@ class CLOBClient:
         self.subscriptions.clear()
     
     async def close_websocket(self):
-        """Close WebSocket connection"""
+        """Close any active WebSocket connections."""
         if self.ws_connection:
-            await self.ws_connection.close()
-            self.ws_connection = None
+            try:
+                await self.ws_connection.close()
+            except Exception:
+                pass
+            finally:
+                self.ws_connection = None
+
+        if self.clob_ws:
+            try:
+                await self.clob_ws.close()
+            except Exception:
+                pass
+            finally:
+                self.clob_ws = None
+
+        self.subscriptions.clear()
+        if hasattr(self, '_ob_callback'):
+            self._ob_callback = None
+        if hasattr(self, '_ob_token_ids'):
+            self._ob_token_ids = []
     
     def close(self):
-        """Close REST session"""
+        """Close REST session and best-effort close active websockets."""
         self.session.close()
-    
+        if not self.ws_connection and not self.clob_ws:
+            return
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            loop.create_task(self.close_websocket())
+        else:
+            asyncio.run(self.close_websocket())
+
+    # CLOB Order Book WebSocket Methods
+
+    CLOB_WS_ENDPOINT = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
+
+    async def connect_clob_websocket(self):
+        """Connect to CLOB order book WebSocket"""
+        if not HAS_WEBSOCKETS:
+            raise Exception("websockets library not installed. Install with: pip install websockets")
+
+        try:
+            self.clob_ws = await websockets.connect(self.CLOB_WS_ENDPOINT)
+            return True
+        except Exception as e:
+            raise Exception(f"Failed to connect to CLOB WebSocket: {e}")
+
+    async def subscribe_orderbook(self, token_ids, callback):
+        """Subscribe to real-time order book updates
+
+        Message types: book, last_trade_price, price_change, tick_size_change
+        Subscribe: {"assets_ids": [token_id1, token_id2], "type": "market"}
+
+        Args:
+            token_ids: List of CLOB token IDs to subscribe to
+            callback: Function to call with order book update data
+        """
+        if not hasattr(self, 'clob_ws') or not self.clob_ws:
+            await self.connect_clob_websocket()
+
+        subscribe_msg = {
+            "assets_ids": token_ids,
+            "type": "market",
+        }
+        await self.clob_ws.send(json.dumps(subscribe_msg))
+        self._ob_callback = callback
+        self._ob_token_ids = token_ids
+
+    async def listen_orderbook(self, max_reconnects=5):
+        """Listen for order book update messages from CLOB WebSocket
+
+        Handles message types:
+        - book: Full or partial order book update
+        - last_trade_price: Latest trade price change
+        - price_change: Market price movement
+        """
+        reconnect_attempts = 0
+
+        while reconnect_attempts <= max_reconnects:
+            if not hasattr(self, 'clob_ws') or not self.clob_ws:
+                if reconnect_attempts > 0:
+                    import asyncio as _asyncio
+                    wait = min(2 ** reconnect_attempts, 30)
+                    await _asyncio.sleep(wait)
+                    try:
+                        await self.connect_clob_websocket()
+                        if hasattr(self, '_ob_token_ids') and self._ob_token_ids:
+                            subscribe_msg = {
+                                "assets_ids": self._ob_token_ids,
+                                "type": "market",
+                            }
+                            await self.clob_ws.send(json.dumps(subscribe_msg))
+                    except Exception:
+                        reconnect_attempts += 1
+                        continue
+                else:
+                    raise Exception("CLOB WebSocket not connected")
+
+            try:
+                async for message in self.clob_ws:
+                    reconnect_attempts = 0
+
+                    try:
+                        if not message or message.strip() == "":
+                            continue
+
+                        data = json.loads(message)
+
+                        # Handle different message types
+                        msg_type = data.get("type", data.get("event_type", ""))
+                        if msg_type in ("book", "last_trade_price", "price_change", "tick_size_change"):
+                            if hasattr(self, '_ob_callback') and self._ob_callback:
+                                result = self._ob_callback(data)
+                                if hasattr(result, '__await__'):
+                                    await result
+                    except json.JSONDecodeError:
+                        continue
+                    except Exception:
+                        continue
+
+            except Exception:
+                if hasattr(self, 'clob_ws'):
+                    self.clob_ws = None
+                reconnect_attempts += 1
+                if reconnect_attempts <= max_reconnects:
+                    continue
+                break
+
+        if hasattr(self, '_ob_callback'):
+            self._ob_callback = None
+
     # Utility Methods
-    
+
     def calculate_spread(self, order_book: Dict[str, Any]) -> float:
         """Calculate bid-ask spread from order book
 
@@ -406,4 +571,3 @@ class CLOBClient:
         notional = size * price
         
         return notional >= threshold
-

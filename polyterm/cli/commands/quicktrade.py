@@ -15,29 +15,9 @@ from ...utils.json_output import print_json
 
 
 def search_markets_fallback(gamma_client: GammaClient, query: str, limit: int = 5) -> list:
-    """Search markets with fallback to filtering get_markets results"""
-    # Try search endpoint first
+    """Search markets using GammaClient's built-in fallback behavior."""
     try:
-        results = gamma_client.search_markets(query, limit=limit)
-        if results:
-            return results
-    except Exception:
-        pass
-
-    # Fallback: get all markets and filter locally
-    try:
-        markets = gamma_client.get_markets(limit=200)
-        query_lower = query.lower()
-
-        matches = []
-        for market in markets:
-            title = market.get('question', market.get('title', '')).lower()
-            if query_lower in title:
-                matches.append(market)
-                if len(matches) >= limit:
-                    break
-
-        return matches
+        return gamma_client.search_markets(query, limit=limit)
     except Exception:
         return []
 

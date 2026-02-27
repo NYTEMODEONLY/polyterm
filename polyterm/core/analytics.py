@@ -8,6 +8,7 @@ from collections import defaultdict
 from ..api.gamma import GammaClient
 from ..api.clob import CLOBClient
 from ..api.subgraph import SubgraphClient
+from ..api.data_api import DataAPIClient
 from ..utils.json_output import safe_float
 
 
@@ -48,11 +49,13 @@ class AnalyticsEngine:
         self,
         gamma_client: GammaClient,
         clob_client: CLOBClient,
-        subgraph_client: SubgraphClient,
+        subgraph_client: Optional[SubgraphClient] = None,
+        data_api_client: Optional[DataAPIClient] = None,
     ):
         self.gamma_client = gamma_client
         self.clob_client = clob_client
         self.subgraph_client = subgraph_client
+        self.data_api_client = data_api_client
         
         # Cache for whale traders
         self.known_whales: Dict[str, List[WhaleActivity]] = defaultdict(list)
@@ -235,6 +238,9 @@ class AnalyticsEngine:
         Returns:
             Correlation object or None
         """
+        if self.subgraph_client is None:
+            return None
+
         try:
             # Get historical data for both markets
             # This is a simplified version - real implementation would need time series data
@@ -295,6 +301,9 @@ class AnalyticsEngine:
         Returns:
             Trend statistics
         """
+        if self.subgraph_client is None:
+            return {}
+
         try:
             # Get market statistics
             stats = self.subgraph_client.get_market_statistics(market_id)
@@ -408,7 +417,7 @@ class AnalyticsEngine:
             }
     
     def get_portfolio_analytics(self, wallet_address: str) -> Dict[str, Any]:
-        """Get analytics for a user's portfolio (limited without Subgraph)
+        """Get analytics for a user's portfolio.
         
         Args:
             wallet_address: User wallet address
@@ -417,34 +426,112 @@ class AnalyticsEngine:
             Portfolio analytics with available data
         """
         try:
-            # Try Subgraph first (may not work if endpoint removed)
-            positions = self.subgraph_client.get_user_positions(wallet_address)
-            
+            data_api_client = self.data_api_client
+            if data_api_client is None and self.subgraph_client is None:
+                data_api_client = DataAPIClient()
+
+            if data_api_client is None:
+                raise RuntimeError("Data API client not configured")
+
+            # Primary source: Data API (live wallet positions/trades)
+            positions = data_api_client.get_positions(wallet_address, limit=500, sort_by="CURRENT_VALUE")
+            if not isinstance(positions, list):
+                positions = []
+
             total_value = 0
             total_pnl = 0
+            total_invested = 0
             position_count = len(positions)
             
             for position in positions:
-                shares = float(position.get("shares", 0))
-                avg_price = float(position.get("averagePrice", 0))
-                realized_pnl = float(position.get("realizedPnL", 0))
-                unrealized_pnl = float(position.get("unrealizedPnL", 0))
-                
-                position_value = shares * avg_price
-                total_value += position_value
-                total_pnl += realized_pnl + unrealized_pnl
+                shares = safe_float(
+                    position.get("size", position.get("shares", position.get("quantity", 0)))
+                )
+                avg_price = safe_float(
+                    position.get("averagePrice", position.get("avgPrice", position.get("entryPrice", 0)))
+                )
+                current_value_raw = position.get("currentValue")
+                if current_value_raw is None:
+                    current_value_raw = position.get("value")
+                if current_value_raw is None:
+                    current_value_raw = position.get("current_value")
+                has_current_value = current_value_raw not in (None, "")
+                current_value = safe_float(current_value_raw)
+
+                initial_value_raw = position.get("initialValue")
+                if initial_value_raw is None:
+                    initial_value_raw = position.get("costBasis")
+                if initial_value_raw is None:
+                    initial_value_raw = position.get("initial_value")
+                has_initial_value = initial_value_raw not in (None, "")
+                initial_value = safe_float(initial_value_raw)
+                realized_pnl = safe_float(
+                    position.get("realizedPnL", position.get("realizedPnl", 0))
+                )
+                unrealized_pnl = safe_float(
+                    position.get("unrealizedPnL", position.get("unrealizedPnl", 0))
+                )
+                explicit_pnl = position.get("pnl")
+
+                if (not has_current_value) and shares > 0 and avg_price > 0:
+                    current_value = shares * avg_price
+                if (not has_initial_value) and shares > 0 and avg_price > 0:
+                    initial_value = shares * avg_price
+
+                if explicit_pnl is not None:
+                    position_pnl = safe_float(explicit_pnl)
+                else:
+                    position_pnl = realized_pnl + unrealized_pnl
+
+                total_value += current_value
+                total_pnl += position_pnl
+                total_invested += initial_value
             
             return {
                 "wallet_address": wallet_address,
                 "total_positions": position_count,
                 "total_value": total_value,
                 "total_pnl": total_pnl,
-                "roi_percent": (total_pnl / total_value * 100) if total_value > 0 else 0,
+                "total_invested": total_invested,
+                "roi_percent": (total_pnl / total_invested * 100) if total_invested > 0 else 0,
                 "positions": positions,
+                "data_source": "data_api",
             }
             
         except Exception as e:
-            # Graceful degradation - return empty portfolio with error message
+            # Fallback path: Subgraph if caller provided one.
+            if self.subgraph_client is not None:
+                try:
+                    positions = self.subgraph_client.get_user_positions(wallet_address)
+
+                    total_value = 0
+                    total_pnl = 0
+                    position_count = len(positions)
+
+                    for position in positions:
+                        shares = safe_float(position.get("shares", 0))
+                        avg_price = safe_float(position.get("averagePrice", 0))
+                        realized_pnl = safe_float(position.get("realizedPnL", 0))
+                        unrealized_pnl = safe_float(position.get("unrealizedPnL", 0))
+
+                        position_value = shares * avg_price
+                        total_value += position_value
+                        total_pnl += realized_pnl + unrealized_pnl
+
+                    return {
+                        "wallet_address": wallet_address,
+                        "total_positions": position_count,
+                        "total_value": total_value,
+                        "total_pnl": total_pnl,
+                        "total_invested": total_value,
+                        "roi_percent": (total_pnl / total_value * 100) if total_value > 0 else 0,
+                        "positions": positions,
+                        "data_source": "subgraph",
+                    }
+                except Exception:
+                    pass
+
+            # Graceful degradation when no position source is available
             return {
                 "wallet_address": wallet_address,
                 "total_positions": 0,
@@ -452,8 +539,8 @@ class AnalyticsEngine:
                 "total_pnl": 0,
                 "roi_percent": 0,
                 "positions": [],
-                "error": "Portfolio data unavailable - Subgraph API endpoint has been removed",
-                "note": "Historical position tracking requires on-chain data access",
+                "error": "Portfolio data unavailable from Data API",
+                "note": str(e),
             }
     
     def detect_market_manipulation(self, market_id: str) -> Dict[str, Any]:
@@ -465,6 +552,15 @@ class AnalyticsEngine:
         Returns:
             Manipulation risk analysis
         """
+        if self.subgraph_client is None:
+            return {
+                "market_id": market_id,
+                "risk_level": "unknown",
+                "risk_score": 0,
+                "risk_factors": [],
+                "error": "Subgraph data source unavailable",
+            }
+
         try:
             # Get liquidity changes
             liquidity_events = self.subgraph_client.get_market_liquidity_changes(
@@ -517,4 +613,3 @@ class AnalyticsEngine:
         except Exception as e:
             print(f"Error detecting manipulation: {e}")
             return {"risk_level": "unknown", "error": str(e)}
-

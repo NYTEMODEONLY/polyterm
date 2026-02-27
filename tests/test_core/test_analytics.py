@@ -188,6 +188,78 @@ class TestAnalyticsEngine:
         assert portfolio["total_positions"] == 2
         assert portfolio["total_value"] > 0
         assert portfolio["total_pnl"] == 155  # 50 + 25 + 100 - 20
+
+    def test_get_portfolio_analytics_uses_data_api_when_subgraph_missing(self, mock_clients):
+        """Test portfolio analytics uses Data API when Subgraph is unavailable."""
+        gamma, clob, _ = mock_clients
+
+        data_api = Mock()
+        data_api.get_positions.return_value = [
+            {
+                "market": "market1",
+                "size": "100",
+                "averagePrice": "0.65",
+                "currentValue": "80",
+                "initialValue": "65",
+                "pnl": "15",
+            }
+        ]
+
+        analytics = AnalyticsEngine(gamma, clob, None, data_api_client=data_api)
+        portfolio = analytics.get_portfolio_analytics("0x123")
+
+        assert portfolio["wallet_address"] == "0x123"
+        assert portfolio["total_positions"] == 1
+        assert portfolio["total_value"] == 80
+        assert portfolio["total_invested"] == 65
+        assert portfolio["total_pnl"] == 15
+        assert portfolio["data_source"] == "data_api"
+
+    def test_get_portfolio_analytics_preserves_explicit_zero_values(self, mock_clients):
+        """Explicit zero current/initial values should not be replaced by fallback math."""
+        gamma, clob, _ = mock_clients
+
+        data_api = Mock()
+        data_api.get_positions.return_value = [
+            {
+                "market": "market-zero",
+                "size": "100",
+                "averagePrice": "0.65",
+                "currentValue": "0",
+                "initialValue": "0",
+                "pnl": "-65",
+            }
+        ]
+
+        analytics = AnalyticsEngine(gamma, clob, None, data_api_client=data_api)
+        portfolio = analytics.get_portfolio_analytics("0x123")
+
+        assert portfolio["total_positions"] == 1
+        assert portfolio["total_value"] == 0
+        assert portfolio["total_invested"] == 0
+        assert portfolio["total_pnl"] == -65
+        assert portfolio["roi_percent"] == 0
+
+    def test_get_portfolio_analytics_falls_back_when_values_missing(self, mock_clients):
+        """Missing value fields should still use shares*avg_price fallback."""
+        gamma, clob, _ = mock_clients
+
+        data_api = Mock()
+        data_api.get_positions.return_value = [
+            {
+                "market": "market-missing",
+                "size": "10",
+                "averagePrice": "0.5",
+                # currentValue and initialValue intentionally omitted
+                "pnl": "0",
+            }
+        ]
+
+        analytics = AnalyticsEngine(gamma, clob, None, data_api_client=data_api)
+        portfolio = analytics.get_portfolio_analytics("0x123")
+
+        assert portfolio["total_value"] == 5
+        assert portfolio["total_invested"] == 5
     
     def test_detect_market_manipulation(self, analytics, mock_clients):
         """Test market manipulation detection"""
@@ -228,4 +300,3 @@ class TestAnalyticsEngine:
         risk = analytics.detect_market_manipulation("market1")
         
         assert risk["risk_level"] == "low"
-

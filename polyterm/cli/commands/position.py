@@ -283,6 +283,7 @@ def _add_position(console: Console, config, db: Database, search_term: str, outp
         console.print(f"  {shares:.1f} shares = ${position_value:,.2f}")
 
         if Confirm.ask("[cyan]Add this position?[/cyan]", default=True):
+            wallet_address = config.get("wallet.address", "") or ""
             position_id = db.add_position(
                 market_id=market_id,
                 title=title,
@@ -291,6 +292,7 @@ def _add_position(console: Console, config, db: Database, search_term: str, outp
                 entry_price=entry_price,
                 platform=platform,
                 notes=notes,
+                wallet_address=wallet_address,
             )
 
             if output_format == 'json':
