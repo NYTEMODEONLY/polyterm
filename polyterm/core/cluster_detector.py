@@ -45,17 +45,20 @@ class WalletClusterDetector:
         if len(trades) < 2:
             return []
 
+        # Ensure newest->oldest ordering so we can short-circuit once outside window.
+        trades = sorted(trades, key=lambda trade: trade.timestamp, reverse=True)
+
         # Group trades by timestamp windows
         pairs = defaultdict(int)
         for i, t1 in enumerate(trades):
             for t2 in trades[i+1:]:
+                delta = (t1.timestamp - t2.timestamp).total_seconds()
+                if delta > window_seconds:
+                    break
                 if t1.wallet_address == t2.wallet_address:
                     continue
-                # Check if within time window
-                delta = abs((t1.timestamp - t2.timestamp).total_seconds())
-                if delta <= window_seconds:
-                    pair = tuple(sorted([t1.wallet_address, t2.wallet_address]))
-                    pairs[pair] += 1
+                pair = tuple(sorted([t1.wallet_address, t2.wallet_address]))
+                pairs[pair] += 1
 
         # Filter pairs with enough correlated trades (3+)
         results = []
