@@ -45,6 +45,7 @@ def rewards(ctx, wallet, output_format):
                     'success': True,
                     'wallet': wallet_address,
                     'positions': [],
+                    'positions_count': 0,
                     'rewards': calc.estimate_holding_rewards([]),
                 })
                 return
@@ -87,7 +88,8 @@ def rewards(ctx, wallet, output_format):
                 'success': True,
                 'wallet': wallet_address,
                 'rewards': result,
-                'positions': len(positions),
+                'positions': positions,
+                'positions_count': len(positions),
             })
             return
 
