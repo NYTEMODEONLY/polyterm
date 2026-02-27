@@ -654,6 +654,45 @@ class TestGetMarketNews:
 
         assert len(articles) <= 3
 
+    @responses.activate
+    def test_respects_hours_filter(self):
+        """Should apply hours filter for market-specific queries."""
+        now = datetime.now(timezone.utc)
+        old_date = (now - timedelta(hours=30)).strftime("%a, %d %b %Y %H:%M:%S %z")
+        recent_date = (now - timedelta(hours=2)).strftime("%a, %d %b %Y %H:%M:%S %z")
+
+        mixed_feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Test Feed</title>
+    <item>
+      <title>Old Bitcoin Article</title>
+      <link>https://example.com/old</link>
+      <pubDate>{old_date}</pubDate>
+      <description>Old bitcoin story</description>
+    </item>
+    <item>
+      <title>Recent Bitcoin Article</title>
+      <link>https://example.com/recent</link>
+      <pubDate>{recent_date}</pubDate>
+      <description>Recent bitcoin story</description>
+    </item>
+  </channel>
+</rss>"""
+
+        responses.add(
+            responses.GET,
+            "https://test.com/feed.xml",
+            body=mixed_feed,
+            status=200,
+        )
+
+        aggregator = NewsAggregator(feeds=[("Test", "https://test.com/feed.xml")])
+        articles = aggregator.get_market_news("Bitcoin", limit=10, hours=6)
+
+        assert len(articles) == 1
+        assert articles[0]["title"] == "Recent Bitcoin Article"
+
 
 class TestGetBreakingNews:
     """Tests for get_breaking_news method"""
