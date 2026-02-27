@@ -86,6 +86,17 @@ ATOM_FEED_LEAF_FIELDS = """<?xml version="1.0" encoding="UTF-8"?>
   </entry>
 </feed>"""
 
+ATOM_FEED_NESTED_SUMMARY = """<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Atom Nested Feed</title>
+  <entry>
+    <title>Atom Nested Summary Headline</title>
+    <link href="https://example.com/atom-2" />
+    <published>2026-02-03T12:00:00Z</published>
+    <summary><p>Will Bitcoin <em>rally</em> today</p></summary>
+  </entry>
+</feed>"""
+
 
 class TestFetchFeed:
     """Tests for fetch_feed method"""
@@ -303,6 +314,22 @@ class TestParsing:
         assert article['published_dt'] is not None
         assert article['published'] != ''
         assert article['summary'] == "Atom summary without child nodes"
+
+    @responses.activate
+    def test_atom_nested_summary_text_is_preserved(self):
+        """Should extract text from nested Atom summary markup."""
+        responses.add(
+            responses.GET,
+            "https://test.com/feed.xml",
+            body=ATOM_FEED_NESTED_SUMMARY,
+            status=200,
+        )
+
+        aggregator = NewsAggregator(feeds=[("Test", "https://test.com/feed.xml")])
+        articles = aggregator.fetch_feed("Test", "https://test.com/feed.xml")
+
+        assert len(articles) == 1
+        assert "Will Bitcoin rally today" in articles[0]['summary']
 
     @responses.activate
     def test_various_date_formats(self):

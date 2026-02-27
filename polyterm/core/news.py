@@ -111,7 +111,7 @@ class NewsAggregator:
             if summary_el is None:
                 summary_el = item.find('atom:content', ns)
             if summary_el is not None:
-                summary = summary_el.text
+                summary = self._extract_all_text(summary_el)
 
         if not title:
             return None
