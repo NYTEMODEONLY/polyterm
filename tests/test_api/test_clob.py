@@ -743,6 +743,25 @@ class TestCLOBClientInit:
             client.close()
             mock_close.assert_called_once()
 
+    def test_close_runs_websocket_teardown_when_connections_exist(self):
+        """close() should trigger async websocket teardown when sockets are active."""
+        client = CLOBClient()
+        client.ws_connection = object()
+        client.clob_ws = object()
+
+        with (
+            patch.object(client.session, "close") as mock_session_close,
+            patch("polyterm.api.clob.asyncio.get_running_loop", side_effect=RuntimeError),
+            patch(
+                "polyterm.api.clob.asyncio.run",
+                side_effect=lambda coroutine: coroutine.close(),
+            ) as mock_asyncio_run,
+        ):
+            client.close()
+
+        mock_session_close.assert_called_once()
+        mock_asyncio_run.assert_called_once()
+
 
 class TestCLOBGetPriceHistory:
     """Test get_price_history method"""
@@ -1061,6 +1080,27 @@ class TestCLOBWebSocketOrderBook:
     @pytest.fixture
     def client(self):
         return CLOBClient(rest_endpoint=CLOB_ENDPOINT)
+
+    @pytest.mark.asyncio
+    async def test_close_websocket_closes_rtds_and_orderbook_connections(self, client):
+        """close_websocket should close both RTDS and orderbook sockets."""
+        rtds_ws = AsyncMock()
+        orderbook_ws = AsyncMock()
+        client.ws_connection = rtds_ws
+        client.clob_ws = orderbook_ws
+        client.subscriptions = {"_all": MagicMock()}
+        client._ob_callback = MagicMock()
+        client._ob_token_ids = ["token1"]
+
+        await client.close_websocket()
+
+        rtds_ws.close.assert_awaited_once()
+        orderbook_ws.close.assert_awaited_once()
+        assert client.ws_connection is None
+        assert client.clob_ws is None
+        assert client.subscriptions == {}
+        assert client._ob_callback is None
+        assert client._ob_token_ids == []
 
     @pytest.mark.asyncio
     @patch("polyterm.api.clob.HAS_WEBSOCKETS", True)

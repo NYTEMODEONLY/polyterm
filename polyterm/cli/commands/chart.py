@@ -13,6 +13,60 @@ from ...core.charts import ASCIIChart, generate_price_chart
 from ...utils.json_output import print_json, safe_float
 
 
+def _parse_clob_token_ids(raw_token_ids):
+    """Normalize clobTokenIds to a list of token ids."""
+    token_ids = raw_token_ids
+    if isinstance(token_ids, str):
+        import json as json_mod
+        try:
+            token_ids = json_mod.loads(token_ids)
+        except Exception:
+            return []
+
+    if not isinstance(token_ids, list):
+        return []
+
+    return [token_id for token_id in token_ids if token_id]
+
+
+def _select_clob_granularity(time_hours):
+    """Pick CLOB interval/fidelity based on requested window."""
+    if time_hours <= 1:
+        return "1h", 60
+    if time_hours <= 6:
+        return "6h", 60
+    if time_hours <= 24:
+        return "1d", 300
+    return "max", 3600
+
+
+def _build_time_bounds(time_hours):
+    """Build [start, end] unix timestamp bounds for the requested window."""
+    hours = max(int(time_hours), 1)
+    end_ts = int(datetime.now().timestamp())
+    start_ts = end_ts - (hours * 3600)
+    return start_ts, end_ts
+
+
+def _parse_clob_prices(history, start_ts, end_ts):
+    """Convert CLOB history rows into chart points within the requested bounds."""
+    prices = []
+
+    for row in history or []:
+        if "t" not in row or "p" not in row:
+            continue
+        try:
+            timestamp = int(row["t"])
+        except (TypeError, ValueError):
+            continue
+        if timestamp < start_ts or timestamp > end_ts:
+            continue
+        prices.append((datetime.fromtimestamp(timestamp), safe_float(row["p"])))
+
+    prices.sort(key=lambda point: point[0])
+    return prices
+
+
 @click.command()
 @click.option("--market", "-m", default=None, help="Market ID or search term")
 @click.option("--hours", "-h", "time_hours", default=24, help="Hours of history (default: 24)")
@@ -99,43 +153,33 @@ def chart(ctx, market, time_hours, width, height, sparkline, output_format):
 
         # Try CLOB price history first (real market data)
         prices = None
-        clob_token_ids = selected.get('clobTokenIds', [])
-        if isinstance(clob_token_ids, str):
-            import json as json_mod2
-            try:
-                clob_token_ids = json_mod2.loads(clob_token_ids)
-            except Exception:
-                clob_token_ids = []
+        clob_token_ids = _parse_clob_token_ids(selected.get('clobTokenIds', []))
 
         if clob_token_ids:
+            clob_client = None
             try:
                 clob_client = CLOBClient(
                     rest_endpoint=config.clob_rest_endpoint,
                 )
-                # Map hours to interval
-                if time_hours <= 1:
-                    interval, fidelity = "1h", 60
-                elif time_hours <= 6:
-                    interval, fidelity = "6h", 60
-                elif time_hours <= 24:
-                    interval, fidelity = "1d", 300
-                else:
-                    interval, fidelity = "max", 3600
+                interval, fidelity = _select_clob_granularity(time_hours)
+                start_ts, end_ts = _build_time_bounds(time_hours)
 
                 history = clob_client.get_price_history(
-                    clob_token_ids[0], interval=interval, fidelity=fidelity
+                    clob_token_ids[0],
+                    interval=interval,
+                    fidelity=fidelity,
+                    start_ts=start_ts,
+                    end_ts=end_ts,
                 )
-                if history and len(history) >= 2:
-                    prices = [
-                        (datetime.fromtimestamp(int(h["t"])), safe_float(h["p"]))
-                        for h in history
-                        if "t" in h and "p" in h
-                    ]
+                prices = _parse_clob_prices(history, start_ts=start_ts, end_ts=end_ts)
+                if len(prices) >= 2:
                     if output_format != 'json':
                         console.print(f"[dim]Using CLOB price history ({len(prices)} points)[/dim]")
-                clob_client.close()
             except Exception:
                 pass  # Fall back to DB snapshots
+            finally:
+                if clob_client is not None:
+                    clob_client.close()
 
         # Fall back to database snapshots
         if not prices or len(prices) < 2:
