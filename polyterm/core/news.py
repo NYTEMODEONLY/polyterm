@@ -48,13 +48,14 @@ class NewsAggregator:
         """
         # Check cache
         cache_key = url
-        if cache_key in self.cache:
-            cached_time, cached_data = self.cache[cache_key]
+        cache_entry = self.cache.get(cache_key)
+        if cache_entry:
+            cached_time, cached_data = cache_entry
             if time.time() - cached_time < self.cache_ttl:
                 return cached_data
 
-        articles = []
         try:
+            articles = []
             response = self.session.get(url, timeout=10)
             response.raise_for_status()
 
@@ -74,9 +75,13 @@ class NewsAggregator:
                     articles.append(article)
 
         except Exception:
-            pass  # Silently handle feed errors - other feeds may work
+            # Preserve stale data on transient errors, but keep retries enabled.
+            if cache_entry:
+                _, cached_data = cache_entry
+                return cached_data
+            return []
 
-        # Cache results
+        # Cache successful parses (including legitimately empty feeds).
         self.cache[cache_key] = (time.time(), articles)
         return articles
 

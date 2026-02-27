@@ -6,7 +6,7 @@ Identifies wallets likely controlled by the same entity based on:
 - Size patterns (identical position sizes)
 """
 
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from datetime import datetime
 from collections import defaultdict
 
@@ -22,6 +22,16 @@ class WalletClusterDetector:
 
     def __init__(self, database):
         self.db = database
+
+    def _build_timing_lookup(
+        self,
+        timing_clusters: List[Tuple[str, str, int]],
+    ) -> Dict[Tuple[str, str], int]:
+        """Convert timing results into O(1) pair lookup map."""
+        return {
+            tuple(sorted([wallet1, wallet2])): count
+            for wallet1, wallet2, count in timing_clusters
+        }
 
     def find_timing_clusters(self, window_seconds=30):
         """Find wallets that consistently trade within seconds of each other.
@@ -128,7 +138,12 @@ class WalletClusterDetector:
 
         return sorted(results, key=lambda x: x[2], reverse=True)
 
-    def calculate_cluster_score(self, wallet1, wallet2):
+    def calculate_cluster_score(
+        self,
+        wallet1,
+        wallet2,
+        timing_lookup: Optional[Dict[Tuple[str, str], int]] = None,
+    ):
         """Score 0-100 likelihood that two wallets are same entity.
 
         Combines all detection signals into a single confidence score.
@@ -137,14 +152,17 @@ class WalletClusterDetector:
         signals = []
 
         # Timing correlation (up to 40 points)
-        timing = self.find_timing_clusters(window_seconds=30)
+        if timing_lookup is None:
+            timing_lookup = self._build_timing_lookup(
+                self.find_timing_clusters(window_seconds=30)
+            )
+
         pair = tuple(sorted([wallet1, wallet2]))
-        for w1, w2, count in timing:
-            if tuple(sorted([w1, w2])) == pair:
-                timing_score = min(count * 10, 40)
-                score += timing_score
-                signals.append(f"timing:{count}")
-                break
+        timing_count = timing_lookup.get(pair, 0)
+        if timing_count:
+            timing_score = min(timing_count * 10, 40)
+            score += timing_score
+            signals.append(f"timing:{timing_count}")
 
         # Market overlap (up to 35 points)
         w1_trades = self.db.get_trades_by_wallet(wallet1, limit=500)
@@ -184,6 +202,7 @@ class WalletClusterDetector:
         all_pairs = set()
 
         timing = self.find_timing_clusters()
+        timing_lookup = self._build_timing_lookup(timing)
         for w1, w2, _ in timing:
             all_pairs.add(tuple(sorted([w1, w2])))
 
@@ -198,7 +217,11 @@ class WalletClusterDetector:
         # Score each pair
         clusters = []
         for w1, w2 in all_pairs:
-            result = self.calculate_cluster_score(w1, w2)
+            result = self.calculate_cluster_score(
+                w1,
+                w2,
+                timing_lookup=timing_lookup,
+            )
             if result['score'] >= min_score:
                 clusters.append({
                     'wallets': [w1, w2],
