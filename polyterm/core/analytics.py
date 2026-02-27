@@ -450,12 +450,21 @@ class AnalyticsEngine:
                 avg_price = safe_float(
                     position.get("averagePrice", position.get("avgPrice", position.get("entryPrice", 0)))
                 )
-                current_value = safe_float(
-                    position.get("currentValue", position.get("value", position.get("current_value", 0)))
-                )
-                initial_value = safe_float(
-                    position.get("initialValue", position.get("costBasis", position.get("initial_value", 0)))
-                )
+                current_value_raw = position.get("currentValue")
+                if current_value_raw is None:
+                    current_value_raw = position.get("value")
+                if current_value_raw is None:
+                    current_value_raw = position.get("current_value")
+                has_current_value = current_value_raw not in (None, "")
+                current_value = safe_float(current_value_raw)
+
+                initial_value_raw = position.get("initialValue")
+                if initial_value_raw is None:
+                    initial_value_raw = position.get("costBasis")
+                if initial_value_raw is None:
+                    initial_value_raw = position.get("initial_value")
+                has_initial_value = initial_value_raw not in (None, "")
+                initial_value = safe_float(initial_value_raw)
                 realized_pnl = safe_float(
                     position.get("realizedPnL", position.get("realizedPnl", 0))
                 )
@@ -464,9 +473,9 @@ class AnalyticsEngine:
                 )
                 explicit_pnl = position.get("pnl")
 
-                if current_value == 0 and shares > 0 and avg_price > 0:
+                if (not has_current_value) and shares > 0 and avg_price > 0:
                     current_value = shares * avg_price
-                if initial_value == 0 and shares > 0 and avg_price > 0:
+                if (not has_initial_value) and shares > 0 and avg_price > 0:
                     initial_value = shares * avg_price
 
                 if explicit_pnl is not None:
