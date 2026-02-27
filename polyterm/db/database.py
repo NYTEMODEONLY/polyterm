@@ -184,9 +184,16 @@ class Database:
                     exit_date TIMESTAMP DEFAULT NULL,
                     status TEXT DEFAULT 'open',
                     platform TEXT DEFAULT 'polymarket',
+                    wallet_address TEXT DEFAULT '',
                     notes TEXT DEFAULT ''
                 )
             """)
+
+            # Migrate existing databases created before wallet_address support.
+            cursor.execute("PRAGMA table_info(positions)")
+            position_columns = {row[1] for row in cursor.fetchall()}
+            if "wallet_address" not in position_columns:
+                cursor.execute("ALTER TABLE positions ADD COLUMN wallet_address TEXT DEFAULT ''")
 
             # Screener presets table
             cursor.execute("""
@@ -231,6 +238,7 @@ class Database:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_price_alerts_created ON price_alerts(created_at)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_positions_entry ON positions(entry_date)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_alerts_ack ON alerts(acknowledged)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_positions_wallet ON positions(wallet_address)")
 
     # Wallet operations
 
@@ -601,7 +609,8 @@ class Database:
         shares: float,
         entry_price: float,
         platform: str = "polymarket",
-        notes: str = ""
+        notes: str = "",
+        wallet_address: str = "",
     ) -> int:
         """Add a tracked position"""
         with self._get_connection() as conn:
@@ -609,25 +618,36 @@ class Database:
             cursor.execute("""
                 INSERT INTO positions (
                     market_id, title, side, shares, entry_price,
-                    entry_date, platform, notes, status
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open')
+                    entry_date, platform, notes, wallet_address, status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')
             """, (market_id, title, side, shares, entry_price,
-                  datetime.now().isoformat(), platform, notes))
+                  datetime.now().isoformat(), platform, notes, wallet_address))
             return cursor.lastrowid
 
-    def get_positions(self, status: str = None) -> List[Dict[str, Any]]:
+    def get_positions(
+        self,
+        status: str = None,
+        wallet_address: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         """Get tracked positions"""
         with self._get_connection() as conn:
             cursor = conn.cursor()
+            query = "SELECT * FROM positions"
+            where_clauses = []
+            params = []
+
             if status:
-                cursor.execute("""
-                    SELECT * FROM positions WHERE status = ?
-                    ORDER BY entry_date DESC
-                """, (status,))
-            else:
-                cursor.execute("""
-                    SELECT * FROM positions ORDER BY entry_date DESC
-                """)
+                where_clauses.append("status = ?")
+                params.append(status)
+            if wallet_address:
+                where_clauses.append("LOWER(wallet_address) = LOWER(?)")
+                params.append(wallet_address)
+
+            if where_clauses:
+                query += " WHERE " + " AND ".join(where_clauses)
+            query += " ORDER BY entry_date DESC"
+
+            cursor.execute(query, params)
             return [dict(row) for row in cursor.fetchall()]
 
     def get_position(self, position_id: int) -> Optional[Dict[str, Any]]:

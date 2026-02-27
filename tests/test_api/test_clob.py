@@ -3,7 +3,7 @@
 import pytest
 import responses
 import requests
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 from polyterm.api.clob import CLOBClient
 
 
@@ -742,3 +742,594 @@ class TestCLOBClientInit:
         with patch.object(client.session, "close") as mock_close:
             client.close()
             mock_close.assert_called_once()
+
+
+class TestCLOBGetPriceHistory:
+    """Test get_price_history method"""
+
+    @pytest.fixture
+    def client(self):
+        return CLOBClient(rest_endpoint=CLOB_ENDPOINT)
+
+    @responses.activate
+    def test_get_price_history_success(self, client):
+        """Test successful price history retrieval"""
+        responses.add(
+            responses.GET,
+            f"{CLOB_ENDPOINT}/prices-history",
+            json={
+                "history": [
+                    {"t": 1704067200, "p": "0.65"},
+                    {"t": 1704070800, "p": "0.66"},
+                    {"t": 1704074400, "p": "0.64"},
+                ]
+            },
+            status=200,
+        )
+
+        history = client.get_price_history("token123", interval="1h", fidelity=60)
+        assert len(history) == 3
+        assert history[0]["t"] == 1704067200
+        assert history[0]["p"] == "0.65"
+        assert history[2]["p"] == "0.64"
+        # Verify query parameters
+        assert "market=token123" in responses.calls[0].request.url
+        assert "interval=1h" in responses.calls[0].request.url
+        assert "fidelity=60" in responses.calls[0].request.url
+
+    @responses.activate
+    def test_get_price_history_interval_1h(self, client):
+        """Test price history with 1h interval"""
+        responses.add(
+            responses.GET,
+            f"{CLOB_ENDPOINT}/prices-history",
+            json={"history": [{"t": 1704067200, "p": "0.50"}]},
+            status=200,
+        )
+
+        history = client.get_price_history("token123", interval="1h")
+        assert len(history) == 1
+        assert "interval=1h" in responses.calls[0].request.url
+
+    @responses.activate
+    def test_get_price_history_interval_6h(self, client):
+        """Test price history with 6h interval"""
+        responses.add(
+            responses.GET,
+            f"{CLOB_ENDPOINT}/prices-history",
+            json={"history": [{"t": 1704067200, "p": "0.75"}]},
+            status=200,
+        )
+
+        history = client.get_price_history("token123", interval="6h")
+        assert "interval=6h" in responses.calls[0].request.url
+
+    @responses.activate
+    def test_get_price_history_interval_1d(self, client):
+        """Test price history with 1d interval"""
+        responses.add(
+            responses.GET,
+            f"{CLOB_ENDPOINT}/prices-history",
+            json={"history": [{"t": 1704067200, "p": "0.80"}]},
+            status=200,
+        )
+
+        history = client.get_price_history("token123", interval="1d")
+        assert "interval=1d" in responses.calls[0].request.url
+
+    @responses.activate
+    def test_get_price_history_interval_max(self, client):
+        """Test price history with max interval"""
+        responses.add(
+            responses.GET,
+            f"{CLOB_ENDPOINT}/prices-history",
+            json={"history": [{"t": 1704067200, "p": "0.55"}]},
+            status=200,
+        )
+
+        history = client.get_price_history("token123", interval="max")
+        assert "interval=max" in responses.calls[0].request.url
+
+    @responses.activate
+    def test_get_price_history_interval_1m(self, client):
+        """Test price history with 1m interval"""
+        responses.add(
+            responses.GET,
+            f"{CLOB_ENDPOINT}/prices-history",
+            json={"history": [{"t": 1704067200, "p": "0.60"}]},
+            status=200,
+        )
+
+        history = client.get_price_history("token123", interval="1m")
+        assert "interval=1m" in responses.calls[0].request.url
+
+    @responses.activate
+    def test_get_price_history_custom_fidelity(self, client):
+        """Test price history with custom fidelity values"""
+        responses.add(
+            responses.GET,
+            f"{CLOB_ENDPOINT}/prices-history",
+            json={"history": [{"t": 1704067200, "p": "0.70"}]},
+            status=200,
+        )
+
+        # Test fidelity=300 (5 minutes)
+        history = client.get_price_history("token123", fidelity=300)
+        assert "fidelity=300" in responses.calls[0].request.url
+
+    @responses.activate
+    def test_get_price_history_with_start_ts(self, client):
+        """Test price history with start_ts parameter"""
+        responses.add(
+            responses.GET,
+            f"{CLOB_ENDPOINT}/prices-history",
+            json={"history": [{"t": 1704067200, "p": "0.65"}]},
+            status=200,
+        )
+
+        history = client.get_price_history("token123", start_ts=1704000000)
+        assert "startTs=1704000000" in responses.calls[0].request.url
+
+    @responses.activate
+    def test_get_price_history_with_end_ts(self, client):
+        """Test price history with end_ts parameter"""
+        responses.add(
+            responses.GET,
+            f"{CLOB_ENDPOINT}/prices-history",
+            json={"history": [{"t": 1704067200, "p": "0.65"}]},
+            status=200,
+        )
+
+        history = client.get_price_history("token123", end_ts=1704100000)
+        assert "endTs=1704100000" in responses.calls[0].request.url
+
+    @responses.activate
+    def test_get_price_history_with_start_and_end_ts(self, client):
+        """Test price history with both start_ts and end_ts parameters"""
+        responses.add(
+            responses.GET,
+            f"{CLOB_ENDPOINT}/prices-history",
+            json={"history": [{"t": 1704067200, "p": "0.65"}]},
+            status=200,
+        )
+
+        history = client.get_price_history("token123", start_ts=1704000000, end_ts=1704100000)
+        assert "startTs=1704000000" in responses.calls[0].request.url
+        assert "endTs=1704100000" in responses.calls[0].request.url
+
+    @responses.activate
+    def test_get_price_history_empty_history(self, client):
+        """Test price history with empty history response"""
+        responses.add(
+            responses.GET,
+            f"{CLOB_ENDPOINT}/prices-history",
+            json={"history": []},
+            status=200,
+        )
+
+        history = client.get_price_history("token123")
+        assert history == []
+
+    @responses.activate
+    def test_get_price_history_missing_history_key(self, client):
+        """Test that missing 'history' key returns empty list"""
+        responses.add(
+            responses.GET,
+            f"{CLOB_ENDPOINT}/prices-history",
+            json={"other_key": "value"},
+            status=200,
+        )
+
+        history = client.get_price_history("token123")
+        assert history == []
+
+    @responses.activate
+    @patch("time.sleep", return_value=None)
+    def test_get_price_history_retries_on_500(self, mock_sleep, client):
+        """Test that get_price_history retries on HTTP 500 and succeeds"""
+        responses.add(
+            responses.GET,
+            f"{CLOB_ENDPOINT}/prices-history",
+            status=500,
+        )
+        responses.add(
+            responses.GET,
+            f"{CLOB_ENDPOINT}/prices-history",
+            json={"history": [{"t": 1704067200, "p": "0.65"}]},
+            status=200,
+        )
+
+        history = client.get_price_history("token123")
+        assert len(history) == 1
+        assert history[0]["p"] == "0.65"
+        assert len(responses.calls) == 2
+        mock_sleep.assert_called_once_with(1)
+
+    @responses.activate
+    @patch("time.sleep", return_value=None)
+    def test_get_price_history_retries_on_429(self, mock_sleep, client):
+        """Test that get_price_history retries on HTTP 429 with backoff"""
+        responses.add(
+            responses.GET,
+            f"{CLOB_ENDPOINT}/prices-history",
+            status=429,
+            headers={},
+        )
+        responses.add(
+            responses.GET,
+            f"{CLOB_ENDPOINT}/prices-history",
+            json={"history": [{"t": 1704067200, "p": "0.65"}]},
+            status=200,
+        )
+
+        history = client.get_price_history("token123")
+        assert len(history) == 1
+        assert len(responses.calls) == 2
+        # Should sleep with exponential backoff: min(2^0 * 2, 30) = 2
+        mock_sleep.assert_called_once_with(2)
+
+    @responses.activate
+    def test_get_price_history_connection_error_raises_exception(self, client):
+        """Test that ConnectionError is wrapped and raised"""
+        responses.add(
+            responses.GET,
+            f"{CLOB_ENDPOINT}/prices-history",
+            body=requests.exceptions.ConnectionError("connection failed"),
+        )
+
+        with pytest.raises(Exception, match="Failed to get price history"):
+            client.get_price_history("token123")
+
+    @responses.activate
+    def test_get_price_history_request_exception_wrapped(self, client):
+        """Test that RequestException is wrapped into generic Exception"""
+        responses.add(
+            responses.GET,
+            f"{CLOB_ENDPOINT}/prices-history",
+            body=requests.exceptions.RequestException("generic error"),
+        )
+
+        with pytest.raises(Exception, match="Failed to get price history"):
+            client.get_price_history("token123")
+
+    @responses.activate
+    def test_get_price_history_large_dataset(self, client):
+        """Test price history with large history data (many points)"""
+        # Simulate 100 data points
+        large_history = [{"t": 1704067200 + i * 3600, "p": str(0.5 + i * 0.001)} for i in range(100)]
+        responses.add(
+            responses.GET,
+            f"{CLOB_ENDPOINT}/prices-history",
+            json={"history": large_history},
+            status=200,
+        )
+
+        history = client.get_price_history("token123", interval="1h", fidelity=3600)
+        assert len(history) == 100
+        assert history[0]["t"] == 1704067200
+        assert history[99]["t"] == 1704067200 + 99 * 3600
+
+    @responses.activate
+    def test_get_price_history_string_prices(self, client):
+        """Test that price values are returned as strings (API format)"""
+        responses.add(
+            responses.GET,
+            f"{CLOB_ENDPOINT}/prices-history",
+            json={
+                "history": [
+                    {"t": 1704067200, "p": "0.65432"},
+                    {"t": 1704070800, "p": "0.12345"},
+                ]
+            },
+            status=200,
+        )
+
+        history = client.get_price_history("token123")
+        assert isinstance(history[0]["p"], str)
+        assert history[0]["p"] == "0.65432"
+        assert history[1]["p"] == "0.12345"
+
+    @responses.activate
+    def test_get_price_history_verifies_query_parameters(self, client):
+        """Test that all query parameters are correctly passed to URL"""
+        responses.add(
+            responses.GET,
+            f"{CLOB_ENDPOINT}/prices-history",
+            json={"history": []},
+            status=200,
+        )
+
+        client.get_price_history(
+            "my_token_id",
+            interval="6h",
+            fidelity=300,
+            start_ts=1700000000,
+            end_ts=1700100000,
+        )
+
+        url = responses.calls[0].request.url
+        assert "market=my_token_id" in url
+        assert "interval=6h" in url
+        assert "fidelity=300" in url
+        assert "startTs=1700000000" in url
+        assert "endTs=1700100000" in url
+
+
+class TestCLOBWebSocketOrderBook:
+    """Test CLOB WebSocket order book streaming functionality"""
+
+    @pytest.fixture
+    def client(self):
+        return CLOBClient(rest_endpoint=CLOB_ENDPOINT)
+
+    @pytest.mark.asyncio
+    @patch("polyterm.api.clob.HAS_WEBSOCKETS", True)
+    @patch("polyterm.api.clob.websockets")
+    async def test_connect_clob_websocket_success(self, mock_websockets, client):
+        """Test successful connection to CLOB order book WebSocket"""
+        mock_ws = AsyncMock()
+        mock_websockets.connect = AsyncMock(return_value=mock_ws)
+
+        result = await client.connect_clob_websocket()
+
+        assert result is True
+        assert client.clob_ws == mock_ws
+        mock_websockets.connect.assert_called_once_with(client.CLOB_WS_ENDPOINT)
+
+    @pytest.mark.asyncio
+    @patch("polyterm.api.clob.HAS_WEBSOCKETS", False)
+    async def test_connect_clob_websocket_without_websockets_raises(self, client):
+        """Test that connecting without websockets library raises exception"""
+        with pytest.raises(Exception, match="websockets library not installed"):
+            await client.connect_clob_websocket()
+
+    @pytest.mark.asyncio
+    @patch("polyterm.api.clob.HAS_WEBSOCKETS", True)
+    @patch("polyterm.api.clob.websockets")
+    async def test_subscribe_orderbook_sends_correct_message(self, mock_websockets, client):
+        """Test that subscribe_orderbook sends correct subscription message"""
+        mock_ws = AsyncMock()
+        mock_websockets.connect = AsyncMock(return_value=mock_ws)
+        client.clob_ws = mock_ws
+
+        token_ids = ["token1", "token2"]
+        callback = MagicMock()
+
+        await client.subscribe_orderbook(token_ids, callback)
+
+        # Verify subscription message was sent
+        mock_ws.send.assert_called_once()
+        sent_message = mock_ws.send.call_args[0][0]
+        import json
+        msg_data = json.loads(sent_message)
+        assert msg_data == {"assets_ids": ["token1", "token2"], "type": "market"}
+        assert client._ob_callback == callback
+        assert client._ob_token_ids == token_ids
+
+    @pytest.mark.asyncio
+    @patch("polyterm.api.clob.HAS_WEBSOCKETS", True)
+    @patch("polyterm.api.clob.websockets")
+    async def test_subscribe_orderbook_auto_connects(self, mock_websockets, client):
+        """Test that subscribe_orderbook auto-connects if not connected"""
+        mock_ws = AsyncMock()
+        mock_websockets.connect = AsyncMock(return_value=mock_ws)
+
+        token_ids = ["token1"]
+        callback = MagicMock()
+
+        await client.subscribe_orderbook(token_ids, callback)
+
+        # Should have called connect
+        mock_websockets.connect.assert_called_once_with(client.CLOB_WS_ENDPOINT)
+        assert client.clob_ws == mock_ws
+
+    @pytest.mark.asyncio
+    @patch("polyterm.api.clob.HAS_WEBSOCKETS", True)
+    async def test_listen_orderbook_processes_book_messages(self, client):
+        """Test that listen_orderbook processes 'book' message type"""
+        received_messages = []
+
+        def callback(data):
+            received_messages.append(data)
+
+        book_message = '{"type": "book", "asset_id": "token1", "bids": [], "asks": []}'
+
+        async def message_iterator():
+            yield book_message
+            # After yielding one message, raise exception to exit the listen loop
+            raise Exception("Test complete")
+
+        mock_ws = MagicMock()
+        mock_ws.__aiter__ = lambda self: message_iterator()
+
+        client.clob_ws = mock_ws
+        client._ob_callback = callback
+
+        # listen_orderbook will catch the exception and exit
+        await client.listen_orderbook(max_reconnects=0)
+
+        assert len(received_messages) == 1
+        assert received_messages[0]["type"] == "book"
+
+    @pytest.mark.asyncio
+    @patch("polyterm.api.clob.HAS_WEBSOCKETS", True)
+    async def test_listen_orderbook_processes_last_trade_price_messages(self, client):
+        """Test that listen_orderbook processes 'last_trade_price' message type"""
+        received_messages = []
+
+        def callback(data):
+            received_messages.append(data)
+
+        trade_message = '{"type": "last_trade_price", "asset_id": "token1", "price": "0.65"}'
+
+        async def message_iterator():
+            yield trade_message
+            raise Exception("Test complete")
+
+        mock_ws = MagicMock()
+        mock_ws.__aiter__ = lambda self: message_iterator()
+
+        client.clob_ws = mock_ws
+        client._ob_callback = callback
+
+        await client.listen_orderbook(max_reconnects=0)
+
+        assert len(received_messages) == 1
+        assert received_messages[0]["type"] == "last_trade_price"
+
+    @pytest.mark.asyncio
+    @patch("polyterm.api.clob.HAS_WEBSOCKETS", True)
+    async def test_listen_orderbook_skips_empty_messages(self, client):
+        """Test that listen_orderbook skips empty messages"""
+        received_messages = []
+
+        def callback(data):
+            received_messages.append(data)
+
+        async def message_iterator():
+            yield ""
+            yield "   "
+            yield '{"type": "book", "asset_id": "token1"}'
+            raise Exception("Test complete")
+
+        mock_ws = MagicMock()
+        mock_ws.__aiter__ = lambda self: message_iterator()
+
+        client.clob_ws = mock_ws
+        client._ob_callback = callback
+
+        await client.listen_orderbook(max_reconnects=0)
+
+        # Should only receive the valid message
+        assert len(received_messages) == 1
+        assert received_messages[0]["type"] == "book"
+
+    @pytest.mark.asyncio
+    @patch("polyterm.api.clob.HAS_WEBSOCKETS", True)
+    async def test_listen_orderbook_handles_json_decode_errors(self, client):
+        """Test that listen_orderbook handles JSON decode errors gracefully"""
+        received_messages = []
+
+        def callback(data):
+            received_messages.append(data)
+
+        async def message_iterator():
+            yield "not valid json"
+            yield '{"type": "book", "asset_id": "token1"}'
+            raise Exception("Test complete")
+
+        mock_ws = MagicMock()
+        mock_ws.__aiter__ = lambda self: message_iterator()
+
+        client.clob_ws = mock_ws
+        client._ob_callback = callback
+
+        await client.listen_orderbook(max_reconnects=0)
+
+        # Should only receive the valid message
+        assert len(received_messages) == 1
+        assert received_messages[0]["type"] == "book"
+
+    @pytest.mark.asyncio
+    @patch("polyterm.api.clob.HAS_WEBSOCKETS", True)
+    @patch("polyterm.api.clob.websockets")
+    async def test_listen_orderbook_reconnects_on_disconnection(self, mock_websockets, client):
+        """Test that listen_orderbook sets clob_ws to None on disconnection"""
+        # Start with a connection that will fail
+        initial_ws = MagicMock()
+
+        async def failing_iterator():
+            raise Exception("Connection lost")
+            yield
+
+        initial_ws.__aiter__ = lambda self: failing_iterator()
+
+        client.clob_ws = initial_ws
+        client._ob_callback = MagicMock()
+        client._ob_token_ids = ["token1"]
+
+        # Mock reconnection attempts
+        reconnect_mock = AsyncMock()
+        reconnect_mock.send = AsyncMock()
+
+        async def failing_reconnect_iterator():
+            raise Exception("Still failing")
+            yield
+
+        reconnect_mock.__aiter__ = lambda self: failing_reconnect_iterator()
+
+        mock_websockets.connect = AsyncMock(return_value=reconnect_mock)
+
+        # Patch asyncio.sleep to avoid actual delay
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            await client.listen_orderbook(max_reconnects=1)
+
+        # After failure, clob_ws should have been set to None
+        assert client.clob_ws is None
+        # Should have attempted reconnection
+        assert mock_websockets.connect.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_listen_orderbook_raises_if_not_connected(self, client):
+        """Test that listen_orderbook raises if WebSocket not connected"""
+        client.clob_ws = None
+
+        with pytest.raises(Exception, match="CLOB WebSocket not connected"):
+            await client.listen_orderbook(max_reconnects=0)
+
+    def test_clob_ws_endpoint_has_correct_url(self, client):
+        """Test that CLOB_WS_ENDPOINT has the correct URL"""
+        assert client.CLOB_WS_ENDPOINT == "wss://ws-subscriptions-clob.polymarket.com/ws/market"
+
+    def test_clob_ws_initialized_to_none(self, client):
+        """Test that clob_ws is initialized to None"""
+        assert client.clob_ws is None
+
+    @pytest.mark.asyncio
+    @patch("polyterm.api.clob.HAS_WEBSOCKETS", True)
+    @patch("polyterm.api.clob.websockets")
+    async def test_subscribe_stores_callback(self, mock_websockets, client):
+        """Test that subscribe_orderbook stores the callback"""
+        mock_ws = AsyncMock()
+        mock_websockets.connect = AsyncMock(return_value=mock_ws)
+        client.clob_ws = mock_ws
+
+        callback = MagicMock()
+        await client.subscribe_orderbook(["token1"], callback)
+
+        assert client._ob_callback == callback
+
+    @pytest.mark.asyncio
+    @patch("polyterm.api.clob.HAS_WEBSOCKETS", True)
+    @patch("polyterm.api.clob.websockets")
+    async def test_subscribe_stores_token_ids(self, mock_websockets, client):
+        """Test that subscribe_orderbook stores the token IDs"""
+        mock_ws = AsyncMock()
+        mock_websockets.connect = AsyncMock(return_value=mock_ws)
+        client.clob_ws = mock_ws
+
+        token_ids = ["token1", "token2", "token3"]
+        await client.subscribe_orderbook(token_ids, MagicMock())
+
+        assert client._ob_token_ids == token_ids
+
+    @pytest.mark.asyncio
+    @patch("polyterm.api.clob.HAS_WEBSOCKETS", True)
+    @patch("polyterm.api.clob.websockets")
+    async def test_listen_handles_max_reconnects_limit(self, mock_websockets, client):
+        """Test that listen_orderbook respects max_reconnects limit"""
+        mock_ws = AsyncMock()
+        mock_ws.__aiter__.side_effect = Exception("Connection failed")
+
+        mock_websockets.connect = AsyncMock(return_value=mock_ws)
+
+        client.clob_ws = mock_ws
+        client._ob_callback = MagicMock()
+        client._ob_token_ids = ["token1"]
+
+        # Patch asyncio.sleep to avoid actual delay
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            await client.listen_orderbook(max_reconnects=2)
+
+        # Should have attempted to reconnect 2 times (attempts 1 and 2)
+        assert mock_websockets.connect.call_count == 2

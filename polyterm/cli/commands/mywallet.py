@@ -15,6 +15,20 @@ from ...utils.json_output import print_json
 from ...utils.config import Config
 
 
+def _emit_error(console: Console, output_format: str, error: str, hint: str = ""):
+    """Emit an error in either table/text mode or JSON mode."""
+    if output_format == "json":
+        payload = {"success": False, "error": error}
+        if hint:
+            payload["hint"] = hint
+        print_json(payload)
+        return
+
+    console.print(f"[yellow]{error}[/yellow]")
+    if hint:
+        console.print(f"[dim]{hint}[/dim]")
+
+
 def is_valid_ethereum_address(address: str) -> bool:
     """Check if address is a valid Ethereum address"""
     if not address:
@@ -108,6 +122,15 @@ def mywallet(ctx, address, connect, disconnect, positions, show_history, pnl, in
     try:
         # Connect new wallet
         if connect:
+            if output_format == "json":
+                _emit_error(
+                    console,
+                    output_format,
+                    "Interactive wallet connect is not supported in JSON mode",
+                    "Run 'polyterm mywallet --connect' without '--format json'.",
+                )
+                return
+
             console.print()
             console.print(Panel(
                 "[bold cyan]Connect Your Wallet[/bold cyan]\n\n"
@@ -135,31 +158,53 @@ def mywallet(ctx, address, connect, disconnect, positions, show_history, pnl, in
         if disconnect:
             if saved_address:
                 config.set("wallet.address", "")
-                console.print(f"[yellow]Wallet disconnected:[/yellow] {saved_address[:10]}...{saved_address[-8:]}")
+                if output_format == "json":
+                    print_json({
+                        "success": True,
+                        "wallet": saved_address,
+                        "message": "Wallet disconnected",
+                    })
+                else:
+                    console.print(f"[yellow]Wallet disconnected:[/yellow] {saved_address[:10]}...{saved_address[-8:]}")
             else:
-                console.print("[yellow]No wallet connected[/yellow]")
+                _emit_error(console, output_format, "No wallet connected")
             return
 
         # Interactive mode
         if interactive:
+            if output_format == "json":
+                _emit_error(
+                    console,
+                    output_format,
+                    "Interactive mode is not supported in JSON mode",
+                )
+                return
             _interactive_mode(console, config, db, gamma_client, clob_client)
             return
 
         # No wallet connected
         if not wallet_address:
-            console.print()
-            console.print("[yellow]No wallet connected[/yellow]")
-            console.print()
-            console.print("Connect a wallet to view your Polymarket activity:")
-            console.print("  [cyan]polyterm mywallet --connect[/cyan]")
-            console.print()
-            console.print("Or view any wallet with:")
-            console.print("  [cyan]polyterm mywallet -a 0x...[/cyan]")
+            if output_format == "json":
+                _emit_error(
+                    console,
+                    output_format,
+                    "No wallet connected",
+                    "Use 'polyterm mywallet --connect' or provide '--address'.",
+                )
+            else:
+                console.print()
+                console.print("[yellow]No wallet connected[/yellow]")
+                console.print()
+                console.print("Connect a wallet to view your Polymarket activity:")
+                console.print("  [cyan]polyterm mywallet --connect[/cyan]")
+                console.print()
+                console.print("Or view any wallet with:")
+                console.print("  [cyan]polyterm mywallet -a 0x...[/cyan]")
             return
 
         # Validate address
         if not is_valid_ethereum_address(wallet_address):
-            console.print("[red]Invalid wallet address format[/red]")
+            _emit_error(console, output_format, "Invalid wallet address format")
             return
 
         # Show wallet info header
@@ -271,18 +316,21 @@ def _interactive_mode(console, config, db, gamma_client, clob_client):
 
 def _show_positions(console, address, db, output_format):
     """Show wallet positions from local database"""
-    console.print("[bold]Open Positions[/bold]")
-    console.print()
+    if output_format != 'json':
+        console.print("[bold]Open Positions[/bold]")
+        console.print()
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-        transient=True,
-    ) as progress:
-        progress.add_task("Fetching positions...", total=None)
-
+    if output_format == 'json':
         positions = get_wallet_positions(db, address)
+    else:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+            transient=True,
+        ) as progress:
+            progress.add_task("Fetching positions...", total=None)
+            positions = get_wallet_positions(db, address)
 
     if output_format == 'json':
         print_json({
@@ -321,8 +369,9 @@ def _show_positions(console, address, db, output_format):
 
 def _show_history(console, address, db, output_format):
     """Show wallet trade history"""
-    console.print("[bold]Recent Trade History[/bold]")
-    console.print()
+    if output_format != 'json':
+        console.print("[bold]Recent Trade History[/bold]")
+        console.print()
 
     # Get trades from database (we track followed wallet activity)
     trades = db.get_trades_by_wallet(address, limit=20)
@@ -370,8 +419,9 @@ def _show_history(console, address, db, output_format):
 
 def _show_pnl(console, address, db, output_format):
     """Show P&L summary"""
-    console.print("[bold]P&L Summary[/bold]")
-    console.print()
+    if output_format != 'json':
+        console.print("[bold]P&L Summary[/bold]")
+        console.print()
 
     # Get position summary from local tracking
     summary = db.get_position_summary()

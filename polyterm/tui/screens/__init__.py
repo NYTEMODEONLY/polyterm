@@ -75,6 +75,10 @@ from .notify_screen import run_notify_screen
 from .crypto15m_screen import run_crypto15m_screen
 from .mywallet_screen import run_mywallet_screen
 from .quicktrade_screen import run_quicktrade_screen
+from .negrisk_screen import run_negrisk_screen
+from .rewards_screen import run_rewards_screen
+from .clusters_screen import run_clusters_screen
+from .news_screen import run_news_screen
 
 __all__ = [
     "monitor_screen",
@@ -152,6 +156,10 @@ __all__ = [
     "run_crypto15m_screen",
     "run_mywallet_screen",
     "run_quicktrade_screen",
+    "run_negrisk_screen",
+    "run_rewards_screen",
+    "run_clusters_screen",
+    "run_news_screen",
 ]
 
 
