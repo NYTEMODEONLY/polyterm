@@ -75,6 +75,17 @@ RSS_FEED_MIXED_DATES = """<?xml version="1.0" encoding="UTF-8"?>
   </channel>
 </rss>"""
 
+ATOM_FEED_LEAF_FIELDS = """<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Atom Test Feed</title>
+  <entry>
+    <title>Atom BTC Headline</title>
+    <link href="https://example.com/atom-1" />
+    <published>2026-02-03T12:00:00Z</published>
+    <summary>Atom summary without child nodes</summary>
+  </entry>
+</feed>"""
+
 
 class TestFetchFeed:
     """Tests for fetch_feed method"""
@@ -271,6 +282,27 @@ class TestParsing:
         assert article['published'] != ''
         assert article['published_dt'] is not None
         assert "Bitcoin has surged" in article['summary']
+
+    @responses.activate
+    def test_atom_leaf_nodes_parse_published_and_summary(self):
+        """Should parse Atom fields even when elements have no child nodes."""
+        responses.add(
+            responses.GET,
+            "https://test.com/feed.xml",
+            body=ATOM_FEED_LEAF_FIELDS,
+            status=200,
+        )
+
+        aggregator = NewsAggregator(feeds=[("Test", "https://test.com/feed.xml")])
+        articles = aggregator.fetch_feed("Test", "https://test.com/feed.xml")
+
+        assert len(articles) == 1
+        article = articles[0]
+        assert article['title'] == "Atom BTC Headline"
+        assert article['link'] == "https://example.com/atom-1"
+        assert article['published_dt'] is not None
+        assert article['published'] != ''
+        assert article['summary'] == "Atom summary without child nodes"
 
     @responses.activate
     def test_various_date_formats(self):

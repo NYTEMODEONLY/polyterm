@@ -102,10 +102,14 @@ class NewsAggregator:
             link_el = item.find('atom:link', ns)
             if link_el is not None:
                 link = link_el.get('href', '')
-            pub_el = item.find('atom:published', ns) or item.find('atom:updated', ns)
+            pub_el = item.find('atom:published', ns)
+            if pub_el is None:
+                pub_el = item.find('atom:updated', ns)
             if pub_el is not None:
                 pub_date = pub_el.text
-            summary_el = item.find('atom:summary', ns) or item.find('atom:content', ns)
+            summary_el = item.find('atom:summary', ns)
+            if summary_el is None:
+                summary_el = item.find('atom:content', ns)
             if summary_el is not None:
                 summary = summary_el.text
 
