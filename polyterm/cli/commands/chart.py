@@ -7,9 +7,64 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 
 from ...api.gamma import GammaClient
+from ...api.clob import CLOBClient
 from ...db.database import Database
 from ...core.charts import ASCIIChart, generate_price_chart
-from ...utils.json_output import print_json
+from ...utils.json_output import print_json, safe_float
+
+
+def _parse_clob_token_ids(raw_token_ids):
+    """Normalize clobTokenIds to a list of token ids."""
+    token_ids = raw_token_ids
+    if isinstance(token_ids, str):
+        import json as json_mod
+        try:
+            token_ids = json_mod.loads(token_ids)
+        except Exception:
+            return []
+
+    if not isinstance(token_ids, list):
+        return []
+
+    return [token_id for token_id in token_ids if token_id]
+
+
+def _select_clob_granularity(time_hours):
+    """Pick CLOB interval/fidelity based on requested window."""
+    if time_hours <= 1:
+        return "1h", 60
+    if time_hours <= 6:
+        return "6h", 60
+    if time_hours <= 24:
+        return "1d", 300
+    return "max", 3600
+
+
+def _build_time_bounds(time_hours):
+    """Build [start, end] unix timestamp bounds for the requested window."""
+    hours = max(int(time_hours), 1)
+    end_ts = int(datetime.now().timestamp())
+    start_ts = end_ts - (hours * 3600)
+    return start_ts, end_ts
+
+
+def _parse_clob_prices(history, start_ts, end_ts):
+    """Convert CLOB history rows into chart points within the requested bounds."""
+    prices = []
+
+    for row in history or []:
+        if "t" not in row or "p" not in row:
+            continue
+        try:
+            timestamp = int(row["t"])
+        except (TypeError, ValueError):
+            continue
+        if timestamp < start_ts or timestamp > end_ts:
+            continue
+        prices.append((datetime.fromtimestamp(timestamp), safe_float(row["p"])))
+
+    prices.sort(key=lambda point: point[0])
+    return prices
 
 
 @click.command()
@@ -96,21 +151,51 @@ def chart(ctx, market, time_hours, width, height, sparkline, output_format):
         # Track this market view
         db.track_market_view(market_id, title, current_price)
 
-        # Get price history from database
-        snapshots = db.get_market_history(market_id, hours=time_hours)
+        # Try CLOB price history first (real market data)
+        prices = None
+        clob_token_ids = _parse_clob_token_ids(selected.get('clobTokenIds', []))
 
-        # If no history in DB, show flat line at current price
-        if not snapshots or len(snapshots) < 2:
-            console.print("[yellow]No price history available. Showing current price only.[/yellow]")
+        if clob_token_ids:
+            clob_client = None
+            try:
+                clob_client = CLOBClient(
+                    rest_endpoint=config.clob_rest_endpoint,
+                )
+                interval, fidelity = _select_clob_granularity(time_hours)
+                start_ts, end_ts = _build_time_bounds(time_hours)
 
+                history = clob_client.get_price_history(
+                    clob_token_ids[0],
+                    interval=interval,
+                    fidelity=fidelity,
+                    start_ts=start_ts,
+                    end_ts=end_ts,
+                )
+                prices = _parse_clob_prices(history, start_ts=start_ts, end_ts=end_ts)
+                if len(prices) >= 2:
+                    if output_format != 'json':
+                        console.print(f"[dim]Using CLOB price history ({len(prices)} points)[/dim]")
+            except Exception:
+                pass  # Fall back to DB snapshots
+            finally:
+                if clob_client is not None:
+                    clob_client.close()
+
+        # Fall back to database snapshots
+        if not prices or len(prices) < 2:
+            snapshots = db.get_market_history(market_id, hours=time_hours)
+            if snapshots and len(snapshots) >= 2:
+                prices = [(s.timestamp, s.probability) for s in reversed(snapshots)]
+
+        # Last resort: flat line at current price
+        if not prices or len(prices) < 2:
+            if output_format != 'json':
+                console.print("[yellow]No price history available. Showing current price only.[/yellow]")
             now = datetime.now()
             prices = [
                 (now - timedelta(hours=time_hours), current_price),
                 (now, current_price),
             ]
-        else:
-            # Use actual snapshot data
-            prices = [(s.timestamp, s.probability) for s in reversed(snapshots)]
 
         # JSON output
         if output_format == 'json':

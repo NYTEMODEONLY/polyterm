@@ -7,7 +7,6 @@ from rich.table import Table
 
 from ...api.gamma import GammaClient
 from ...api.clob import CLOBClient
-from ...api.subgraph import SubgraphClient
 from ...core.analytics import AnalyticsEngine
 from ...utils.formatting import format_timestamp, format_volume
 from ...utils.json_output import print_json
@@ -36,14 +35,14 @@ def whales(ctx, min_amount, market, hours, limit, output_format):
         rest_endpoint=config.clob_rest_endpoint,
         ws_endpoint=config.clob_endpoint,
     )
-    subgraph_client = SubgraphClient(endpoint=config.subgraph_endpoint)
-    
-    # Initialize analytics
-    analytics = AnalyticsEngine(gamma_client, clob_client, subgraph_client)
-    
-    console.print(f"[cyan]Tracking high-volume markets ≥ ${min_amount:,.0f}[/cyan]")
-    console.print(f"[cyan]Period: Last {hours} hours[/cyan]")
-    console.print(f"[dim]Note: Showing markets with significant 24hr volume (individual trades not available from API)[/dim]\n")
+    # Initialize analytics (Subgraph is not required for volume-based whale tracking)
+    analytics = AnalyticsEngine(gamma_client, clob_client, None)
+
+    if output_format != 'json':
+        console.print(f"[cyan]Tracking high-volume markets ≥ ${min_amount:,.0f}[/cyan]")
+        console.print(f"[cyan]Period: Last {hours} hours[/cyan]")
+        console.print("[dim]Note: Showing markets with significant 24hr volume "
+                     "(individual trades not available from API)[/dim]\n")
     
     try:
         # Get whale trades
@@ -139,4 +138,3 @@ def whales(ctx, min_amount, market, hours, limit, output_format):
     finally:
         gamma_client.close()
         clob_client.close()
-

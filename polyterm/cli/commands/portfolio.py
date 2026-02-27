@@ -6,8 +6,53 @@ from rich.table import Table
 
 from ...api.gamma import GammaClient
 from ...api.clob import CLOBClient
-from ...api.subgraph import SubgraphClient
 from ...core.analytics import AnalyticsEngine
+from ...utils.json_output import safe_float
+
+
+def _extract_position_fields(position):
+    """Normalize position fields across Data API and legacy Subgraph shapes."""
+    market_id = (
+        position.get("market")
+        or position.get("market_id")
+        or position.get("conditionId")
+        or ""
+    )
+    title = position.get("title", "") or position.get("question", "")
+    outcome = (position.get("outcome") or position.get("side") or "").upper()
+
+    shares = safe_float(position.get("size", position.get("shares", position.get("quantity", 0))))
+    avg_price = safe_float(
+        position.get("averagePrice", position.get("avgPrice", position.get("entryPrice", 0)))
+    )
+    current_value = safe_float(
+        position.get("currentValue", position.get("value", position.get("current_value", 0)))
+    )
+    explicit_pnl = position.get("pnl")
+    if explicit_pnl is not None:
+        total_pnl = safe_float(explicit_pnl)
+    else:
+        realized = position.get("realizedPnL", position.get("realizedPnl", 0))
+        unrealized = position.get("unrealizedPnL", position.get("unrealizedPnl", 0))
+        total_pnl = safe_float(realized) + safe_float(unrealized)
+
+    if avg_price == 0 and shares > 0:
+        initial_value = safe_float(position.get("initialValue", position.get("costBasis", 0)))
+        if initial_value > 0:
+            avg_price = initial_value / shares
+
+    if current_value == 0 and shares > 0 and avg_price > 0:
+        current_value = shares * avg_price
+
+    return {
+        "market_id": market_id,
+        "title": title,
+        "outcome": outcome,
+        "shares": shares,
+        "avg_price": avg_price,
+        "current_value": current_value,
+        "total_pnl": total_pnl,
+    }
 
 
 @click.command()
@@ -37,10 +82,8 @@ def portfolio(ctx, wallet):
         rest_endpoint=config.clob_rest_endpoint,
         ws_endpoint=config.clob_endpoint,
     )
-    subgraph_client = SubgraphClient(endpoint=config.subgraph_endpoint)
-    
-    # Initialize analytics
-    analytics = AnalyticsEngine(gamma_client, clob_client, subgraph_client)
+    # Initialize analytics (Data API-backed; no Subgraph dependency required)
+    analytics = AnalyticsEngine(gamma_client, clob_client, None)
     
     console.print(f"[cyan]Loading portfolio for:[/cyan] {wallet}\n")
     
@@ -77,31 +120,38 @@ def portfolio(ctx, wallet):
         table.add_column("P&L", justify="right")
         
         for position in portfolio_data["positions"]:
-            market_id = position.get("market")
-            outcome = position.get("outcome", "")
-            shares = float(position.get("shares", 0))
-            avg_price = float(position.get("averagePrice", 0))
-            realized_pnl = float(position.get("realizedPnL", 0))
-            unrealized_pnl = float(position.get("unrealizedPnL", 0))
-            
-            # Get market name
-            try:
-                market_data = gamma_client.get_market(market_id)
-                market_name = market_data.get("question", "Unknown")[:50]
-            except Exception:
-                market_name = market_id[:30]
-            
-            value = shares * avg_price
-            total_pnl = realized_pnl + unrealized_pnl
-            
-            # Format outcome
-            outcome_style = "green" if outcome == "YES" else "red"
-            outcome_text = f"[{outcome_style}]{outcome}[/{outcome_style}]"
-            
-            # Format P&L
+            normalized = _extract_position_fields(position)
+
+            market_id = normalized["market_id"]
+            market_name = normalized["title"][:50] if normalized["title"] else ""
+
+            if not market_name and market_id:
+                try:
+                    market_data = gamma_client.get_market(market_id)
+                    market_name = market_data.get("question", "Unknown")[:50]
+                except Exception:
+                    market_name = market_id[:30]
+            elif not market_name:
+                market_name = "Unknown"
+
+            outcome = normalized["outcome"]
+            shares = normalized["shares"]
+            avg_price = normalized["avg_price"]
+            value = normalized["current_value"]
+            total_pnl = normalized["total_pnl"]
+
+            if outcome == "YES":
+                outcome_text = f"[green]{outcome}[/green]"
+            elif outcome == "NO":
+                outcome_text = f"[red]{outcome}[/red]"
+            elif outcome:
+                outcome_text = outcome
+            else:
+                outcome_text = "N/A"
+
             pnl_style = "green" if total_pnl >= 0 else "red"
             pnl_text = f"[{pnl_style}]${total_pnl:,.2f}[/{pnl_style}]"
-            
+
             table.add_row(
                 market_name,
                 outcome_text,
@@ -120,4 +170,3 @@ def portfolio(ctx, wallet):
     finally:
         gamma_client.close()
         clob_client.close()
-

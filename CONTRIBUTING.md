@@ -52,6 +52,31 @@ Thank you for your interest in contributing to PolyTerm! This document provides 
 - **Core Tests**: `tests/test_core/`
 - **CLI Tests**: `tests/test_cli/`
 
+## CI Checks
+
+Every pull request and push to `main` runs the following automated checks via GitHub Actions (`.github/workflows/ci.yml`):
+
+| Check | What it does |
+|-------|-------------|
+| **Syntax check** | Parses all `.py` files with `ast.parse` to catch syntax errors (zero dependencies) |
+| **Import smoke test** | Verifies top-level package imports (CLI, TUI, API, Core, DB) |
+| **Test suite** | Runs `pytest` against Python 3.10 and 3.11 (excludes live-data and flaky TUI integration tests) |
+
+**Design tradeoffs:**
+- Uses stdlib `ast.parse` instead of `flake8`/`ruff` to avoid adding dev dependencies. A linter can be added later.
+- Tests run on Python 3.10 and 3.11 to balance coverage vs CI runtime (~20s per matrix entry).
+- `tests/test_live_data/` is excluded because it hits real APIs and is non-deterministic.
+- `tests/test_tui/test_integration.py` is excluded due to pre-existing stdin capture issues in CI.
+
+To run the same checks locally:
+```bash
+# Syntax check
+python -c "import ast, os, sys; [ast.parse(open(os.path.join(r,f)).read()) for r,_,fs in os.walk('polyterm') for f in fs if f.endswith('.py')]"
+
+# Tests (matching CI)
+pytest tests/ --ignore=tests/test_live_data --ignore=tests/test_tui/test_integration.py -q
+```
+
 ## 📋 Pull Request Process
 
 1. **Update** README.md with details of changes if needed

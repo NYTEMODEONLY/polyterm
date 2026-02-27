@@ -81,6 +81,10 @@ from .screens import (
     run_crypto15m_screen,
     run_mywallet_screen,
     run_quicktrade_screen,
+    run_negrisk_screen,
+    run_rewards_screen,
+    run_clusters_screen,
+    run_news_screen,
 )
 
 # Screen dispatch table: maps shortcut keys to screen functions
@@ -97,6 +101,7 @@ SCREEN_ROUTES = {
     '8': settings_screen, 's': settings_screen,
     '9': arbitrage_screen, 'arb': arbitrage_screen,
     '10': predictions_screen, 'pred': predictions_screen,
+    'nr': run_negrisk_screen, 'negrisk': run_negrisk_screen,
     '11': wallets_screen, 'wal': wallets_screen,
     '12': alerts_screen, 'alert': alerts_screen,
     '13': orderbook_screen, 'ob': orderbook_screen,
@@ -164,6 +169,9 @@ SCREEN_ROUTES = {
     'c15': run_crypto15m_screen, 'crypto15m': run_crypto15m_screen, '15m': run_crypto15m_screen,
     'mw': run_mywallet_screen, 'mywallet': run_mywallet_screen, 'wallet': run_mywallet_screen,
     'qt': run_quicktrade_screen, 'quicktrade': run_quicktrade_screen,
+    'rw': run_rewards_screen, 'rewards': run_rewards_screen,
+    'cl': run_clusters_screen, 'clusters': run_clusters_screen,
+    'nw': run_news_screen, 'news': run_news_screen,
 }
 
 QUIT_COMMANDS = {'q', 'quit', 'exit'}

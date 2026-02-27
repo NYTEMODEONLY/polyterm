@@ -103,6 +103,56 @@ class TestPositionPnL:
         assert summary['losses'] == 1
         assert summary['win_rate'] == pytest.approx(66.67, abs=0.1)
 
+    def test_get_positions_can_filter_by_wallet(self, temp_db):
+        """Wallet-scoped position queries should only return matching positions."""
+        temp_db.add_position(
+            "m1",
+            "Wallet A",
+            "yes",
+            10,
+            0.45,
+            wallet_address="0xAAA",
+        )
+        temp_db.add_position(
+            "m2",
+            "Wallet B",
+            "yes",
+            10,
+            0.50,
+            wallet_address="0xBBB",
+        )
+
+        positions = temp_db.get_positions(status="open", wallet_address="0xaaa")
+
+        assert len(positions) == 1
+        assert positions[0]["title"] == "Wallet A"
+        assert positions[0]["wallet_address"] == "0xAAA"
+
+    def test_get_positions_wallet_filter_respects_status(self, temp_db):
+        """Wallet filter should combine with status filter."""
+        open_id = temp_db.add_position(
+            "m1",
+            "Open Position",
+            "yes",
+            10,
+            0.45,
+            wallet_address="0xAAA",
+        )
+        closed_id = temp_db.add_position(
+            "m2",
+            "Closed Position",
+            "yes",
+            10,
+            0.50,
+            wallet_address="0xAAA",
+        )
+        temp_db.close_position(closed_id, 0.55)
+
+        open_positions = temp_db.get_positions(status="open", wallet_address="0xAAA")
+
+        assert len(open_positions) == 1
+        assert open_positions[0]["id"] == open_id
+
 
 class TestScreenerPresets:
     """Test screener preset JSON handling"""

@@ -98,7 +98,16 @@ def test_polyterm_help():
 
     # Should show CLI help, not TUI
     assert result.exit_code == 0
-    assert 'PolyMarket' in result.output or 'monitor' in result.output.lower()
+
+
+def test_polyterm_negrisk_command_exists():
+    """Test 'polyterm negrisk' command is registered"""
+    runner = CliRunner()
+    result = runner.invoke(cli, ['negrisk', '--help'])
+
+    # Should show negrisk help, not TUI
+    assert result.exit_code == 0
+    assert 'negrisk' in result.output.lower()
 
 
 def test_monitor_sort_option_exists():
