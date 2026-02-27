@@ -37,11 +37,17 @@ def news(ctx, market, hours, limit, output_format):
                 console.print()
                 console.print(f"[dim]Fetching news related to: {market}[/dim]")
 
-            articles = aggregator.get_market_news(market, limit=limit)
+            articles = aggregator.get_market_news(market, limit=limit, hours=hours)
 
             if output_format == 'json':
                 cleaned = [{k: v for k, v in a.items() if k != 'published_dt'} for a in articles]
-                print_json({'success': True, 'market': market, 'articles': cleaned, 'count': len(cleaned)})
+                print_json({
+                    'success': True,
+                    'market': market,
+                    'hours': hours,
+                    'articles': cleaned,
+                    'count': len(cleaned),
+                })
                 return
 
             if not articles:

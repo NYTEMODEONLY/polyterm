@@ -249,17 +249,21 @@ class NewsAggregator:
 
         return matches
 
-    def get_market_news(self, market_title, limit=5):
+    def get_market_news(self, market_title, limit=5, hours=None):
         """Get news relevant to a specific market
 
         Args:
             market_title: Market question/title to match against
             limit: Max articles to return
+            hours: Optional recency filter window
 
         Returns:
             List of matching article dicts
         """
         all_articles = self.fetch_all()
+        cutoff = None
+        if hours is not None:
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
 
         market_words = set(market_title.lower().split())
         stop_words = {'the', 'a', 'an', 'will', 'be', 'by', 'in', 'on', 'to', 'of', '?', 'is', 'it', 'and', 'or'}
@@ -270,6 +274,12 @@ class NewsAggregator:
 
         matches = []
         for article in all_articles:
+            if cutoff is not None:
+                pub_dt = self._normalize_datetime(article.get('published_dt'))
+                # Apply a strict recency filter when requested.
+                if pub_dt is None or pub_dt < cutoff:
+                    continue
+
             text = f"{article.get('title', '')} {article.get('summary', '')}".lower()
             text_words = set(text.split()) - stop_words
 
