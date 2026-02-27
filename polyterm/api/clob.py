@@ -330,14 +330,44 @@ class CLOBClient:
         self.subscriptions.clear()
     
     async def close_websocket(self):
-        """Close WebSocket connection"""
+        """Close any active WebSocket connections."""
         if self.ws_connection:
-            await self.ws_connection.close()
-            self.ws_connection = None
+            try:
+                await self.ws_connection.close()
+            except Exception:
+                pass
+            finally:
+                self.ws_connection = None
+
+        if self.clob_ws:
+            try:
+                await self.clob_ws.close()
+            except Exception:
+                pass
+            finally:
+                self.clob_ws = None
+
+        self.subscriptions.clear()
+        if hasattr(self, '_ob_callback'):
+            self._ob_callback = None
+        if hasattr(self, '_ob_token_ids'):
+            self._ob_token_ids = []
     
     def close(self):
-        """Close REST session"""
+        """Close REST session and best-effort close active websockets."""
         self.session.close()
+        if not self.ws_connection and not self.clob_ws:
+            return
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            loop.create_task(self.close_websocket())
+        else:
+            asyncio.run(self.close_websocket())
 
     # CLOB Order Book WebSocket Methods
 
@@ -541,4 +571,3 @@ class CLOBClient:
         notional = size * price
         
         return notional >= threshold
-
