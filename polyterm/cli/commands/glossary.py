@@ -25,7 +25,7 @@ GLOSSARY = {
     },
     "resolution": {
         "definition": "The final determination of a market's outcome. Winners receive $1 per share.",
-        "example": "The market resolves to YES, all YES shareholders get paid.",
+        "example": "The market resolves to YES, all YES shareholders receive $1.",
         "category": "Core Concepts",
     },
 

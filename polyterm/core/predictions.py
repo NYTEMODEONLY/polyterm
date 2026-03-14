@@ -1,5 +1,5 @@
 """
-AI-Powered Predictions Module
+Signal-Based Predictions Module
 
 Features:
 - Multi-factor signal generation

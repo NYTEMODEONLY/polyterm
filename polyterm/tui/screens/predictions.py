@@ -12,7 +12,7 @@ def predictions_screen(console: RichConsole):
     """Generate signal-based predictions for markets
 
     Uses momentum, volume, whale activity, and technical indicators.
-    No external AI/LLM required - all analysis is algorithmic.
+    All analysis is algorithmic — no external APIs or LLMs required.
 
     Args:
         console: Rich Console instance

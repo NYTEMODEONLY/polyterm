@@ -149,7 +149,7 @@ PolyTerm is the **only terminal-native tool** offering:
 | **Polymtrade** | Unknown | Mobile-first, AI insights | No desktop power | Terminal power tools |
 | **Polylayer** | Unknown | Advanced filtering | Learning curve | Simpler CLI |
 | **PolyScope** | Free | Community-driven | Limited features | Full feature set |
-| **Verso** | Premium | Bloomberg-style | Expensive | Affordable terminal |
+| **Verso** | Commercial | Bloomberg-style | Expensive | Affordable terminal |
 
 ### Ecosystem Tool Categories (190+ Tools)
 
