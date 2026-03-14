@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-PolyTerm is a terminal-based monitoring and analytics tool for PolyMarket prediction markets. It provides both a CLI and an interactive TUI (Terminal User Interface) for tracking markets, whale activity, insider patterns, arbitrage opportunities, and AI-powered predictions.
+PolyTerm is a terminal-based monitoring and analytics tool for PolyMarket prediction markets. It provides both a CLI and an interactive TUI (Terminal User Interface) for tracking markets, whale activity, insider patterns, arbitrage opportunities, and signal-based predictions.
 
 ## Common Commands
 
@@ -32,7 +32,7 @@ polyterm simulate -i                  # P&L calculator (interactive)
 polyterm monitor --limit 20           # CLI market monitoring
 polyterm whales --hours 24            # Whale activity
 polyterm arbitrage --min-spread 0.025 # Arbitrage scanning
-polyterm predict --limit 10           # AI predictions
+polyterm predict --limit 10           # Signal-based predictions
 polyterm risk --market "bitcoin"      # Market risk assessment
 polyterm follow --list                # Copy trading / followed wallets
 polyterm parlay -i                    # Parlay calculator (interactive)
@@ -86,7 +86,7 @@ polyterm/
 │   ├── arbitrage.py      # Arbitrage scanner (intra-market, correlated, Kalshi)
 │   ├── negrisk.py        # NegRisk multi-outcome arbitrage detection
 │   ├── orderbook.py      # Order book analysis with ASCII charts
-│   ├── predictions.py    # AI-powered multi-factor predictions
+│   ├── predictions.py    # Signal-based multi-factor predictions
 │   ├── risk_score.py     # Market risk scoring system (A-F grades)
 │   ├── uma_tracker.py    # UMA oracle dispute risk analysis
 │   ├── wash_trade_detector.py  # Wash trade detection indicators
