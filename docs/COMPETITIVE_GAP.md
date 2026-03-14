@@ -1,6 +1,6 @@
 # Competitive Gap Analysis: PolyTerm vs Polymarket CLI
 
-**Last updated:** 2026-02-25
+**Last updated:** 2026-03-14
 **Competitor:** [Polymarket/polymarket-cli](https://github.com/Polymarket/polymarket-cli) (official)
 
 ---
@@ -21,7 +21,7 @@ Polymarket released their official CLI on Feb 24, 2026. It gained 1,016 GitHub s
 
 ### Feature Matrix
 
-| Capability | PolyTerm (v0.8.5) | Polymarket CLI (v0.1.4) | Gap Owner |
+| Capability | PolyTerm (v0.9.0) | Polymarket CLI (v0.1.4) | Gap Owner |
 |---|---|---|---|
 | **Market browsing** | monitor, search, hot | markets list/get/search, events, tags, series | Parity |
 | **Order book** | ASCII depth charts, iceberg detection, slippage calc | Full CLOB read (book, books, spreads, midpoints) | Polymarket CLI |
@@ -42,6 +42,10 @@ Polymarket released their official CLI on Feb 24, 2026. It gained 1,016 GitHub s
 | **Bookmarks/favorites** | SQLite-backed with notes | None | PolyTerm |
 | **Price alerts** | Direction-aware target alerts | None | PolyTerm |
 | **Copy trading** | Follow up to 10 wallets with win rate tracking | None | PolyTerm |
+| **NegRisk arbitrage** | Multi-outcome market arbitrage scanning | None | PolyTerm |
+| **Wallet clusters** | Same-entity wallet detection (timing, overlap, size) | None | PolyTerm |
+| **Rewards estimator** | Holding & liquidity reward projections | None | PolyTerm |
+| **News aggregation** | RSS-based market-relevant news from crypto outlets | None | PolyTerm |
 | **Dashboard** | Overview of bookmarks, alerts, wallets | None | PolyTerm |
 | **Calendar** | Upcoming resolutions with countdown | None | PolyTerm |
 | **Statistics** | Volatility, RSI, trend, momentum | None | PolyTerm |
@@ -61,7 +65,7 @@ Polymarket released their official CLI on Feb 24, 2026. It gained 1,016 GitHub s
 | **Self-update** | PyPI check + auto-restart | `polymarket upgrade` + Homebrew | Polymarket CLI |
 | **Install methods** | pip | Homebrew, curl script, cargo | Polymarket CLI |
 | **Performance** | Python (~300ms startup) | Rust (native binary, ~10ms startup) | Polymarket CLI |
-| **Test suite** | 440 tests | 40 integration tests | PolyTerm |
+| **Test suite** | 660+ tests | 40 integration tests | PolyTerm |
 
 ---
 
