@@ -31,7 +31,7 @@ Polymarket released their official CLI on Feb 24, 2026. It gained 1,016 GitHub s
 | **On-chain ops** | None | CTF split/merge/redeem, contract approvals, bridge | Polymarket CLI |
 | **Whale tracking** | Dedicated tracker + insider detection scoring | None | PolyTerm |
 | **Arbitrage scanning** | Intra-market, correlated, cross-platform (Kalshi) | None | PolyTerm |
-| **AI predictions** | 5-signal multi-factor (momentum, volume, whale, smart money, RSI) | None | PolyTerm |
+| **Signal-based predictions** | 5-signal multi-factor (momentum, volume, whale, smart money, RSI) | None | PolyTerm |
 | **Risk scoring** | 6-factor A-F grading system | None | PolyTerm |
 | **Wash trade detection** | Volume quality indicators (4 metrics) | None | PolyTerm |
 | **UMA dispute risk** | Resolution dispute analysis | None | PolyTerm |

@@ -24,7 +24,7 @@ def predict(ctx, market, limit, horizon, min_confidence, output_format):
     """Generate signal-based predictions for markets
 
     Uses momentum, volume, whale activity, and technical indicators
-    to generate market predictions. No external AI/LLM required.
+    to generate market predictions. All analysis is algorithmic.
     """
 
     config = ctx.obj["config"]
