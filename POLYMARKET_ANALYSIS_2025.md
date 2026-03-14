@@ -552,7 +552,7 @@ polyterm suggest            # Suggest commands based on goals
 | Monthly downloads | ~100 | 1,000 | 5,000 |
 | Daily active users | Unknown | 100 | 500 |
 | GitHub stars | ~50 | 500 | 2,000 |
-| Premium conversions | 0% | 10% | 20% |
+| Feature adoption rate | 30% | 60% | 80% |
 
 ### Qualitative Goals
 
@@ -582,7 +582,7 @@ polyterm suggest            # Suggest commands based on goals
 2. **Privacy-First**: All data local, no account required
 3. **Full-Featured**: Monitoring, analytics, alerts, arbitrage in one tool
 4. **Scriptable**: JSON output enables automation
-5. **Free Core**: Generous free tier builds trust
+5. **Fully Free & Open Source**: MIT-licensed, no paywalls, all features included
 6. **Open Architecture**: Hackable, extensible
 7. **Cross-Platform**: Works on macOS, Linux, Windows
 
