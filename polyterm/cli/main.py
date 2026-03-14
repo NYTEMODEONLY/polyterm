@@ -26,7 +26,8 @@ def cli(ctx):
     Track big moves, sudden shifts, and whale activity in prediction markets.
     """
     ctx.ensure_object(dict)
-    ctx.obj["config"] = _get_config_class()()
+    if "config" not in ctx.obj:
+        ctx.obj["config"] = _get_config_class()()
 
     if ctx.invoked_subcommand is None:
         from ..tui.controller import TUIController
