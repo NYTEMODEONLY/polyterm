@@ -375,6 +375,29 @@ class TestNegRiskScanAll:
 
         assert result == []
 
+    def test_excludes_overpriced_events_from_opportunities(self, analyzer, mock_gamma_client):
+        """Should only surface underpriced baskets as arbitrage opportunities"""
+        events = [
+            create_event('e1', 'Underpriced Event', [
+                create_market('m1', 'A', 0.25),
+                create_market('m2', 'B', 0.25),
+                create_market('m3', 'C', 0.25),
+            ]),
+            create_event('e2', 'Overpriced Event', [
+                create_market('m4', 'A', 0.40),
+                create_market('m5', 'B', 0.35),
+                create_market('m6', 'C', 0.30),
+            ]),
+        ]
+        mock_gamma_client.get_markets.return_value = events
+
+        result = analyzer.scan_all(min_spread=0.02)
+
+        assert len(result) == 1
+        assert result[0]['event_id'] == 'e1'
+        assert result[0]['type'] == 'underpriced'
+        assert result[0]['fee_adjusted_profit'] > 0
+
     def test_respects_different_spread_thresholds(self, analyzer, mock_gamma_client):
         """Should respect various min_spread values"""
         # Create events with spreads: 0.01, 0.03, 0.05, 0.12, 0.15

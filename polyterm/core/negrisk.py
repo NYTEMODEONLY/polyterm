@@ -191,20 +191,25 @@ class NegRiskAnalyzer:
         }
 
     def scan_all(self, min_spread=0.02):
-        """Scan all NegRisk events for arbitrage opportunities
+        """Scan all NegRisk events for actionable arbitrage opportunities
 
         Args:
             min_spread: Minimum spread threshold (default 2%)
 
         Returns:
-            List of arbitrage opportunities sorted by profit potential
+            List of underpriced arbitrage opportunities sorted by profit potential
         """
         events = self.find_multi_outcome_events(limit=50)
         opportunities = []
 
         for event in events:
             result = self.analyze_event(event)
-            if result and result['spread'] >= min_spread:
+            if (
+                result
+                and result['type'] == 'underpriced'
+                and result['fee_adjusted_profit'] > 0
+                and result['spread'] >= min_spread
+            ):
                 opportunities.append(result)
 
         return sorted(opportunities, key=lambda x: x['fee_adjusted_profit'], reverse=True)

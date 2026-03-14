@@ -19,8 +19,8 @@ from ...utils.json_output import print_json
 def negrisk(ctx, min_spread, limit, output_format):
     """Scan multi-outcome markets for NegRisk arbitrage
 
-    Finds markets where the sum of all YES outcome prices doesn't equal $1.00.
-    If total < $1.00, buying all outcomes guarantees profit on resolution.
+    Finds markets where the sum of all YES outcome prices is below $1.00.
+    Buying all outcomes in those baskets guarantees profit on resolution.
 
     Examples:
         polyterm negrisk
@@ -41,7 +41,7 @@ def negrisk(ctx, min_spread, limit, output_format):
             console.print()
             console.print(Panel(
                 "[bold cyan]NegRisk Multi-Outcome Arbitrage[/bold cyan]\n\n"
-                "Scanning multi-outcome markets where sum of YES prices != $1.00.\n"
+                "Scanning multi-outcome markets where sum of YES prices is below $1.00.\n"
                 "[dim]Buy all outcomes below $1.00 for guaranteed profit.[/dim]",
                 border_style="cyan"
             ))
