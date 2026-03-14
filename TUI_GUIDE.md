@@ -7,7 +7,7 @@ Complete guide to using PolyTerm's Terminal User Interface.
 - [Getting Started](#getting-started)
 - [Main Menu](#main-menu)
 - [Core Features](#core-features)
-- [Premium Features](#premium-features)
+- [Advanced Analytics](#advanced-analytics)
 - [Tools & Calculators](#tools--calculators)
 - [Research & Analysis](#research--analysis)
 - [Learning Resources](#learning-resources)
@@ -150,7 +150,7 @@ Configure PolyTerm settings:
 - Notification channels
 - Update PolyTerm
 
-## Premium Features
+## Advanced Analytics
 
 ### 9. Arbitrage Scanner (9/arb)
 
