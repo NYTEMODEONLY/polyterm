@@ -4,14 +4,14 @@
 
 PolyTerm uses verified PolyMarket API endpoints that return live, current data with accurate volume information.
 
-## ✅ Working Endpoints (October 2025)
+## Working Endpoints (March 2026)
 
 ### Gamma Markets API - `/events` endpoint
 **Primary source for live data with volume**
 
 - **URL**: `https://gamma-api.polymarket.com/events`
 - **Parameters**: `active=true&closed=false`
-- **Returns**: Current 2025 markets with volume data
+- **Returns**: Current active markets with volume data
 - **Volume Fields**: `volume`, `volume24hr`
 - **Status**: ✅ Working with live data
 
@@ -23,7 +23,15 @@ PolyTerm uses verified PolyMarket API endpoints that return live, current data w
 - **Status**: ✅ Working (fallback when Gamma fails)
 - **Note**: No volume data in response
 
-### ❌ Subgraph GraphQL (Deprecated)
+### Data API - wallet positions & activity
+**Source for wallet data (replaces deprecated Subgraph)**
+
+- **URL**: `https://data-api.polymarket.com`
+- **Returns**: Wallet positions, activity, trade history, P&L
+- **Status**: Working
+- **Note**: Same retry pattern as CLOB client (429/500/timeout backoff)
+
+### Subgraph GraphQL (Deprecated)
 **Endpoint has been removed**
 
 - **URL**: `https://api.thegraph.com/subgraphs/name/polymarket/matic-markets`
@@ -36,7 +44,7 @@ PolyTerm uses verified PolyMarket API endpoints that return live, current data w
 PolyTerm includes automatic data validation:
 
 ### Freshness Checks
-- ✅ Rejects markets from previous years
+- Rejects markets from previous years
 - ✅ Validates end dates are current or future
 - ✅ Filters out closed markets
 - ✅ Ensures timestamps are recent
@@ -91,7 +99,7 @@ polyterm config --set data_validation.require_volume_data false
 # Verify you're getting current data
 polyterm monitor --limit 5
 
-# Check for 2025 markets
+# Check for current markets
 polyterm whales --hours 24
 
 # Validate data freshness
@@ -101,7 +109,7 @@ python3 -m pytest tests/test_live_data/ -v
 ### Expected Results
 
 When working correctly, you should see:
-- ✅ Market questions mentioning "2025" or current events
+- Market questions mentioning current events
 - ✅ Volume data showing real numbers (not $0)
 - ✅ "Data Age" showing current timeframes
 - ✅ No markets from 2020-2024
@@ -202,7 +210,7 @@ for market in markets:
     print()
 ```
 
-Expected output should show 2025 markets with real volume numbers.
+Expected output should show current active markets with real volume numbers.
 
 ## API Response Format
 
@@ -239,5 +247,5 @@ polyterm config --set api.gamma_api_key "your-api-key-here"
 
 ## Last Updated
 
-This guide was verified on **October 14, 2025** with confirmed working endpoints returning live 2025 data.
+This guide was verified on **March 14, 2026** with confirmed working endpoints returning live data.
 

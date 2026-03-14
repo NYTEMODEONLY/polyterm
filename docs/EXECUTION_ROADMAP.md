@@ -1,6 +1,6 @@
 # Execution Roadmap
 
-**Last updated:** 2026-02-25
+**Last updated:** 2026-03-14
 **Context:** Response to Polymarket official CLI launch (Feb 24, 2026)
 **Team model:** 1 engineer + swarm agents
 
@@ -99,8 +99,8 @@ These items open PolyTerm to new audiences and use cases.
 - [ ] `time polyterm --version` completes in <150ms
 - [ ] Zero Subgraph deprecation warnings in normal usage
 - [ ] README has "Why PolyTerm" section with measurable claims
-- [ ] 440+ tests still passing (no regression)
-- [ ] v0.9.0 published to PyPI
+- [x] 660+ tests passing (no regression)
+- [x] v0.9.0 published to PyPI
 
 ---
 
@@ -130,7 +130,7 @@ These items widen the feature gap in areas where the official CLI will not inves
 |--------|---------|-----------------|-----------------|
 | PyPI monthly downloads | Baseline TBD | +20% | +50% |
 | GitHub stars | Current count | +50 | +150 |
-| CLI commands | 84 | 85 (+analyze) | 88 (+comments, leaderboard, trends) |
-| Test count | 440 | 460 | 500 |
+| CLI commands | 81 | 85 (+analyze) | 88 (+comments, leaderboard, trends) |
+| Test count | 660 | 680 | 720 |
 | Startup time (ms) | ~300 | <150 | <150 |
 | Cold-start chart support | No | Yes | Yes |

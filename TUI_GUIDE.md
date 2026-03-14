@@ -54,7 +54,9 @@ pr  = presets        sent = sentiment     corr = correlate
 ex  = exitplan       dp  = depth          tr  = trade
 tl  = timeline       an  = analyze        jn  = journal
 hot = hot markets    pnl = profit/loss    u   = quick update
-h/? = help           q   = quit
+c15 = 15m crypto     mw  = my wallet      qt  = quick trade
+nr  = negrisk arb    cl  = clusters       rw  = rewards
+nw  = news           h/? = help           q   = quit
 ```
 
 ### Navigation
@@ -74,13 +76,13 @@ PolyTerm automatically checks for updates on launch:
 **Current Version:**
 ```
 Main Menu
-PolyTerm v0.5.2
+PolyTerm v0.9.0
 ```
 
 **Update Available:**
 ```
 Main Menu
-PolyTerm v0.5.2 Update Available: v0.5.3
+PolyTerm v0.9.0 Update Available: v0.9.1
 ```
 
 Press `u` to quick update directly from the menu.
@@ -360,6 +362,13 @@ Comprehensive prediction market terminology reference.
 | `sr` | Search |
 | `hot` | Hot Markets |
 | `pnl` | Profit/Loss |
+| `c15` | 15-Minute Crypto |
+| `mw` | My Wallet |
+| `qt` | Quick Trade |
+| `nr` | NegRisk Arbitrage |
+| `cl` | Wallet Clusters |
+| `rw` | Rewards |
+| `nw` | News |
 | `u` | Quick Update |
 | `h`, `?` | Help |
 | `q` | Quit |

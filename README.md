@@ -47,7 +47,7 @@ PolyTerm is an analytics and intelligence layer for Polymarket — not just an A
 - **Terminal-native visualization**: ASCII line charts, sparklines, depth charts, and side-by-side market comparison — all without leaving the terminal.
 - **Stateful local database** (SQLite): bookmarks, price alerts, trade journal, position tracking, recently viewed markets, screener presets. Your research accumulates value over time.
 - **Zero custody risk**: PolyTerm never touches private keys. Wallet features are view-only. No attack surface for key theft.
-- **650+ tests** across API, core logic, CLI, TUI, and database layers.
+- **660+ tests** across API, core logic, CLI, TUI, and database layers.
 
 For a detailed comparison with the official Polymarket CLI, see [docs/COMPETITIVE_GAP.md](docs/COMPETITIVE_GAP.md).
 
@@ -76,12 +76,16 @@ For a detailed comparison with the official Polymarket CLI, see [docs/COMPETITIV
 | Feature | Command | Description |
 |---------|---------|-------------|
 | Arbitrage Scanner | `polyterm arbitrage` | Find cross-market profit opportunities |
+| NegRisk Arbitrage | `polyterm negrisk` | Multi-outcome market arbitrage scanning |
 | Signal-based Predictions | `polyterm predict` | Multi-factor market predictions using live data |
 | Order Book Analysis | `polyterm orderbook` | Depth charts, slippage, icebergs |
 | Wallet Tracking | `polyterm wallets` | Smart money & whale wallet analysis |
+| Wallet Clusters | `polyterm clusters` | Detect same-entity wallet groups |
 | Alert Management | `polyterm alerts` | Multi-channel notification system |
 | Risk Assessment | `polyterm risk` | Market risk scoring (A-F grades) |
 | Copy Trading | `polyterm follow` | Follow successful wallets |
+| Rewards Estimator | `polyterm rewards` | Holding & liquidity reward projections |
+| News | `polyterm news` | Market-relevant news aggregation |
 
 ### Tools & Calculators
 | Feature | Command | Description |
@@ -372,9 +376,12 @@ Page 1:                                  Page 2:
 7/e    = export     15/follow = copy     sr  = search          nt  = notes
 8/s    = settings   16/parlay = parlay   pr  = presets         sent= sentiment
                     17/bm   = bookmarks  corr= correlate       dp  = depth
-
+                                         ex  = exitplan        tr  = trade
 c15 = 15m crypto     mw  = my wallet     qt  = quick trade
 hot = hot markets    pnl = profit/loss    u   = quick update
+nr  = negrisk arb    cl  = clusters      rw  = rewards
+nw  = news           tl  = timeline      an  = analyze
+                     jn  = journal
 
 h/? = help           m/+ = next page      q   = quit
 ```
@@ -506,32 +513,39 @@ max_markets = 20
 ```
 polyterm/
 ├── api/              # API clients
-│   ├── gamma.py          # Gamma REST API
-│   ├── clob.py           # CLOB REST + WebSocket
-│   └── aggregator.py     # Multi-source aggregator
+│   ├── gamma.py          # Gamma REST API (/events endpoint)
+│   ├── clob.py           # CLOB REST + WebSocket (order book, price history)
+│   ├── data_api.py       # Data API (wallet positions, activity, trades)
+│   └── aggregator.py     # Multi-source aggregator with fallback
 ├── core/             # Business logic
-│   ├── whale_tracker.py  # Whale & insider detection
-│   ├── notifications.py  # Multi-channel alerts
-│   ├── arbitrage.py      # Arbitrage scanner
-│   ├── orderbook.py      # Order book analysis
-│   ├── predictions.py    # Signal-based predictions
-│   ├── correlation.py    # Market correlations
-│   ├── historical.py     # Historical data API
-│   └── portfolio.py      # Portfolio analytics
+│   ├── whale_tracker.py  # Whale tracking + insider detection scoring
+│   ├── arbitrage.py      # Arbitrage scanner (intra-market, correlated, Kalshi)
+│   ├── negrisk.py        # NegRisk multi-outcome arbitrage detection
+│   ├── predictions.py    # Signal-based multi-factor predictions
+│   ├── risk_score.py     # Market risk scoring (A-F grades)
+│   ├── orderbook.py      # Order book analysis with ASCII charts
+│   ├── charts.py         # ASCII chart generation (line, bar, sparkline)
+│   ├── cluster_detector.py # Wallet cluster detection (same-entity)
+│   ├── rewards.py        # Holding & liquidity rewards calculator
+│   ├── news.py           # RSS news aggregation engine
+│   ├── wash_trade_detector.py # Wash trade detection indicators
+│   ├── uma_tracker.py    # UMA oracle dispute risk analysis
+│   └── notifications.py  # Multi-channel notifications
 ├── db/               # Database layer
 │   ├── database.py       # SQLite manager
 │   └── models.py         # Data models
 ├── cli/              # CLI commands
-│   ├── main.py           # Entry point
-│   └── commands/         # Individual commands
+│   ├── main.py           # Entry point (lazy-loaded 81 commands)
+│   └── commands/         # 80 individual command files
 ├── tui/              # Terminal UI
-│   ├── controller.py     # Main loop
-│   ├── menu.py           # Main menu
-│   └── screens/          # TUI screens
+│   ├── controller.py     # Main loop with dispatch table
+│   ├── menu.py           # Main menu with update checking
+│   └── screens/          # 73+ TUI screens
 └── utils/            # Utilities
-    ├── config.py         # Configuration
-    ├── json_output.py    # JSON formatting
-    └── formatting.py     # Rich formatting
+    ├── config.py         # Config management (~/.polyterm/config.toml)
+    ├── json_output.py    # JSON output utilities
+    ├── errors.py         # Centralized error handling
+    └── contextual_help.py # Screen-specific help content
 ```
 
 ---
@@ -570,6 +584,21 @@ rm -rf dist/ build/ *.egg-info
 python -m build
 python -m twine upload dist/*
 ```
+
+---
+
+## What's New in v0.9.0
+
+### Branding & Positioning
+- **100% free and open source** — all premium/paid-tier language removed. PolyTerm has no paid features, no subscriptions, no gated functionality
+- **"Signal-based predictions"** — rebranded from "AI predictions" to accurately reflect the system. Predictions use momentum, volume, whale, smart money, and RSI signals — no LLM or AI model involved
+
+### Performance
+- **Lazy CLI loading** — 81 commands loaded on-demand instead of at startup, significantly reducing import time
+- Multiple bug fixes across CLI, TUI, and core modules
+
+### Test Suite
+- **660 tests passing** across API, core, CLI, TUI, database, and utility layers
 
 ---
 
