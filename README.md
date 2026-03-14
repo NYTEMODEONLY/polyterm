@@ -47,7 +47,7 @@ PolyTerm is an analytics and intelligence layer for Polymarket — not just an A
 - **Terminal-native visualization**: ASCII line charts, sparklines, depth charts, and side-by-side market comparison — all without leaving the terminal.
 - **Stateful local database** (SQLite): bookmarks, price alerts, trade journal, position tracking, recently viewed markets, screener presets. Your research accumulates value over time.
 - **Zero custody risk**: PolyTerm never touches private keys. Wallet features are view-only. No attack surface for key theft.
-- **440+ tests** across API, core logic, CLI, TUI, and database layers.
+- **650+ tests** across API, core logic, CLI, TUI, and database layers.
 
 For a detailed comparison with the official Polymarket CLI, see [docs/COMPETITIVE_GAP.md](docs/COMPETITIVE_GAP.md).
 
@@ -72,7 +72,7 @@ For a detailed comparison with the official Polymarket CLI, see [docs/COMPETITIV
 | My Wallet | `polyterm mywallet` | VIEW-ONLY wallet tracking (positions, P&L) |
 | Quick Trade | `polyterm quicktrade` | Trade analysis with direct Polymarket links |
 
-### Premium Features
+### Advanced Analytics
 | Feature | Command | Description |
 |---------|---------|-------------|
 | Arbitrage Scanner | `polyterm arbitrage` | Find cross-market profit opportunities |
