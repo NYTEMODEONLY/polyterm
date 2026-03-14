@@ -1,4 +1,4 @@
-"""Tests for AI-powered predictions module"""
+"""Tests for signal-based predictions module"""
 
 import pytest
 import tempfile

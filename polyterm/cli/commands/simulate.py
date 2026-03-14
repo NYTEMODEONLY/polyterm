@@ -106,7 +106,7 @@ def _display_simulation(console: Console, market: str, price: float, amount: flo
 
     # If YES position
     if side == "yes":
-        max_profit = shares * (1.0 - price)  # Win: get $1, paid $price
+        max_profit = shares * (1.0 - price)  # Win: receive $1 after entering at $price
         max_loss = amount  # Lose: lose entire investment
         breakeven = price  # Need price at or above entry to not lose
         win_payout = shares * 1.0
@@ -114,7 +114,7 @@ def _display_simulation(console: Console, market: str, price: float, amount: flo
         # NO shares cost (1 - YES_price) and pay $1 if event doesn't happen
         no_price = 1.0 - price
         shares = amount / no_price
-        max_profit = shares * price  # Win: get $1, paid $(1-price)
+        max_profit = shares * price  # Win: receive $1 after entering at $(1-price)
         max_loss = amount
         breakeven = no_price
         win_payout = shares * 1.0
