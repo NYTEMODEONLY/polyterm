@@ -182,27 +182,27 @@ def _build_trader_stats(markets: list, period: str, gamma: GammaClient) -> list:
         seed = f"trader_{i}_{period}"
         address = "0x" + hashlib.sha256(seed.encode()).hexdigest()[:40]
 
-        # Tier-based stats (top traders vs average)
+        # Band-based stats (top traders vs average)
         if i < 5:
-            # Top tier
+            # Top band
             profit = random.uniform(50000, 500000)
             volume = random.uniform(500000, 5000000)
             trades = random.randint(100, 500)
             win_rate = random.uniform(0.60, 0.75)
         elif i < 15:
-            # High tier
+            # High band
             profit = random.uniform(10000, 100000)
             volume = random.uniform(100000, 1000000)
             trades = random.randint(50, 200)
             win_rate = random.uniform(0.55, 0.65)
         elif i < 30:
-            # Medium tier
+            # Medium band
             profit = random.uniform(-5000, 30000)
             volume = random.uniform(10000, 200000)
             trades = random.randint(20, 100)
             win_rate = random.uniform(0.45, 0.58)
         else:
-            # Lower tier
+            # Lower band
             profit = random.uniform(-20000, 10000)
             volume = random.uniform(1000, 50000)
             trades = random.randint(5, 50)

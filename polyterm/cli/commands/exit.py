@@ -291,7 +291,7 @@ def _calculate_exit_strategy(entry: float, shares: float, side: str, current_pri
                 })
 
     else:  # NO position
-        # For NO: you paid (1 - entry) effectively, profit when price drops
+        # For NO: your entry cost is effectively (1 - entry), profit when price drops
         no_cost = (1 - entry) * shares
         breakeven = entry
 

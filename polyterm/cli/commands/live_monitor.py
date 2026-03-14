@@ -401,7 +401,7 @@ class LiveMarketMonitor:
                 self.console.print(f"[red]❌ No markets found for category: {self.category}[/red]")
                 return
 
-            # Extract market slugs for RTDS WebSocket subscription
+            # Extract market slugs for RTDS WebSocket stream registration
             market_slugs = []
             market_titles = {}
             market_prices = {}
@@ -499,7 +499,7 @@ class LiveMarketMonitor:
                 await self.clob_client.subscribe_to_trades([], lambda trade: self._handle_trade(trade, market_titles))
                 self.console.print(f"[green]✅ Monitoring {self.category.upper()} trades (keyword filtering)[/green]")
             else:
-                # For specific markets or all markets, use slug-based subscription
+                # For specific markets or all markets, use slug-based stream registration
                 await self.clob_client.subscribe_to_trades(market_slugs, lambda trade: self._handle_trade(trade, market_titles))
                 self.console.print(f"[green]✅ Subscribed to {len(market_slugs)} market feeds[/green]")
             self.console.print()
