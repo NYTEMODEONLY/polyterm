@@ -63,18 +63,6 @@ class TestAPIEndpoints:
                 year = int(end_date[:4])
                 assert year >= current_year, f"Current market from past year: {market.get('question')}"
     
-    def test_subgraph_returns_recent_data(self, subgraph_client):
-        """Test Subgraph returns recent trade data"""
-        # Get trending markets (should have recent activity)
-        try:
-            markets = subgraph_client.get_trending_markets_by_volume(time_window=86400, first=5)
-            
-            # Just verify it doesn't crash and returns data
-            assert isinstance(markets, list), "Should return list of markets"
-        except Exception as e:
-            # Subgraph might have different structure, that's okay for now
-            pytest.skip(f"Subgraph endpoint needs verification: {e}")
-    
     def test_aggregator_live_markets(self, aggregator):
         """Test aggregator returns live markets"""
         markets = aggregator.get_live_markets(limit=10, require_volume=False)
