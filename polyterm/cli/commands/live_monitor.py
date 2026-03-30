@@ -20,10 +20,10 @@ from rich.align import Align
 
 from ...api.gamma import GammaClient
 from ...api.clob import CLOBClient
-from ...api.subgraph import SubgraphClient
 from ...api.aggregator import APIAggregator
 from ...core.scanner import MarketScanner
 from ...utils.formatting import format_probability_rich, format_volume
+from ...utils.errors import handle_api_error
 
 try:
     from dateutil import parser as date_parser
@@ -136,14 +136,11 @@ class LiveMarketMonitor:
             rest_endpoint=config.clob_rest_endpoint,
             ws_endpoint=config.clob_endpoint,
         )
-        self.subgraph_client = SubgraphClient(endpoint=config.subgraph_endpoint)
-        
         # Initialize aggregator and scanner
-        self.aggregator = APIAggregator(self.gamma_client, self.clob_client, self.subgraph_client)
+        self.aggregator = APIAggregator(self.gamma_client, self.clob_client)
         self.scanner = MarketScanner(
             self.gamma_client,
             self.clob_client,
-            self.subgraph_client,
             check_interval=1,  # 1 second updates for live monitoring
         )
         
@@ -254,7 +251,7 @@ class LiveMarketMonitor:
                     min_volume=0.01
                 )
         except Exception as e:
-            self.console.print(f"[red]Error fetching market data: {e}[/red]")
+            handle_api_error(self.console, e, "fetching market data")
             return []
     
     def generate_live_table(self) -> Table:
@@ -440,7 +437,7 @@ class LiveMarketMonitor:
         except KeyboardInterrupt:
             self.console.print(f"\n[yellow]🔴 Live monitoring stopped[/yellow]")
         except Exception as e:
-            self.console.print(f"\n[red]🔴 Live monitoring error: {e}[/red]")
+            handle_api_error(self.console, e, "live monitoring")
         finally:
             self._running = False
             self.cleanup()
@@ -641,8 +638,6 @@ class LiveMarketMonitor:
                 self.gamma_client.close()
             if hasattr(self.clob_client, 'close'):
                 self.clob_client.close()
-            if hasattr(self.subgraph_client, 'close'):
-                self.subgraph_client.close()
 
             # Clear state data
             self.previous_data.clear()
@@ -822,7 +817,7 @@ def live_monitor(ctx, market, category, interactive):
                 market = market_id
                 
             except Exception as e:
-                console.print(f"[red]Error finding market: {e}[/red]")
+                handle_api_error(console, e, "live monitoring")
                 return
         
         elif choice == 2:

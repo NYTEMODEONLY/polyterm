@@ -58,11 +58,10 @@ def test_watch_screen(mock_run):
 
 
 @patch('polyterm.tui.screens.analytics.APIAggregator')
-@patch('polyterm.tui.screens.analytics.SubgraphClient')
 @patch('polyterm.tui.screens.analytics.CLOBClient')
 @patch('polyterm.tui.screens.analytics.GammaClient')
 @patch('polyterm.tui.screens.analytics.Config')
-def test_analytics_screen_trending(mock_config, mock_gamma, mock_clob, mock_subgraph, mock_aggregator):
+def test_analytics_screen_trending(mock_config, mock_gamma, mock_clob, mock_aggregator):
     """Test analytics screen trending markets option"""
     # Setup mocks
     mock_config_instance = Mock()

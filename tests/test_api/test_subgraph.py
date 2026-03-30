@@ -1,8 +1,10 @@
 """Tests for Subgraph API client"""
 
+import logging
 import pytest
 from unittest.mock import Mock, patch
-from polyterm.api.subgraph import SubgraphClient
+from polyterm.api.subgraph import SubgraphClient, _DEPRECATION_WARNED
+import polyterm.api.subgraph as subgraph_module
 
 
 class TestSubgraphClient:
@@ -187,4 +189,37 @@ class TestSubgraphClient:
         trending = client.get_trending_markets_by_volume(time_window=86400, first=10)
         assert len(trending) == 2
         assert int(trending[0]["totalVolume"]) > int(trending[1]["totalVolume"])
+
+
+class TestSubgraphDeprecation:
+    """Test that SubgraphClient logs deprecation warning on instantiation"""
+
+    def test_instantiation_logs_deprecation_warning(self, caplog):
+        """SubgraphClient.__init__ emits a deprecation warning via logging"""
+        # Reset the module-level flag so warning fires again
+        subgraph_module._DEPRECATION_WARNED = False
+        try:
+            with caplog.at_level(logging.WARNING, logger="polyterm.api.subgraph"):
+                with patch('polyterm.api.subgraph.Client'):
+                    SubgraphClient(endpoint="https://test.example.com")
+            assert any("deprecated" in r.message.lower() for r in caplog.records), (
+                "Expected a deprecation warning in log records"
+            )
+        finally:
+            # Restore flag
+            subgraph_module._DEPRECATION_WARNED = False
+
+    def test_deprecation_warning_fires_only_once(self, caplog):
+        """Second instantiation does NOT re-log the warning"""
+        subgraph_module._DEPRECATION_WARNED = False
+        try:
+            with caplog.at_level(logging.WARNING, logger="polyterm.api.subgraph"):
+                with patch('polyterm.api.subgraph.Client'):
+                    SubgraphClient(endpoint="https://test1.example.com")
+                    caplog.clear()
+                    SubgraphClient(endpoint="https://test2.example.com")
+            deprecation_records = [r for r in caplog.records if "deprecated" in r.message.lower()]
+            assert len(deprecation_records) == 0, "Warning should not fire a second time"
+        finally:
+            subgraph_module._DEPRECATION_WARNED = False
 
