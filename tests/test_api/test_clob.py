@@ -1142,7 +1142,7 @@ class TestCLOBWebSocketOrderBook:
         sent_message = mock_ws.send.call_args[0][0]
         import json
         msg_data = json.loads(sent_message)
-        assert msg_data == {"assets_ids": ["token1", "token2"], "type": "market"}
+        assert msg_data == {"assets_ids": ["token1", "token2"], "type": "market", "custom_feature_enabled": True}
         assert client._ob_callback == callback
         assert client._ob_token_ids == token_ids
 

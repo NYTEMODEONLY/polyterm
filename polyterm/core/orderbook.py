@@ -81,6 +81,11 @@ class LiveOrderBook:
         self._last_update: Optional[datetime] = None
         self._message_count: int = 0
         self._on_update: Optional[Callable[["LiveOrderBook"], None]] = None
+        # Resolution state
+        self._resolved: bool = False
+        self._resolution_outcome: Optional[str] = None  # "YES" or "NO"
+        self._resolution_price: Optional[float] = None
+        self._resolved_at: Optional[datetime] = None
 
     def set_on_update(self, callback: Optional[Callable[["LiveOrderBook"], None]]):
         """Register an optional callback fired after each WS update."""
@@ -105,6 +110,8 @@ class LiveOrderBook:
                 self._apply_last_trade_price(data)
             elif msg_type == "price_change":
                 self._apply_price_change(data)
+            elif msg_type == "market_resolved":
+                self._apply_resolution(data)
             # tick_size_change is informational – ignore
 
         if self._on_update:
@@ -150,6 +157,34 @@ class LiveOrderBook:
             self._last_price_change = float(data.get("price", data.get("new_price", 0)))
         except (ValueError, TypeError):
             pass
+
+    def _apply_resolution(self, data: Dict[str, Any]):
+        """Apply a ``market_resolved`` message."""
+        self._resolved = True
+        self._resolution_outcome = data.get("outcome", "")
+        try:
+            self._resolution_price = float(data.get("price", data.get("winning_price", 1.0)))
+        except (ValueError, TypeError):
+            self._resolution_price = 1.0
+        self._resolved_at = datetime.now()
+
+    @property
+    def resolved(self) -> bool:
+        with self._lock:
+            return self._resolved
+
+    @property
+    def resolution_data(self) -> Optional[Dict[str, Any]]:
+        """Return resolution data if market has been resolved, else None."""
+        with self._lock:
+            if not self._resolved:
+                return None
+            return {
+                "token_id": self.token_id,
+                "outcome": self._resolution_outcome,
+                "winning_price": self._resolution_price,
+                "resolved_at": self._resolved_at,
+            }
 
     # -- Public query interface (thread-safe) --
 
@@ -260,6 +295,7 @@ class OrderBookAnalyzer:
         self,
         token_ids: List[str],
         on_update: Optional[Callable[[LiveOrderBook], None]] = None,
+        on_resolution: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> Dict[str, LiveOrderBook]:
         """Start a live WebSocket feed for the given token IDs.
 
@@ -270,6 +306,8 @@ class OrderBookAnalyzer:
         Args:
             token_ids: CLOB token IDs to subscribe to.
             on_update: Optional callback fired on each book update.
+            on_resolution: Optional callback fired when a market resolves.
+                Receives the raw ``market_resolved`` WS message dict.
 
         Returns:
             Dict mapping token_id -> LiveOrderBook.
@@ -293,7 +331,23 @@ class OrderBookAnalyzer:
                 for b in books.values():
                     b.handle_message(data)
 
-        await self.clob.subscribe_orderbook(token_ids, _dispatch)
+        def _resolution_dispatch(data: Dict[str, Any]):
+            """Route market_resolved WS messages to the correct LiveOrderBook
+            and invoke the user-supplied resolution callback."""
+            asset_id = data.get("market", data.get("asset_id", ""))
+            target = books.get(asset_id)
+            if target:
+                target.handle_message(data)
+            if on_resolution:
+                try:
+                    on_resolution(data)
+                except Exception:
+                    pass
+
+        await self.clob.subscribe_orderbook(
+            token_ids, _dispatch,
+            resolution_callback=_resolution_dispatch if on_resolution else None,
+        )
         return books
 
     def get_live_prices(self, token_ids: List[str]) -> Dict[str, Dict[str, Optional[float]]]:
