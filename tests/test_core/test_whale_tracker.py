@@ -509,6 +509,172 @@ class TestWhaleTracker:
         # All trades should be processed (no deduplication across clears)
         assert mock_db.insert_trade.call_count >= 100
 
+    # --- REST polling edge cases ---
+
+    @pytest.mark.asyncio
+    async def test_rest_polling_partial_slug_failure(self, tracker, mock_clob, mock_db):
+        """REST polling continues with other slugs when one slug fails"""
+        async def listen_with_error(**kwargs):
+            on_error = kwargs.get("on_error")
+            if on_error:
+                on_error(Exception("failed"))
+
+        mock_clob.listen_for_trades = AsyncMock(side_effect=listen_with_error)
+
+        call_idx = [0]
+
+        def get_trades(slug, limit=50):
+            call_idx[0] += 1
+            if slug == "slug-fail":
+                raise Exception("API timeout for this slug")
+            return [{
+                "maker_address": "0xWhale",
+                "price": 0.50,
+                "size": 100,
+                "market": "m1",
+                "transactionHash": f"0xtx_{call_idx[0]}",
+            }]
+
+        mock_clob.get_recent_trades = Mock(side_effect=get_trades)
+
+        poll_count = 0
+
+        async def stop_after_poll(seconds):
+            nonlocal poll_count
+            poll_count += 1
+            if poll_count >= 1:
+                tracker.stop_monitoring()
+
+        with patch("asyncio.sleep", new_callable=AsyncMock, side_effect=stop_after_poll):
+            await tracker.start_monitoring(["slug-ok", "slug-fail"], poll_interval=1.0)
+
+        # slug-ok trades should have been processed despite slug-fail errors
+        assert mock_db.insert_trade.call_count >= 1
+
+    @pytest.mark.asyncio
+    async def test_rest_polling_with_none_market_slugs(self, tracker, mock_clob, mock_db):
+        """REST polling uses empty string slug when market_slugs is None"""
+        async def listen_with_error(**kwargs):
+            on_error = kwargs.get("on_error")
+            if on_error:
+                on_error(Exception("failed"))
+
+        mock_clob.listen_for_trades = AsyncMock(side_effect=listen_with_error)
+        mock_clob.get_recent_trades = Mock(return_value=[{
+            "maker_address": "0xWhale",
+            "price": 0.50,
+            "size": 100,
+            "market": "m1",
+            "transactionHash": "0xtx1",
+        }])
+
+        poll_count = 0
+
+        async def stop_after_poll(seconds):
+            nonlocal poll_count
+            poll_count += 1
+            if poll_count >= 1:
+                tracker.stop_monitoring()
+
+        with patch("asyncio.sleep", new_callable=AsyncMock, side_effect=stop_after_poll):
+            await tracker.start_monitoring(None, poll_interval=1.0)
+
+        # Should have polled with empty string slug
+        mock_clob.get_recent_trades.assert_called()
+        assert mock_db.insert_trade.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_rest_polling_trade_without_tx_hash(self, tracker, mock_clob, mock_db):
+        """REST polling processes trades that have no transactionHash"""
+        async def listen_with_error(**kwargs):
+            on_error = kwargs.get("on_error")
+            if on_error:
+                on_error(Exception("failed"))
+
+        mock_clob.listen_for_trades = AsyncMock(side_effect=listen_with_error)
+        mock_clob.get_recent_trades = Mock(return_value=[
+            {
+                "maker_address": "0xWhale",
+                "price": 0.50,
+                "size": 100,
+                "market": "m1",
+                # No transactionHash or tx_hash
+            },
+            {
+                "maker_address": "0xWhale",
+                "price": 0.50,
+                "size": 100,
+                "market": "m1",
+                # Same trade without hash - can't deduplicate
+            },
+        ])
+
+        poll_count = 0
+
+        async def stop_after_poll(seconds):
+            nonlocal poll_count
+            poll_count += 1
+            if poll_count >= 1:
+                tracker.stop_monitoring()
+
+        with patch("asyncio.sleep", new_callable=AsyncMock, side_effect=stop_after_poll):
+            await tracker.start_monitoring(["slug-a"], poll_interval=1.0)
+
+        # Both trades processed (no hash means no dedup)
+        assert mock_db.insert_trade.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_start_monitoring_ws_success_no_rest_fallback(self, tracker, mock_clob, mock_db):
+        """When WS succeeds (no on_error), REST fallback is not triggered"""
+        # listen_for_trades returns cleanly without invoking on_error
+        mock_clob.listen_for_trades = AsyncMock()
+        mock_clob.get_recent_trades = Mock(return_value=[])
+
+        await tracker.start_monitoring(["slug-a"], poll_interval=1.0)
+
+        # REST polling should NOT have been called
+        mock_clob.get_recent_trades.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_start_monitoring_can_restart_after_stop(self, tracker, mock_clob, mock_db):
+        """start_monitoring can be called again after stop_monitoring"""
+        async def listen_with_error(**kwargs):
+            on_error = kwargs.get("on_error")
+            if on_error:
+                on_error(Exception("failed"))
+
+        mock_clob.listen_for_trades = AsyncMock(side_effect=listen_with_error)
+        mock_clob.get_recent_trades = Mock(return_value=[])
+
+        # First run
+        poll_count = 0
+
+        async def stop_first(seconds):
+            nonlocal poll_count
+            poll_count += 1
+            if poll_count >= 1:
+                tracker.stop_monitoring()
+
+        with patch("asyncio.sleep", new_callable=AsyncMock, side_effect=stop_first):
+            await tracker.start_monitoring(["slug-a"], poll_interval=1.0)
+
+        assert tracker._monitoring is False
+
+        # Second run should work
+        poll_count = 0
+
+        async def stop_second(seconds):
+            nonlocal poll_count
+            poll_count += 1
+            if poll_count >= 1:
+                tracker.stop_monitoring()
+
+        with patch("asyncio.sleep", new_callable=AsyncMock, side_effect=stop_second):
+            await tracker.start_monitoring(["slug-a"], poll_interval=1.0)
+
+        # _monitoring was set to True during second run, then False on stop
+        assert tracker._monitoring is False
+
     # --- Leaderboard & query methods ---
 
     def test_get_whale_leaderboard(self, tracker, mock_db):
