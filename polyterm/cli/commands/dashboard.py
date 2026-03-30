@@ -11,6 +11,7 @@ from rich.text import Text
 from ...api.gamma import GammaClient
 from ...db.database import Database
 from ...utils.json_output import print_json
+from ...utils.errors import handle_api_error
 
 
 @click.command()
@@ -47,23 +48,24 @@ def dashboard(ctx, output_format):
             console.print()
 
         # Gather data
-        markets = gamma_client.get_markets(limit=50, active=True, closed=False)
+        with console.status("[bold green]Loading dashboard data..."):
+            markets = gamma_client.get_markets(limit=50, active=True, closed=False)
 
-        # Sort by volume for top markets
-        top_volume = sorted(
-            markets,
-            key=lambda m: float(m.get('volume24hr', 0) or 0),
-            reverse=True
-        )[:5]
+            # Sort by volume for top markets
+            top_volume = sorted(
+                markets,
+                key=lambda m: float(m.get('volume24hr', 0) or 0),
+                reverse=True
+            )[:5]
 
-        # Get bookmarks
-        bookmarks = db.get_bookmarks()
+            # Get bookmarks
+            bookmarks = db.get_bookmarks()
 
-        # Get alerts
-        alerts = db.get_unacknowledged_alerts(limit=5)
+            # Get alerts
+            alerts = db.get_unacknowledged_alerts(limit=5)
 
-        # Get database stats
-        db_stats = db.get_database_stats()
+            # Get database stats
+            db_stats = db.get_database_stats()
 
         if output_format == 'json':
             print_json({
@@ -197,6 +199,6 @@ def dashboard(ctx, output_format):
         if output_format == 'json':
             print_json({'success': False, 'error': str(e)})
         else:
-            console.print(f"[red]Error: {e}[/red]")
+            handle_api_error(console, e, "dashboard")
     finally:
         gamma_client.close()

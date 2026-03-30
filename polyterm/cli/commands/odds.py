@@ -6,6 +6,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from ...utils.json_output import print_json
+from ...utils.errors import handle_api_error
 
 
 @click.command()
@@ -61,7 +62,7 @@ def odds(ctx, value, from_format, market, interactive, output_format):
         if output_format == 'json':
             print_json({'success': False, 'error': str(e)})
         else:
-            console.print(f"[red]Error: {e}[/red]")
+            handle_api_error(console, e, "odds")
         return
 
     # Calculate all formats

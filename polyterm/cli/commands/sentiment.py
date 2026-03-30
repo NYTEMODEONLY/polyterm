@@ -12,6 +12,7 @@ from ...api.gamma import GammaClient
 from ...api.clob import CLOBClient
 from ...db.database import Database
 from ...utils.json_output import print_json
+from ...utils.errors import handle_api_error
 
 
 @click.command()
@@ -175,7 +176,7 @@ def sentiment(ctx, search_term, interactive, output_format):
         if output_format == 'json':
             print_json({'success': False, 'error': str(e)})
         else:
-            console.print(f"[red]Error: {e}[/red]")
+            handle_api_error(console, e, "sentiment analysis")
     finally:
         gamma_client.close()
         clob_client.close()

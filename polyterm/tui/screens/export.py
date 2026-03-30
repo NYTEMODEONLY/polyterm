@@ -3,6 +3,7 @@
 from rich.panel import Panel
 from rich.console import Console as RichConsole
 from rich.progress import Progress
+from ...utils.errors import handle_api_error
 import subprocess
 import sys
 import os
@@ -62,6 +63,6 @@ def export_screen(console: RichConsole):
             console.print(f"[red]Export failed: {result.stderr}[/red]")
 
     except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
+        handle_api_error(console, e, "export")
 
 

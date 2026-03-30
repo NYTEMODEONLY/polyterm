@@ -62,7 +62,8 @@ def predict(ctx, market, limit, horizon, min_confidence, output_format):
 
         if not market:
             # Top markets by volume
-            markets_data = gamma_client.get_markets(limit=limit, active=True, closed=False)
+            with console.status("[bold green]Fetching markets for prediction analysis..."):
+                markets_data = gamma_client.get_markets(limit=limit, active=True, closed=False)
 
             for m in markets_data:
                 market_id = m.get('id', '')
