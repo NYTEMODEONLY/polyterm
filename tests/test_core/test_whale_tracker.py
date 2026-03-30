@@ -313,6 +313,202 @@ class TestWhaleTracker:
         assert slugs_arg == ['slug-a', 'slug-b']
         mock_clob.listen_for_trades.assert_awaited_once()
 
+    # --- start_monitoring with fallback ---
+
+    @pytest.mark.asyncio
+    async def test_start_monitoring_falls_back_to_rest_on_ws_error(self, tracker, mock_clob):
+        """Falls back to REST polling when on_error callback fires"""
+        # Make listen_for_trades invoke the on_error callback
+        async def listen_with_error(**kwargs):
+            on_error = kwargs.get("on_error")
+            if on_error:
+                on_error(Exception("WebSocket permanently failed"))
+
+        mock_clob.listen_for_trades = AsyncMock(side_effect=listen_with_error)
+        mock_clob.get_recent_trades = Mock(return_value=[])
+
+        with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            # Stop monitoring after first poll iteration
+            async def stop_after_sleep(seconds):
+                tracker.stop_monitoring()
+
+            mock_sleep.side_effect = stop_after_sleep
+            await tracker.start_monitoring(["slug-a"], poll_interval=1.0)
+
+        # Should have attempted REST polling
+        mock_clob.get_recent_trades.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_start_monitoring_falls_back_on_subscribe_exception(self, tracker, mock_clob):
+        """Falls back to REST polling when subscribe raises"""
+        mock_clob.subscribe_to_trades = AsyncMock(side_effect=Exception("connect failed"))
+        mock_clob.get_recent_trades = Mock(return_value=[])
+
+        with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            async def stop_after_sleep(seconds):
+                tracker.stop_monitoring()
+
+            mock_sleep.side_effect = stop_after_sleep
+            await tracker.start_monitoring(["slug-a"], poll_interval=1.0)
+
+        mock_clob.get_recent_trades.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_rest_polling_processes_trades(self, tracker, mock_clob, mock_db):
+        """REST polling processes trade data through process_trade"""
+        mock_clob.listen_for_trades = AsyncMock()  # Exits cleanly (no error)
+        # But we simulate ws_failed by making on_error fire
+        async def listen_with_error(**kwargs):
+            on_error = kwargs.get("on_error")
+            if on_error:
+                on_error(Exception("failed"))
+
+        mock_clob.listen_for_trades = AsyncMock(side_effect=listen_with_error)
+        mock_clob.get_recent_trades = Mock(return_value=[
+            {
+                "maker_address": "0xWhale",
+                "price": 0.50,
+                "size": 100,
+                "market": "m1",
+                "transactionHash": "0xtx1",
+            },
+            {
+                "maker_address": "0xWhale2",
+                "price": 0.60,
+                "size": 200,
+                "market": "m1",
+                "transactionHash": "0xtx2",
+            },
+        ])
+
+        poll_count = 0
+
+        async def stop_after_poll(seconds):
+            nonlocal poll_count
+            poll_count += 1
+            if poll_count >= 1:
+                tracker.stop_monitoring()
+
+        with patch("asyncio.sleep", new_callable=AsyncMock, side_effect=stop_after_poll):
+            await tracker.start_monitoring(["slug-a"], poll_interval=1.0)
+
+        # Both trades should have been processed
+        assert mock_db.insert_trade.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_rest_polling_deduplicates_by_tx_hash(self, tracker, mock_clob, mock_db):
+        """REST polling skips trades with already-seen tx hashes"""
+        async def listen_with_error(**kwargs):
+            on_error = kwargs.get("on_error")
+            if on_error:
+                on_error(Exception("failed"))
+
+        mock_clob.listen_for_trades = AsyncMock(side_effect=listen_with_error)
+
+        trade = {
+            "maker_address": "0xWhale",
+            "price": 0.50,
+            "size": 100,
+            "market": "m1",
+            "transactionHash": "0xSameTx",
+        }
+        # Return same trade on both poll iterations
+        mock_clob.get_recent_trades = Mock(return_value=[trade])
+
+        poll_count = 0
+
+        async def stop_after_two(seconds):
+            nonlocal poll_count
+            poll_count += 1
+            if poll_count >= 2:
+                tracker.stop_monitoring()
+
+        with patch("asyncio.sleep", new_callable=AsyncMock, side_effect=stop_after_two):
+            await tracker.start_monitoring(["slug-a"], poll_interval=1.0)
+
+        # Trade should only be processed once despite appearing in both polls
+        assert mock_db.insert_trade.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_rest_polling_handles_api_error_gracefully(self, tracker, mock_clob, mock_db):
+        """REST polling continues after individual API call failures"""
+        async def listen_with_error(**kwargs):
+            on_error = kwargs.get("on_error")
+            if on_error:
+                on_error(Exception("failed"))
+
+        mock_clob.listen_for_trades = AsyncMock(side_effect=listen_with_error)
+        mock_clob.get_recent_trades = Mock(side_effect=Exception("API error"))
+
+        poll_count = 0
+
+        async def stop_after_two(seconds):
+            nonlocal poll_count
+            poll_count += 1
+            if poll_count >= 2:
+                tracker.stop_monitoring()
+
+        with patch("asyncio.sleep", new_callable=AsyncMock, side_effect=stop_after_two):
+            await tracker.start_monitoring(["slug-a"], poll_interval=1.0)
+
+        # Should not crash, just keep polling
+        assert mock_db.insert_trade.call_count == 0
+
+    def test_stop_monitoring_sets_flag(self, tracker):
+        """stop_monitoring sets _monitoring to False"""
+        tracker._monitoring = True
+        tracker.stop_monitoring()
+        assert tracker._monitoring is False
+
+    @pytest.mark.asyncio
+    async def test_start_monitoring_sets_monitoring_flag(self, tracker, mock_clob):
+        """start_monitoring sets _monitoring to True"""
+        assert tracker._monitoring is False
+        await tracker.start_monitoring(["slug-a"])
+        assert tracker._monitoring is True
+
+    @pytest.mark.asyncio
+    async def test_rest_polling_caps_seen_set(self, tracker, mock_clob, mock_db):
+        """REST polling clears seen_tx_hashes when exceeding MAX_SEEN"""
+        async def listen_with_error(**kwargs):
+            on_error = kwargs.get("on_error")
+            if on_error:
+                on_error(Exception("failed"))
+
+        mock_clob.listen_for_trades = AsyncMock(side_effect=listen_with_error)
+
+        # Generate unique trades to fill the seen set
+        call_idx = [0]
+
+        def make_trades(slug, limit=50):
+            trades = []
+            for i in range(limit):
+                trades.append({
+                    "maker_address": "0xWhale",
+                    "price": 0.50,
+                    "size": 100,
+                    "market": "m1",
+                    "transactionHash": f"0xtx_{call_idx[0]}_{i}",
+                })
+            call_idx[0] += 1
+            return trades
+
+        mock_clob.get_recent_trades = Mock(side_effect=make_trades)
+
+        poll_count = 0
+
+        async def stop_after_polls(seconds):
+            nonlocal poll_count
+            poll_count += 1
+            if poll_count >= 3:
+                tracker.stop_monitoring()
+
+        with patch("asyncio.sleep", new_callable=AsyncMock, side_effect=stop_after_polls):
+            await tracker.start_monitoring(["slug-a"], poll_interval=1.0)
+
+        # All trades should be processed (no deduplication across clears)
+        assert mock_db.insert_trade.call_count >= 100
+
     # --- Leaderboard & query methods ---
 
     def test_get_whale_leaderboard(self, tracker, mock_db):
