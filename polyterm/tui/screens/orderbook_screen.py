@@ -95,6 +95,8 @@ class LiveOrderbookDisplay:
         self._live_book: Optional[LiveOrderBook] = None
         self._analyzer: Optional[OrderBookAnalyzer] = None
         self._clob: Optional[CLOBClient] = None
+        # Resolution
+        self._resolution_data: Optional[Dict[str, Any]] = None
 
     # -- Rendering -----------------------------------------------------------
 
@@ -115,6 +117,13 @@ class LiveOrderbookDisplay:
         header_text = (
             f"{pause_label}{ws_label} | Depth: {self.depth} | {controls}"
         )
+
+        # Resolution banner
+        if self._resolution_data:
+            outcome = self._resolution_data.get("outcome", "")
+            color = "green" if outcome == "YES" else "red" if outcome == "NO" else "yellow"
+            ws_label = f"[bold {color}]RESOLVED: {outcome}[/bold {color}]"
+            header_text = f"{ws_label} | {controls}"
 
         # Check if we have data
         if self._live_book is None or not self._live_book.is_ready:
@@ -262,7 +271,12 @@ class LiveOrderbookDisplay:
         asyncio.set_event_loop(loop)
 
         async def _run():
-            await self._analyzer.start_live_feed([self.market_id])
+            def _on_resolution(data):
+                self._resolution_data = data
+
+            await self._analyzer.start_live_feed(
+                [self.market_id], on_resolution=_on_resolution,
+            )
             self._ws_status = "connected"
             try:
                 await self._clob.listen_orderbook(
