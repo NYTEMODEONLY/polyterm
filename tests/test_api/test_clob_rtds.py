@@ -942,3 +942,350 @@ class TestCLOBRTDSCloseWebSocket:
 
         # Should not raise
         await client.close_websocket()
+
+
+class TestCLOBCloseWebSocketDualCleanup:
+    """Tests for close_websocket cleaning up both connections simultaneously"""
+
+    @pytest.mark.asyncio
+    async def test_close_websocket_closes_both_connections(self):
+        """close_websocket closes both RTDS and CLOB WS when both are active"""
+        client = CLOBClient()
+        mock_rtds = AsyncMock()
+        mock_clob = AsyncMock()
+        client.ws_connection = mock_rtds
+        client.clob_ws = mock_clob
+
+        await client.close_websocket()
+
+        mock_rtds.close.assert_awaited_once()
+        mock_clob.close.assert_awaited_once()
+        assert client.ws_connection is None
+        assert client.clob_ws is None
+
+    @pytest.mark.asyncio
+    async def test_close_websocket_clears_subscriptions_and_ob_state(self):
+        """close_websocket clears subscriptions, _ob_callback, and _ob_token_ids"""
+        client = CLOBClient()
+        client.ws_connection = AsyncMock()
+        client.clob_ws = AsyncMock()
+        client.subscriptions = {"slug-a": Mock(), "_all": Mock()}
+        client._ob_callback = Mock()
+        client._ob_token_ids = ["token-1", "token-2"]
+
+        await client.close_websocket()
+
+        assert len(client.subscriptions) == 0
+        assert client._ob_callback is None
+        assert client._ob_token_ids == []
+
+    @pytest.mark.asyncio
+    async def test_close_websocket_rtds_error_still_closes_clob(self):
+        """If RTDS close() throws, CLOB WS is still closed"""
+        client = CLOBClient()
+        mock_rtds = AsyncMock()
+        mock_rtds.close = AsyncMock(side_effect=Exception("rtds close error"))
+        mock_clob = AsyncMock()
+        client.ws_connection = mock_rtds
+        client.clob_ws = mock_clob
+
+        await client.close_websocket()
+
+        mock_clob.close.assert_awaited_once()
+        assert client.ws_connection is None
+        assert client.clob_ws is None
+
+    @pytest.mark.asyncio
+    async def test_close_websocket_clears_ob_callback_without_clob_ws(self):
+        """close_websocket clears _ob_callback even when clob_ws is None"""
+        client = CLOBClient()
+        client._ob_callback = Mock()
+        client._ob_token_ids = ["token-x"]
+
+        await client.close_websocket()
+
+        assert client._ob_callback is None
+        assert client._ob_token_ids == []
+
+
+class TestCLOBOrderbookAsyncCallback:
+    """Tests for orderbook async callback support"""
+
+    @pytest.fixture
+    def client(self):
+        return CLOBClient()
+
+    @pytest.mark.asyncio
+    async def test_orderbook_async_callback_awaited(self, client):
+        """Orderbook WS awaits async callbacks"""
+        import websockets.exceptions
+
+        callback = AsyncMock(return_value=None)
+        msg = json.dumps({"type": "book", "bids": [], "asks": []})
+
+        mock_ws = AsyncMock()
+        mock_ws.recv = AsyncMock(side_effect=[
+            msg,
+            websockets.exceptions.ConnectionClosed(None, None),
+        ])
+        client.clob_ws = mock_ws
+        client._ob_callback = callback
+        client._ob_token_ids = ["token1"]
+
+        await client.listen_orderbook(max_reconnects=0, message_timeout=5.0)
+
+        callback.assert_awaited_once()
+        call_data = callback.call_args[0][0]
+        assert call_data["type"] == "book"
+
+    @pytest.mark.asyncio
+    async def test_orderbook_callback_exception_does_not_crash(self, client):
+        """Orderbook WS swallows callback exceptions and continues"""
+        import websockets.exceptions
+
+        callback = Mock(side_effect=RuntimeError("callback exploded"))
+        book_msg = json.dumps({"type": "book", "bids": [], "asks": []})
+        price_msg = json.dumps({"type": "price_change", "price": "0.5"})
+
+        mock_ws = AsyncMock()
+        mock_ws.recv = AsyncMock(side_effect=[
+            book_msg,
+            price_msg,
+            websockets.exceptions.ConnectionClosed(None, None),
+        ])
+        client.clob_ws = mock_ws
+        client._ob_callback = callback
+        client._ob_token_ids = ["token1"]
+
+        # Should not raise despite callback errors
+        await client.listen_orderbook(max_reconnects=0, message_timeout=5.0)
+
+        # Both messages should have triggered callback attempts
+        assert callback.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_orderbook_ignores_unknown_message_types(self, client):
+        """Orderbook WS ignores messages with unrecognized types"""
+        import websockets.exceptions
+
+        callback = Mock(return_value=None)
+        unknown_msg = json.dumps({"type": "heartbeat", "ts": 1234})
+        book_msg = json.dumps({"type": "book", "bids": [], "asks": []})
+
+        mock_ws = AsyncMock()
+        mock_ws.recv = AsyncMock(side_effect=[
+            unknown_msg,
+            book_msg,
+            websockets.exceptions.ConnectionClosed(None, None),
+        ])
+        client.clob_ws = mock_ws
+        client._ob_callback = callback
+        client._ob_token_ids = ["token1"]
+
+        await client.listen_orderbook(max_reconnects=0, message_timeout=5.0)
+
+        # Only book message should trigger callback
+        callback.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_orderbook_json_decode_error_skipped(self, client):
+        """Orderbook WS skips malformed JSON and continues"""
+        import websockets.exceptions
+
+        callback = Mock(return_value=None)
+        book_msg = json.dumps({"type": "book", "bids": [], "asks": []})
+
+        mock_ws = AsyncMock()
+        mock_ws.recv = AsyncMock(side_effect=[
+            "not valid json{{{",
+            book_msg,
+            websockets.exceptions.ConnectionClosed(None, None),
+        ])
+        client.clob_ws = mock_ws
+        client._ob_callback = callback
+        client._ob_token_ids = ["token1"]
+
+        await client.listen_orderbook(max_reconnects=0, message_timeout=5.0)
+        callback.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_orderbook_no_callback_skips_processing(self, client):
+        """Orderbook WS skips callback invocation when _ob_callback is None"""
+        import websockets.exceptions
+
+        book_msg = json.dumps({"type": "book", "bids": [], "asks": []})
+
+        mock_ws = AsyncMock()
+        mock_ws.recv = AsyncMock(side_effect=[
+            book_msg,
+            websockets.exceptions.ConnectionClosed(None, None),
+        ])
+        client.clob_ws = mock_ws
+        client._ob_callback = None
+        client._ob_token_ids = ["token1"]
+
+        # Should not raise
+        await client.listen_orderbook(max_reconnects=0, message_timeout=5.0)
+
+
+class TestCLOBSyncClose:
+    """Tests for synchronous close() method"""
+
+    def test_close_noop_when_no_websockets(self):
+        """close() only closes REST session when no WS connections exist"""
+        client = CLOBClient()
+        client.ws_connection = None
+        client.clob_ws = None
+        client.session = Mock()
+
+        client.close()
+
+        client.session.close.assert_called_once()
+
+    def test_close_schedules_ws_cleanup_on_running_loop(self):
+        """close() schedules close_websocket when event loop is running"""
+        client = CLOBClient()
+        client.ws_connection = AsyncMock()
+        client.session = Mock()
+
+        mock_loop = Mock()
+        mock_loop.is_running.return_value = True
+
+        with patch("asyncio.get_running_loop", return_value=mock_loop):
+            client.close()
+
+        client.session.close.assert_called_once()
+        mock_loop.create_task.assert_called_once()
+
+    def test_close_runs_ws_cleanup_without_running_loop(self):
+        """close() runs close_websocket synchronously when no loop running"""
+        client = CLOBClient()
+        client.ws_connection = AsyncMock()
+        client.session = Mock()
+
+        with patch("asyncio.get_running_loop", side_effect=RuntimeError("no loop")):
+            with patch("asyncio.run") as mock_run:
+                client.close()
+
+        client.session.close.assert_called_once()
+        mock_run.assert_called_once()
+
+
+class TestCLOBSubscribeEdgeCases:
+    """Tests for subscribe method edge cases"""
+
+    @pytest.fixture
+    def client(self):
+        return CLOBClient()
+
+    @pytest.mark.asyncio
+    async def test_subscribe_auto_connects_if_clob_ws_missing(self, client):
+        """subscribe_orderbook auto-connects when clob_ws is None"""
+        mock_ws = AsyncMock()
+        with patch.object(client, "connect_clob_websocket") as mock_connect:
+            async def set_ws():
+                client.clob_ws = mock_ws
+            mock_connect.side_effect = set_ws
+
+            callback = Mock()
+            await client.subscribe_orderbook(["token-1"], callback)
+
+            mock_connect.assert_awaited_once()
+            assert client._ob_callback is callback
+            assert client._ob_token_ids == ["token-1"]
+
+    @pytest.mark.asyncio
+    async def test_subscribe_orderbook_sends_correct_message(self, client):
+        """subscribe_orderbook sends assets_ids and type=market"""
+        sent = []
+        mock_ws = AsyncMock()
+        mock_ws.send = AsyncMock(side_effect=lambda m: sent.append(json.loads(m)))
+        client.clob_ws = mock_ws
+
+        await client.subscribe_orderbook(["tok-a", "tok-b"], Mock())
+
+        assert len(sent) == 1
+        assert sent[0]["assets_ids"] == ["tok-a", "tok-b"]
+        assert sent[0]["type"] == "market"
+
+    @pytest.mark.asyncio
+    async def test_subscribe_trades_resubscribes_with_new_slugs(self, client):
+        """subscribe_to_trades can be called again with different slugs"""
+        mock_ws = AsyncMock()
+        client.ws_connection = mock_ws
+
+        cb1 = Mock()
+        cb2 = Mock()
+        await client.subscribe_to_trades(["slug-a"], cb1)
+        await client.subscribe_to_trades(["slug-b"], cb2)
+
+        assert client.subscriptions["slug-a"] is cb1
+        assert client.subscriptions["slug-b"] is cb2
+
+    @pytest.mark.asyncio
+    async def test_subscribe_trades_overwrites_same_slug_callback(self, client):
+        """Subscribing to same slug again overwrites the callback"""
+        mock_ws = AsyncMock()
+        client.ws_connection = mock_ws
+
+        cb1 = Mock()
+        cb2 = Mock()
+        await client.subscribe_to_trades(["slug-a"], cb1)
+        await client.subscribe_to_trades(["slug-a"], cb2)
+
+        assert client.subscriptions["slug-a"] is cb2
+
+
+class TestCLOBRTDSInnerReconnect:
+    """Tests for RTDS inner loop reconnect edge cases"""
+
+    @pytest.fixture
+    def client(self):
+        return CLOBClient()
+
+    @pytest.mark.asyncio
+    async def test_inner_loop_reconnect_failure_increments_attempts(self, client):
+        """Failed reconnect in inner loop increments counter and eventually exits"""
+        client.ws_connection = None
+        client.subscriptions = {"slug-a": Mock()}
+
+        # First call: ws_connection is None + reconnect_attempts=0 → raises "not connected"
+        with pytest.raises(Exception, match="WebSocket not connected"):
+            await client._listen_for_trades_inner(max_reconnects=3, message_timeout=5.0)
+
+    @pytest.mark.asyncio
+    async def test_inner_loop_resubscribes_on_reconnect(self, client):
+        """Inner loop re-sends subscribe message after reconnecting"""
+        import websockets.exceptions
+
+        sent_messages = []
+        reconnect_ws = AsyncMock()
+        reconnect_ws.recv = AsyncMock(
+            side_effect=websockets.exceptions.ConnectionClosed(None, None)
+        )
+
+        async def capture_send(msg):
+            sent_messages.append(json.loads(msg))
+
+        reconnect_ws.send = capture_send
+
+        # First WS drops immediately
+        first_ws = AsyncMock()
+        first_ws.recv = AsyncMock(
+            side_effect=websockets.exceptions.ConnectionClosed(None, None)
+        )
+        client.ws_connection = first_ws
+        client.subscriptions = {"slug-a": Mock()}
+
+        async def mock_connect():
+            client.ws_connection = reconnect_ws
+            return True
+
+        with patch.object(client, "connect_websocket", side_effect=mock_connect):
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                await client._listen_for_trades_inner(max_reconnects=1, message_timeout=5.0)
+
+        # Should have re-subscribed with activity/trades
+        assert any(
+            m.get("action") == "subscribe" for m in sent_messages
+        ), "Should re-subscribe after reconnect"
