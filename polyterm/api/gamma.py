@@ -1,5 +1,6 @@
 """Gamma Markets REST API client"""
 
+import json
 import time
 import requests
 from typing import Dict, List, Optional, Any
@@ -343,6 +344,143 @@ class GammaClient:
         
         return fresh_markets
     
+    def get_resolution(self, market_id: str) -> Optional[Dict[str, Any]]:
+        """Get resolution/settlement data for a market.
+
+        Args:
+            market_id: Market ID or condition ID
+
+        Returns:
+            Resolution data dict with keys: resolved, outcome, winning_price,
+            resolved_at, resolution_source, closed_at, status.
+            Returns None if market not found.
+        """
+        try:
+            market = self.get_market(market_id)
+        except Exception:
+            return None
+
+        if not market:
+            return None
+
+        return self._parse_resolution(market)
+
+    def get_resolved_markets(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """Get recently resolved markets.
+
+        Args:
+            limit: Maximum number of markets to return
+
+        Returns:
+            List of market dicts with resolution data attached
+        """
+        params = {
+            "limit": limit,
+            "closed": "true",
+            "order": "endDate",
+            "ascending": "false",
+        }
+
+        try:
+            markets = self._request("GET", "/markets", params=params)
+        except Exception:
+            return []
+
+        results = []
+        for market in markets:
+            resolution = self._parse_resolution(market)
+            if resolution and resolution.get('resolved'):
+                market['_resolution'] = resolution
+                results.append(market)
+
+        return results
+
+    def _parse_resolution(self, market: Dict[str, Any]) -> Dict[str, Any]:
+        """Parse resolution data from a market response.
+
+        Determines resolution status from closed/active flags and outcomePrices.
+        A market is considered resolved when it is closed and outcomePrices
+        show a definitive outcome (one side at 1.0).
+
+        Args:
+            market: Raw market dict from Gamma API
+
+        Returns:
+            Resolution data dict
+        """
+        is_closed = bool(market.get('closed', False))
+        is_active = bool(market.get('active', True))
+
+        # Parse outcome prices
+        outcome_prices = market.get('outcomePrices', [])
+        if isinstance(outcome_prices, str):
+            try:
+                outcome_prices = json.loads(outcome_prices)
+            except (json.JSONDecodeError, TypeError):
+                outcome_prices = []
+
+        # Convert to floats
+        try:
+            outcome_prices = [float(p) for p in outcome_prices]
+        except (ValueError, TypeError):
+            outcome_prices = []
+
+        # Parse timestamps
+        closed_at = None
+        end_date_str = market.get('endDate', '')
+        if end_date_str:
+            try:
+                closed_at = datetime.fromisoformat(
+                    end_date_str.replace('Z', '+00:00')
+                ).replace(tzinfo=None)
+            except (ValueError, TypeError):
+                pass
+
+        resolution_source = market.get('resolvedBy', '')
+
+        # Determine resolution outcome
+        resolved = False
+        outcome = ""
+        winning_price = 0.0
+
+        if is_closed and outcome_prices:
+            # Check for definitive resolution: one side at ~1.0, other at ~0.0
+            if len(outcome_prices) >= 2:
+                yes_price = outcome_prices[0]
+                no_price = outcome_prices[1]
+
+                if yes_price >= 0.95:
+                    resolved = True
+                    outcome = "YES"
+                    winning_price = yes_price
+                elif no_price >= 0.95:
+                    resolved = True
+                    outcome = "NO"
+                    winning_price = no_price
+
+        # Status string
+        if resolved:
+            status = f"Resolved: {outcome}"
+        elif is_closed and not is_active:
+            status = "Pending resolution"
+        elif is_closed:
+            status = "Closed"
+        else:
+            status = "Active"
+
+        return {
+            'market_id': market.get('id', market.get('condition_id', '')),
+            'market_slug': market.get('slug', ''),
+            'title': market.get('question', market.get('title', '')),
+            'resolved': resolved,
+            'outcome': outcome,
+            'winning_price': winning_price,
+            'resolved_at': closed_at if resolved else None,
+            'closed_at': closed_at,
+            'resolution_source': resolution_source,
+            'status': status,
+        }
+
     def close(self):
         """Close the session"""
         self.session.close()
