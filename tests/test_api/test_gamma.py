@@ -1,11 +1,12 @@
 """Comprehensive tests for Gamma Markets API client"""
 
+import os
 import time
 import pytest
 import responses
 import requests
 from unittest.mock import patch, MagicMock
-from polyterm.api.gamma import GammaClient, RateLimiter
+from polyterm.api.gamma import GammaClient, RateLimiter, SharedRateLimiter
 
 
 GAMMA_ENDPOINT = "https://gamma-api.polymarket.com"
@@ -69,6 +70,123 @@ class TestRateLimiter:
 
         # Should sleep for 1.0 - 0.3 = 0.7 seconds
         mock_sleep.assert_called_once_with(pytest.approx(0.7, abs=0.01))
+
+
+class TestSharedRateLimiter:
+    """Test SharedRateLimiter cross-process coordination"""
+
+    def test_initialization(self, tmp_path):
+        """Test shared rate limiter initializes with correct values"""
+        limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(tmp_path))
+        assert limiter.requests_per_minute == 60
+        assert limiter.min_interval == 1.0
+
+    def test_creates_lock_directory(self, tmp_path):
+        """Test that lock directory is created during init"""
+        lock_dir = tmp_path / "subdir"
+        limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(lock_dir))
+        assert lock_dir.exists()
+
+    def test_first_call_no_wait(self, tmp_path):
+        """Test that the first call does not wait"""
+        limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(tmp_path))
+        start = time.time()
+        limiter.wait_if_needed()
+        elapsed = time.time() - start
+        assert elapsed < 0.1
+
+    def test_consecutive_calls_enforce_delay(self, tmp_path):
+        """Test that consecutive calls enforce the minimum interval"""
+        limiter = SharedRateLimiter(requests_per_minute=120, lock_dir=str(tmp_path))
+        limiter.wait_if_needed()  # First call
+        start = time.time()
+        limiter.wait_if_needed()  # Second call — should wait
+        elapsed = time.time() - start
+        assert elapsed >= limiter.min_interval - 0.05
+
+    def test_cross_instance_coordination(self, tmp_path):
+        """Test that two separate instances sharing a lock dir coordinate"""
+        limiter1 = SharedRateLimiter(requests_per_minute=120, lock_dir=str(tmp_path))
+        limiter2 = SharedRateLimiter(requests_per_minute=120, lock_dir=str(tmp_path))
+
+        limiter1.wait_if_needed()
+        start = time.time()
+        limiter2.wait_if_needed()
+        elapsed = time.time() - start
+        assert elapsed >= limiter1.min_interval - 0.05
+
+    def test_stale_timestamp_ignored(self, tmp_path):
+        """Test that stale timestamps (>120s old) are treated as fresh start"""
+        lock_file = tmp_path / "gamma_rate.lock"
+        # Write a very old timestamp
+        lock_file.write_text(str(time.time() - 300))
+
+        limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(tmp_path))
+        start = time.time()
+        limiter.wait_if_needed()
+        elapsed = time.time() - start
+        # Should not wait because the timestamp is stale
+        assert elapsed < 0.1
+
+    def test_corrupted_lock_file_handled(self, tmp_path):
+        """Test that corrupted lock file content is handled gracefully"""
+        lock_file = tmp_path / "gamma_rate.lock"
+        lock_file.write_text("not-a-number")
+
+        limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(tmp_path))
+        start = time.time()
+        limiter.wait_if_needed()
+        elapsed = time.time() - start
+        assert elapsed < 0.1
+
+    def test_empty_lock_file_handled(self, tmp_path):
+        """Test that empty lock file is handled gracefully"""
+        lock_file = tmp_path / "gamma_rate.lock"
+        lock_file.write_text("")
+
+        limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(tmp_path))
+        start = time.time()
+        limiter.wait_if_needed()
+        elapsed = time.time() - start
+        assert elapsed < 0.1
+
+    def test_fallback_when_fcntl_unavailable(self, tmp_path):
+        """Test graceful fallback to per-process limiter when fcntl is unavailable"""
+        with patch.dict("sys.modules", {"fcntl": None}):
+            with patch("polyterm.api.gamma.SharedRateLimiter._init_shared", return_value=False):
+                limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(tmp_path))
+                assert limiter._shared_available is False
+                # Should still work via fallback
+                start = time.time()
+                limiter.wait_if_needed()
+                elapsed = time.time() - start
+                assert elapsed < 0.1
+
+    def test_fallback_on_runtime_error(self, tmp_path):
+        """Test that runtime errors during shared wait fall back gracefully"""
+        limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(tmp_path))
+        limiter._shared_available = True
+
+        with patch.object(limiter, "_shared_wait", side_effect=OSError("disk full")):
+            # Should not raise — falls back to per-process
+            limiter.wait_if_needed()
+
+    def test_lock_file_updated_after_call(self, tmp_path):
+        """Test that the lock file contains a recent timestamp after a call"""
+        limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(tmp_path))
+        before = time.time()
+        limiter.wait_if_needed()
+        after = time.time()
+
+        lock_file = tmp_path / "gamma_rate.lock"
+        stored = float(lock_file.read_text().strip())
+        assert before <= stored <= after + 0.1
+
+    def test_gamma_client_uses_shared_limiter(self):
+        """Test that GammaClient uses SharedRateLimiter by default"""
+        client = GammaClient()
+        assert isinstance(client.rate_limiter, SharedRateLimiter)
+        client.close()
 
 
 class TestGammaClientRequest:
@@ -678,9 +796,9 @@ class TestGammaClientInit:
         assert "Authorization" not in client.session.headers
 
     def test_rate_limiter_created(self):
-        """Test that rate limiter is created"""
+        """Test that rate limiter is created (shared by default)"""
         client = GammaClient()
-        assert isinstance(client.rate_limiter, RateLimiter)
+        assert isinstance(client.rate_limiter, SharedRateLimiter)
         assert client.rate_limiter.requests_per_minute == 60
 
     def test_close_session(self):
