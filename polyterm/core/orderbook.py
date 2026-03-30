@@ -7,15 +7,21 @@ Features:
 - Support/resistance level identification
 - Slippage calculator
 - Liquidity imbalance alerts
+- Live WebSocket-fed order book state
 """
 
-from typing import Dict, List, Optional, Any, Tuple
-from dataclasses import dataclass
+import asyncio
+import logging
+import threading
+from typing import Dict, List, Optional, Any, Tuple, Callable
+from dataclasses import dataclass, field
 from datetime import datetime
 import math
 
 from ..api.clob import CLOBClient
 from ..utils.json_output import safe_float
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -55,6 +61,216 @@ class OrderBookAnalysis:
     warnings: List[str]
 
 
+class LiveOrderBook:
+    """In-memory order book state maintained by CLOB WebSocket updates.
+
+    Accepts WS messages from ``CLOBClient.subscribe_orderbook`` and keeps
+    a sorted book of bids and asks.  Thread-safe reads via a lock so the
+    CLI refresh loop (sync) can query while the async WS listener writes.
+    """
+
+    def __init__(self, token_id: str):
+        self.token_id = token_id
+        self._lock = threading.Lock()
+        # Bids: price -> size  (descending by price)
+        self._bids: Dict[str, str] = {}
+        # Asks: price -> size  (ascending by price)
+        self._asks: Dict[str, str] = {}
+        self._last_trade_price: Optional[float] = None
+        self._last_price_change: Optional[float] = None
+        self._last_update: Optional[datetime] = None
+        self._message_count: int = 0
+        self._on_update: Optional[Callable[["LiveOrderBook"], None]] = None
+        # Resolution state
+        self._resolved: bool = False
+        self._resolution_outcome: Optional[str] = None  # "YES" or "NO"
+        self._resolution_price: Optional[float] = None
+        self._resolved_at: Optional[datetime] = None
+
+    def set_on_update(self, callback: Optional[Callable[["LiveOrderBook"], None]]):
+        """Register an optional callback fired after each WS update."""
+        self._on_update = callback
+
+    # -- WS message handler (passed to CLOBClient.subscribe_orderbook) --
+
+    def handle_message(self, data: Dict[str, Any]):
+        """Process a CLOB WS message and update internal state.
+
+        Supports message types: ``book``, ``last_trade_price``,
+        ``price_change``.
+        """
+        msg_type = data.get("type", data.get("event_type", ""))
+        with self._lock:
+            self._message_count += 1
+            self._last_update = datetime.now()
+
+            if msg_type == "book":
+                self._apply_book(data)
+            elif msg_type == "last_trade_price":
+                self._apply_last_trade_price(data)
+            elif msg_type == "price_change":
+                self._apply_price_change(data)
+            elif msg_type == "market_resolved":
+                self._apply_resolution(data)
+            # tick_size_change is informational – ignore
+
+        if self._on_update:
+            try:
+                self._on_update(self)
+            except Exception:
+                pass
+
+    def _apply_book(self, data: Dict[str, Any]):
+        """Apply a ``book`` message – full or incremental snapshot."""
+        # The CLOB WS sends {"type": "book", "market": token_id,
+        #   "bids": [{"price": "0.55", "size": "1200"}, ...],
+        #   "asks": [{"price": "0.56", "size": "800"}, ...]}
+        # A size of "0" means the level was removed.
+        for entry in data.get("bids", []):
+            price = str(entry.get("price", ""))
+            size = str(entry.get("size", "0"))
+            if not price:
+                continue
+            if float(size) == 0:
+                self._bids.pop(price, None)
+            else:
+                self._bids[price] = size
+
+        for entry in data.get("asks", []):
+            price = str(entry.get("price", ""))
+            size = str(entry.get("size", "0"))
+            if not price:
+                continue
+            if float(size) == 0:
+                self._asks.pop(price, None)
+            else:
+                self._asks[price] = size
+
+    def _apply_last_trade_price(self, data: Dict[str, Any]):
+        try:
+            self._last_trade_price = float(data.get("price", data.get("last_trade_price", 0)))
+        except (ValueError, TypeError):
+            pass
+
+    def _apply_price_change(self, data: Dict[str, Any]):
+        try:
+            self._last_price_change = float(data.get("price", data.get("new_price", 0)))
+        except (ValueError, TypeError):
+            pass
+
+    def _apply_resolution(self, data: Dict[str, Any]):
+        """Apply a ``market_resolved`` message."""
+        self._resolved = True
+        self._resolution_outcome = data.get("outcome", "")
+        try:
+            self._resolution_price = float(data.get("price", data.get("winning_price", 1.0)))
+        except (ValueError, TypeError):
+            self._resolution_price = 1.0
+        self._resolved_at = datetime.now()
+
+    @property
+    def resolved(self) -> bool:
+        with self._lock:
+            return self._resolved
+
+    @property
+    def resolution_data(self) -> Optional[Dict[str, Any]]:
+        """Return resolution data if market has been resolved, else None."""
+        with self._lock:
+            if not self._resolved:
+                return None
+            return {
+                "token_id": self.token_id,
+                "outcome": self._resolution_outcome,
+                "winning_price": self._resolution_price,
+                "resolved_at": self._resolved_at,
+            }
+
+    # -- Public query interface (thread-safe) --
+
+    def get_snapshot(self) -> Dict[str, Any]:
+        """Return a REST-compatible order book snapshot (sorted bids/asks)."""
+        with self._lock:
+            bids = sorted(
+                [{"price": p, "size": s} for p, s in self._bids.items()],
+                key=lambda x: float(x["price"]),
+                reverse=True,
+            )
+            asks = sorted(
+                [{"price": p, "size": s} for p, s in self._asks.items()],
+                key=lambda x: float(x["price"]),
+            )
+            return {
+                "bids": bids,
+                "asks": asks,
+                "last_trade_price": self._last_trade_price,
+                "last_price_change": self._last_price_change,
+                "timestamp": self._last_update.isoformat() if self._last_update else None,
+                "message_count": self._message_count,
+            }
+
+    def get_top_of_book(self) -> Dict[str, Optional[float]]:
+        """Return best bid, best ask, spread, and mid price."""
+        with self._lock:
+            best_bid = max((float(p) for p in self._bids), default=None)
+            best_ask = min((float(p) for p in self._asks), default=None)
+
+        spread = None
+        mid = None
+        if best_bid is not None and best_ask is not None:
+            spread = best_ask - best_bid
+            mid = (best_bid + best_ask) / 2.0
+
+        return {
+            "best_bid": best_bid,
+            "best_ask": best_ask,
+            "spread": spread,
+            "mid_price": mid,
+            "last_trade_price": self._last_trade_price,
+        }
+
+    def get_depth(self, levels: int = 10) -> Dict[str, Any]:
+        """Return top N bid/ask levels with cumulative size."""
+        snap = self.get_snapshot()
+        bids = snap["bids"][:levels]
+        asks = snap["asks"][:levels]
+
+        cum = 0.0
+        for b in bids:
+            cum += float(b["size"])
+            b["cumulative_size"] = cum
+        bid_depth = cum
+
+        cum = 0.0
+        for a in asks:
+            cum += float(a["size"])
+            a["cumulative_size"] = cum
+        ask_depth = cum
+
+        return {
+            "bids": bids,
+            "asks": asks,
+            "bid_depth": bid_depth,
+            "ask_depth": ask_depth,
+        }
+
+    @property
+    def is_ready(self) -> bool:
+        """True once at least one book message has been received."""
+        with self._lock:
+            return bool(self._bids or self._asks)
+
+    @property
+    def message_count(self) -> int:
+        with self._lock:
+            return self._message_count
+
+    @property
+    def last_update(self) -> Optional[datetime]:
+        with self._lock:
+            return self._last_update
+
+
 class OrderBookAnalyzer:
     """
     Analyzes order books for trading insights.
@@ -67,6 +283,103 @@ class OrderBookAnalyzer:
     ):
         self.clob = clob_client
         self.large_order_threshold = large_order_threshold
+        self._live_books: Dict[str, LiveOrderBook] = {}
+
+    # -- Live WebSocket methods --
+
+    def get_live_book(self, token_id: str) -> Optional[LiveOrderBook]:
+        """Return the LiveOrderBook for a token, or None if not started."""
+        return self._live_books.get(token_id)
+
+    async def start_live_feed(
+        self,
+        token_ids: List[str],
+        on_update: Optional[Callable[[LiveOrderBook], None]] = None,
+        on_resolution: Optional[Callable[[Dict[str, Any]], None]] = None,
+    ) -> Dict[str, LiveOrderBook]:
+        """Start a live WebSocket feed for the given token IDs.
+
+        Creates ``LiveOrderBook`` instances, subscribes via CLOB WS,
+        and returns the live books.  The caller must also run
+        ``clob.listen_orderbook()`` in the event loop to pump messages.
+
+        Args:
+            token_ids: CLOB token IDs to subscribe to.
+            on_update: Optional callback fired on each book update.
+            on_resolution: Optional callback fired when a market resolves.
+                Receives the raw ``market_resolved`` WS message dict.
+
+        Returns:
+            Dict mapping token_id -> LiveOrderBook.
+        """
+        books: Dict[str, LiveOrderBook] = {}
+        for tid in token_ids:
+            book = LiveOrderBook(tid)
+            if on_update:
+                book.set_on_update(on_update)
+            books[tid] = book
+            self._live_books[tid] = book
+
+        def _dispatch(data: Dict[str, Any]):
+            """Route WS message to the correct LiveOrderBook."""
+            asset_id = data.get("market", data.get("asset_id", ""))
+            target = books.get(asset_id)
+            if target:
+                target.handle_message(data)
+            else:
+                # Broadcast to all books if we can't determine the target
+                for b in books.values():
+                    b.handle_message(data)
+
+        def _resolution_dispatch(data: Dict[str, Any]):
+            """Route market_resolved WS messages to the correct LiveOrderBook
+            and invoke the user-supplied resolution callback."""
+            asset_id = data.get("market", data.get("asset_id", ""))
+            target = books.get(asset_id)
+            if target:
+                target.handle_message(data)
+            if on_resolution:
+                try:
+                    on_resolution(data)
+                except Exception:
+                    pass
+
+        await self.clob.subscribe_orderbook(
+            token_ids, _dispatch,
+            resolution_callback=_resolution_dispatch if on_resolution else None,
+        )
+        return books
+
+    def get_live_prices(self, token_ids: List[str]) -> Dict[str, Dict[str, Optional[float]]]:
+        """Return mid prices and spreads for multiple tokens from live feeds.
+
+        Designed for the arb scanner (Phase 3) to query live price data
+        without needing REST calls.
+
+        Returns:
+            Dict mapping token_id -> {mid_price, best_bid, best_ask, spread}
+            Only includes tokens that have live data.
+        """
+        result = {}
+        for tid in token_ids:
+            book = self._live_books.get(tid)
+            if book and book.is_ready:
+                result[tid] = book.get_top_of_book()
+        return result
+
+    def stop_live_feed(self):
+        """Clear live book references (caller should close WS separately)."""
+        self._live_books.clear()
+
+    def analyze_live(self, token_id: str) -> Optional["OrderBookAnalysis"]:
+        """Run the same analysis as ``analyze()`` but from live WS state."""
+        book = self._live_books.get(token_id)
+        if not book or not book.is_ready:
+            return None
+        snapshot = book.get_snapshot()
+        return self._analyze_snapshot(token_id, snapshot)
+
+    # -- Core analysis --
 
     def get_order_book(self, market_id: str, depth: int = 50) -> Dict[str, Any]:
         """Fetch order book from CLOB"""
@@ -89,6 +402,10 @@ class OrderBookAnalyzer:
             print(f"Error fetching order book: {e}")
             return None
 
+        return self._analyze_snapshot(market_id, book)
+
+    def _analyze_snapshot(self, market_id: str, book: Dict[str, Any]) -> Optional[OrderBookAnalysis]:
+        """Shared analysis logic for both REST and live snapshots."""
         bids = book.get('bids', [])
         asks = book.get('asks', [])
 
@@ -111,10 +428,6 @@ class OrderBookAnalyzer:
         ask_depth = sum(level.size for level in ask_levels)
         total_depth = bid_depth + ask_depth
         imbalance = (bid_depth - ask_depth) / total_depth if total_depth else 0
-
-        # Notional values for display purposes
-        bid_notional = sum(level.size * level.price for level in bid_levels)
-        ask_notional = sum(level.size * level.price for level in ask_levels)
 
         # Find support/resistance levels
         support_levels = self._find_support_levels(bid_levels)

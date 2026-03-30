@@ -153,6 +153,9 @@ class LiveMarketMonitor:
         self._last_successful_refresh = None
         self._refresh_failed = False
 
+        # Resolution tracking
+        self._resolved_markets: Dict[str, str] = {}  # market_id -> outcome
+
         # WebSocket connection status tracking
         self._ws_status = "disconnected"  # connected | reconnecting | polling | disconnected
         self._ws_reconnect_attempt = 0
@@ -630,24 +633,55 @@ class LiveMarketMonitor:
                     market_id = market.get("id")
                     if not market_id:
                         continue
-                    
+
+                    # Check for market resolution
+                    if market_id not in self._resolved_markets:
+                        closed = market.get("closed", False)
+                        sub_markets = market.get("markets", [])
+                        if closed and sub_markets:
+                            outcome_prices = sub_markets[0].get("outcomePrices")
+                            if isinstance(outcome_prices, str):
+                                import json as _j
+                                try:
+                                    outcome_prices = _j.loads(outcome_prices)
+                                except Exception:
+                                    outcome_prices = None
+                            if outcome_prices and len(outcome_prices) >= 2:
+                                yes_p = float(outcome_prices[0])
+                                no_p = float(outcome_prices[1])
+                                if yes_p >= 0.95:
+                                    outcome = "YES"
+                                elif no_p >= 0.95:
+                                    outcome = "NO"
+                                else:
+                                    outcome = None
+                                if outcome:
+                                    self._resolved_markets[market_id] = outcome
+                                    mt = market_titles.get(market_id, "Unknown")
+                                    title_short = mt[:30] + "..." if len(mt) > 30 else mt
+                                    color = "green" if outcome == "YES" else "red"
+                                    self.console.print(
+                                        f"[bold {color}]{current_time} | {title_short:<33} | "
+                                        f"RESOLVED {outcome} | Market settled[/bold {color}]"
+                                    )
+
                     # Get current price
                     current_price = self._get_market_values(market)['price']
                     previous_price = last_prices.get(market_id)
-                    
+
                     if previous_price is not None and current_price != previous_price:
                         # Price changed - simulate a trade
                         direction = "🟢 BUY" if current_price > previous_price else "🔴 SELL"
                         color = "green" if current_price > previous_price else "red"
-                        
+
                         market_title = market_titles.get(market_id, "Unknown")
                         title_short = market_title[:30] + "..." if len(market_title) > 30 else market_title
-                        
+
                         self.console.print(
                             f"[{color}]{current_time} | {title_short:<33} | {direction} | "
                             f"PRICE CHANGE | ${previous_price:.4f} → ${current_price:.4f}[/{color}]"
                         )
-                    
+
                     last_prices[market_id] = current_price
                 
                 await asyncio.sleep(2)  # Poll every 2 seconds

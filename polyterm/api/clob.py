@@ -435,6 +435,8 @@ class CLOBClient:
         self.subscriptions.clear()
         if hasattr(self, '_ob_callback'):
             self._ob_callback = None
+        if hasattr(self, '_ob_resolution_callback'):
+            self._ob_resolution_callback = None
         if hasattr(self, '_ob_token_ids'):
             self._ob_token_ids = []
     
@@ -469,15 +471,17 @@ class CLOBClient:
         except Exception as e:
             raise Exception(f"Failed to connect to CLOB WebSocket: {e}")
 
-    async def subscribe_orderbook(self, token_ids, callback):
+    async def subscribe_orderbook(self, token_ids, callback, resolution_callback=None):
         """Subscribe to real-time order book updates
 
-        Message types: book, last_trade_price, price_change, tick_size_change
-        Subscribe: {"assets_ids": [token_id1, token_id2], "type": "market"}
+        Message types: book, last_trade_price, price_change, tick_size_change,
+        market_resolved (when custom_feature_enabled is set)
+        Subscribe: {"assets_ids": [token_id1, ...], "type": "market", "custom_feature_enabled": true}
 
         Args:
             token_ids: List of CLOB token IDs to subscribe to
             callback: Function to call with order book update data
+            resolution_callback: Optional callback for market_resolved events
         """
         if not hasattr(self, 'clob_ws') or not self.clob_ws:
             await self.connect_clob_websocket()
@@ -485,9 +489,11 @@ class CLOBClient:
         subscribe_msg = {
             "assets_ids": token_ids,
             "type": "market",
+            "custom_feature_enabled": True,
         }
         await self.clob_ws.send(json.dumps(subscribe_msg))
         self._ob_callback = callback
+        self._ob_resolution_callback = resolution_callback
         self._ob_token_ids = token_ids
 
     async def listen_orderbook(self, max_reconnects=5, message_timeout: float = 60.0):
@@ -515,6 +521,7 @@ class CLOBClient:
                             subscribe_msg = {
                                 "assets_ids": self._ob_token_ids,
                                 "type": "market",
+                                "custom_feature_enabled": True,
                             }
                             await self.clob_ws.send(json.dumps(subscribe_msg))
                     except Exception:
@@ -553,7 +560,12 @@ class CLOBClient:
 
                         # Handle different message types
                         msg_type = data.get("type", data.get("event_type", ""))
-                        if msg_type in ("book", "last_trade_price", "price_change", "tick_size_change"):
+                        if msg_type == "market_resolved":
+                            if hasattr(self, '_ob_resolution_callback') and self._ob_resolution_callback:
+                                result = self._ob_resolution_callback(data)
+                                if hasattr(result, '__await__'):
+                                    await result
+                        elif msg_type in ("book", "last_trade_price", "price_change", "tick_size_change"):
                             if hasattr(self, '_ob_callback') and self._ob_callback:
                                 result = self._ob_callback(data)
                                 if hasattr(result, '__await__'):
@@ -573,6 +585,8 @@ class CLOBClient:
 
         if hasattr(self, '_ob_callback'):
             self._ob_callback = None
+        if hasattr(self, '_ob_resolution_callback'):
+            self._ob_resolution_callback = None
 
     # Utility Methods
 

@@ -7,7 +7,7 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from contextlib import contextmanager
 
-from .models import Wallet, Trade, Alert, MarketSnapshot, ArbitrageOpportunity
+from .models import Wallet, Trade, Alert, MarketSnapshot, ArbitrageOpportunity, ResolutionOutcome
 
 
 class Database:
@@ -216,6 +216,23 @@ class Database:
                 )
             """)
 
+            # Resolutions table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS resolutions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    market_id TEXT NOT NULL UNIQUE,
+                    market_slug TEXT NOT NULL DEFAULT '',
+                    title TEXT NOT NULL DEFAULT '',
+                    resolved INTEGER NOT NULL DEFAULT 0,
+                    outcome TEXT NOT NULL DEFAULT '',
+                    winning_price REAL NOT NULL DEFAULT 0.0,
+                    resolved_at TIMESTAMP,
+                    resolution_source TEXT NOT NULL DEFAULT '',
+                    closed_at TIMESTAMP,
+                    fetched_at TIMESTAMP NOT NULL
+                )
+            """)
+
             # Create indexes for performance
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_trades_wallet ON trades(wallet_address)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_trades_market ON trades(market_id)")
@@ -239,6 +256,8 @@ class Database:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_positions_entry ON positions(entry_date)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_alerts_ack ON alerts(acknowledged)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_positions_wallet ON positions(wallet_address)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_resolutions_resolved ON resolutions(resolved)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_resolutions_resolved_at ON resolutions(resolved_at)")
 
     # Wallet operations
 
@@ -1201,3 +1220,83 @@ class Database:
                 stats[table] = cursor.fetchone()[0]
 
             return stats
+
+    # Resolution operations
+
+    def save_resolution(self, resolution: ResolutionOutcome) -> None:
+        """Insert or update a market resolution outcome."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO resolutions (market_id, market_slug, title, resolved, outcome,
+                                        winning_price, resolved_at, resolution_source,
+                                        closed_at, fetched_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(market_id) DO UPDATE SET
+                    resolved = excluded.resolved,
+                    outcome = excluded.outcome,
+                    winning_price = excluded.winning_price,
+                    resolved_at = excluded.resolved_at,
+                    resolution_source = excluded.resolution_source,
+                    closed_at = excluded.closed_at,
+                    fetched_at = excluded.fetched_at
+            """, (
+                resolution.market_id,
+                resolution.market_slug,
+                resolution.title,
+                1 if resolution.resolved else 0,
+                resolution.outcome,
+                resolution.winning_price,
+                resolution.resolved_at.isoformat() if resolution.resolved_at else None,
+                resolution.resolution_source,
+                resolution.closed_at.isoformat() if resolution.closed_at else None,
+                resolution.fetched_at.isoformat(),
+            ))
+
+    def get_resolution(self, market_id: str) -> Optional[ResolutionOutcome]:
+        """Get resolution data for a specific market."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM resolutions WHERE market_id = ?", (market_id,))
+            row = cursor.fetchone()
+            if not row:
+                return None
+            return self._row_to_resolution(row)
+
+    def get_recent_resolutions(self, limit: int = 20) -> List[ResolutionOutcome]:
+        """Get recently resolved markets."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM resolutions WHERE resolved = 1 ORDER BY resolved_at DESC LIMIT ?",
+                (limit,),
+            )
+            return [self._row_to_resolution(row) for row in cursor.fetchall()]
+
+    @staticmethod
+    def _row_to_resolution(row) -> ResolutionOutcome:
+        resolved_at = row["resolved_at"]
+        if isinstance(resolved_at, str):
+            resolved_at = datetime.fromisoformat(resolved_at)
+        closed_at = row["closed_at"]
+        if isinstance(closed_at, str):
+            closed_at = datetime.fromisoformat(closed_at)
+        fetched_at = row["fetched_at"]
+        if isinstance(fetched_at, str):
+            fetched_at = datetime.fromisoformat(fetched_at)
+        elif fetched_at is None:
+            fetched_at = datetime.now()
+
+        return ResolutionOutcome(
+            id=row["id"],
+            market_id=row["market_id"],
+            market_slug=row["market_slug"],
+            title=row["title"],
+            resolved=bool(row["resolved"]),
+            outcome=row["outcome"],
+            winning_price=float(row["winning_price"]),
+            resolved_at=resolved_at,
+            closed_at=closed_at,
+            resolution_source=row["resolution_source"],
+            fetched_at=fetched_at,
+        )

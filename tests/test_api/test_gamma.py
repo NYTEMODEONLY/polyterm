@@ -1,11 +1,12 @@
 """Comprehensive tests for Gamma Markets API client"""
 
+import os
 import time
 import pytest
 import responses
 import requests
 from unittest.mock import patch, MagicMock
-from polyterm.api.gamma import GammaClient, RateLimiter
+from polyterm.api.gamma import GammaClient, RateLimiter, SharedRateLimiter
 
 
 GAMMA_ENDPOINT = "https://gamma-api.polymarket.com"
@@ -69,6 +70,223 @@ class TestRateLimiter:
 
         # Should sleep for 1.0 - 0.3 = 0.7 seconds
         mock_sleep.assert_called_once_with(pytest.approx(0.7, abs=0.01))
+
+
+class TestSharedRateLimiter:
+    """Test SharedRateLimiter cross-process coordination"""
+
+    def test_initialization(self, tmp_path):
+        """Test shared rate limiter initializes with correct values"""
+        limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(tmp_path))
+        assert limiter.requests_per_minute == 60
+        assert limiter.min_interval == 1.0
+
+    def test_creates_lock_directory(self, tmp_path):
+        """Test that lock directory is created during init"""
+        lock_dir = tmp_path / "subdir"
+        limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(lock_dir))
+        assert lock_dir.exists()
+
+    def test_first_call_no_wait(self, tmp_path):
+        """Test that the first call does not wait"""
+        limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(tmp_path))
+        start = time.time()
+        limiter.wait_if_needed()
+        elapsed = time.time() - start
+        assert elapsed < 0.1
+
+    def test_consecutive_calls_enforce_delay(self, tmp_path):
+        """Test that consecutive calls enforce the minimum interval"""
+        limiter = SharedRateLimiter(requests_per_minute=120, lock_dir=str(tmp_path))
+        limiter.wait_if_needed()  # First call
+        start = time.time()
+        limiter.wait_if_needed()  # Second call — should wait
+        elapsed = time.time() - start
+        assert elapsed >= limiter.min_interval - 0.05
+
+    def test_cross_instance_coordination(self, tmp_path):
+        """Test that two separate instances sharing a lock dir coordinate"""
+        limiter1 = SharedRateLimiter(requests_per_minute=120, lock_dir=str(tmp_path))
+        limiter2 = SharedRateLimiter(requests_per_minute=120, lock_dir=str(tmp_path))
+
+        limiter1.wait_if_needed()
+        start = time.time()
+        limiter2.wait_if_needed()
+        elapsed = time.time() - start
+        assert elapsed >= limiter1.min_interval - 0.05
+
+    def test_stale_timestamp_ignored(self, tmp_path):
+        """Test that stale timestamps (>120s old) are treated as fresh start"""
+        lock_file = tmp_path / "gamma_rate.lock"
+        # Write a very old timestamp
+        lock_file.write_text(str(time.time() - 300))
+
+        limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(tmp_path))
+        start = time.time()
+        limiter.wait_if_needed()
+        elapsed = time.time() - start
+        # Should not wait because the timestamp is stale
+        assert elapsed < 0.1
+
+    def test_corrupted_lock_file_handled(self, tmp_path):
+        """Test that corrupted lock file content is handled gracefully"""
+        lock_file = tmp_path / "gamma_rate.lock"
+        lock_file.write_text("not-a-number")
+
+        limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(tmp_path))
+        start = time.time()
+        limiter.wait_if_needed()
+        elapsed = time.time() - start
+        assert elapsed < 0.1
+
+    def test_empty_lock_file_handled(self, tmp_path):
+        """Test that empty lock file is handled gracefully"""
+        lock_file = tmp_path / "gamma_rate.lock"
+        lock_file.write_text("")
+
+        limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(tmp_path))
+        start = time.time()
+        limiter.wait_if_needed()
+        elapsed = time.time() - start
+        assert elapsed < 0.1
+
+    def test_fallback_when_fcntl_unavailable(self, tmp_path):
+        """Test graceful fallback to per-process limiter when fcntl is unavailable"""
+        with patch.dict("sys.modules", {"fcntl": None}):
+            with patch("polyterm.api.gamma.SharedRateLimiter._init_shared", return_value=False):
+                limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(tmp_path))
+                assert limiter._shared_available is False
+                # Should still work via fallback
+                start = time.time()
+                limiter.wait_if_needed()
+                elapsed = time.time() - start
+                assert elapsed < 0.1
+
+    def test_fallback_on_runtime_error(self, tmp_path):
+        """Test that runtime errors during shared wait fall back gracefully"""
+        limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(tmp_path))
+        limiter._shared_available = True
+
+        with patch.object(limiter, "_shared_wait", side_effect=OSError("disk full")):
+            # Should not raise — falls back to per-process
+            limiter.wait_if_needed()
+
+    def test_lock_file_updated_after_call(self, tmp_path):
+        """Test that the lock file contains a recent timestamp after a call"""
+        limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(tmp_path))
+        before = time.time()
+        limiter.wait_if_needed()
+        after = time.time()
+
+        lock_file = tmp_path / "gamma_rate.lock"
+        stored = float(lock_file.read_text().strip())
+        assert before <= stored <= after + 0.1
+
+    def test_gamma_client_uses_shared_limiter(self):
+        """Test that GammaClient uses SharedRateLimiter by default"""
+        client = GammaClient()
+        assert isinstance(client.rate_limiter, SharedRateLimiter)
+        client.close()
+
+
+class TestSharedRateLimiterEdgeCases:
+    """Edge-case tests for SharedRateLimiter"""
+
+    def test_init_shared_false_on_mkdir_oserror(self, tmp_path):
+        """_init_shared returns False when mkdir fails"""
+        limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(tmp_path))
+        with patch("pathlib.Path.mkdir", side_effect=OSError("permission denied")):
+            assert limiter._init_shared() is False
+
+    def test_init_shared_false_on_import_error(self, tmp_path):
+        """_init_shared returns False when fcntl is unavailable"""
+        import sys
+        limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(tmp_path))
+        with patch.dict(sys.modules, {"fcntl": None}):
+            with patch("builtins.__import__", side_effect=ImportError("no fcntl")):
+                assert limiter._init_shared() is False
+
+    def test_fdopen_failure_closes_fd(self, tmp_path):
+        """If os.fdopen fails, the raw fd is closed before reraising"""
+        limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(tmp_path))
+
+        with patch("os.open", return_value=42) as mock_open:
+            with patch("os.fdopen", side_effect=OSError("bad fd")):
+                with patch("os.close") as mock_close:
+                    with pytest.raises(OSError, match="bad fd"):
+                        limiter._shared_wait()
+                    mock_close.assert_called_once_with(42)
+
+    def test_flock_unlock_failure_swallowed(self, tmp_path):
+        """fcntl.flock unlock failure is silently swallowed"""
+        import fcntl
+
+        limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(tmp_path))
+
+        original_flock = fcntl.flock
+        call_count = [0]
+
+        def flock_fail_on_unlock(f, op):
+            call_count[0] += 1
+            if op == fcntl.LOCK_UN:
+                raise OSError("unlock failed")
+            return original_flock(f, op)
+
+        with patch("fcntl.flock", side_effect=flock_fail_on_unlock):
+            # Should not raise despite unlock failure
+            limiter.wait_if_needed()
+
+    def test_concurrent_thread_access(self, tmp_path):
+        """Multiple threads using the same lock dir don't corrupt state"""
+        import threading
+
+        limiter1 = SharedRateLimiter(requests_per_minute=600, lock_dir=str(tmp_path))
+        limiter2 = SharedRateLimiter(requests_per_minute=600, lock_dir=str(tmp_path))
+
+        results = []
+        errors = []
+
+        def call_limiter(limiter, count):
+            for _ in range(count):
+                try:
+                    limiter.wait_if_needed()
+                    results.append(time.time())
+                except Exception as e:
+                    errors.append(e)
+
+        t1 = threading.Thread(target=call_limiter, args=(limiter1, 5))
+        t2 = threading.Thread(target=call_limiter, args=(limiter2, 5))
+        t1.start()
+        t2.start()
+        t1.join(timeout=10)
+        t2.join(timeout=10)
+
+        assert len(errors) == 0
+        assert len(results) == 10
+
+    def test_slot_calculation_reserves_future_time(self, tmp_path):
+        """When lock file has a very recent timestamp, slot is pushed ahead"""
+        lock_file = tmp_path / "gamma_rate.lock"
+        # Write a timestamp that is 0.1s in the future
+        future_slot = time.time() + 0.1
+        lock_file.write_text(str(future_slot))
+
+        limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(tmp_path))
+        start = time.time()
+        limiter.wait_if_needed()
+        elapsed = time.time() - start
+
+        # Should have waited for the future slot + min_interval
+        assert elapsed >= 0.1  # at least past the reserved slot
+
+    def test_shared_wait_exception_degrades_to_per_process(self, tmp_path):
+        """Any exception in _shared_wait degrades to per-process fallback"""
+        limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(tmp_path))
+
+        with patch.object(limiter, "_shared_wait", side_effect=RuntimeError("boom")):
+            with patch.object(limiter._fallback, "wait_if_needed") as mock_fallback:
+                limiter.wait_if_needed()
+                mock_fallback.assert_called_once()
 
 
 class TestGammaClientRequest:
@@ -678,9 +896,9 @@ class TestGammaClientInit:
         assert "Authorization" not in client.session.headers
 
     def test_rate_limiter_created(self):
-        """Test that rate limiter is created"""
+        """Test that rate limiter is created (shared by default)"""
         client = GammaClient()
-        assert isinstance(client.rate_limiter, RateLimiter)
+        assert isinstance(client.rate_limiter, SharedRateLimiter)
         assert client.rate_limiter.requests_per_minute == 60
 
     def test_close_session(self):
