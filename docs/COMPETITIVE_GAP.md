@@ -65,7 +65,7 @@ Polymarket released their official CLI on Feb 24, 2026. It gained 1,016 GitHub s
 | **Self-update** | PyPI check + auto-restart | `polymarket upgrade` + Homebrew | Polymarket CLI |
 | **Install methods** | pip | Homebrew, curl script, cargo | Polymarket CLI |
 | **Performance** | Python (~300ms startup) | Rust (native binary, ~10ms startup) | Polymarket CLI |
-| **Test suite** | 660+ tests | 40 integration tests | PolyTerm |
+| **Test suite** | 975 tests | 40 integration tests | PolyTerm |
 
 ---
 

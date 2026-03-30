@@ -47,7 +47,7 @@ PolyTerm is an analytics and intelligence layer for Polymarket — not just an A
 - **Terminal-native visualization**: ASCII line charts, sparklines, depth charts, and side-by-side market comparison — all without leaving the terminal.
 - **Stateful local database** (SQLite): bookmarks, price alerts, trade journal, position tracking, recently viewed markets, screener presets. Your research accumulates value over time.
 - **Zero custody risk**: PolyTerm never touches private keys. Wallet features are view-only. No attack surface for key theft.
-- **660+ tests** across API, core logic, CLI, TUI, and database layers.
+- **975 tests** across API, core logic, CLI, TUI, and database layers.
 
 For a detailed comparison with the official Polymarket CLI, see [docs/COMPETITIVE_GAP.md](docs/COMPETITIVE_GAP.md).
 
@@ -79,6 +79,7 @@ For a detailed comparison with the official Polymarket CLI, see [docs/COMPETITIV
 | NegRisk Arbitrage | `polyterm negrisk` | Multi-outcome market arbitrage scanning |
 | Signal-based Predictions | `polyterm predict` | Multi-factor market predictions using live data |
 | Order Book Analysis | `polyterm orderbook` | Depth charts, slippage, icebergs |
+| Live Order Book | `polyterm orderbook --live` | Real-time WebSocket depth display |
 | Wallet Tracking | `polyterm wallets` | Smart money & whale wallet analysis |
 | Wallet Clusters | `polyterm clusters` | Detect same-entity wallet groups |
 | Alert Management | `polyterm alerts` | Multi-channel notification system |
@@ -194,6 +195,12 @@ polyterm orderbook <market_token_id> --slippage 10000 --side buy
 
 # Full analysis with depth
 polyterm orderbook <market_token_id> --depth 50 --chart
+
+# Live WebSocket-fed order book (real-time updates)
+polyterm orderbook <market_token_id> --live
+
+# Live with custom refresh rate
+polyterm orderbook <market_token_id> --live --refresh 0.5
 ```
 
 **What you get:**
@@ -203,6 +210,7 @@ polyterm orderbook <market_token_id> --depth 50 --chart
 - Large order detection (icebergs)
 - Slippage calculations
 - Liquidity imbalance warnings
+- **Live mode**: Real-time WebSocket depth updates with keyboard controls (P=pause, D=cycle depth, Q=quit), automatic REST fallback, and instant settlement detection
 
 ### Wallet Tracking
 ```bash
@@ -584,6 +592,44 @@ rm -rf dist/ build/ *.egg-info
 python -m build
 python -m twine upload dist/*
 ```
+
+---
+
+## What's New in v0.10.0 (Sprint 2)
+
+### Real-Time Live Order Book
+- **`polyterm orderbook --live`** — WebSocket-fed real-time order book display with sub-second updates
+- `LiveOrderBook` in-memory book maintained by CLOB WebSocket with thread-safe reads
+- `LiveOrderbookDisplay` TUI screen with keyboard controls: P (pause), D (cycle depth 10/20/50), Q (quit)
+- Automatic REST polling fallback when WebSocket is unavailable
+
+### Real-Time Settlement Detection
+- **`market_resolved` WebSocket event** — Instant settlement notifications via CLOB WebSocket
+- Enabled by `custom_feature_enabled: True` flag in WebSocket subscription
+- Resolution outcome (YES/NO) and winning price displayed immediately in live order book
+- Settlement callbacks propagated to all live systems (order book, arb scanner)
+
+### Shared Cross-Process Rate Limiter
+- **`SharedRateLimiter`** — File-lock-based rate limiter coordinating Gamma API requests across all PolyTerm processes
+- Default 60 requests/minute shared across concurrent instances
+- Automatic stale lock cleanup (120s threshold) for crashed processes
+- Graceful fallback to per-process limiting on Windows or permission errors
+
+### Arb Scanner WebSocket Integration
+- **Arbitrage scanner wired to live WebSocket prices** for lower-latency spread detection
+- `ArbitrageScanner` accepts optional `orderbook_analyzer` for real-time mid-prices
+- Falls back to REST API prices when WebSocket data unavailable
+
+### WebSocket Supervisor with Auto-Restart
+- **Two-tier resilience model** for trade WebSocket: inner reconnect loop + outer supervisor
+- Supervisor restarts entire connection cycle after cooldown (default 3 retries, 60s cooldown)
+- Ping/pong timeout detection (configurable `message_timeout`)
+- `on_error` callback for permanent failure notification
+- **Whale tracker REST fallback**: Automatic switch to REST polling (5s interval) when WebSocket permanently fails
+
+### Test Suite
+- **975 tests passing** across API, core, CLI, TUI, database, and utility layers (up from 660)
+- 68+ new tests for rate limiter, live orderbook, WebSocket supervisor, and REST fallback edge cases
 
 ---
 

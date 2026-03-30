@@ -99,7 +99,7 @@ These items open PolyTerm to new audiences and use cases.
 - [ ] `time polyterm --version` completes in <150ms
 - [ ] Zero Subgraph deprecation warnings in normal usage
 - [ ] README has "Why PolyTerm" section with measurable claims
-- [x] 660+ tests passing (no regression)
+- [x] 975 tests passing (no regression)
 - [x] v0.9.0 published to PyPI
 
 ---
@@ -131,6 +131,6 @@ These items widen the feature gap in areas where the official CLI will not inves
 | PyPI monthly downloads | Baseline TBD | +20% | +50% |
 | GitHub stars | Current count | +50 | +150 |
 | CLI commands | 81 | 85 (+analyze) | 88 (+comments, leaderboard, trends) |
-| Test count | 660 | 680 | 720 |
+| Test count | 975 | 980 | 1000 |
 | Startup time (ms) | ~300 | <150 | <150 |
 | Cold-start chart support | No | Yes | Yes |
