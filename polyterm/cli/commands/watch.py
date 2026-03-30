@@ -5,7 +5,6 @@ from rich.console import Console
 
 from ...api.gamma import GammaClient
 from ...api.clob import CLOBClient
-from ...api.subgraph import SubgraphClient
 from ...core.scanner import MarketScanner
 from ...core.alerts import AlertManager
 
@@ -32,8 +31,6 @@ def watch(ctx, market, threshold, volume_threshold, interval, notify):
         rest_endpoint=config.clob_rest_endpoint,
         ws_endpoint=config.clob_endpoint,
     )
-    subgraph_client = SubgraphClient(endpoint=config.subgraph_endpoint)
-    
     # Find market
     console.print(f"[cyan]Searching for market: {market}[/cyan]")
     
@@ -68,7 +65,6 @@ def watch(ctx, market, threshold, volume_threshold, interval, notify):
     scanner = MarketScanner(
         gamma_client,
         clob_client,
-        subgraph_client,
         check_interval=interval,
     )
     

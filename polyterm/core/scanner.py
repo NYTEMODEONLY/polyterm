@@ -9,7 +9,6 @@ from datetime import datetime
 from ..api.gamma import GammaClient
 from ..api.clob import CLOBClient
 from ..utils.json_output import safe_float
-from ..api.subgraph import SubgraphClient
 from ..api.aggregator import APIAggregator
 
 
@@ -63,16 +62,14 @@ class MarketScanner:
         self,
         gamma_client: GammaClient,
         clob_client: CLOBClient,
-        subgraph_client: Optional[SubgraphClient] = None,
         check_interval: int = 60,
     ):
         self.gamma_client = gamma_client
         self.clob_client = clob_client
-        self.subgraph_client = subgraph_client
         self.check_interval = check_interval
-        
+
         # Initialize aggregator for live data with fallback
-        self.aggregator = APIAggregator(gamma_client, clob_client, subgraph_client)
+        self.aggregator = APIAggregator(gamma_client, clob_client)
         
         # Storage for market snapshots
         self.snapshots: Dict[str, List[MarketSnapshot]] = {}
@@ -108,15 +105,6 @@ class MarketScanner:
                 clob_ticker = {}
                 clob_book = {}
 
-            # Get on-chain data (subgraph may be deprecated)
-            if self.subgraph_client is not None:
-                try:
-                    subgraph_stats = self.subgraph_client.get_market_statistics(market_id)
-                except Exception:
-                    subgraph_stats = {}
-            else:
-                subgraph_stats = {}
-            
             # Aggregate data
             aggregated_data = {
                 "market_id": market_id,
@@ -127,8 +115,6 @@ class MarketScanner:
                 "liquidity": safe_float(gamma_data.get("liquidity", 0)),
                 "last_trade_price": safe_float(clob_ticker.get("last", 0)) if clob_ticker else 0,
                 "spread": self.clob_client.calculate_spread(clob_book) if clob_book else 0,
-                "on_chain_volume": safe_float(subgraph_stats.get("totalVolume", 0)),
-                "trade_count": int(subgraph_stats.get("tradeCount", 0)),
             }
             
             return MarketSnapshot(market_id, aggregated_data, time.time())

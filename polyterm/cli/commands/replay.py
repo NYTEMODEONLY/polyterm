@@ -7,8 +7,8 @@ from rich.table import Table
 
 from ...api.gamma import GammaClient
 from ...api.clob import CLOBClient
-from ...api.subgraph import SubgraphClient
 from ...utils.formatting import format_timestamp, format_probability
+from ...utils.errors import handle_api_error
 
 
 @click.command()
@@ -32,8 +32,6 @@ def replay(ctx, market, hours, speed, trades):
         rest_endpoint=config.clob_rest_endpoint,
         ws_endpoint=config.clob_endpoint,
     )
-    subgraph_client = SubgraphClient(endpoint=config.subgraph_endpoint)
-    
     console.print(f"[cyan]Loading market: {market}[/cyan]")
     
     try:
@@ -163,7 +161,7 @@ def replay(ctx, market, hours, speed, trades):
         console.print(f"  Total trades: {len(historical_trades)}")
     
     except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
+        handle_api_error(console, e, "market replay")
         import traceback
         console.print(f"[red]{traceback.format_exc()}[/red]")
     finally:

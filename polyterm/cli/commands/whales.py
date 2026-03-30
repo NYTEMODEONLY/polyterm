@@ -35,8 +35,8 @@ def whales(ctx, min_amount, market, hours, limit, output_format):
         rest_endpoint=config.clob_rest_endpoint,
         ws_endpoint=config.clob_endpoint,
     )
-    # Initialize analytics (Subgraph is not required for volume-based whale tracking)
-    analytics = AnalyticsEngine(gamma_client, clob_client, None)
+    # Initialize analytics
+    analytics = AnalyticsEngine(gamma_client, clob_client)
 
     if output_format != 'json':
         console.print(f"[cyan]Tracking high-volume markets ≥ ${min_amount:,.0f}[/cyan]")

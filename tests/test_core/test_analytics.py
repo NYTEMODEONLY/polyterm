@@ -37,18 +37,17 @@ class TestAnalyticsEngine:
         """Create mock API clients"""
         gamma = Mock()
         clob = Mock()
-        subgraph = Mock()
-        return gamma, clob, subgraph
-    
+        return gamma, clob
+
     @pytest.fixture
     def analytics(self, mock_clients):
         """Create test analytics engine"""
-        gamma, clob, subgraph = mock_clients
-        return AnalyticsEngine(gamma, clob, subgraph)
+        gamma, clob = mock_clients
+        return AnalyticsEngine(gamma, clob)
     
     def test_track_whale_trades(self, analytics, mock_clients):
         """Test tracking whale trades via volume spike detection"""
-        gamma, clob, subgraph = mock_clients
+        gamma, clob = mock_clients
 
         import time
         current_time = int(time.time())
@@ -110,88 +109,35 @@ class TestAnalyticsEngine:
         assert impact["sell_volume"] == 1750.0
         assert impact["net_position"] == 4750.0
     
-    def test_analyze_historical_trends(self, analytics, mock_clients):
-        """Test historical trend analysis"""
-        gamma, clob, subgraph = mock_clients
-        
-        subgraph.get_market_statistics.return_value = {
-            "id": "market1",
-            "totalVolume": "50000",
-            "tradeCount": "150",
-        }
-        
-        import time
-        current_time = int(time.time())
-        
-        subgraph.get_market_volume.return_value = {}
-        
-        subgraph.get_market_trades.return_value = [
-            {"shares": "100", "price": "0.50", "timestamp": str(current_time - 3600)},
-            {"shares": "200", "price": "0.60", "timestamp": str(current_time - 7200)},
-            {"shares": "150", "price": "0.65", "timestamp": str(current_time - 10800)},
-        ]
-        
+    def test_analyze_historical_trends_returns_empty(self, analytics):
+        """Test historical trend analysis returns empty (no data source)"""
         trends = analytics.analyze_historical_trends("market1", hours=24)
-        
-        assert trends["market_id"] == "market1"
-        assert trends["total_trades"] == 3
-        assert trends["total_volume"] > 0
-        assert "trend_direction" in trends
+        assert trends == {}
     
     def test_predict_price_movement(self, analytics, mock_clients):
-        """Test price prediction"""
-        gamma, clob, subgraph = mock_clients
-        
-        # Mock historical trends
-        subgraph.get_market_statistics.return_value = {"id": "market1"}
-        subgraph.get_market_volume.return_value = {}
-        
-        import time
-        current_time = int(time.time())
-        
-        # Upward trend
-        subgraph.get_market_trades.return_value = [
-            {"shares": "100", "price": "0.70", "timestamp": str(current_time - 1000)},
-            {"shares": "100", "price": "0.50", "timestamp": str(current_time - 100000)},
-        ]
-        
-        subgraph.get_whale_trades.return_value = []
-        
+        """Test price prediction returns result (empty trends, volume-based whales)"""
+        gamma, clob = mock_clients
+
+        # Mock whale tracking (uses Gamma markets, not subgraph)
+        gamma.get_markets.return_value = []
+
         prediction = analytics.predict_price_movement("market1", horizon_hours=24)
-        
+
         assert "prediction" in prediction
         assert "confidence" in prediction
         assert prediction["prediction"] in ["up", "down", "stable"]
     
-    def test_get_portfolio_analytics(self, analytics, mock_clients):
-        """Test portfolio analytics"""
-        gamma, clob, subgraph = mock_clients
-        
-        subgraph.get_user_positions.return_value = [
-            {
-                "shares": "100",
-                "averagePrice": "0.65",
-                "realizedPnL": "50",
-                "unrealizedPnL": "25",
-            },
-            {
-                "shares": "200",
-                "averagePrice": "0.50",
-                "realizedPnL": "100",
-                "unrealizedPnL": "-20",
-            },
-        ]
-        
+    def test_get_portfolio_analytics_no_data_api(self, analytics):
+        """Test portfolio analytics graceful degradation without data API"""
         portfolio = analytics.get_portfolio_analytics("0x123")
-        
+
         assert portfolio["wallet_address"] == "0x123"
-        assert portfolio["total_positions"] == 2
-        assert portfolio["total_value"] > 0
-        assert portfolio["total_pnl"] == 155  # 50 + 25 + 100 - 20
+        # Should return graceful fallback (empty or error note)
+        assert "total_positions" in portfolio
 
     def test_get_portfolio_analytics_uses_data_api_when_subgraph_missing(self, mock_clients):
         """Test portfolio analytics uses Data API when Subgraph is unavailable."""
-        gamma, clob, _ = mock_clients
+        gamma, clob = mock_clients
 
         data_api = Mock()
         data_api.get_positions.return_value = [
@@ -205,7 +151,7 @@ class TestAnalyticsEngine:
             }
         ]
 
-        analytics = AnalyticsEngine(gamma, clob, None, data_api_client=data_api)
+        analytics = AnalyticsEngine(gamma, clob, data_api_client=data_api)
         portfolio = analytics.get_portfolio_analytics("0x123")
 
         assert portfolio["wallet_address"] == "0x123"
@@ -217,7 +163,7 @@ class TestAnalyticsEngine:
 
     def test_get_portfolio_analytics_preserves_explicit_zero_values(self, mock_clients):
         """Explicit zero current/initial values should not be replaced by fallback math."""
-        gamma, clob, _ = mock_clients
+        gamma, clob = mock_clients
 
         data_api = Mock()
         data_api.get_positions.return_value = [
@@ -231,7 +177,7 @@ class TestAnalyticsEngine:
             }
         ]
 
-        analytics = AnalyticsEngine(gamma, clob, None, data_api_client=data_api)
+        analytics = AnalyticsEngine(gamma, clob, data_api_client=data_api)
         portfolio = analytics.get_portfolio_analytics("0x123")
 
         assert portfolio["total_positions"] == 1
@@ -242,7 +188,7 @@ class TestAnalyticsEngine:
 
     def test_get_portfolio_analytics_falls_back_when_values_missing(self, mock_clients):
         """Missing value fields should still use shares*avg_price fallback."""
-        gamma, clob, _ = mock_clients
+        gamma, clob = mock_clients
 
         data_api = Mock()
         data_api.get_positions.return_value = [
@@ -255,48 +201,17 @@ class TestAnalyticsEngine:
             }
         ]
 
-        analytics = AnalyticsEngine(gamma, clob, None, data_api_client=data_api)
+        analytics = AnalyticsEngine(gamma, clob, data_api_client=data_api)
         portfolio = analytics.get_portfolio_analytics("0x123")
 
         assert portfolio["total_value"] == 5
         assert portfolio["total_invested"] == 5
     
-    def test_detect_market_manipulation(self, analytics, mock_clients):
-        """Test market manipulation detection"""
-        gamma, clob, subgraph = mock_clients
-        
-        # Mock liquidity withdrawals
-        subgraph.get_market_liquidity_changes.return_value = [
-            {"type": "remove", "amount": "10000"},
-            {"type": "remove", "amount": "5000"},
-            {"type": "remove", "amount": "3000"},
-            {"type": "remove", "amount": "2000"},
-        ]
-        
-        # Mock suspicious trades
-        subgraph.get_market_trades.return_value = [
-            {"trader": "0x123", "price": "0.50"},
-            {"trader": "0x123", "price": "0.52"},
-            {"trader": "0x123", "price": "0.51"},
-            {"trader": "0x123", "price": "0.53"},
-        ]
-        
+    def test_detect_market_manipulation_returns_unknown(self, analytics):
+        """Test market manipulation detection returns safe default (no data source)"""
         risk = analytics.detect_market_manipulation("market1")
-        
+
         assert risk["market_id"] == "market1"
-        assert risk["risk_level"] in ["low", "medium", "high"]
-        assert len(risk["risk_factors"]) > 0
-    
-    def test_no_manipulation_detected(self, analytics, mock_clients):
-        """Test when no manipulation is detected"""
-        gamma, clob, subgraph = mock_clients
-        
-        subgraph.get_market_liquidity_changes.return_value = []
-        subgraph.get_market_trades.return_value = [
-            {"trader": "0x123", "price": "0.50"},
-            {"trader": "0x456", "price": "0.51"},
-        ]
-        
-        risk = analytics.detect_market_manipulation("market1")
-        
-        assert risk["risk_level"] == "low"
+        assert risk["risk_level"] == "unknown"
+        assert risk["risk_score"] == 0
+        assert risk["risk_factors"] == []

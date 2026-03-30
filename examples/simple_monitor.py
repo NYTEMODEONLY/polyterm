@@ -5,7 +5,6 @@ Simple example of using PolyTerm to monitor markets
 
 from polyterm.api.gamma import GammaClient
 from polyterm.api.clob import CLOBClient
-from polyterm.api.subgraph import SubgraphClient
 from polyterm.core.scanner import MarketScanner
 from polyterm.core.alerts import AlertManager
 from polyterm.utils.config import Config
@@ -28,15 +27,10 @@ def main():
         ws_endpoint=config.clob_endpoint,
     )
     
-    subgraph_client = SubgraphClient(
-        endpoint=config.subgraph_endpoint,
-    )
-    
     # Initialize scanner and alert manager
     scanner = MarketScanner(
         gamma_client,
         clob_client,
-        subgraph_client,
         check_interval=60,
     )
     

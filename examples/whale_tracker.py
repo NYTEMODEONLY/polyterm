@@ -5,7 +5,6 @@ Example of tracking whale trades using PolyTerm
 
 from polyterm.api.gamma import GammaClient
 from polyterm.api.clob import CLOBClient
-from polyterm.api.subgraph import SubgraphClient
 from polyterm.core.analytics import AnalyticsEngine
 from polyterm.utils.config import Config
 from polyterm.utils.formatting import format_timestamp, format_volume
@@ -28,12 +27,8 @@ def main():
         ws_endpoint=config.clob_endpoint,
     )
     
-    subgraph_client = SubgraphClient(
-        endpoint=config.subgraph_endpoint,
-    )
-    
     # Initialize analytics engine
-    analytics = AnalyticsEngine(gamma_client, clob_client, subgraph_client)
+    analytics = AnalyticsEngine(gamma_client, clob_client)
     
     # Track whale trades
     print("🐋 Tracking Whale Trades (≥$10,000)")

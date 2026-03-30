@@ -4,27 +4,25 @@ import pytest
 from datetime import datetime
 from polyterm.api.gamma import GammaClient
 from polyterm.api.clob import CLOBClient
-from polyterm.api.subgraph import SubgraphClient
 from polyterm.api.aggregator import APIAggregator
 from polyterm.core.scanner import MarketScanner
 
 
 class TestLiveIntegration:
     """End-to-end integration tests with real API calls"""
-    
+
     @pytest.fixture
     def clients(self):
         """Initialize all API clients"""
         gamma = GammaClient()
         clob = CLOBClient()
-        subgraph = SubgraphClient()
-        return gamma, clob, subgraph
-    
+        return gamma, clob
+
     @pytest.fixture
     def aggregator(self, clients):
         """Initialize aggregator"""
         return APIAggregator(*clients)
-    
+
     @pytest.fixture
     def scanner(self, clients):
         """Initialize scanner"""
@@ -102,8 +100,8 @@ class TestLiveIntegration:
     
     def test_fallback_mechanism_works(self, clients):
         """Test that fallback works when primary fails"""
-        gamma, clob, subgraph = clients
-        aggregator = APIAggregator(gamma, clob, subgraph)
+        gamma, clob = clients
+        aggregator = APIAggregator(gamma, clob)
         
         # Get markets (should succeed via either Gamma or CLOB)
         markets = aggregator.get_live_markets(limit=5, require_volume=False)
