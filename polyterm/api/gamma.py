@@ -1,8 +1,10 @@
 """Gamma Markets REST API client"""
 
 import json
+import os
 import time
 import requests
+from pathlib import Path
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 
@@ -14,22 +16,140 @@ except ImportError:
 
 
 class RateLimiter:
-    """Simple rate limiter for API requests"""
-    
+    """Simple per-process rate limiter for API requests"""
+
     def __init__(self, requests_per_minute: int = 60):
         self.requests_per_minute = requests_per_minute
         self.min_interval = 60.0 / requests_per_minute
         self.last_request_time = 0
-    
+
     def wait_if_needed(self):
         """Wait if necessary to respect rate limit"""
         current_time = time.time()
         time_since_last = current_time - self.last_request_time
-        
+
         if time_since_last < self.min_interval:
             time.sleep(self.min_interval - time_since_last)
-        
+
         self.last_request_time = time.time()
+
+
+class SharedRateLimiter:
+    """Cross-process rate limiter using file-based coordination.
+
+    Uses a lockfile at ``~/.polyterm/gamma_rate.lock`` (configurable) to
+    coordinate Gamma API request timing across concurrent PolyTerm processes.
+    Falls back to a per-process ``RateLimiter`` when file locking is
+    unavailable (e.g. Windows or permission errors).
+    """
+
+    # Timestamps older than this (seconds) are treated as stale and ignored.
+    _STALE_THRESHOLD = 120.0
+
+    def __init__(
+        self,
+        requests_per_minute: int = 60,
+        lock_dir: Optional[str] = None,
+    ):
+        self.requests_per_minute = requests_per_minute
+        self.min_interval = 60.0 / requests_per_minute
+        self._lock_dir = Path(lock_dir) if lock_dir else Path.home() / ".polyterm"
+        self._lock_file = self._lock_dir / "gamma_rate.lock"
+        self._fallback = RateLimiter(requests_per_minute)
+        self._shared_available = self._init_shared()
+
+    # ------------------------------------------------------------------
+    # Initialisation helpers
+    # ------------------------------------------------------------------
+
+    def _init_shared(self) -> bool:
+        """Return True if cross-process locking is available."""
+        try:
+            import fcntl  # noqa: F401 – availability check
+            self._lock_dir.mkdir(parents=True, exist_ok=True)
+            return True
+        except (ImportError, OSError):
+            return False
+
+    # ------------------------------------------------------------------
+    # Public API (same interface as RateLimiter)
+    # ------------------------------------------------------------------
+
+    def wait_if_needed(self):
+        """Wait if necessary to respect the *global* rate limit.
+
+        If the shared lock mechanism is available the wait is coordinated
+        across all PolyTerm processes.  Otherwise falls back to per-process
+        limiting so single-process usage is unaffected.
+        """
+        if not self._shared_available:
+            self._fallback.wait_if_needed()
+            return
+
+        try:
+            self._shared_wait()
+        except Exception:
+            # Any unexpected error → degrade gracefully to per-process.
+            self._fallback.wait_if_needed()
+
+    # ------------------------------------------------------------------
+    # Internal – file-based coordination
+    # ------------------------------------------------------------------
+
+    def _shared_wait(self):
+        import fcntl
+
+        self._lock_dir.mkdir(parents=True, exist_ok=True)
+
+        # Open (or create) the lock file and acquire an exclusive lock.
+        fd = os.open(str(self._lock_file), os.O_RDWR | os.O_CREAT)
+        try:
+            f = os.fdopen(fd, "r+")
+        except Exception:
+            os.close(fd)
+            raise
+
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX)
+
+            # --- critical section (lock held) ---
+            f.seek(0)
+            content = f.read().strip()
+
+            last_request_time = 0.0
+            if content:
+                try:
+                    last_request_time = float(content)
+                except (ValueError, TypeError):
+                    last_request_time = 0.0
+
+            current_time = time.time()
+
+            # Discard stale timestamps (e.g. from a crashed process).
+            if current_time - last_request_time > self._STALE_THRESHOLD:
+                last_request_time = 0.0
+
+            next_allowed = last_request_time + self.min_interval
+            my_slot = max(current_time, next_allowed)
+
+            # Reserve this slot for the current process.
+            f.seek(0)
+            f.truncate()
+            f.write(str(my_slot))
+            f.flush()
+            # --- end critical section ---
+        finally:
+            # Release the lock and close the file.
+            try:
+                fcntl.flock(f, fcntl.LOCK_UN)
+            except Exception:
+                pass
+            f.close()
+
+        # Sleep *outside* the lock so other processes can reserve their slots.
+        wait_time = my_slot - time.time()
+        if wait_time > 0:
+            time.sleep(wait_time)
 
 
 class GammaClient:
@@ -38,7 +158,7 @@ class GammaClient:
     def __init__(self, base_url: str = "https://gamma-api.polymarket.com", api_key: str = ""):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
-        self.rate_limiter = RateLimiter(requests_per_minute=60)
+        self.rate_limiter = SharedRateLimiter(requests_per_minute=60)
         self.session = requests.Session()
         self._search_endpoint_supported = True
         
