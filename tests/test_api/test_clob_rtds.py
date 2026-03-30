@@ -119,42 +119,36 @@ class TestCLOBRTDSListenForTrades:
     @pytest.mark.asyncio
     async def test_ping_pong_handling(self, client):
         """Server PING message gets PONG response"""
-        mock_ws = AsyncMock()
-        # Simulate: PING, then ConnectionClosed to exit
         import websockets.exceptions
-        mock_ws.__aiter__ = Mock(return_value=iter(["PING"]))
+        mock_ws = AsyncMock()
+        mock_ws.recv = AsyncMock(side_effect=[
+            "PING",
+            websockets.exceptions.ConnectionClosed(None, None),
+        ])
         mock_ws.send = AsyncMock()
 
-        # After iterating, raise ConnectionClosed to break loop
-        async def aiter_then_close():
-            yield "PING"
-            raise websockets.exceptions.ConnectionClosed(None, None)
-
-        mock_ws.__aiter__ = lambda self: aiter_then_close()
         client.ws_connection = mock_ws
         client.subscriptions = {"_all": Mock()}
 
-        await client.listen_for_trades(max_reconnects=0)
+        await client.listen_for_trades(max_reconnects=0, supervisor_retries=0)
         mock_ws.send.assert_awaited_with("PONG")
 
     @pytest.mark.asyncio
     async def test_trade_message_dispatches_to_callback(self, client):
         """Trade message routes to matching subscription callback"""
+        import websockets.exceptions
         callback = Mock(return_value=None)
         trade_msg = self._make_trade_message(event_slug="btc-100k")
 
-        import websockets.exceptions
-
-        async def aiter_messages():
-            yield trade_msg
-            raise websockets.exceptions.ConnectionClosed(None, None)
-
         mock_ws = AsyncMock()
-        mock_ws.__aiter__ = lambda self: aiter_messages()
+        mock_ws.recv = AsyncMock(side_effect=[
+            trade_msg,
+            websockets.exceptions.ConnectionClosed(None, None),
+        ])
         client.ws_connection = mock_ws
         client.subscriptions = {"btc-100k": callback}
 
-        await client.listen_for_trades(max_reconnects=0)
+        await client.listen_for_trades(max_reconnects=0, supervisor_retries=0)
 
         callback.assert_called_once()
         call_data = callback.call_args[0][0]
@@ -164,108 +158,99 @@ class TestCLOBRTDSListenForTrades:
     @pytest.mark.asyncio
     async def test_trade_message_dispatches_by_slug(self, client):
         """Trade routes to callback matched by market slug"""
+        import websockets.exceptions
         callback = Mock(return_value=None)
         trade_msg = self._make_trade_message(event_slug="no-match", slug="will-btc-hit-100k")
 
-        import websockets.exceptions
-
-        async def aiter_messages():
-            yield trade_msg
-            raise websockets.exceptions.ConnectionClosed(None, None)
-
         mock_ws = AsyncMock()
-        mock_ws.__aiter__ = lambda self: aiter_messages()
+        mock_ws.recv = AsyncMock(side_effect=[
+            trade_msg,
+            websockets.exceptions.ConnectionClosed(None, None),
+        ])
         client.ws_connection = mock_ws
         client.subscriptions = {"will-btc-hit-100k": callback}
 
-        await client.listen_for_trades(max_reconnects=0)
+        await client.listen_for_trades(max_reconnects=0, supervisor_retries=0)
         callback.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_trade_dispatches_to_all_callback(self, client):
         """Trade routes to _all callback when no slug match"""
+        import websockets.exceptions
         callback = Mock(return_value=None)
         trade_msg = self._make_trade_message(event_slug="unmatched", slug="unmatched")
 
-        import websockets.exceptions
-
-        async def aiter_messages():
-            yield trade_msg
-            raise websockets.exceptions.ConnectionClosed(None, None)
-
         mock_ws = AsyncMock()
-        mock_ws.__aiter__ = lambda self: aiter_messages()
+        mock_ws.recv = AsyncMock(side_effect=[
+            trade_msg,
+            websockets.exceptions.ConnectionClosed(None, None),
+        ])
         client.ws_connection = mock_ws
         client.subscriptions = {"_all": callback}
 
-        await client.listen_for_trades(max_reconnects=0)
+        await client.listen_for_trades(max_reconnects=0, supervisor_retries=0)
         callback.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_empty_messages_skipped(self, client):
         """Empty and whitespace messages are skipped"""
+        import websockets.exceptions
         callback = Mock(return_value=None)
 
-        import websockets.exceptions
-
-        async def aiter_messages():
-            yield ""
-            yield "   "
-            yield self._make_trade_message()
-            raise websockets.exceptions.ConnectionClosed(None, None)
-
         mock_ws = AsyncMock()
-        mock_ws.__aiter__ = lambda self: aiter_messages()
+        mock_ws.recv = AsyncMock(side_effect=[
+            "",
+            "   ",
+            self._make_trade_message(),
+            websockets.exceptions.ConnectionClosed(None, None),
+        ])
         client.ws_connection = mock_ws
         client.subscriptions = {"btc-100k": callback}
 
-        await client.listen_for_trades(max_reconnects=0)
+        await client.listen_for_trades(max_reconnects=0, supervisor_retries=0)
         # Only the valid trade message should trigger callback
         assert callback.call_count == 1
 
     @pytest.mark.asyncio
     async def test_json_decode_errors_skipped(self, client):
         """Invalid JSON messages are silently skipped"""
+        import websockets.exceptions
         callback = Mock(return_value=None)
 
-        import websockets.exceptions
-
-        async def aiter_messages():
-            yield "not-json{{"
-            yield self._make_trade_message()
-            raise websockets.exceptions.ConnectionClosed(None, None)
-
         mock_ws = AsyncMock()
-        mock_ws.__aiter__ = lambda self: aiter_messages()
+        mock_ws.recv = AsyncMock(side_effect=[
+            "not-json{{",
+            self._make_trade_message(),
+            websockets.exceptions.ConnectionClosed(None, None),
+        ])
         client.ws_connection = mock_ws
         client.subscriptions = {"btc-100k": callback}
 
-        await client.listen_for_trades(max_reconnects=0)
+        await client.listen_for_trades(max_reconnects=0, supervisor_retries=0)
         assert callback.call_count == 1
 
     @pytest.mark.asyncio
     async def test_messages_without_payload_skipped(self, client):
         """Messages without payload key are skipped"""
+        import websockets.exceptions
         callback = Mock(return_value=None)
 
-        import websockets.exceptions
-
-        async def aiter_messages():
-            yield json.dumps({"topic": "system", "type": "status"})
-            yield self._make_trade_message()
-            raise websockets.exceptions.ConnectionClosed(None, None)
-
         mock_ws = AsyncMock()
-        mock_ws.__aiter__ = lambda self: aiter_messages()
+        mock_ws.recv = AsyncMock(side_effect=[
+            json.dumps({"topic": "system", "type": "status"}),
+            self._make_trade_message(),
+            websockets.exceptions.ConnectionClosed(None, None),
+        ])
         client.ws_connection = mock_ws
         client.subscriptions = {"btc-100k": callback}
 
-        await client.listen_for_trades(max_reconnects=0)
+        await client.listen_for_trades(max_reconnects=0, supervisor_retries=0)
         assert callback.call_count == 1
 
     @pytest.mark.asyncio
     async def test_async_callback_support(self, client):
         """Async callbacks are awaited correctly"""
+        import websockets.exceptions
         calls = []
 
         async def async_callback(data):
@@ -273,38 +258,33 @@ class TestCLOBRTDSListenForTrades:
 
         trade_msg = self._make_trade_message()
 
-        import websockets.exceptions
-
-        async def aiter_messages():
-            yield trade_msg
-            raise websockets.exceptions.ConnectionClosed(None, None)
-
         mock_ws = AsyncMock()
-        mock_ws.__aiter__ = lambda self: aiter_messages()
+        mock_ws.recv = AsyncMock(side_effect=[
+            trade_msg,
+            websockets.exceptions.ConnectionClosed(None, None),
+        ])
         client.ws_connection = mock_ws
         client.subscriptions = {"btc-100k": async_callback}
 
-        await client.listen_for_trades(max_reconnects=0)
+        await client.listen_for_trades(max_reconnects=0, supervisor_retries=0)
         assert len(calls) == 1
 
     @pytest.mark.asyncio
     async def test_reconnect_attempts_reset_on_successful_message(self, client):
         """Reconnect counter resets to 0 on each successful message"""
+        import websockets.exceptions
         callback = Mock(return_value=None)
 
-        import websockets.exceptions
-
-        async def aiter_messages():
-            yield self._make_trade_message()
-            raise websockets.exceptions.ConnectionClosed(None, None)
-
         mock_ws = AsyncMock()
-        mock_ws.__aiter__ = lambda self: aiter_messages()
+        mock_ws.recv = AsyncMock(side_effect=[
+            self._make_trade_message(),
+            websockets.exceptions.ConnectionClosed(None, None),
+        ])
         client.ws_connection = mock_ws
         client.subscriptions = {"btc-100k": callback}
 
         # With max_reconnects=0, after ConnectionClosed it should exit
-        await client.listen_for_trades(max_reconnects=0)
+        await client.listen_for_trades(max_reconnects=0, supervisor_retries=0)
         callback.assert_called_once()
 
 
@@ -321,15 +301,11 @@ class TestCLOBRTDSReconnection:
         import websockets.exceptions
 
         mock_ws = AsyncMock()
-
-        async def aiter_close():
-            raise websockets.exceptions.ConnectionClosed(None, None)
-
-        mock_ws.__aiter__ = lambda self: aiter_close()
+        mock_ws.recv = AsyncMock(side_effect=websockets.exceptions.ConnectionClosed(None, None))
         client.ws_connection = mock_ws
         client.subscriptions = {"btc-100k": Mock()}
 
-        await client.listen_for_trades(max_reconnects=0)
+        await client.listen_for_trades(max_reconnects=0, supervisor_retries=0)
         assert len(client.subscriptions) == 0
 
     @pytest.mark.asyncio
@@ -339,26 +315,23 @@ class TestCLOBRTDSReconnection:
 
         call_count = 0
 
-        async def aiter_close():
-            raise websockets.exceptions.ConnectionClosed(None, None)
-
         async def mock_connect():
             nonlocal call_count
             call_count += 1
             mock_ws = AsyncMock()
-            mock_ws.__aiter__ = lambda self: aiter_close()
+            mock_ws.recv = AsyncMock(side_effect=websockets.exceptions.ConnectionClosed(None, None))
             client.ws_connection = mock_ws
             return True
 
         # First connection fails immediately
         mock_ws = AsyncMock()
-        mock_ws.__aiter__ = lambda self: aiter_close()
+        mock_ws.recv = AsyncMock(side_effect=websockets.exceptions.ConnectionClosed(None, None))
         client.ws_connection = mock_ws
         client.subscriptions = {"_all": Mock()}
 
         with patch.object(client, "connect_websocket", side_effect=mock_connect):
             with patch("asyncio.sleep", new_callable=AsyncMock):
-                await client.listen_for_trades(max_reconnects=2)
+                await client.listen_for_trades(max_reconnects=2, supervisor_retries=0)
 
         # Should have attempted reconnects
         assert call_count >= 1
@@ -376,19 +349,15 @@ class TestCLOBRTDSReconnection:
         async def always_fail():
             raise Exception("connect failed")
 
-        # Start with no connection, force reconnection path
+        # Start with a connection that immediately fails
         mock_ws = AsyncMock()
-
-        async def aiter_close():
-            raise websockets.exceptions.ConnectionClosed(None, None)
-
-        mock_ws.__aiter__ = lambda self: aiter_close()
+        mock_ws.recv = AsyncMock(side_effect=websockets.exceptions.ConnectionClosed(None, None))
         client.ws_connection = mock_ws
         client.subscriptions = {"_all": Mock()}
 
         with patch.object(client, "connect_websocket", side_effect=always_fail):
             with patch("asyncio.sleep", side_effect=mock_sleep):
-                await client.listen_for_trades(max_reconnects=3)
+                await client.listen_for_trades(max_reconnects=3, supervisor_retries=0)
 
         # Backoff values should be exponential: 2, 4, 8 (min(2^n, 30))
         for i, wait in enumerate(sleep_calls):
@@ -407,15 +376,11 @@ class TestCLOBRTDSReconnection:
             sent_messages.append(json.loads(msg))
 
         reconnect_ws.send = capture_send
-
-        async def aiter_close():
-            raise websockets.exceptions.ConnectionClosed(None, None)
-
-        reconnect_ws.__aiter__ = lambda self: aiter_close()
+        reconnect_ws.recv = AsyncMock(side_effect=websockets.exceptions.ConnectionClosed(None, None))
 
         # First WS fails
         first_ws = AsyncMock()
-        first_ws.__aiter__ = lambda self: aiter_close()
+        first_ws.recv = AsyncMock(side_effect=websockets.exceptions.ConnectionClosed(None, None))
         client.ws_connection = first_ws
         client.subscriptions = {"btc-100k": Mock()}
 
@@ -425,7 +390,7 @@ class TestCLOBRTDSReconnection:
 
         with patch.object(client, "connect_websocket", side_effect=mock_connect):
             with patch("asyncio.sleep", new_callable=AsyncMock):
-                await client.listen_for_trades(max_reconnects=1)
+                await client.listen_for_trades(max_reconnects=1, supervisor_retries=0)
 
         # Verify re-subscription was sent
         assert any(
@@ -433,28 +398,502 @@ class TestCLOBRTDSReconnection:
         ), "Should re-subscribe after reconnect"
 
     @pytest.mark.asyncio
-    async def test_no_connection_no_reconnect_raises(self, client):
-        """If ws_connection is None on first attempt, raises"""
+    async def test_no_connection_no_reconnect_permanently_fails(self, client):
+        """If ws_connection is None on first attempt, permanently fails"""
         client.ws_connection = None
         client.subscriptions = {}
 
-        with pytest.raises(Exception, match="WebSocket not connected"):
-            await client.listen_for_trades(max_reconnects=0)
+        await client.listen_for_trades(max_reconnects=0, supervisor_retries=0)
+        assert client._ws_permanently_failed is True
 
     @pytest.mark.asyncio
     async def test_generic_exception_triggers_reconnect(self, client):
         """Non-ConnectionClosed exceptions also trigger reconnect"""
-        async def aiter_error():
-            raise RuntimeError("unexpected")
-
         mock_ws = AsyncMock()
-        mock_ws.__aiter__ = lambda self: aiter_error()
+        mock_ws.recv = AsyncMock(side_effect=RuntimeError("unexpected"))
         client.ws_connection = mock_ws
         client.subscriptions = {"_all": Mock()}
 
         # With max_reconnects=0, should exit after first failure
-        await client.listen_for_trades(max_reconnects=0)
+        await client.listen_for_trades(max_reconnects=0, supervisor_retries=0)
         assert len(client.subscriptions) == 0
+
+
+class TestCLOBRTDSMessageTimeout:
+    """Tests for message timeout forcing reconnect"""
+
+    @pytest.fixture
+    def client(self):
+        return CLOBClient()
+
+    @pytest.mark.asyncio
+    async def test_message_timeout_triggers_reconnect(self, client):
+        """asyncio.TimeoutError from recv triggers reconnect"""
+        import websockets.exceptions
+
+        mock_ws = AsyncMock()
+        mock_ws.recv = AsyncMock(side_effect=asyncio.TimeoutError())
+        mock_ws.close = AsyncMock()
+
+        client.ws_connection = mock_ws
+        client.subscriptions = {"_all": Mock()}
+
+        await client.listen_for_trades(
+            max_reconnects=0, message_timeout=0.01, supervisor_retries=0
+        )
+
+        # Timeout should have closed the stale connection
+        mock_ws.close.assert_awaited_once()
+        # Should have set permanently_failed since max_reconnects=0
+        assert client._ws_permanently_failed is True
+
+    @pytest.mark.asyncio
+    async def test_message_timeout_resets_ws_connection(self, client):
+        """After timeout, ws_connection is set to None for fresh reconnect"""
+        mock_ws = AsyncMock()
+        mock_ws.recv = AsyncMock(side_effect=asyncio.TimeoutError())
+        mock_ws.close = AsyncMock()
+
+        client.ws_connection = mock_ws
+        client.subscriptions = {"_all": Mock()}
+
+        await client.listen_for_trades(
+            max_reconnects=0, message_timeout=0.01, supervisor_retries=0
+        )
+
+        # ws_connection should have been cleared for reconnect attempt
+        assert client.ws_connection is None
+
+    @pytest.mark.asyncio
+    async def test_message_timeout_close_error_swallowed(self, client):
+        """If close() fails on timeout, error is swallowed"""
+        mock_ws = AsyncMock()
+        mock_ws.recv = AsyncMock(side_effect=asyncio.TimeoutError())
+        mock_ws.close = AsyncMock(side_effect=Exception("already closed"))
+
+        client.ws_connection = mock_ws
+        client.subscriptions = {"_all": Mock()}
+
+        # Should not raise
+        await client.listen_for_trades(
+            max_reconnects=0, message_timeout=0.01, supervisor_retries=0
+        )
+        assert client._ws_permanently_failed is True
+
+    @pytest.mark.asyncio
+    async def test_successful_message_after_timeout_resets_reconnects(self, client):
+        """A successful message resets the reconnect counter even after a timeout"""
+        import websockets.exceptions
+
+        timeout_ws = AsyncMock()
+        timeout_ws.recv = AsyncMock(side_effect=asyncio.TimeoutError())
+        timeout_ws.close = AsyncMock()
+
+        trade_msg = json.dumps({
+            "topic": "activity", "type": "trades",
+            "payload": {"eventSlug": "test", "price": "0.5", "size": "10"}
+        })
+
+        recovery_ws = AsyncMock()
+        recovery_ws.recv = AsyncMock(side_effect=[
+            trade_msg,
+            websockets.exceptions.ConnectionClosed(None, None),
+        ])
+
+        client.ws_connection = timeout_ws
+        callback = Mock(return_value=None)
+        client.subscriptions = {"_all": callback}
+
+        connect_count = 0
+
+        async def mock_connect():
+            nonlocal connect_count
+            connect_count += 1
+            client.ws_connection = recovery_ws
+            return True
+
+        with patch.object(client, "connect_websocket", side_effect=mock_connect):
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                await client.listen_for_trades(
+                    max_reconnects=2, message_timeout=0.01, supervisor_retries=0
+                )
+
+        # Should have reconnected and processed the trade
+        callback.assert_called_once()
+
+
+class TestCLOBRTDSSupervisor:
+    """Tests for supervisor retry loop"""
+
+    @pytest.fixture
+    def client(self):
+        return CLOBClient()
+
+    @pytest.mark.asyncio
+    async def test_supervisor_restarts_after_inner_exhaustion(self, client):
+        """Supervisor restarts inner loop after cooldown when reconnects exhaust"""
+        import websockets.exceptions
+
+        inner_call_count = 0
+        original_inner = client._listen_for_trades_inner
+
+        async def counting_inner(max_reconnects, message_timeout):
+            nonlocal inner_call_count
+            inner_call_count += 1
+            # Simulate inner loop exiting (reconnects exhausted)
+            return
+
+        with patch.object(client, "_listen_for_trades_inner", side_effect=counting_inner):
+            with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+                await client.listen_for_trades(
+                    max_reconnects=3,
+                    supervisor_retries=2,
+                    supervisor_cooldown=10.0,
+                )
+
+        # Inner loop should run: 1 initial + 2 supervisor retries = 3 times
+        assert inner_call_count == 3
+        # Supervisor should sleep between retries
+        assert mock_sleep.await_count == 2
+        mock_sleep.assert_awaited_with(10.0)
+
+    @pytest.mark.asyncio
+    async def test_supervisor_resets_ws_connection_between_restarts(self, client):
+        """Supervisor sets ws_connection to None before restarting"""
+        ws_states = []
+
+        async def capture_inner(max_reconnects, message_timeout):
+            ws_states.append(client.ws_connection)
+            client.ws_connection = AsyncMock()  # Simulate stale connection
+
+        with patch.object(client, "_listen_for_trades_inner", side_effect=capture_inner):
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                await client.listen_for_trades(
+                    max_reconnects=1,
+                    supervisor_retries=1,
+                    supervisor_cooldown=0.01,
+                )
+
+        # After first inner exit, supervisor should reset ws_connection to None
+        # So second inner call should see None
+        assert ws_states[1] is None
+
+    @pytest.mark.asyncio
+    async def test_supervisor_zero_retries_exits_immediately(self, client):
+        """supervisor_retries=0 means no supervisor restarts"""
+        inner_call_count = 0
+
+        async def counting_inner(max_reconnects, message_timeout):
+            nonlocal inner_call_count
+            inner_call_count += 1
+
+        with patch.object(client, "_listen_for_trades_inner", side_effect=counting_inner):
+            await client.listen_for_trades(
+                max_reconnects=1,
+                supervisor_retries=0,
+            )
+
+        # Only 1 inner call, no supervisor restarts
+        assert inner_call_count == 1
+        assert client._ws_permanently_failed is True
+
+    @pytest.mark.asyncio
+    async def test_supervisor_handles_inner_exception(self, client):
+        """Supervisor catches exceptions from inner loop and continues"""
+        call_count = 0
+
+        async def failing_inner(max_reconnects, message_timeout):
+            nonlocal call_count
+            call_count += 1
+            raise RuntimeError("inner loop crashed")
+
+        with patch.object(client, "_listen_for_trades_inner", side_effect=failing_inner):
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                await client.listen_for_trades(
+                    max_reconnects=1,
+                    supervisor_retries=1,
+                    supervisor_cooldown=0.01,
+                )
+
+        # Should have retried despite exception
+        assert call_count == 2
+        assert client._ws_permanently_failed is True
+
+
+class TestCLOBRTDSOnError:
+    """Tests for on_error callback"""
+
+    @pytest.fixture
+    def client(self):
+        return CLOBClient()
+
+    @pytest.mark.asyncio
+    async def test_on_error_called_on_permanent_failure(self, client):
+        """on_error is called when supervisor exhausts all retries"""
+        errors = []
+
+        def capture_error(exc):
+            errors.append(str(exc))
+
+        async def noop_inner(max_reconnects, message_timeout):
+            return
+
+        with patch.object(client, "_listen_for_trades_inner", side_effect=noop_inner):
+            await client.listen_for_trades(
+                max_reconnects=1,
+                supervisor_retries=0,
+                on_error=capture_error,
+            )
+
+        assert len(errors) == 1
+        assert "permanently failed" in errors[0]
+
+    @pytest.mark.asyncio
+    async def test_on_error_called_on_supervisor_restart(self, client):
+        """on_error is called on each supervisor restart (not just final)"""
+        errors = []
+
+        def capture_error(exc):
+            errors.append(str(exc))
+
+        async def noop_inner(max_reconnects, message_timeout):
+            return
+
+        with patch.object(client, "_listen_for_trades_inner", side_effect=noop_inner):
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                await client.listen_for_trades(
+                    max_reconnects=1,
+                    supervisor_retries=2,
+                    supervisor_cooldown=0.01,
+                    on_error=capture_error,
+                )
+
+        # 2 supervisor restart notifications + 1 permanent failure
+        assert len(errors) == 3
+        assert any("supervisor restart" in e for e in errors)
+        assert any("permanently failed" in e for e in errors)
+
+    @pytest.mark.asyncio
+    async def test_on_error_exception_swallowed(self, client):
+        """If on_error itself raises, it's swallowed"""
+        def bad_callback(exc):
+            raise RuntimeError("callback crashed")
+
+        async def noop_inner(max_reconnects, message_timeout):
+            return
+
+        with patch.object(client, "_listen_for_trades_inner", side_effect=noop_inner):
+            # Should not raise
+            await client.listen_for_trades(
+                max_reconnects=1,
+                supervisor_retries=0,
+                on_error=bad_callback,
+            )
+
+        assert client._ws_permanently_failed is True
+
+    @pytest.mark.asyncio
+    async def test_permanently_failed_flag_set(self, client):
+        """_ws_permanently_failed flag is set on final supervisor failure"""
+        assert client._ws_permanently_failed is False
+
+        async def noop_inner(max_reconnects, message_timeout):
+            return
+
+        with patch.object(client, "_listen_for_trades_inner", side_effect=noop_inner):
+            await client.listen_for_trades(
+                max_reconnects=1,
+                supervisor_retries=0,
+            )
+
+        assert client._ws_permanently_failed is True
+
+    @pytest.mark.asyncio
+    async def test_subscriptions_cleared_on_permanent_failure(self, client):
+        """Subscriptions are cleared when supervisor gives up"""
+        client.subscriptions = {"slug-a": Mock(), "slug-b": Mock()}
+
+        async def noop_inner(max_reconnects, message_timeout):
+            return
+
+        with patch.object(client, "_listen_for_trades_inner", side_effect=noop_inner):
+            await client.listen_for_trades(
+                max_reconnects=1,
+                supervisor_retries=0,
+            )
+
+        assert len(client.subscriptions) == 0
+
+
+class TestCLOBOrderbookWSTimeout:
+    """Tests for orderbook WebSocket message timeout"""
+
+    @pytest.fixture
+    def client(self):
+        c = CLOBClient()
+        return c
+
+    @pytest.mark.asyncio
+    async def test_orderbook_timeout_triggers_reconnect(self, client):
+        """Orderbook WS timeout closes connection and increments reconnects"""
+        mock_ws = AsyncMock()
+        mock_ws.recv = AsyncMock(side_effect=asyncio.TimeoutError())
+        mock_ws.close = AsyncMock()
+        client.clob_ws = mock_ws
+        client._ob_callback = Mock()
+        client._ob_token_ids = ["token1"]
+
+        await client.listen_orderbook(max_reconnects=0, message_timeout=0.01)
+
+        mock_ws.close.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_orderbook_timeout_close_error_swallowed(self, client):
+        """Orderbook timeout swallows close() errors"""
+        mock_ws = AsyncMock()
+        mock_ws.recv = AsyncMock(side_effect=asyncio.TimeoutError())
+        mock_ws.close = AsyncMock(side_effect=Exception("already closed"))
+        client.clob_ws = mock_ws
+        client._ob_callback = Mock()
+        client._ob_token_ids = ["token1"]
+
+        # Should not raise
+        await client.listen_orderbook(max_reconnects=0, message_timeout=0.01)
+
+    @pytest.mark.asyncio
+    async def test_orderbook_processes_book_message(self, client):
+        """Orderbook WS processes book-type messages via callback"""
+        import websockets.exceptions
+
+        callback = Mock(return_value=None)
+        book_msg = json.dumps({"type": "book", "bids": [], "asks": []})
+
+        mock_ws = AsyncMock()
+        mock_ws.recv = AsyncMock(side_effect=[
+            book_msg,
+            websockets.exceptions.ConnectionClosed(None, None),
+        ])
+        client.clob_ws = mock_ws
+        client._ob_callback = callback
+        client._ob_token_ids = ["token1"]
+
+        await client.listen_orderbook(max_reconnects=0, message_timeout=5.0)
+
+        callback.assert_called_once()
+        call_data = callback.call_args[0][0]
+        assert call_data["type"] == "book"
+
+    @pytest.mark.asyncio
+    async def test_orderbook_processes_price_change_message(self, client):
+        """Orderbook WS processes price_change messages"""
+        import websockets.exceptions
+
+        callback = Mock(return_value=None)
+        msg = json.dumps({"type": "price_change", "price": "0.65"})
+
+        mock_ws = AsyncMock()
+        mock_ws.recv = AsyncMock(side_effect=[
+            msg,
+            websockets.exceptions.ConnectionClosed(None, None),
+        ])
+        client.clob_ws = mock_ws
+        client._ob_callback = callback
+        client._ob_token_ids = ["token1"]
+
+        await client.listen_orderbook(max_reconnects=0, message_timeout=5.0)
+        callback.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_orderbook_processes_last_trade_price(self, client):
+        """Orderbook WS processes last_trade_price messages"""
+        import websockets.exceptions
+
+        callback = Mock(return_value=None)
+        msg = json.dumps({"type": "last_trade_price", "price": "0.70"})
+
+        mock_ws = AsyncMock()
+        mock_ws.recv = AsyncMock(side_effect=[
+            msg,
+            websockets.exceptions.ConnectionClosed(None, None),
+        ])
+        client.clob_ws = mock_ws
+        client._ob_callback = callback
+        client._ob_token_ids = ["token1"]
+
+        await client.listen_orderbook(max_reconnects=0, message_timeout=5.0)
+        callback.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_orderbook_skips_empty_messages(self, client):
+        """Orderbook WS skips empty/whitespace messages"""
+        import websockets.exceptions
+
+        callback = Mock(return_value=None)
+        book_msg = json.dumps({"type": "book", "bids": [], "asks": []})
+
+        mock_ws = AsyncMock()
+        mock_ws.recv = AsyncMock(side_effect=[
+            "",
+            "   ",
+            book_msg,
+            websockets.exceptions.ConnectionClosed(None, None),
+        ])
+        client.clob_ws = mock_ws
+        client._ob_callback = callback
+        client._ob_token_ids = ["token1"]
+
+        await client.listen_orderbook(max_reconnects=0, message_timeout=5.0)
+        assert callback.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_orderbook_clears_callback_on_failure(self, client):
+        """Orderbook clears _ob_callback when max_reconnects exhausted"""
+        import websockets.exceptions
+
+        mock_ws = AsyncMock()
+        mock_ws.recv = AsyncMock(side_effect=websockets.exceptions.ConnectionClosed(None, None))
+        client.clob_ws = mock_ws
+        client._ob_callback = Mock()
+        client._ob_token_ids = ["token1"]
+
+        await client.listen_orderbook(max_reconnects=0)
+        assert client._ob_callback is None
+
+    @pytest.mark.asyncio
+    async def test_orderbook_reconnect_resubscribes(self, client):
+        """Orderbook re-subscribes with token_ids after reconnect"""
+        import websockets.exceptions
+
+        sent_messages = []
+        reconnect_ws = AsyncMock()
+
+        async def capture_send(msg):
+            sent_messages.append(json.loads(msg))
+
+        reconnect_ws.send = capture_send
+        reconnect_ws.recv = AsyncMock(
+            side_effect=websockets.exceptions.ConnectionClosed(None, None)
+        )
+
+        first_ws = AsyncMock()
+        first_ws.recv = AsyncMock(
+            side_effect=websockets.exceptions.ConnectionClosed(None, None)
+        )
+        client.clob_ws = first_ws
+        client._ob_callback = Mock()
+        client._ob_token_ids = ["token-abc", "token-def"]
+
+        async def mock_connect():
+            client.clob_ws = reconnect_ws
+            return True
+
+        with patch.object(client, "connect_clob_websocket", side_effect=mock_connect):
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                await client.listen_orderbook(max_reconnects=1)
+
+        assert any(
+            m.get("assets_ids") == ["token-abc", "token-def"] for m in sent_messages
+        ), "Should re-subscribe with token IDs after reconnect"
 
 
 class TestCLOBRTDSCloseWebSocket:
