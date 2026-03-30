@@ -263,7 +263,7 @@ class TUIController:
                     except KeyboardInterrupt:
                         self.console.print("\n[yellow]Interrupted.[/yellow]")
                     except Exception as e:
-                        handle_api_error(self.console, e, "controller")
+                        handle_api_error(self.console, e, "TUI")
 
                 else:
                     self.console.print("[red]Invalid choice. Try again.[/red]")

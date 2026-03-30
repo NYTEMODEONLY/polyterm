@@ -5,6 +5,7 @@ import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
+from ...utils.errors import handle_api_error
 
 
 def run_bookmarks_screen(console: Console):
@@ -51,7 +52,7 @@ def run_bookmarks_screen(console: Console):
     try:
         subprocess.run(cmd, capture_output=False)
     except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
+        handle_api_error(console, e, "bookmarks")
 
     console.print()
     Prompt.ask("[dim]Press Enter to return to menu[/dim]")

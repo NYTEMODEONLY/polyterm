@@ -34,7 +34,8 @@ def _display_trending_markets(console: RichConsole, limit: int = 10):
 
     try:
         # Get top markets by volume with meaningful threshold ($1000+ 24hr volume)
-        markets = aggregator.get_top_markets_by_volume(limit=limit, min_volume=1000)
+        with console.status("[bold green]Fetching trending markets..."):
+            markets = aggregator.get_top_markets_by_volume(limit=limit, min_volume=1000)
 
         if not markets:
             console.print("[yellow]No trending markets found with significant volume.[/yellow]")

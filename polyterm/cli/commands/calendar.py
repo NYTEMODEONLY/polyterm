@@ -9,6 +9,7 @@ from rich.table import Table
 from ...api.gamma import GammaClient
 from ...db.database import Database
 from ...utils.json_output import print_json
+from ...utils.errors import handle_api_error
 
 
 @click.command()
@@ -56,11 +57,9 @@ def calendar(ctx, days, limit, category, bookmarked, output_format):
         now = datetime.now()
         end_date = now + timedelta(days=days)
 
-        # Get markets - we need to fetch more and filter
-        console.print(f"[dim]Fetching markets ending in the next {days} days...[/dim]")
-
         # Get active markets sorted by end date
-        markets = gamma_client.get_markets(limit=200, active=True)
+        with console.status(f"[bold green]Fetching markets ending in the next {days} days..."):
+            markets = gamma_client.get_markets(limit=200, active=True)
 
         # Filter and sort by end date
         upcoming = []
@@ -227,6 +226,6 @@ def calendar(ctx, days, limit, category, bookmarked, output_format):
         if output_format == 'json':
             print_json({'success': False, 'error': str(e)})
         else:
-            console.print(f"[red]Error: {e}[/red]")
+            handle_api_error(console, e, "market calendar")
     finally:
         gamma_client.close()

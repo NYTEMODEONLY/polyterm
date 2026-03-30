@@ -9,6 +9,7 @@ from ...api.clob import CLOBClient
 from ...db.database import Database
 from ...core.orderbook import OrderBookAnalyzer
 from ...utils.json_output import print_json, format_orderbook_json
+from ...utils.errors import handle_api_error
 
 
 @click.command()
@@ -38,7 +39,8 @@ def orderbook(ctx, market_id, depth, chart, slippage, side, output_format):
             console.print(f"[cyan]Analyzing order book for {market_id[:30]}...[/cyan]\n")
 
         # Get analysis
-        analysis = analyzer.analyze(market_id, depth=depth)
+        with console.status("[bold green]Fetching order book data..."):
+            analysis = analyzer.analyze(market_id, depth=depth)
 
         if not analysis:
             if output_format == 'json':
@@ -96,6 +98,6 @@ def orderbook(ctx, market_id, depth, chart, slippage, side, output_format):
         if output_format == 'json':
             print_json({'success': False, 'error': str(e)})
         else:
-            console.print(f"[red]Error: {e}[/red]")
+            handle_api_error(console, e, "order book")
     finally:
         clob_client.close()

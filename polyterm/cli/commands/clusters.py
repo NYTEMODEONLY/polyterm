@@ -8,6 +8,7 @@ from rich.panel import Panel
 from ...core.cluster_detector import WalletClusterDetector
 from ...db.database import Database
 from ...utils.json_output import print_json
+from ...utils.errors import handle_api_error
 
 
 @click.command()
@@ -96,4 +97,4 @@ def clusters(ctx, min_score, output_format):
         if output_format == 'json':
             print_json({'success': False, 'error': str(e)})
         else:
-            console.print(f"[red]Error: {e}[/red]")
+            handle_api_error(console, e, "cluster detection")

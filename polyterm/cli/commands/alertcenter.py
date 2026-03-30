@@ -9,6 +9,7 @@ from rich.table import Table
 from ...db.database import Database
 from ...api.gamma import GammaClient
 from ...utils.json_output import print_json
+from ...utils.errors import handle_api_error
 
 
 @click.command(name="center")
@@ -282,7 +283,7 @@ def _check_alerts(console: Console, config, db: Database, output_format: str):
         if output_format == 'json':
             print_json({'success': False, 'error': str(e)})
         else:
-            console.print(f"[red]Error checking alerts: {e}[/red]")
+            handle_api_error(console, e, "alert center")
         return
     finally:
         gamma_client.close()

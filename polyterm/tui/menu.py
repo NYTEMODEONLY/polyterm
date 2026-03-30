@@ -7,6 +7,7 @@ import polyterm
 import requests
 import re
 from packaging import version
+from ..utils.errors import handle_api_error
 
 
 class MainMenu:
@@ -181,7 +182,7 @@ class MainMenu:
                 return False
 
         except Exception as e:
-            self.console.print(f"[bold red]❌ Update error: {e}[/bold red]")
+            handle_api_error(self.console, e, "menu")
             return False
     
     def display(self):

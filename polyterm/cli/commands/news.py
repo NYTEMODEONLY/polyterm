@@ -7,6 +7,7 @@ from rich.panel import Panel
 
 from ...core.news import NewsAggregator
 from ...utils.json_output import print_json
+from ...utils.errors import handle_api_error
 
 
 @click.command()
@@ -118,6 +119,6 @@ def news(ctx, market, hours, limit, output_format):
         if output_format == 'json':
             print_json({'success': False, 'error': str(e)})
         else:
-            console.print(f"[red]Error fetching news: {e}[/red]")
+            handle_api_error(console, e, "news feed")
     finally:
         aggregator.close()

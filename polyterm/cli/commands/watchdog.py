@@ -11,6 +11,7 @@ from rich.live import Live
 from ...api.gamma import GammaClient
 from ...db.database import Database
 from ...utils.json_output import print_json
+from ...utils.errors import handle_api_error
 
 
 @click.command()
@@ -157,7 +158,7 @@ def _run_watchdog(console: Console, gamma_client: GammaClient, watched_markets: 
                 wm['last_volume'] = current_volume
 
             except Exception as e:
-                console.print(f"[red]Error checking {wm['title']}: {e}[/red]")
+                handle_api_error(console, e, f"checking {wm['title']}")
 
         # Wait for next check
         try:

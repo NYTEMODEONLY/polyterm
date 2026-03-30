@@ -4,6 +4,7 @@ import subprocess
 import sys
 from rich.console import Console as RichConsole
 from rich.panel import Panel
+from ...utils.errors import handle_api_error
 
 
 def simulate_screen(console: RichConsole):
@@ -33,5 +34,5 @@ def simulate_screen(console: RichConsole):
     try:
         subprocess.run([sys.executable, "-m", "polyterm", "simulate", "-i"])
     except Exception as e:
-        console.print(f"[red]Error running simulator: {e}[/red]")
+        handle_api_error(console, e, "simulation")
         console.print("[dim]Try running: polyterm simulate -i[/dim]")
