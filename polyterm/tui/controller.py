@@ -5,6 +5,7 @@ from rich.console import Console
 from rich.prompt import Confirm
 from .logo import display_logo
 from .menu import MainMenu
+from ..utils.errors import handle_api_error
 from .screens import (
     monitor_screen,
     live_monitor_screen,
@@ -262,7 +263,7 @@ class TUIController:
                     except KeyboardInterrupt:
                         self.console.print("\n[yellow]Interrupted.[/yellow]")
                     except Exception as e:
-                        self.console.print(f"\n[red]Error: {e}[/red]")
+                        handle_api_error(self.console, e, "controller")
 
                 else:
                     self.console.print("[red]Invalid choice. Try again.[/red]")

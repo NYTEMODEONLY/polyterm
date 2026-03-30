@@ -8,6 +8,7 @@ from ...api.gamma import GammaClient
 from ...api.clob import CLOBClient
 from ...core.analytics import AnalyticsEngine
 from ...utils.json_output import safe_float
+from ...utils.errors import handle_api_error
 
 
 def _extract_position_fields(position):
@@ -82,8 +83,8 @@ def portfolio(ctx, wallet):
         rest_endpoint=config.clob_rest_endpoint,
         ws_endpoint=config.clob_endpoint,
     )
-    # Initialize analytics (Data API-backed; no Subgraph dependency required)
-    analytics = AnalyticsEngine(gamma_client, clob_client, None)
+    # Initialize analytics
+    analytics = AnalyticsEngine(gamma_client, clob_client)
     
     console.print(f"[cyan]Loading portfolio for:[/cyan] {wallet}\n")
     
@@ -164,9 +165,7 @@ def portfolio(ctx, wallet):
         console.print(table)
     
     except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        import traceback
-        console.print(f"[red]{traceback.format_exc()}[/red]")
+        handle_api_error(console, e, "portfolio")
     finally:
         gamma_client.close()
         clob_client.close()

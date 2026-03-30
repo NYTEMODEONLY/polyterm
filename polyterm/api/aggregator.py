@@ -5,23 +5,20 @@ import logging
 
 from .gamma import GammaClient
 from .clob import CLOBClient
-from .subgraph import SubgraphClient
 
 logger = logging.getLogger(__name__)
 
 
 class APIAggregator:
     """Aggregates data from multiple PolyMarket API sources with fallback"""
-    
+
     def __init__(
         self,
         gamma_client: GammaClient,
         clob_client: CLOBClient,
-        subgraph_client: Optional[SubgraphClient] = None,
     ):
         self.gamma_client = gamma_client
         self.clob_client = clob_client
-        self.subgraph_client = subgraph_client
     
     def get_live_markets(
         self,
@@ -117,24 +114,12 @@ class APIAggregator:
         except Exception:
             pass
         
-        # Try to add on-chain stats from Subgraph when available
-        if self.subgraph_client is not None:
-            try:
-                stats = self.subgraph_client.get_market_statistics(market_id)
-                if stats:
-                    enriched['on_chain_volume'] = stats.get('totalVolume', 0)
-                    enriched['trade_count'] = stats.get('tradeCount', 0)
-            except Exception:
-                pass
-        
         # Add data source metadata
         enriched['_data_sources'] = []
         if 'volume' in enriched and enriched['volume']:
             enriched['_data_sources'].append('gamma')
         if 'order_book' in enriched:
             enriched['_data_sources'].append('clob')
-        if 'on_chain_volume' in enriched:
-            enriched['_data_sources'].append('subgraph')
         
         return enriched
     

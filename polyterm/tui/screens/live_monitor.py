@@ -165,7 +165,7 @@ def live_monitor_screen(console: RichConsole):
                 launch_live_monitor(console, market_id=market_id, market_title=market_title)
                 
             except Exception as e:
-                console.print(f"[red]Error finding market: {e}[/red]")
+                handle_api_error(console, e, "live monitoring")
                 return
         
         elif choice == "2":
@@ -411,7 +411,7 @@ monitor.run_live_monitor()
         ))
         
     except Exception as e:
-        console.print(f"[red]Error launching live monitor: {e}[/red]")
+        handle_api_error(console, e, "live monitoring")
         console.print("[yellow]Falling back to current terminal...[/yellow]")
         
         # Fallback - run in current terminal
