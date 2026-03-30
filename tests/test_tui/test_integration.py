@@ -23,14 +23,15 @@ def test_tui_quit_command(mock_console_class, mock_display_logo):
     """Test TUI quits on 'q' command"""
     mock_console = Mock()
     mock_console_class.return_value = mock_console
-    
+
     mock_menu = Mock()
     mock_menu.get_choice.return_value = 'q'
-    
+
     controller = TUIController()
     controller.menu = mock_menu
+    controller._check_first_run = Mock(return_value=False)
     controller.run()
-    
+
     # Should have quit
     assert controller.running is False
     assert mock_console.print.called
@@ -93,14 +94,15 @@ def test_tui_keyboard_interrupt(mock_console_class, mock_display_logo):
     """Test TUI handles Ctrl+C gracefully"""
     mock_console = Mock()
     mock_console_class.return_value = mock_console
-    
+
     mock_menu = Mock()
     mock_menu.get_choice.side_effect = KeyboardInterrupt()
-    
+
     controller = TUIController()
     controller.menu = mock_menu
+    controller._check_first_run = Mock(return_value=False)
     controller.run()
-    
+
     # Should have handled interrupt
     assert controller.running is False
 
