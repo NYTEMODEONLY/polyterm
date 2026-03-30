@@ -48,18 +48,21 @@ def arbitrage(ctx, min_spread, limit, include_kalshi, output_format):
             console.print(f"[cyan]Scanning for arbitrage opportunities (min spread: {min_spread:.1%})...[/cyan]\n")
 
         # Get markets
-        markets = gamma_client.get_markets(limit=100, active=True, closed=False)
+        with console.status("[bold green]Fetching markets for arbitrage scan...") as status:
+            markets = gamma_client.get_markets(limit=100, active=True, closed=False)
 
-        # Scan for opportunities
-        all_opportunities = []
+            # Scan for opportunities
+            all_opportunities = []
 
-        # Intra-market arbitrage
-        intra_opps = scanner.scan_intra_market_arbitrage(markets)
-        all_opportunities.extend(intra_opps)
+            # Intra-market arbitrage
+            status.update("[bold green]Scanning intra-market arbitrage...")
+            intra_opps = scanner.scan_intra_market_arbitrage(markets)
+            all_opportunities.extend(intra_opps)
 
-        # Correlated market arbitrage
-        correlated_opps = scanner.scan_correlated_markets(markets)
-        all_opportunities.extend(correlated_opps)
+            # Correlated market arbitrage
+            status.update("[bold green]Scanning correlated markets...")
+            correlated_opps = scanner.scan_correlated_markets(markets)
+            all_opportunities.extend(correlated_opps)
 
         # Kalshi cross-platform (if enabled and configured)
         if include_kalshi and config.kalshi_api_key:

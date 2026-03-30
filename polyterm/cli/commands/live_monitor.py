@@ -148,6 +148,15 @@ class LiveMarketMonitor:
         self.previous_data = {}
         self.price_history = {}
         self.volume_history = {}
+
+        # Stale data tracking
+        self._last_successful_refresh = None
+        self._refresh_failed = False
+
+        # WebSocket connection status tracking
+        self._ws_status = "disconnected"  # connected | reconnecting | polling | disconnected
+        self._ws_reconnect_attempt = 0
+        self._ws_max_reconnects = 5
     
     def _signal_handler(self, signum, frame):
         """Handle interrupt signals"""
@@ -232,7 +241,7 @@ class LiveMarketMonitor:
             if self.market_id:
                 # Single market monitoring
                 market_data = self.gamma_client.get_market(self.market_id)
-                return [market_data] if market_data else []
+                result = [market_data] if market_data else []
             elif self.category:
                 # Category-based monitoring - fetch many markets and filter by keywords
                 # API tag parameter doesn't work reliably, so we filter locally
@@ -242,22 +251,26 @@ class LiveMarketMonitor:
                 )
                 # Filter by category using keyword matching
                 filtered = [m for m in all_markets if matches_category(m, self.category)]
-                return filtered[:50]  # Return top 50 matching markets
+                result = filtered[:50]  # Return top 50 matching markets
             else:
                 # All active markets
-                return self.aggregator.get_live_markets(
+                result = self.aggregator.get_live_markets(
                     limit=20,
                     require_volume=True,
                     min_volume=0.01
                 )
+            self._last_successful_refresh = datetime.now(timezone.utc)
+            self._refresh_failed = False
+            return result
         except Exception as e:
+            self._refresh_failed = True
             handle_api_error(self.console, e, "fetching market data")
             return []
-    
+
     def generate_live_table(self) -> Table:
         """Generate live market table with color indicators"""
         now = datetime.now()
-        
+
         # Create header based on selection
         if self.market_id:
             title = f"🔴 LIVE MARKET MONITOR - Single Market"
@@ -265,12 +278,20 @@ class LiveMarketMonitor:
             title = f"🔴 LIVE MARKET MONITOR - {self.category.upper()} Category"
         else:
             title = f"🔴 LIVE MARKET MONITOR - All Active Markets"
-        
+
+        # Build timestamp with stale indicator
+        if self._refresh_failed and self._last_successful_refresh:
+            stale_time = self._last_successful_refresh.strftime('%H:%M:%S')
+            time_str = f"Last updated: {stale_time} [yellow]⚠ stale — refresh failed[/yellow]"
+        else:
+            time_str = f"Updated: {now.strftime('%H:%M:%S')}"
+
         table = Table(
-            title=f"{title} (Updated: {now.strftime('%H:%M:%S')})",
+            title=f"{title} ({time_str})",
             title_style="bold red",
             show_header=True,
-            header_style="bold magenta"
+            header_style="bold magenta",
+            caption=self._format_ws_status(),
         )
         
         # Configure columns
@@ -472,9 +493,21 @@ class LiveMarketMonitor:
         self.console.print("[bold cyan]TIME     │ MARKET                      │ SIDE      │ SIZE      │ PRICE    │ TOTAL[/bold cyan]")
         self.console.print("[dim]─" * 90 + "[/dim]")
 
+    def _format_ws_status(self) -> str:
+        """Format WebSocket connection status indicator"""
+        if self._ws_status == "connected":
+            return "[green]🟢 Connected[/green]"
+        elif self._ws_status == "reconnecting":
+            return f"[yellow]🟡 Reconnecting ({self._ws_reconnect_attempt}/{self._ws_max_reconnects})[/yellow]"
+        elif self._ws_status == "polling":
+            return "[red]🔴 Disconnected — REST fallback[/red]"
+        else:
+            return "[dim]⚪ Disconnected[/dim]"
+
     def _print_stats_bar(self):
         """Print/update the stats bar"""
         stats = (
+            f"{self._format_ws_status()} | "
             f"[bold]Trades:[/bold] {self.trade_count:,} | "
             f"[bold]Volume:[/bold] ${self.total_volume:,.0f} | "
             f"[green]Buys:[/green] {self.buy_count} | "
@@ -486,8 +519,12 @@ class LiveMarketMonitor:
         """Run WebSocket monitoring for live trades"""
         try:
             # Connect to WebSocket
+            self._ws_status = "reconnecting"
+            self._ws_reconnect_attempt = 1
             await self.clob_client.connect_websocket()
-            self.console.print("[green]✅ Connected to PolyMarket RTDS WebSocket[/green]")
+            self._ws_status = "connected"
+            self._ws_reconnect_attempt = 0
+            self.console.print(f"{self._format_ws_status()} Connected to PolyMarket RTDS WebSocket")
 
             # When monitoring a category, subscribe to ALL trades and filter client-side
             # This is because RTDS slugs may not match Gamma API slugs exactly
@@ -507,9 +544,10 @@ class LiveMarketMonitor:
             await self.clob_client.listen_for_trades()
             
         except Exception as e:
+            self._ws_status = "polling"
+            self.console.print(f"\n{self._format_ws_status()}")
             self.console.print(f"[red]❌ WebSocket error: {e}[/red]")
-            # Fallback to polling mode
-            self.console.print("[yellow]⚠️ Falling back to polling mode...[/yellow]")
+            self.console.print("[yellow]⚠️ Falling back to REST polling mode...[/yellow]")
             await self._run_polling_monitor(market_slugs, market_titles)
         finally:
             await self.clob_client.close_websocket()

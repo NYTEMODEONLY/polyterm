@@ -10,6 +10,7 @@ from rich.console import Console
 
 from ...api.gamma import GammaClient
 from ...api.clob import CLOBClient
+from ...utils.errors import handle_api_error
 
 
 @click.command(name="export")
@@ -141,7 +142,7 @@ def export(ctx, market, output_format, hours, output):
         console.print(f"[green]Market data exported successfully[/green]")
 
     except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
+        handle_api_error(console, e, "data export")
         import traceback
         console.print(f"[red]{traceback.format_exc()}[/red]")
     finally:

@@ -679,6 +679,6 @@ def _display_order_book(console: Console, market: dict, clob_client: CLOBClient)
             console.print(f"[bold]Spread:[/bold] {spread:.2f}%")
 
     except Exception as e:
-        console.print(f"[red]Error fetching order book: {e}[/red]")
+        handle_api_error(console, e, "crypto 15m markets")
 
     console.print()

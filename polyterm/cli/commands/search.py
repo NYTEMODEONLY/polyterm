@@ -10,6 +10,7 @@ from rich.prompt import Prompt
 from ...api.gamma import GammaClient
 from ...db.database import Database
 from ...utils.json_output import print_json
+from ...utils.errors import handle_api_error
 
 
 @click.command()
@@ -62,12 +63,11 @@ def search(ctx, query, category, min_volume, max_volume, min_liquidity, min_pric
 
     try:
         # Get markets
-        if query:
-            console.print(f"[dim]Searching for: {query}[/dim]")
-            markets = gamma_client.search_markets(query, limit=200)
-        else:
-            console.print("[dim]Fetching markets...[/dim]")
-            markets = gamma_client.get_markets(limit=200, active=True)
+        with console.status("[bold green]Searching markets..."):
+            if query:
+                markets = gamma_client.search_markets(query, limit=200)
+            else:
+                markets = gamma_client.get_markets(limit=200, active=True)
 
         if not markets:
             if output_format == 'json':
@@ -126,7 +126,7 @@ def search(ctx, query, category, min_volume, max_volume, min_liquidity, min_pric
         if output_format == 'json':
             print_json({'success': False, 'error': str(e)})
         else:
-            console.print(f"[red]Error: {e}[/red]")
+            handle_api_error(console, e, "market search")
     finally:
         gamma_client.close()
 

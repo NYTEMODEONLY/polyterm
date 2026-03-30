@@ -5,6 +5,7 @@ import sys
 from rich.console import Console as RichConsole
 from rich.panel import Panel
 from rich.prompt import Confirm
+from ...utils.errors import handle_api_error
 
 
 def tutorial_screen(console: RichConsole):
@@ -40,7 +41,7 @@ def tutorial_screen(console: RichConsole):
                 console.print("[yellow]Tutorial encountered an issue.[/yellow]")
                 console.print("[dim]Try running directly: polyterm tutorial[/dim]")
         except Exception as e:
-            console.print(f"[red]Error running tutorial: {e}[/red]")
+            handle_api_error(console, e, "tutorial")
             console.print("[dim]Try running: polyterm tutorial[/dim]")
     else:
         console.print("[yellow]Tutorial cancelled.[/yellow]")

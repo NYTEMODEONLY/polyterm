@@ -5,6 +5,7 @@ import sys
 from rich.console import Console as RichConsole
 from rich.panel import Panel
 from rich.prompt import Prompt
+from ...utils.errors import handle_api_error
 
 
 def glossary_screen(console: RichConsole):
@@ -48,5 +49,5 @@ def glossary_screen(console: RichConsole):
                 subprocess.run([sys.executable, "-m", "polyterm", "glossary", "--category", category])
 
     except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
+        handle_api_error(console, e, "glossary")
         console.print("[dim]Try running: polyterm glossary[/dim]")
