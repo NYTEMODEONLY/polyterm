@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 from typing import Dict, List, Optional, Any, Callable
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
@@ -9,6 +10,8 @@ from collections import defaultdict
 from ..db.database import Database
 from ..db.models import Wallet, Trade, Alert
 from ..api.clob import CLOBClient
+
+logger = logging.getLogger(__name__)
 
 
 class WhaleTracker:
@@ -41,6 +44,9 @@ class WhaleTracker:
         # Callbacks for whale activity
         self.whale_callbacks: List[Callable[[Trade, Wallet], None]] = []
         self.smart_money_callbacks: List[Callable[[Trade, Wallet], None]] = []
+
+        # Monitoring state
+        self._monitoring = False
 
     def add_whale_callback(self, callback: Callable[[Trade, Wallet], None]):
         """Add callback for whale trade events"""
@@ -254,13 +260,83 @@ class WhaleTracker:
         all_wallets = self.db.get_all_wallets(limit=10000)
         return [w for w in all_wallets if 'tracked' in w.tags]
 
-    async def start_monitoring(self, market_slugs: List[str]):
-        """Start monitoring markets for whale activity via WebSocket"""
+    async def start_monitoring(
+        self,
+        market_slugs: List[str],
+        poll_interval: float = 5.0,
+    ):
+        """Start monitoring markets for whale activity via WebSocket.
+
+        Falls back to REST polling if WebSocket permanently fails.
+
+        Args:
+            market_slugs: Market slugs to monitor
+            poll_interval: Seconds between REST polls when in fallback mode
+        """
+        self._monitoring = True
+        ws_failed = False
+
+        def on_ws_error(exc: Exception):
+            nonlocal ws_failed
+            ws_failed = True
+            logger.error("WhaleTracker WebSocket error: %s", exc)
+
         async def handle_trade(data):
             await self.process_trade(data)
 
-        await self.clob.subscribe_to_trades(market_slugs, handle_trade)
-        await self.clob.listen_for_trades()
+        try:
+            await self.clob.subscribe_to_trades(market_slugs, handle_trade)
+            await self.clob.listen_for_trades(on_error=on_ws_error)
+        except Exception as e:
+            logger.error("WhaleTracker WebSocket failed: %s", e)
+            ws_failed = True
+
+        # If WebSocket permanently failed, switch to REST polling
+        if ws_failed and self._monitoring:
+            logger.warning("WhaleTracker falling back to REST polling (interval=%.0fs)", poll_interval)
+            await self._run_rest_polling(market_slugs, poll_interval)
+
+    async def _run_rest_polling(self, market_slugs: List[str], poll_interval: float):
+        """REST polling fallback for whale monitoring.
+
+        Polls CLOB REST for recent trades and processes them through
+        the same callback pipeline as WebSocket trades.
+        """
+        seen_tx_hashes: set = set()
+        MAX_SEEN = 5000
+
+        while self._monitoring:
+            try:
+                for slug in (market_slugs or [""]):
+                    try:
+                        trades = self.clob.get_recent_trades(slug, limit=50)
+                    except Exception as e:
+                        logger.debug("REST poll failed for %s: %s", slug, e)
+                        continue
+
+                    for trade_data in trades:
+                        tx_hash = trade_data.get("transactionHash", trade_data.get("tx_hash", ""))
+                        if tx_hash and tx_hash in seen_tx_hashes:
+                            continue
+                        if tx_hash:
+                            seen_tx_hashes.add(tx_hash)
+
+                        # Process through same pipeline as WebSocket trades
+                        await self.process_trade(trade_data)
+
+                # Cap seen set size
+                if len(seen_tx_hashes) > MAX_SEEN:
+                    # Keep most recent half
+                    seen_tx_hashes.clear()
+
+            except Exception as e:
+                logger.error("REST polling error: %s", e)
+
+            await asyncio.sleep(poll_interval)
+
+    def stop_monitoring(self):
+        """Stop monitoring (both WebSocket and REST polling)."""
+        self._monitoring = False
 
 
 class InsiderDetector:

@@ -2,9 +2,12 @@
 
 import asyncio
 import json
+import logging
 import requests
 from typing import Dict, List, Optional, Any, Callable
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 try:
     import websockets
@@ -33,6 +36,7 @@ class CLOBClient:
         self.ws_connection = None
         self.clob_ws = None
         self.subscriptions = {}
+        self._ws_permanently_failed = False
 
     def _request(self, method: str, url: str, retries: int = 3, **kwargs) -> requests.Response:
         """Make request with retry logic and backoff"""
@@ -239,18 +243,83 @@ class CLOBClient:
         if not market_slugs:
             self.subscriptions["_all"] = callback
     
-    async def listen_for_trades(self, max_reconnects: int = 5):
-        """Listen for incoming trade messages from RTDS with auto-reconnection"""
+    async def listen_for_trades(
+        self,
+        max_reconnects: int = 5,
+        message_timeout: float = 30.0,
+        on_error: Optional[Callable[[Exception], None]] = None,
+        supervisor_retries: int = 3,
+        supervisor_cooldown: float = 60.0,
+    ):
+        """Listen for incoming trade messages from RTDS with auto-reconnection.
+
+        Features a two-tier resilience model:
+        - Inner loop: reconnects up to max_reconnects on connection drops
+        - Outer supervisor: restarts the entire connection loop after a cooldown
+          when inner reconnects are exhausted
+
+        Args:
+            max_reconnects: Max reconnect attempts per supervisor cycle
+            message_timeout: Seconds to wait for a message before forcing reconnect
+            on_error: Optional callback invoked on permanent failures
+            supervisor_retries: Max supervisor restart cycles (0 = no supervisor)
+            supervisor_cooldown: Seconds to wait between supervisor restarts
+        """
+        supervisor_attempts = 0
+
+        while True:
+            try:
+                await self._listen_for_trades_inner(max_reconnects, message_timeout)
+                # Inner loop exited cleanly (max_reconnects exhausted)
+            except Exception as exc:
+                logger.error("RTDS listen_for_trades inner loop error: %s", exc)
+
+            # Check if supervisor should restart
+            supervisor_attempts += 1
+            if supervisor_attempts > supervisor_retries:
+                logger.error(
+                    "RTDS supervisor exhausted after %d retries, giving up",
+                    supervisor_retries,
+                )
+                self.subscriptions.clear()
+                self._ws_permanently_failed = True
+                if on_error:
+                    try:
+                        on_error(Exception(
+                            f"WebSocket permanently failed after {supervisor_retries} supervisor retries"
+                        ))
+                    except Exception:
+                        pass
+                return
+
+            logger.error(
+                "RTDS reconnects exhausted, supervisor restarting in %.0fs (attempt %d/%d)",
+                supervisor_cooldown,
+                supervisor_attempts,
+                supervisor_retries,
+            )
+            if on_error:
+                try:
+                    on_error(Exception(
+                        f"WebSocket reconnects exhausted, supervisor restart {supervisor_attempts}/{supervisor_retries}"
+                    ))
+                except Exception:
+                    pass
+
+            await asyncio.sleep(supervisor_cooldown)
+
+            # Reset connection state for fresh start
+            self.ws_connection = None
+
+    async def _listen_for_trades_inner(self, max_reconnects: int, message_timeout: float):
+        """Inner reconnect loop for RTDS trade listening."""
         reconnect_attempts = 0
 
         while reconnect_attempts <= max_reconnects:
             if not self.ws_connection:
                 if reconnect_attempts > 0:
-                    # Exponential backoff for reconnection
-                    import asyncio as _asyncio
                     wait = min(2 ** reconnect_attempts, 30)
-                    _asyncio.get_event_loop()  # verify loop exists
-                    await _asyncio.sleep(wait)
+                    await asyncio.sleep(wait)
                     try:
                         await self.connect_websocket()
                         # Re-subscribe after reconnecting
@@ -267,7 +336,26 @@ class CLOBClient:
                     raise Exception("WebSocket not connected")
 
             try:
-                async for message in self.ws_connection:
+                while True:
+                    try:
+                        message = await asyncio.wait_for(
+                            self.ws_connection.recv(),
+                            timeout=message_timeout,
+                        )
+                    except asyncio.TimeoutError:
+                        logger.warning(
+                            "RTDS message timeout (%.0fs), forcing reconnect",
+                            message_timeout,
+                        )
+                        # Force close stale connection
+                        try:
+                            await self.ws_connection.close()
+                        except Exception:
+                            pass
+                        self.ws_connection = None
+                        reconnect_attempts += 1
+                        break
+
                     # Reset reconnect counter on successful message
                     reconnect_attempts = 0
 
@@ -325,9 +413,6 @@ class CLOBClient:
                 if reconnect_attempts <= max_reconnects:
                     continue
                 break
-
-        # Clear subscriptions on permanent failure
-        self.subscriptions.clear()
     
     async def close_websocket(self):
         """Close any active WebSocket connections."""
@@ -405,22 +490,25 @@ class CLOBClient:
         self._ob_callback = callback
         self._ob_token_ids = token_ids
 
-    async def listen_orderbook(self, max_reconnects=5):
+    async def listen_orderbook(self, max_reconnects=5, message_timeout: float = 60.0):
         """Listen for order book update messages from CLOB WebSocket
 
         Handles message types:
         - book: Full or partial order book update
         - last_trade_price: Latest trade price change
         - price_change: Market price movement
+
+        Args:
+            max_reconnects: Max reconnect attempts before giving up
+            message_timeout: Seconds to wait for a message before forcing reconnect
         """
         reconnect_attempts = 0
 
         while reconnect_attempts <= max_reconnects:
             if not hasattr(self, 'clob_ws') or not self.clob_ws:
                 if reconnect_attempts > 0:
-                    import asyncio as _asyncio
                     wait = min(2 ** reconnect_attempts, 30)
-                    await _asyncio.sleep(wait)
+                    await asyncio.sleep(wait)
                     try:
                         await self.connect_clob_websocket()
                         if hasattr(self, '_ob_token_ids') and self._ob_token_ids:
@@ -436,7 +524,25 @@ class CLOBClient:
                     raise Exception("CLOB WebSocket not connected")
 
             try:
-                async for message in self.clob_ws:
+                while True:
+                    try:
+                        message = await asyncio.wait_for(
+                            self.clob_ws.recv(),
+                            timeout=message_timeout,
+                        )
+                    except asyncio.TimeoutError:
+                        logger.warning(
+                            "Orderbook message timeout (%.0fs), forcing reconnect",
+                            message_timeout,
+                        )
+                        try:
+                            await self.clob_ws.close()
+                        except Exception:
+                            pass
+                        self.clob_ws = None
+                        reconnect_attempts += 1
+                        break
+
                     reconnect_attempts = 0
 
                     try:

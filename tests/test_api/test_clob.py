@@ -1174,13 +1174,8 @@ class TestCLOBWebSocketOrderBook:
 
         book_message = '{"type": "book", "asset_id": "token1", "bids": [], "asks": []}'
 
-        async def message_iterator():
-            yield book_message
-            # After yielding one message, raise exception to exit the listen loop
-            raise Exception("Test complete")
-
-        mock_ws = MagicMock()
-        mock_ws.__aiter__ = lambda self: message_iterator()
+        mock_ws = AsyncMock()
+        mock_ws.recv = AsyncMock(side_effect=[book_message, Exception("Test complete")])
 
         client.clob_ws = mock_ws
         client._ob_callback = callback
@@ -1202,12 +1197,8 @@ class TestCLOBWebSocketOrderBook:
 
         trade_message = '{"type": "last_trade_price", "asset_id": "token1", "price": "0.65"}'
 
-        async def message_iterator():
-            yield trade_message
-            raise Exception("Test complete")
-
-        mock_ws = MagicMock()
-        mock_ws.__aiter__ = lambda self: message_iterator()
+        mock_ws = AsyncMock()
+        mock_ws.recv = AsyncMock(side_effect=[trade_message, Exception("Test complete")])
 
         client.clob_ws = mock_ws
         client._ob_callback = callback
@@ -1226,14 +1217,13 @@ class TestCLOBWebSocketOrderBook:
         def callback(data):
             received_messages.append(data)
 
-        async def message_iterator():
-            yield ""
-            yield "   "
-            yield '{"type": "book", "asset_id": "token1"}'
-            raise Exception("Test complete")
-
-        mock_ws = MagicMock()
-        mock_ws.__aiter__ = lambda self: message_iterator()
+        mock_ws = AsyncMock()
+        mock_ws.recv = AsyncMock(side_effect=[
+            "",
+            "   ",
+            '{"type": "book", "asset_id": "token1"}',
+            Exception("Test complete"),
+        ])
 
         client.clob_ws = mock_ws
         client._ob_callback = callback
@@ -1253,13 +1243,12 @@ class TestCLOBWebSocketOrderBook:
         def callback(data):
             received_messages.append(data)
 
-        async def message_iterator():
-            yield "not valid json"
-            yield '{"type": "book", "asset_id": "token1"}'
-            raise Exception("Test complete")
-
-        mock_ws = MagicMock()
-        mock_ws.__aiter__ = lambda self: message_iterator()
+        mock_ws = AsyncMock()
+        mock_ws.recv = AsyncMock(side_effect=[
+            "not valid json",
+            '{"type": "book", "asset_id": "token1"}',
+            Exception("Test complete"),
+        ])
 
         client.clob_ws = mock_ws
         client._ob_callback = callback
@@ -1276,13 +1265,8 @@ class TestCLOBWebSocketOrderBook:
     async def test_listen_orderbook_reconnects_on_disconnection(self, mock_websockets, client):
         """Test that listen_orderbook sets clob_ws to None on disconnection"""
         # Start with a connection that will fail
-        initial_ws = MagicMock()
-
-        async def failing_iterator():
-            raise Exception("Connection lost")
-            yield
-
-        initial_ws.__aiter__ = lambda self: failing_iterator()
+        initial_ws = AsyncMock()
+        initial_ws.recv = AsyncMock(side_effect=Exception("Connection lost"))
 
         client.clob_ws = initial_ws
         client._ob_callback = MagicMock()
@@ -1291,12 +1275,7 @@ class TestCLOBWebSocketOrderBook:
         # Mock reconnection attempts
         reconnect_mock = AsyncMock()
         reconnect_mock.send = AsyncMock()
-
-        async def failing_reconnect_iterator():
-            raise Exception("Still failing")
-            yield
-
-        reconnect_mock.__aiter__ = lambda self: failing_reconnect_iterator()
+        reconnect_mock.recv = AsyncMock(side_effect=Exception("Still failing"))
 
         mock_websockets.connect = AsyncMock(return_value=reconnect_mock)
 
@@ -1359,7 +1338,7 @@ class TestCLOBWebSocketOrderBook:
     async def test_listen_handles_max_reconnects_limit(self, mock_websockets, client):
         """Test that listen_orderbook respects max_reconnects limit"""
         mock_ws = AsyncMock()
-        mock_ws.__aiter__.side_effect = Exception("Connection failed")
+        mock_ws.recv = AsyncMock(side_effect=Exception("Connection failed"))
 
         mock_websockets.connect = AsyncMock(return_value=mock_ws)
 
