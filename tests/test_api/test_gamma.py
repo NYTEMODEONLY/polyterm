@@ -189,6 +189,106 @@ class TestSharedRateLimiter:
         client.close()
 
 
+class TestSharedRateLimiterEdgeCases:
+    """Edge-case tests for SharedRateLimiter"""
+
+    def test_init_shared_false_on_mkdir_oserror(self, tmp_path):
+        """_init_shared returns False when mkdir fails"""
+        limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(tmp_path))
+        with patch("pathlib.Path.mkdir", side_effect=OSError("permission denied")):
+            assert limiter._init_shared() is False
+
+    def test_init_shared_false_on_import_error(self, tmp_path):
+        """_init_shared returns False when fcntl is unavailable"""
+        import sys
+        limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(tmp_path))
+        with patch.dict(sys.modules, {"fcntl": None}):
+            with patch("builtins.__import__", side_effect=ImportError("no fcntl")):
+                assert limiter._init_shared() is False
+
+    def test_fdopen_failure_closes_fd(self, tmp_path):
+        """If os.fdopen fails, the raw fd is closed before reraising"""
+        limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(tmp_path))
+
+        with patch("os.open", return_value=42) as mock_open:
+            with patch("os.fdopen", side_effect=OSError("bad fd")):
+                with patch("os.close") as mock_close:
+                    with pytest.raises(OSError, match="bad fd"):
+                        limiter._shared_wait()
+                    mock_close.assert_called_once_with(42)
+
+    def test_flock_unlock_failure_swallowed(self, tmp_path):
+        """fcntl.flock unlock failure is silently swallowed"""
+        import fcntl
+
+        limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(tmp_path))
+
+        original_flock = fcntl.flock
+        call_count = [0]
+
+        def flock_fail_on_unlock(f, op):
+            call_count[0] += 1
+            if op == fcntl.LOCK_UN:
+                raise OSError("unlock failed")
+            return original_flock(f, op)
+
+        with patch("fcntl.flock", side_effect=flock_fail_on_unlock):
+            # Should not raise despite unlock failure
+            limiter.wait_if_needed()
+
+    def test_concurrent_thread_access(self, tmp_path):
+        """Multiple threads using the same lock dir don't corrupt state"""
+        import threading
+
+        limiter1 = SharedRateLimiter(requests_per_minute=600, lock_dir=str(tmp_path))
+        limiter2 = SharedRateLimiter(requests_per_minute=600, lock_dir=str(tmp_path))
+
+        results = []
+        errors = []
+
+        def call_limiter(limiter, count):
+            for _ in range(count):
+                try:
+                    limiter.wait_if_needed()
+                    results.append(time.time())
+                except Exception as e:
+                    errors.append(e)
+
+        t1 = threading.Thread(target=call_limiter, args=(limiter1, 5))
+        t2 = threading.Thread(target=call_limiter, args=(limiter2, 5))
+        t1.start()
+        t2.start()
+        t1.join(timeout=10)
+        t2.join(timeout=10)
+
+        assert len(errors) == 0
+        assert len(results) == 10
+
+    def test_slot_calculation_reserves_future_time(self, tmp_path):
+        """When lock file has a very recent timestamp, slot is pushed ahead"""
+        lock_file = tmp_path / "gamma_rate.lock"
+        # Write a timestamp that is 0.1s in the future
+        future_slot = time.time() + 0.1
+        lock_file.write_text(str(future_slot))
+
+        limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(tmp_path))
+        start = time.time()
+        limiter.wait_if_needed()
+        elapsed = time.time() - start
+
+        # Should have waited for the future slot + min_interval
+        assert elapsed >= 0.1  # at least past the reserved slot
+
+    def test_shared_wait_exception_degrades_to_per_process(self, tmp_path):
+        """Any exception in _shared_wait degrades to per-process fallback"""
+        limiter = SharedRateLimiter(requests_per_minute=60, lock_dir=str(tmp_path))
+
+        with patch.object(limiter, "_shared_wait", side_effect=RuntimeError("boom")):
+            with patch.object(limiter._fallback, "wait_if_needed") as mock_fallback:
+                limiter.wait_if_needed()
+                mock_fallback.assert_called_once()
+
+
 class TestGammaClientRequest:
     """Test _request method retry logic and error handling"""
 
