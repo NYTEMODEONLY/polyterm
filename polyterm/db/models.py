@@ -266,6 +266,76 @@ class MarketSnapshot:
 
 
 @dataclass
+class ResolutionOutcome:
+    """Market resolution outcome for tracking settlement data"""
+    id: Optional[int] = None
+    market_id: str = ""
+    market_slug: str = ""
+    title: str = ""
+    resolved: bool = False
+    outcome: str = ""  # "YES", "NO", or "" if unresolved
+    winning_price: float = 0.0  # Final price of winning outcome (1.0 for resolved)
+    resolved_at: Optional[datetime] = None
+    resolution_source: str = ""  # Authority that resolved (e.g., UMA oracle)
+    closed_at: Optional[datetime] = None  # When market stopped trading
+    fetched_at: datetime = field(default_factory=datetime.now)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'id': self.id,
+            'market_id': self.market_id,
+            'market_slug': self.market_slug,
+            'title': self.title,
+            'resolved': self.resolved,
+            'outcome': self.outcome,
+            'winning_price': self.winning_price,
+            'resolved_at': self.resolved_at.isoformat() if self.resolved_at else None,
+            'resolution_source': self.resolution_source,
+            'closed_at': self.closed_at.isoformat() if self.closed_at else None,
+            'fetched_at': self.fetched_at.isoformat(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'ResolutionOutcome':
+        resolved_at = data.get('resolved_at')
+        if isinstance(resolved_at, str):
+            resolved_at = datetime.fromisoformat(resolved_at)
+
+        closed_at = data.get('closed_at')
+        if isinstance(closed_at, str):
+            closed_at = datetime.fromisoformat(closed_at)
+
+        fetched_at = data.get('fetched_at')
+        if isinstance(fetched_at, str):
+            fetched_at = datetime.fromisoformat(fetched_at)
+        elif fetched_at is None:
+            fetched_at = datetime.now()
+
+        return cls(
+            id=data.get('id'),
+            market_id=data.get('market_id', ''),
+            market_slug=data.get('market_slug', ''),
+            title=data.get('title', ''),
+            resolved=bool(data.get('resolved', False)),
+            outcome=data.get('outcome', ''),
+            winning_price=float(data.get('winning_price', 0)),
+            resolved_at=resolved_at,
+            closed_at=closed_at,
+            resolution_source=data.get('resolution_source', ''),
+            fetched_at=fetched_at,
+        )
+
+    @property
+    def status(self) -> str:
+        """Human-readable resolution status"""
+        if self.resolved:
+            return f"Resolved: {self.outcome}"
+        if self.closed_at:
+            return "Pending resolution"
+        return "Active"
+
+
+@dataclass
 class ArbitrageOpportunity:
     """Arbitrage opportunity record"""
     id: Optional[int] = None

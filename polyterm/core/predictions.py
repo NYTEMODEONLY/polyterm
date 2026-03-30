@@ -17,7 +17,7 @@ from collections import defaultdict
 from enum import Enum
 
 from ..db.database import Database
-from ..db.models import Trade, MarketSnapshot, Wallet
+from ..db.models import Trade, MarketSnapshot, Wallet, ResolutionOutcome
 
 
 class SignalType(Enum):
@@ -724,6 +724,53 @@ class PredictionEngine:
 
         correct = sum(1 for p in recent if p['correct'])
         return correct / len(recent)
+
+    def verify_with_resolution(
+        self,
+        prediction: Prediction,
+        resolution: ResolutionOutcome,
+    ) -> Optional[Dict[str, Any]]:
+        """Verify a prediction against actual market resolution.
+
+        Args:
+            prediction: The prediction that was made
+            resolution: The market's resolution outcome
+
+        Returns:
+            Accuracy record dict, or None if resolution is not yet available
+        """
+        if not resolution.resolved:
+            return None
+
+        # Determine if the prediction direction matched the resolution
+        # YES outcome means price went to 1.0 (bullish was correct)
+        # NO outcome means price went to 0.0 (bearish was correct)
+        if resolution.outcome == "YES":
+            correct = prediction.direction == Direction.BULLISH
+        elif resolution.outcome == "NO":
+            correct = prediction.direction == Direction.BEARISH
+        else:
+            return None
+
+        record = {
+            'timestamp': prediction.created_at,
+            'market_id': prediction.market_id,
+            'predicted_direction': prediction.direction.value,
+            'predicted_change': prediction.probability_change,
+            'actual_outcome': resolution.outcome,
+            'confidence': prediction.confidence,
+            'correct': correct,
+            'resolution_source': resolution.resolution_source,
+            'resolved_at': resolution.resolved_at.isoformat() if resolution.resolved_at else None,
+        }
+
+        self.accuracy_history.append(record)
+
+        # Keep last 1000 predictions
+        if len(self.accuracy_history) > 1000:
+            self.accuracy_history = self.accuracy_history[-1000:]
+
+        return record
 
     def format_prediction(self, prediction: Prediction) -> str:
         """Format prediction for display"""
