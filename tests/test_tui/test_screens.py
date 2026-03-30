@@ -69,7 +69,6 @@ def test_analytics_screen_trending(mock_config, mock_gamma, mock_clob, mock_aggr
     mock_config_instance.gamma_api_key = ""
     mock_config_instance.clob_rest_endpoint = "https://clob.polymarket.com"
     mock_config_instance.clob_endpoint = "wss://ws-live-data.polymarket.com"
-    mock_config_instance.subgraph_endpoint = "https://api.thegraph.com"
     mock_config.return_value = mock_config_instance
 
     # Mock aggregator to return sample markets
@@ -92,6 +91,9 @@ def test_analytics_screen_trending(mock_config, mock_gamma, mock_clob, mock_aggr
 
     mock_console = Mock()
     mock_console.input.side_effect = ["1", "10"]
+    # Support console.status() context manager used by loading spinner
+    mock_console.status.return_value.__enter__ = Mock(return_value=None)
+    mock_console.status.return_value.__exit__ = Mock(return_value=False)
 
     analytics_screen(mock_console)
 

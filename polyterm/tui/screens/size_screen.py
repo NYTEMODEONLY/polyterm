@@ -4,6 +4,7 @@ import subprocess
 import sys
 from rich.console import Console
 from rich.panel import Panel
+from ...utils.errors import handle_api_error
 
 
 def run_size_screen(console: Console):
@@ -24,4 +25,4 @@ def run_size_screen(console: Console):
     try:
         subprocess.run([sys.executable, "-m", "polyterm.cli.main", "size", "-i"])
     except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
+        handle_api_error(console, e, "position sizing")

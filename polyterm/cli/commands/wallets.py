@@ -9,6 +9,7 @@ from ...db.database import Database
 from ...db.models import Wallet
 from ...core.whale_tracker import InsiderDetector
 from ...utils.json_output import print_json
+from ...utils.errors import handle_api_error
 
 
 @click.command()
@@ -157,4 +158,4 @@ def wallets(ctx, wallet_type, limit, analyze, track, untrack, output_format):
         if output_format == 'json':
             print_json({'success': False, 'error': str(e)})
         else:
-            console.print(f"[red]Error: {e}[/red]")
+            handle_api_error(console, e, "wallet data")

@@ -8,6 +8,7 @@ from rich.panel import Panel
 from ...core.rewards import RewardsCalculator
 from ...db.database import Database
 from ...utils.json_output import print_json, safe_float
+from ...utils.errors import handle_api_error
 
 
 @click.command()
@@ -129,4 +130,4 @@ def rewards(ctx, wallet, output_format):
         if output_format == 'json':
             print_json({'success': False, 'error': str(e)})
         else:
-            console.print(f"[red]Error: {e}[/red]")
+            handle_api_error(console, e, "rewards calculation")

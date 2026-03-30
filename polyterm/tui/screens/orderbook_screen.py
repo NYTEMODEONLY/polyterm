@@ -7,6 +7,7 @@ from rich.console import Console as RichConsole
 from rich.table import Table
 
 from .market_picker import pick_market, get_market_id, get_market_title
+from ...utils.errors import handle_api_error
 
 
 def orderbook_screen(console: RichConsole):
@@ -158,4 +159,4 @@ def orderbook_screen(console: RichConsole):
     except KeyboardInterrupt:
         console.print("\n[yellow]Analysis cancelled.[/yellow]")
     except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
+        handle_api_error(console, e, "order book")

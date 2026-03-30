@@ -143,10 +143,18 @@ def monitor(ctx, limit, category, refresh, active_only, sort, output_format, onc
     # Initialize aggregator for live data
     aggregator = APIAggregator(gamma_client, clob_client)
     
+    # Track last successful refresh for stale data indicator
+    _last_refresh = {"time": None, "stale": False}
+
     def generate_table():
         """Generate market table"""
         now = datetime.now()
-        table = Table(title=f"PolyTerm - Live Market Monitor (Updated: {now.strftime('%H:%M:%S')})")
+        if _last_refresh["stale"] and _last_refresh["time"]:
+            stale_time = _last_refresh["time"].strftime('%H:%M:%S')
+            title = f"PolyTerm - Live Market Monitor (Last updated: {stale_time} [yellow]⚠ stale — refresh failed[/yellow])"
+        else:
+            title = f"PolyTerm - Live Market Monitor (Updated: {now.strftime('%H:%M:%S')})"
+        table = Table(title=title)
         
         table.add_column("Market", style="cyan", no_wrap=False, max_width=40 if show_quality else 45)
         table.add_column("Prob", justify="right", style="green")
@@ -285,7 +293,10 @@ def monitor(ctx, limit, category, refresh, active_only, sort, output_format, onc
                         data_age,
                     )
         
+            _last_refresh["time"] = now
+            _last_refresh["stale"] = False
         except Exception as e:
+            _last_refresh["stale"] = True
             error_str = str(e).lower()
             if "timeout" in error_str or "timed out" in error_str:
                 msg = "Connection timed out while fetching market data."

@@ -5,6 +5,7 @@ import sys
 from rich.panel import Panel
 from rich.console import Console as RichConsole
 from rich.table import Table
+from ...utils.errors import handle_api_error
 
 
 def arbitrage_screen(console: RichConsole):
@@ -64,4 +65,4 @@ def arbitrage_screen(console: RichConsole):
     except KeyboardInterrupt:
         console.print("\n[yellow]Scan cancelled.[/yellow]")
     except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
+        handle_api_error(console, e, "arbitrage scanning")

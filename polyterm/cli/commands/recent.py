@@ -10,6 +10,7 @@ from rich.prompt import Prompt
 from ...db.database import Database
 from ...api.gamma import GammaClient
 from ...utils.json_output import print_json
+from ...utils.errors import handle_api_error
 
 
 @click.command()
@@ -223,6 +224,6 @@ def _show_market_details(console: Console, config, db: Database, market_id: str,
         console.print()
 
     except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
+        handle_api_error(console, e, "recent markets")
     finally:
         gamma_client.close()

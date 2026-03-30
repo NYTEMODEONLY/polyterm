@@ -148,6 +148,10 @@ class LiveMarketMonitor:
         self.previous_data = {}
         self.price_history = {}
         self.volume_history = {}
+
+        # Stale data tracking
+        self._last_successful_refresh = None
+        self._refresh_failed = False
     
     def _signal_handler(self, signum, frame):
         """Handle interrupt signals"""
@@ -232,7 +236,7 @@ class LiveMarketMonitor:
             if self.market_id:
                 # Single market monitoring
                 market_data = self.gamma_client.get_market(self.market_id)
-                return [market_data] if market_data else []
+                result = [market_data] if market_data else []
             elif self.category:
                 # Category-based monitoring - fetch many markets and filter by keywords
                 # API tag parameter doesn't work reliably, so we filter locally
@@ -242,22 +246,26 @@ class LiveMarketMonitor:
                 )
                 # Filter by category using keyword matching
                 filtered = [m for m in all_markets if matches_category(m, self.category)]
-                return filtered[:50]  # Return top 50 matching markets
+                result = filtered[:50]  # Return top 50 matching markets
             else:
                 # All active markets
-                return self.aggregator.get_live_markets(
+                result = self.aggregator.get_live_markets(
                     limit=20,
                     require_volume=True,
                     min_volume=0.01
                 )
+            self._last_successful_refresh = datetime.now(timezone.utc)
+            self._refresh_failed = False
+            return result
         except Exception as e:
+            self._refresh_failed = True
             handle_api_error(self.console, e, "fetching market data")
             return []
-    
+
     def generate_live_table(self) -> Table:
         """Generate live market table with color indicators"""
         now = datetime.now()
-        
+
         # Create header based on selection
         if self.market_id:
             title = f"🔴 LIVE MARKET MONITOR - Single Market"
@@ -265,9 +273,16 @@ class LiveMarketMonitor:
             title = f"🔴 LIVE MARKET MONITOR - {self.category.upper()} Category"
         else:
             title = f"🔴 LIVE MARKET MONITOR - All Active Markets"
-        
+
+        # Build timestamp with stale indicator
+        if self._refresh_failed and self._last_successful_refresh:
+            stale_time = self._last_successful_refresh.strftime('%H:%M:%S')
+            time_str = f"Last updated: {stale_time} [yellow]⚠ stale — refresh failed[/yellow]"
+        else:
+            time_str = f"Updated: {now.strftime('%H:%M:%S')}"
+
         table = Table(
-            title=f"{title} (Updated: {now.strftime('%H:%M:%S')})",
+            title=f"{title} ({time_str})",
             title_style="bold red",
             show_header=True,
             header_style="bold magenta"
