@@ -6,6 +6,7 @@ import time
 from rich.console import Console
 from rich.table import Table
 from rich.live import Live
+from rich.panel import Panel
 
 from ...api.gamma import GammaClient
 from ...api.clob import CLOBClient
@@ -140,7 +141,7 @@ def monitor(ctx, limit, category, refresh, active_only, sort, output_format, onc
         ws_endpoint=config.clob_endpoint,
     )
     # Initialize aggregator for live data
-    aggregator = APIAggregator(gamma_client, clob_client, None)
+    aggregator = APIAggregator(gamma_client, clob_client)
     
     def generate_table():
         """Generate market table"""
@@ -285,7 +286,21 @@ def monitor(ctx, limit, category, refresh, active_only, sort, output_format, onc
                     )
         
         except Exception as e:
-            handle_api_error(console, e, "fetching markets")
+            error_str = str(e).lower()
+            if "timeout" in error_str or "timed out" in error_str:
+                msg = "Connection timed out while fetching market data."
+                suggestion = "Check your internet connection or try again."
+            elif "connection" in error_str:
+                msg = "Could not connect to the Polymarket API."
+                suggestion = "Check your internet connection. The API may be temporarily down."
+            else:
+                msg = f"Error fetching market data: {e}"
+                suggestion = "Try again or check 'polyterm --help' for usage."
+            return Panel(
+                f"[red]{msg}[/red]\n\n[yellow]Suggestion:[/yellow] {suggestion}",
+                title="[bold red]Market Monitor Error[/bold red]",
+                border_style="red",
+            )
 
         return table
     
@@ -330,6 +345,7 @@ def monitor(ctx, limit, category, refresh, active_only, sort, output_format, onc
 
             return markets
         except Exception as e:
+            handle_api_error(console, e, "fetching markets")
             return []
 
     # JSON output mode

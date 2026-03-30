@@ -7,7 +7,6 @@ from collections import defaultdict
 
 from ..api.gamma import GammaClient
 from ..api.clob import CLOBClient
-from ..api.subgraph import SubgraphClient
 from ..api.data_api import DataAPIClient
 from ..utils.json_output import safe_float
 
@@ -49,12 +48,10 @@ class AnalyticsEngine:
         self,
         gamma_client: GammaClient,
         clob_client: CLOBClient,
-        subgraph_client: Optional[SubgraphClient] = None,
         data_api_client: Optional[DataAPIClient] = None,
     ):
         self.gamma_client = gamma_client
         self.clob_client = clob_client
-        self.subgraph_client = subgraph_client
         self.data_api_client = data_api_client
         
         # Cache for whale traders
@@ -229,44 +226,17 @@ class AnalyticsEngine:
         window_hours: int = 24,
     ) -> Optional[MarketCorrelation]:
         """Calculate correlation between two markets
-        
+
         Args:
             market1_id: First market ID
             market2_id: Second market ID
             window_hours: Time window for correlation
-        
+
         Returns:
             Correlation object or None
         """
-        if self.subgraph_client is None:
-            return None
-
-        try:
-            # Get historical data for both markets
-            # This is a simplified version - real implementation would need time series data
-            
-            market1_trades = self.subgraph_client.get_market_trades(
-                market1_id,
-                first=100,
-            )
-            market2_trades = self.subgraph_client.get_market_trades(
-                market2_id,
-                first=100,
-            )
-            
-            if not market1_trades or not market2_trades:
-                return None
-            
-            # Calculate simple correlation based on price movements
-            # This is a placeholder - real implementation would use proper time series correlation
-            
-            correlation = 0.0  # Placeholder
-            
-            return MarketCorrelation(market1_id, market2_id, correlation)
-            
-        except Exception as e:
-            print(f"Error calculating correlation: {e}")
-            return None
+        # Placeholder — requires time-series data source
+        return None
     
     def find_correlated_markets(
         self,
@@ -293,67 +263,18 @@ class AnalyticsEngine:
         hours: int = 168,  # 1 week
     ) -> Dict[str, Any]:
         """Analyze historical trends for a market
-        
+
         Args:
             market_id: Market ID
             hours: Hours of history to analyze
-        
+
         Returns:
             Trend statistics
         """
-        if self.subgraph_client is None:
-            return {}
-
-        try:
-            # Get market statistics
-            stats = self.subgraph_client.get_market_statistics(market_id)
-            
-            # Get trades in time window
-            end_time = int(time.time())
-            start_time = end_time - (hours * 3600)
-            
-            volume_data = self.subgraph_client.get_market_volume(
-                market_id,
-                start_time=start_time,
-                end_time=end_time,
-            )
-            
-            trades = self.subgraph_client.get_market_trades(
-                market_id,
-                first=1000,
-            )
-            
-            # Filter trades in time window
-            recent_trades = [
-                t for t in trades
-                if start_time <= int(t.get("timestamp", 0)) <= end_time
-            ]
-            
-            # Calculate trend metrics
-            total_volume = sum(safe_float(t.get("shares", 0)) * safe_float(t.get("price", 0)) for t in recent_trades)
-            avg_trade_size = total_volume / len(recent_trades) if recent_trades else 0
-            
-            # Price trend
-            if len(recent_trades) >= 2:
-                first_price = float(recent_trades[-1].get("price", 0))
-                last_price = float(recent_trades[0].get("price", 0))
-                price_change = ((last_price - first_price) / first_price * 100) if first_price > 0 else 0
-            else:
-                price_change = 0
-            
-            return {
-                "market_id": market_id,
-                "time_window_hours": hours,
-                "total_trades": len(recent_trades),
-                "total_volume": total_volume,
-                "average_trade_size": avg_trade_size,
-                "price_change_percent": price_change,
-                "trend_direction": "up" if price_change > 0 else "down" if price_change < 0 else "flat",
-            }
-            
-        except Exception as e:
-            print(f"Error analyzing trends: {e}")
-            return {}
+        # Historical trend analysis requires a time-series data source.
+        # The Subgraph endpoint has been removed; return empty until a
+        # replacement (e.g. CLOB price history) is wired in.
+        return {}
     
     def predict_price_movement(
         self,
@@ -427,7 +348,7 @@ class AnalyticsEngine:
         """
         try:
             data_api_client = self.data_api_client
-            if data_api_client is None and self.subgraph_client is None:
+            if data_api_client is None:
                 data_api_client = DataAPIClient()
 
             if data_api_client is None:
@@ -499,38 +420,6 @@ class AnalyticsEngine:
             }
             
         except Exception as e:
-            # Fallback path: Subgraph if caller provided one.
-            if self.subgraph_client is not None:
-                try:
-                    positions = self.subgraph_client.get_user_positions(wallet_address)
-
-                    total_value = 0
-                    total_pnl = 0
-                    position_count = len(positions)
-
-                    for position in positions:
-                        shares = safe_float(position.get("shares", 0))
-                        avg_price = safe_float(position.get("averagePrice", 0))
-                        realized_pnl = safe_float(position.get("realizedPnL", 0))
-                        unrealized_pnl = safe_float(position.get("unrealizedPnL", 0))
-
-                        position_value = shares * avg_price
-                        total_value += position_value
-                        total_pnl += realized_pnl + unrealized_pnl
-
-                    return {
-                        "wallet_address": wallet_address,
-                        "total_positions": position_count,
-                        "total_value": total_value,
-                        "total_pnl": total_pnl,
-                        "total_invested": total_value,
-                        "roi_percent": (total_pnl / total_value * 100) if total_value > 0 else 0,
-                        "positions": positions,
-                        "data_source": "subgraph",
-                    }
-                except Exception:
-                    pass
-
             # Graceful degradation when no position source is available
             return {
                 "wallet_address": wallet_address,
@@ -545,71 +434,19 @@ class AnalyticsEngine:
     
     def detect_market_manipulation(self, market_id: str) -> Dict[str, Any]:
         """Detect potential market manipulation patterns
-        
+
         Args:
             market_id: Market ID
-        
+
         Returns:
             Manipulation risk analysis
         """
-        if self.subgraph_client is None:
-            return {
-                "market_id": market_id,
-                "risk_level": "unknown",
-                "risk_score": 0,
-                "risk_factors": [],
-                "error": "Subgraph data source unavailable",
-            }
-
-        try:
-            # Get liquidity changes
-            liquidity_events = self.subgraph_client.get_market_liquidity_changes(
-                market_id,
-                first=50,
-            )
-            
-            # Get recent trades
-            trades = self.subgraph_client.get_market_trades(market_id, first=100)
-            
-            # Check for suspicious patterns
-            risk_factors = []
-            risk_score = 0
-            
-            # 1. Sudden liquidity withdrawal
-            if liquidity_events:
-                withdrawals = [e for e in liquidity_events if e.get("type") == "remove"]
-                if len(withdrawals) > 3:
-                    risk_factors.append("Multiple liquidity withdrawals")
-                    risk_score += 20
-            
-            # 2. Wash trading (same trader buying and selling)
-            trader_activity = defaultdict(list)
-            for trade in trades[:20]:  # Recent trades
-                trader = trade.get("trader")
-                trader_activity[trader].append(trade)
-            
-            for trader, trader_trades in trader_activity.items():
-                if len(trader_trades) >= 4:
-                    risk_factors.append(f"High frequency trading by {trader[:8]}...")
-                    risk_score += 15
-            
-            # 3. Price manipulation (rapid swings)
-            if len(trades) >= 10:
-                prices = [float(t.get("price", 0)) for t in trades[:10]]
-                price_range = max(prices) - min(prices)
-                if price_range > 0.3:  # 30% swing
-                    risk_factors.append("Rapid price swings")
-                    risk_score += 25
-            
-            risk_level = "high" if risk_score >= 50 else "medium" if risk_score >= 25 else "low"
-            
-            return {
-                "market_id": market_id,
-                "risk_level": risk_level,
-                "risk_score": risk_score,
-                "risk_factors": risk_factors,
-            }
-            
-        except Exception as e:
-            print(f"Error detecting manipulation: {e}")
-            return {"risk_level": "unknown", "error": str(e)}
+        # Manipulation detection required on-chain Subgraph data which is no
+        # longer available.  Return a safe default until a replacement source
+        # (e.g. CLOB trade history) is wired in.
+        return {
+            "market_id": market_id,
+            "risk_level": "unknown",
+            "risk_score": 0,
+            "risk_factors": [],
+        }

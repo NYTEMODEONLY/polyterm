@@ -58,14 +58,13 @@ class TestMarketScanner:
         """Create mock API clients"""
         gamma = Mock()
         clob = Mock()
-        subgraph = Mock()
-        return gamma, clob, subgraph
-    
+        return gamma, clob
+
     @pytest.fixture
     def scanner(self, mock_clients):
         """Create test scanner"""
-        gamma, clob, subgraph = mock_clients
-        return MarketScanner(gamma, clob, subgraph, check_interval=60)
+        gamma, clob = mock_clients
+        return MarketScanner(gamma, clob, check_interval=60)
     
     def test_scanner_initialization(self, scanner):
         """Test scanner initializes correctly"""

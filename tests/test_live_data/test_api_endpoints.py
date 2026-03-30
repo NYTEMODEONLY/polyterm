@@ -3,28 +3,23 @@
 import pytest
 from polyterm.api.gamma import GammaClient
 from polyterm.api.clob import CLOBClient
-from polyterm.api.subgraph import SubgraphClient
 from polyterm.api.aggregator import APIAggregator
 
 
 class TestAPIEndpoints:
     """Test that API endpoints return correct, live data"""
-    
+
     @pytest.fixture
     def gamma_client(self):
         return GammaClient()
-    
+
     @pytest.fixture
     def clob_client(self):
         return CLOBClient()
-    
+
     @pytest.fixture
-    def subgraph_client(self):
-        return SubgraphClient()
-    
-    @pytest.fixture
-    def aggregator(self, gamma_client, clob_client, subgraph_client):
-        return APIAggregator(gamma_client, clob_client, subgraph_client)
+    def aggregator(self, gamma_client, clob_client):
+        return APIAggregator(gamma_client, clob_client)
     
     def test_gamma_events_endpoint_returns_data(self, gamma_client):
         """Test Gamma /events endpoint returns data"""

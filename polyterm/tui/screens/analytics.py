@@ -7,9 +7,9 @@ from datetime import datetime, timezone
 
 from ...api.gamma import GammaClient
 from ...api.clob import CLOBClient
-from ...api.subgraph import SubgraphClient
 from ...api.aggregator import APIAggregator
 from ...utils.config import Config
+from ...utils.errors import handle_api_error
 
 
 def _display_trending_markets(console: RichConsole, limit: int = 10):
@@ -30,9 +30,7 @@ def _display_trending_markets(console: RichConsole, limit: int = 10):
         rest_endpoint=config.clob_rest_endpoint,
         ws_endpoint=config.clob_endpoint,
     )
-    subgraph_client = SubgraphClient(endpoint=config.subgraph_endpoint)
-
-    aggregator = APIAggregator(gamma_client, clob_client, subgraph_client)
+    aggregator = APIAggregator(gamma_client, clob_client)
 
     try:
         # Get top markets by volume with meaningful threshold ($1000+ 24hr volume)
@@ -125,7 +123,7 @@ def _display_trending_markets(console: RichConsole, limit: int = 10):
         console.print(f"[dim]Showing top {len(markets)} markets by 24-hour trading volume[/dim]")
 
     except Exception as e:
-        console.print(f"[red]Error fetching trending markets: {e}[/red]")
+        handle_api_error(console, e, "market analytics")
     finally:
         gamma_client.close()
         clob_client.close()
