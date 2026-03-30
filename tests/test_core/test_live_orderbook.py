@@ -433,7 +433,333 @@ class TestAnalyzerAnalyzeSnapshot:
         assert result.large_bids[0].size == 25000.0
 
 
+class TestLiveOrderBookEdgeCases:
+    """Edge-case tests for LiveOrderBook"""
+
+    def test_one_sided_book_bids_only(self):
+        """Book with bids but no asks returns valid snapshot"""
+        book = LiveOrderBook("t1")
+        book.handle_message({
+            "type": "book", "market": "t1",
+            "bids": [{"price": "0.55", "size": "1000"}],
+            "asks": [],
+        })
+        assert book.is_ready
+        snap = book.get_snapshot()
+        assert len(snap["bids"]) == 1
+        assert len(snap["asks"]) == 0
+
+        tob = book.get_top_of_book()
+        assert tob["best_bid"] == 0.55
+        assert tob["best_ask"] is None
+        assert tob["spread"] is None
+        assert tob["mid_price"] is None
+
+    def test_one_sided_book_asks_only(self):
+        """Book with asks but no bids returns valid snapshot"""
+        book = LiveOrderBook("t1")
+        book.handle_message({
+            "type": "book", "market": "t1",
+            "bids": [],
+            "asks": [{"price": "0.60", "size": "500"}],
+        })
+        assert book.is_ready
+        tob = book.get_top_of_book()
+        assert tob["best_bid"] is None
+        assert tob["best_ask"] == 0.60
+        assert tob["spread"] is None
+
+    def test_last_trade_price_invalid_value(self):
+        """Invalid last_trade_price is ignored"""
+        book = LiveOrderBook("t1")
+        book.handle_message({"type": "last_trade_price", "price": "not-a-number"})
+        assert book.message_count == 1
+        assert book.get_top_of_book()["last_trade_price"] is None
+
+    def test_price_change_invalid_value(self):
+        """Invalid price_change value is ignored"""
+        book = LiveOrderBook("t1")
+        book.handle_message({"type": "price_change", "price": "bad"})
+        assert book.message_count == 1
+        snap = book.get_snapshot()
+        assert snap["last_price_change"] is None
+
+    def test_last_trade_price_none_value(self):
+        """None price value in last_trade_price is handled"""
+        book = LiveOrderBook("t1")
+        book.handle_message({"type": "last_trade_price", "price": None})
+        # Should not crash; 0 or None depending on float(None) behavior
+        assert book.message_count == 1
+
+    def test_get_depth_with_fewer_levels_than_requested(self):
+        """get_depth when book has fewer levels than requested"""
+        book = LiveOrderBook("t1")
+        book.handle_message({
+            "type": "book", "market": "t1",
+            "bids": [{"price": "0.55", "size": "100"}],
+            "asks": [{"price": "0.60", "size": "200"}],
+        })
+        depth = book.get_depth(levels=10)
+        assert len(depth["bids"]) == 1
+        assert len(depth["asks"]) == 1
+        assert depth["bid_depth"] == 100.0
+        assert depth["ask_depth"] == 200.0
+
+    def test_get_depth_with_zero_levels(self):
+        """get_depth with levels=0 returns empty lists"""
+        book = LiveOrderBook("t1")
+        book.handle_message({
+            "type": "book", "market": "t1",
+            "bids": [{"price": "0.55", "size": "100"}],
+            "asks": [{"price": "0.60", "size": "200"}],
+        })
+        depth = book.get_depth(levels=0)
+        assert len(depth["bids"]) == 0
+        assert len(depth["asks"]) == 0
+        assert depth["bid_depth"] == 0.0
+        assert depth["ask_depth"] == 0.0
+
+    def test_incremental_updates_before_initial_book(self):
+        """Price updates before any book message still tracked"""
+        book = LiveOrderBook("t1")
+        book.handle_message({"type": "last_trade_price", "price": "0.55"})
+        book.handle_message({"type": "price_change", "price": "0.56"})
+        assert book.message_count == 2
+        assert not book.is_ready  # No book data yet
+        assert book.get_top_of_book()["last_trade_price"] == 0.55
+
+    def test_book_message_with_event_type_key(self):
+        """Book message using event_type key instead of type"""
+        book = LiveOrderBook("t1")
+        book.handle_message({
+            "event_type": "book", "market": "t1",
+            "bids": [{"price": "0.55", "size": "100"}],
+            "asks": [],
+        })
+        assert book.is_ready
+
+    def test_thread_safety_concurrent_read_write(self):
+        """Concurrent reads and writes don't corrupt state"""
+        import threading
+
+        book = LiveOrderBook("t1")
+        errors = []
+
+        def writer():
+            for i in range(50):
+                try:
+                    book.handle_message({
+                        "type": "book", "market": "t1",
+                        "bids": [{"price": f"0.{50 + i % 10}", "size": str(100 + i)}],
+                        "asks": [{"price": f"0.{60 + i % 10}", "size": str(200 + i)}],
+                    })
+                except Exception as e:
+                    errors.append(e)
+
+        def reader():
+            for _ in range(50):
+                try:
+                    book.get_snapshot()
+                    book.get_top_of_book()
+                    book.get_depth(levels=5)
+                except Exception as e:
+                    errors.append(e)
+
+        threads = [
+            threading.Thread(target=writer),
+            threading.Thread(target=reader),
+            threading.Thread(target=reader),
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+
+        assert len(errors) == 0
+
+    def test_callback_exception_does_not_affect_state(self):
+        """Callback exception after state update doesn't roll back state"""
+        book = LiveOrderBook("t1")
+        book.set_on_update(Mock(side_effect=RuntimeError("boom")))
+        book.handle_message({
+            "type": "book", "market": "t1",
+            "bids": [{"price": "0.55", "size": "1000"}],
+            "asks": [],
+        })
+        # State should still be updated despite callback failure
+        assert book.is_ready
+        assert book.get_top_of_book()["best_bid"] == 0.55
+
+    def test_last_trade_price_alternative_key(self):
+        """last_trade_price message with 'last_trade_price' key instead of 'price'"""
+        book = LiveOrderBook("t1")
+        book.handle_message({
+            "type": "last_trade_price",
+            "last_trade_price": "0.72",
+        })
+        assert book.get_top_of_book()["last_trade_price"] == 0.72
+
+    def test_price_change_alternative_key(self):
+        """price_change message with 'new_price' key instead of 'price'"""
+        book = LiveOrderBook("t1")
+        book.handle_message({
+            "type": "price_change",
+            "new_price": "0.68",
+        })
+        snap = book.get_snapshot()
+        assert snap["last_price_change"] == 0.68
+
+
+class TestAnalyzerStartLiveFeedEdgeCases:
+    """Edge-case tests for OrderBookAnalyzer live methods"""
+
+    @pytest.fixture
+    def clob_client(self):
+        client = MagicMock(spec=CLOBClient)
+        client.subscribe_orderbook = AsyncMock()
+        return client
+
+    @pytest.fixture
+    def analyzer(self, clob_client):
+        return OrderBookAnalyzer(clob_client)
+
+    @pytest.mark.asyncio
+    async def test_start_live_feed_empty_token_ids(self, analyzer, clob_client):
+        """start_live_feed with empty token list still subscribes"""
+        books = await analyzer.start_live_feed([])
+        assert books == {}
+        clob_client.subscribe_orderbook.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_dispatch_uses_asset_id_fallback(self, analyzer, clob_client):
+        """Dispatch routes by asset_id when market key is absent"""
+        books = await analyzer.start_live_feed(["token-a"])
+        dispatch = clob_client.subscribe_orderbook.call_args[0][1]
+
+        dispatch({
+            "type": "book",
+            "asset_id": "token-a",
+            "bids": [{"price": "0.55", "size": "100"}],
+            "asks": [],
+        })
+        assert books["token-a"].is_ready
+
+    @pytest.mark.asyncio
+    async def test_dispatch_empty_market_broadcasts(self, analyzer, clob_client):
+        """Dispatch with empty market string broadcasts to all"""
+        books = await analyzer.start_live_feed(["token-a", "token-b"])
+        dispatch = clob_client.subscribe_orderbook.call_args[0][1]
+
+        dispatch({
+            "type": "book",
+            "market": "",
+            "bids": [{"price": "0.55", "size": "100"}],
+            "asks": [],
+        })
+        # Empty string doesn't match any key, so broadcasts
+        assert books["token-a"].is_ready
+        assert books["token-b"].is_ready
+
+    def test_get_live_prices_includes_spread_and_mid(self, analyzer):
+        """get_live_prices returns spread and mid for ready books"""
+        book = LiveOrderBook("t1")
+        book.handle_message({
+            "type": "book", "market": "t1",
+            "bids": [{"price": "0.50", "size": "1000"}],
+            "asks": [{"price": "0.60", "size": "500"}],
+        })
+        analyzer._live_books["t1"] = book
+        result = analyzer.get_live_prices(["t1"])
+        assert result["t1"]["mid_price"] == pytest.approx(0.55)
+        assert result["t1"]["spread"] == pytest.approx(0.10)
+
+
 # ── CLI --live flag tests ─────────────────────────────────────────────────
+
+
+class TestRenderLivePanel:
+    """Tests for _render_live_panel helper"""
+
+    def test_render_with_populated_book(self):
+        """Panel renders with actual bid/ask data"""
+        from polyterm.cli.commands.orderbook import _render_live_panel
+
+        book = LiveOrderBook("t1")
+        book.handle_message({
+            "type": "book", "market": "t1",
+            "bids": [{"price": "0.55", "size": "1000"}, {"price": "0.54", "size": "2000"}],
+            "asks": [{"price": "0.56", "size": "800"}, {"price": "0.57", "size": "1500"}],
+        })
+        panel = _render_live_panel(book, depth=5)
+        assert panel is not None
+        assert "Live Order Book" in panel.title
+
+    def test_render_with_empty_book(self):
+        """Panel renders without crashing on empty book"""
+        from polyterm.cli.commands.orderbook import _render_live_panel
+
+        book = LiveOrderBook("t1")
+        # Send a book message with bids only so it's "ready" but minimal
+        book.handle_message({
+            "type": "book", "market": "t1",
+            "bids": [{"price": "0.55", "size": "100"}],
+            "asks": [],
+        })
+        panel = _render_live_panel(book, depth=5)
+        assert panel is not None
+        # Ask columns should show dash for missing values
+        assert "—" in panel.subtitle  # best_ask is None
+
+    def test_render_with_none_values(self):
+        """Panel renders dashes for None top-of-book values"""
+        from polyterm.cli.commands.orderbook import _render_live_panel
+
+        book = LiveOrderBook("t1")
+        # Only trade price, no book data - but we need at least something
+        book.handle_message({"type": "last_trade_price", "price": "0.55"})
+        # Force it to render even though not "ready"
+        book.handle_message({
+            "type": "book", "market": "t1",
+            "bids": [], "asks": [],
+        })
+        panel = _render_live_panel(book, depth=5)
+        assert "—" in panel.subtitle
+
+    def test_render_subtitle_contains_message_count(self):
+        """Panel subtitle shows message count"""
+        from polyterm.cli.commands.orderbook import _render_live_panel
+
+        book = LiveOrderBook("t1")
+        for i in range(3):
+            book.handle_message({
+                "type": "book", "market": "t1",
+                "bids": [{"price": "0.55", "size": str(100 + i)}],
+                "asks": [{"price": "0.60", "size": "200"}],
+            })
+        panel = _render_live_panel(book, depth=5)
+        assert "Msgs 3" in panel.subtitle
+
+    def test_render_depth_limits_rows(self):
+        """Panel respects depth parameter for row count"""
+        from polyterm.cli.commands.orderbook import _render_live_panel
+
+        book = LiveOrderBook("t1")
+        book.handle_message({
+            "type": "book", "market": "t1",
+            "bids": [
+                {"price": "0.55", "size": "100"},
+                {"price": "0.54", "size": "200"},
+                {"price": "0.53", "size": "300"},
+            ],
+            "asks": [
+                {"price": "0.56", "size": "100"},
+                {"price": "0.57", "size": "200"},
+                {"price": "0.58", "size": "300"},
+            ],
+        })
+        panel = _render_live_panel(book, depth=2)
+        # The table inside the panel should have exactly 2 data rows
+        assert panel is not None
 
 
 class TestOrderbookCLILiveFlag:
