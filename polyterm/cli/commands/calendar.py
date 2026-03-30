@@ -57,9 +57,11 @@ def calendar(ctx, days, limit, category, bookmarked, output_format):
         now = datetime.now()
         end_date = now + timedelta(days=days)
 
-        # Get active markets sorted by end date
+        # Get active markets and recently closed markets (to show resolution status)
         with console.status(f"[bold green]Fetching markets ending in the next {days} days..."):
             markets = gamma_client.get_markets(limit=200, active=True)
+            closed_markets = gamma_client.get_markets(limit=50, active=False, closed=True)
+            markets.extend(closed_markets)
 
         # Filter and sort by end date
         upcoming = []
@@ -104,6 +106,10 @@ def calendar(ctx, days, limit, category, bookmarked, output_format):
             current_price = float(outcome_prices[0]) if outcome_prices else 0.5
             volume = float(market.get('volume', 0) or 0)
 
+            # Determine resolution status
+            resolution = gamma_client._parse_resolution(market)
+            resolution_status = resolution.get('status', 'Active')
+
             upcoming.append({
                 'id': market.get('id', market.get('condition_id', '')),
                 'title': market.get('question', market.get('title', 'Unknown')),
@@ -112,6 +118,7 @@ def calendar(ctx, days, limit, category, bookmarked, output_format):
                 'volume': volume,
                 'category': market.get('category', ''),
                 'liquidity': float(market.get('liquidity', 0) or 0),
+                'resolution_status': resolution_status,
             })
 
         # Sort by end date
@@ -174,8 +181,9 @@ def calendar(ctx, days, limit, category, bookmarked, output_format):
 
                 table = Table(show_header=True, header_style="bold", box=None)
                 table.add_column("Time", width=6)
-                table.add_column("Market", max_width=45)
+                table.add_column("Market", max_width=40)
                 table.add_column("Price", justify="right", width=7)
+                table.add_column("Status", width=12)
                 table.add_column("Volume", justify="right", width=10)
 
             # Format time
@@ -199,10 +207,22 @@ def calendar(ctx, days, limit, category, bookmarked, output_format):
             else:
                 price_style = "cyan"  # Uncertain
 
+            # Resolution status styling
+            res_status = market.get('resolution_status', 'Active')
+            if res_status.startswith('Resolved: YES'):
+                status_str = "[green]YES[/green]"
+            elif res_status.startswith('Resolved: NO'):
+                status_str = "[red]NO[/red]"
+            elif res_status == 'Pending resolution':
+                status_str = "[yellow]Pending[/yellow]"
+            else:
+                status_str = "[dim]Active[/dim]"
+
             table.add_row(
                 time_str,
-                market['title'][:43],
+                market['title'][:38],
                 f"[{price_style}]{price * 100:.0f}%[/{price_style}]",
+                status_str,
                 vol_str,
             )
 
