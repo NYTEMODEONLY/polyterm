@@ -8,8 +8,9 @@ Scans for arbitrage opportunities:
 """
 
 import asyncio
+import json
 import time
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any, Tuple, TYPE_CHECKING
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 from collections import defaultdict
@@ -18,6 +19,9 @@ from ..db.database import Database
 from ..db.models import ArbitrageOpportunity
 from ..api.gamma import GammaClient
 from ..api.clob import CLOBClient
+
+if TYPE_CHECKING:
+    from .orderbook import OrderBookAnalyzer
 
 
 @dataclass
@@ -62,16 +66,71 @@ class ArbitrageScanner:
         clob_client: CLOBClient,
         min_spread: float = 0.025,  # 2.5% minimum spread
         polymarket_fee: float = 0.02,  # 2% winner fee
+        orderbook_analyzer: Optional["OrderBookAnalyzer"] = None,
     ):
         self.db = database
         self.gamma = gamma_client
         self.clob = clob_client
         self.min_spread = min_spread
         self.polymarket_fee = polymarket_fee
+        self.ob_analyzer = orderbook_analyzer
 
         # Cache for market data
         self.market_cache: Dict[str, Dict[str, Any]] = {}
         self.cache_ttl = 30  # seconds
+
+    def _extract_token_ids(self, market: Dict[str, Any]) -> List[str]:
+        """Extract CLOB token IDs from a Gamma market dict."""
+        raw = market.get('clobTokenIds', [])
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except Exception:
+                raw = []
+        return [str(t) for t in raw] if raw else []
+
+    def _get_live_prices_for_market(self, market: Dict[str, Any]) -> Optional[Dict[str, float]]:
+        """Try to get YES/NO prices from live WS feeds.
+
+        Returns {'yes': float, 'no': float} if live data available, else None.
+        """
+        if not self.ob_analyzer:
+            return None
+
+        token_ids = self._extract_token_ids(market)
+        if not token_ids:
+            return None
+
+        live_data = self.ob_analyzer.get_live_prices(token_ids)
+        if not live_data:
+            return None
+
+        # Token 0 = YES, Token 1 = NO
+        yes_tid = token_ids[0] if len(token_ids) > 0 else None
+        no_tid = token_ids[1] if len(token_ids) > 1 else None
+
+        yes_info = live_data.get(yes_tid) if yes_tid else None
+        no_info = live_data.get(no_tid) if no_tid else None
+
+        # Use mid_price when available, fall back to best_bid/best_ask
+        yes_price = None
+        no_price = None
+
+        if yes_info:
+            yes_price = yes_info.get('mid_price') or yes_info.get('best_ask')
+        if no_info:
+            no_price = no_info.get('mid_price') or no_info.get('best_ask')
+
+        # If we have YES but not NO, derive NO = 1 - YES (and vice versa)
+        if yes_price is not None and no_price is None:
+            no_price = 1.0 - yes_price
+        elif no_price is not None and yes_price is None:
+            yes_price = 1.0 - no_price
+
+        if yes_price is not None and no_price is not None:
+            return {'yes': yes_price, 'no': no_price}
+
+        return None
 
     def scan_intra_market_arbitrage(
         self,
@@ -100,23 +159,28 @@ class ArbitrageScanner:
                 if not market_id:
                     continue
 
-                # Get prices
-                outcome_prices = market.get('outcomePrices', [])
-                if isinstance(outcome_prices, str):
-                    import json
-                    try:
-                        outcome_prices = json.loads(outcome_prices)
-                    except Exception:
+                # Prefer live WS prices when available
+                live = self._get_live_prices_for_market(market)
+                if live:
+                    yes_price = live['yes']
+                    no_price = live['no']
+                else:
+                    # Fall back to Gamma snapshot prices
+                    outcome_prices = market.get('outcomePrices', [])
+                    if isinstance(outcome_prices, str):
+                        try:
+                            outcome_prices = json.loads(outcome_prices)
+                        except Exception:
+                            continue
+
+                    if len(outcome_prices) < 2:
                         continue
 
-                if len(outcome_prices) < 2:
-                    continue
-
-                try:
-                    yes_price = float(outcome_prices[0])
-                    no_price = float(outcome_prices[1])
-                except (ValueError, IndexError):
-                    continue
+                    try:
+                        yes_price = float(outcome_prices[0])
+                        no_price = float(outcome_prices[1])
+                    except (ValueError, IndexError):
+                        continue
 
                 # Check for arbitrage
                 total = yes_price + no_price
@@ -292,16 +356,22 @@ class ArbitrageScanner:
         return len(intersection) / len(union) if union else 0.0
 
     def _get_market_prices(self, event: Dict[str, Any]) -> Optional[Dict[str, float]]:
-        """Extract YES/NO prices from market event"""
+        """Extract YES/NO prices from market event, preferring live WS data."""
         nested_markets = event.get('markets', [])
         if not nested_markets:
             return None
 
         market = nested_markets[0]
+
+        # Try live prices first
+        live = self._get_live_prices_for_market(market)
+        if live:
+            return live
+
+        # Fall back to Gamma snapshot prices
         outcome_prices = market.get('outcomePrices', [])
 
         if isinstance(outcome_prices, str):
-            import json
             try:
                 outcome_prices = json.loads(outcome_prices)
             except Exception:
