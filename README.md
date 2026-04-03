@@ -8,6 +8,8 @@ A powerful, terminal-based monitoring and analytics tool for PolyMarket predicti
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PyPI version](https://img.shields.io/pypi/v/polyterm.svg)](https://pypi.org/project/polyterm/)
 
+**[Full Documentation](docs/README.md)** — Comprehensive docs for every CLI command, TUI screen, API module, and core engine.
+
 ![PolyTerm Screenshot](screenshot.png)
 
 ---
