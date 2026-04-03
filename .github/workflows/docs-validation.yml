@@ -1,0 +1,36 @@
+name: Documentation Validation
+
+on:
+  push:
+    tags:
+      - "v*"
+  pull_request:
+    branches: [main]
+    paths:
+      - "polyterm/**"
+      - "docs/**"
+      - "scripts/validate_docs.py"
+      - ".github/workflows/docs-validation.yml"
+
+jobs:
+  validate-docs:
+    name: Validate documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run documentation validation
+        run: python scripts/validate_docs.py --dry-run
+
+      - name: Check validation result
+        if: failure()
+        run: |
+          echo "::error::Documentation is out of sync with code."
+          echo "Run 'python scripts/validate_docs.py' locally to see details."
+          echo "Run 'python scripts/validate_docs.py --generate-stubs' to create missing doc stubs."
