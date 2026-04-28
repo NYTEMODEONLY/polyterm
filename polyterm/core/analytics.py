@@ -355,7 +355,7 @@ class AnalyticsEngine:
                 raise RuntimeError("Data API client not configured")
 
             # Primary source: Data API (live wallet positions/trades)
-            positions = data_api_client.get_positions(wallet_address, limit=500, sort_by="CURRENT_VALUE")
+            positions = data_api_client.get_positions(wallet_address, limit=500, sort_by="CURRENT")
             if not isinstance(positions, list):
                 positions = []
 

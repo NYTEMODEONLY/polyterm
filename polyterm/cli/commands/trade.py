@@ -9,6 +9,12 @@ from rich.prompt import Prompt
 
 from ...api.gamma import GammaClient
 from ...api.clob import CLOBClient
+from ...core.fees import (
+    breakeven_price,
+    estimate_taker_fee,
+    fee_schedule_from_market,
+    fee_source_label,
+)
 from ...utils.json_output import print_json
 from ...utils.errors import handle_api_error
 
@@ -112,6 +118,7 @@ def trade(ctx, search_term, amount, side, interactive, output_format):
                 side=side,
                 yes_price=yes_price,
                 orderbook=orderbook,
+                fee_schedule=fee_schedule_from_market(market),
             )
 
         if output_format == 'json':
@@ -174,7 +181,8 @@ def trade(ctx, search_term, amount, side, interactive, output_format):
         cost_table.add_column(justify="right")
 
         cost_table.add_row("Trade Amount", f"${amount:,.2f}")
-        cost_table.add_row("Est. Fees (2% taker)", f"[yellow]-${trade_analysis['estimated_fees']:,.2f}[/yellow]")
+        cost_table.add_row("Est. Protocol Fee", f"[yellow]-${trade_analysis['estimated_fees']:,.2f}[/yellow]")
+        cost_table.add_row("Fee Source", trade_analysis['fee_source'])
         cost_table.add_row("Slippage Cost", f"[yellow]-${trade_analysis['slippage_cost']:,.2f}[/yellow]")
         cost_table.add_row("[bold]Total Cost[/bold]", f"[bold]${trade_analysis['total_cost']:,.2f}[/bold]")
 
@@ -251,7 +259,7 @@ def _get_yes_price(market: dict) -> float:
     return float(market.get('bestAsk', market.get('lastTradePrice', 0.5)) or 0.5)
 
 
-def _analyze_trade(amount: float, side: str, yes_price: float, orderbook: dict) -> dict:
+def _analyze_trade(amount: float, side: str, yes_price: float, orderbook: dict, fee_schedule=None) -> dict:
     """Analyze a potential trade"""
     # Determine entry price based on side
     if side == "yes":
@@ -294,9 +302,7 @@ def _analyze_trade(amount: float, side: str, yes_price: float, orderbook: dict) 
     # Calculate shares
     shares = amount / entry_price if entry_price > 0 else 0
 
-    # Fees (Polymarket: 0% maker, ~2% taker on profits)
-    # Simplified: estimate 2% on winning trades
-    estimated_fees = amount * 0.02
+    estimated_fees = estimate_taker_fee(amount, entry_price, fee_schedule)
 
     # Total cost
     total_cost = amount + slippage_cost
@@ -306,7 +312,7 @@ def _analyze_trade(amount: float, side: str, yes_price: float, orderbook: dict) 
 
     # Win scenario
     win_payout_total = shares * win_payout
-    win_pnl = win_payout_total - total_cost - (win_payout_total - total_cost) * 0.02  # Fee on profit
+    win_pnl = win_payout_total - total_cost - estimated_fees
     win_roi = win_pnl / total_cost if total_cost > 0 else 0
 
     scenarios.append({
@@ -328,8 +334,7 @@ def _analyze_trade(amount: float, side: str, yes_price: float, orderbook: dict) 
         'roi': lose_roi,
     })
 
-    # Breakeven (accounting for fees)
-    breakeven = entry_price * 1.02  # Need 2% more to cover fees
+    breakeven = breakeven_price(entry_price, fee_schedule)
 
     # Risk metrics
     max_profit = win_pnl
@@ -341,7 +346,7 @@ def _analyze_trade(amount: float, side: str, yes_price: float, orderbook: dict) 
     expected_value = (prob * win_pnl) + ((1 - prob) * lose_pnl)
 
     # Edge needed
-    edge_needed = entry_price * 0.02  # Need to beat market by fee amount
+    edge_needed = max(breakeven - entry_price, 0)
 
     return {
         'entry_price': entry_price,
@@ -350,6 +355,7 @@ def _analyze_trade(amount: float, side: str, yes_price: float, orderbook: dict) 
         'slippage_cost': slippage_cost,
         'spread': spread,
         'estimated_fees': estimated_fees,
+        'fee_source': fee_source_label(fee_schedule),
         'total_cost': total_cost,
         'scenarios': scenarios,
         'breakeven': breakeven,

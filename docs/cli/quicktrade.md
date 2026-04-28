@@ -6,7 +6,7 @@
 
 Prepare a trade and get direct Polymarket link. Analyzes your trade parameters and provides a direct link to execute
 on Polymarket. This tool does NOT execute trades - it prepares the
-analysis and opens the market page for you.
+analysis and opens the market page for you. Fee estimates use CLOB V2 market fee schedules where available.
 
 Examples:
 polyterm quicktrade -m "bitcoin" -a 200 -s yes     # Prepare $200 YES on BTC
@@ -40,15 +40,19 @@ In the TUI main menu, use any of these shortcuts: `qt`, `quicktrade`
 ## Examples
 
 ```bash
-# Interactive mode
-polyterm quicktrade -i
+# Prepare $200 YES on BTC
+polyterm quicktrade -m "bitcoin" -a 200 -s yes
 
-# With amount option
-polyterm quicktrade --amount 100
+# Prepare and open browser
+polyterm quicktrade -m "trump" -a 50 -s no -o
 
 # JSON output
 polyterm quicktrade --format json
 ```
+
+## Notes
+
+`quicktrade` remains non-custodial and does not execute trades. It reports the fee source used for the estimate, then links to the Polymarket event page for manual execution.
 
 ## Data Sources
 

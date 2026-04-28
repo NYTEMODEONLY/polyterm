@@ -237,6 +237,7 @@ class TestDataAPIGetPositions:
         assert positions[0]["market"] == "market1"
         assert "user=0xabc123" in responses.calls[0].request.url
         assert "limit=100" in responses.calls[0].request.url
+        assert "sortBy=CURRENT" in responses.calls[0].request.url
 
     @responses.activate
     def test_get_positions_with_offset_and_sort(self, client):
@@ -248,10 +249,10 @@ class TestDataAPIGetPositions:
             status=200,
         )
 
-        positions = client.get_positions("0xabc123", limit=50, offset=10, sort_by="PNL")
+        positions = client.get_positions("0xabc123", limit=50, offset=10, sort_by="CASHPNL")
         assert len(positions) == 1
         assert "offset=10" in responses.calls[0].request.url
-        assert "sortBy=PNL" in responses.calls[0].request.url
+        assert "sortBy=CASHPNL" in responses.calls[0].request.url
 
     @responses.activate
     def test_get_positions_empty_response(self, client):
@@ -438,7 +439,7 @@ class TestDataAPIGetProfitSummary:
         assert summary["total_invested"] == 500 + 300 + 200
         assert summary["position_count"] == 3
         assert len(summary["positions"]) == 3
-        assert "sortBy=PNL" in responses.calls[0].request.url
+        assert "sortBy=CASHPNL" in responses.calls[0].request.url
         assert "limit=500" in responses.calls[0].request.url
 
     @responses.activate

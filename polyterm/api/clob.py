@@ -141,61 +141,143 @@ class CLOBClient:
         except requests.exceptions.RequestException as e:
             raise Exception(f"Failed to get order book: {e}")
     
-    def get_ticker(self, market_id: str) -> Dict[str, Any]:
-        """Get ticker data for a market
-        
-        Args:
-            market_id: Market ID
-        
-        Returns:
-            Ticker with last price, volume, etc.
-        """
-        url = f"{self.rest_endpoint}/ticker/{market_id}"
+    def get_price(self, token_id: str, side: str) -> Dict[str, Any]:
+        """Get the current best price for a token and side."""
+        url = f"{self.rest_endpoint}/price"
+        params = {"token_id": token_id, "side": side.upper()}
 
-        try:
-            response = self._request("GET", url)
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"Failed to get ticker: {e}")
-    
-    def get_recent_trades(self, market_id: str, limit: int = 100) -> List[Dict[str, Any]]:
-        """Get recent trades for a market
-        
-        Args:
-            market_id: Market ID
-            limit: Maximum number of trades
-        
-        Returns:
-            List of recent trades
-        """
-        url = f"{self.rest_endpoint}/trades/{market_id}"
-        params = {"limit": limit}
-        
         try:
             response = self._request("GET", url, params=params)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
-            raise Exception(f"Failed to get trades: {e}")
-    
-    def get_market_depth(self, market_id: str) -> Dict[str, Any]:
-        """Get market depth statistics
-        
-        Args:
-            market_id: Market ID
-        
-        Returns:
-            Market depth statistics
-        """
-        url = f"{self.rest_endpoint}/depth/{market_id}"
-        
+            raise Exception(f"Failed to get price: {e}")
+
+    def get_spread(self, token_id: str) -> Dict[str, Any]:
+        """Get the current bid/ask spread for a token."""
+        url = f"{self.rest_endpoint}/spread"
+        params = {"token_id": token_id}
+
         try:
-            response = self._request("GET", url)
+            response = self._request("GET", url, params=params)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
+            raise Exception(f"Failed to get spread: {e}")
+
+    def get_last_trade_price(self, token_id: str) -> Dict[str, Any]:
+        """Get the last trade price and side for a token."""
+        url = f"{self.rest_endpoint}/last-trade-price"
+        params = {"token_id": token_id}
+
+        try:
+            response = self._request("GET", url, params=params)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"Failed to get last trade price: {e}")
+
+    def get_fee_rate(self, token_id: str) -> Dict[str, Any]:
+        """Get the current base fee rate for a token."""
+        url = f"{self.rest_endpoint}/fee-rate"
+        params = {"token_id": token_id}
+
+        try:
+            response = self._request("GET", url, params=params)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"Failed to get fee rate: {e}")
+
+    def get_ticker(self, token_id: str) -> Dict[str, Any]:
+        """Get current lightweight ticker data for a token.
+
+        Kept for compatibility with existing callers. CLOB V2 exposes this
+        information through public pricing endpoints instead of the old
+        undocumented ``/ticker/{id}`` route.
+        """
+        ticker: Dict[str, Any] = {}
+
+        try:
+            last_trade = self.get_last_trade_price(token_id)
+            ticker["last"] = last_trade.get("price", "0")
+            ticker["side"] = last_trade.get("side", "")
+        except Exception:
+            ticker["last"] = "0"
+            ticker["side"] = ""
+
+        try:
+            spread = self.get_spread(token_id)
+            ticker["spread"] = spread.get("spread", "0")
+        except Exception:
+            ticker["spread"] = "0"
+
+        return ticker
+
+    def get_recent_trades(
+        self,
+        market_id: str,
+        limit: int = 100,
+        maker_address: Optional[str] = None,
+        asset_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Get recent authenticated CLOB trades.
+
+        CLOB V2 documents ``GET /trades`` with query parameters. It requires
+        auth for user trades, so unauthenticated callers should prefer RTDS
+        WebSocket data; this method is retained for REST fallback compatibility.
+        """
+        url = f"{self.rest_endpoint}/trades"
+        params: Dict[str, Any] = {"limit": limit}
+        if market_id:
+            params["market"] = market_id
+        if maker_address:
+            params["maker_address"] = maker_address
+        if asset_id:
+            params["asset_id"] = asset_id
+
+        try:
+            response = self._request("GET", url, params=params)
+            response.raise_for_status()
+            data = response.json()
+            if isinstance(data, dict):
+                trades = data.get("data", [])
+                return trades if isinstance(trades, list) else []
+            return data if isinstance(data, list) else []
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"Failed to get trades: {e}")
+
+    def get_market_depth(self, token_id: str) -> Dict[str, Any]:
+        """Get depth statistics from the documented order book endpoint."""
+        try:
+            book = self.get_order_book(token_id, depth=100)
+        except Exception as e:
             raise Exception(f"Failed to get market depth: {e}")
+
+        bid_depth = self._sum_order_notional(book.get("bids", []))
+        ask_depth = self._sum_order_notional(book.get("asks", []))
+        return {
+            "bid_depth": bid_depth,
+            "ask_depth": ask_depth,
+            "total_depth": bid_depth + ask_depth,
+        }
+
+    @staticmethod
+    def _sum_order_notional(orders: List[Any]) -> float:
+        """Sum price * size for order rows from either CLOB REST shape."""
+        total = 0.0
+        for order in orders:
+            try:
+                if isinstance(order, dict):
+                    price = float(order.get("price", 0) or 0)
+                    size = float(order.get("size", 0) or 0)
+                else:
+                    price = float(order[0])
+                    size = float(order[1])
+            except (ValueError, TypeError, IndexError):
+                continue
+            total += price * size
+        return total
     
     # WebSocket Methods for Live Trading Data
     
@@ -620,7 +702,7 @@ class CLOBClient:
         return spread
     
     def get_current_markets(self, limit: int = 100) -> List[Dict[str, Any]]:
-        """Get current active markets (uses sampling-markets endpoint)
+        """Get current active markets from the paginated sampling endpoint.
         
         Args:
             limit: Maximum number of markets
@@ -628,14 +710,30 @@ class CLOBClient:
         Returns:
             List of current market dictionaries
         """
-        url = f"{self.rest_endpoint}/sampling-markets"
-        params = {"limit": limit}
-        
         try:
-            response = self._request("GET", url, params=params)
-            response.raise_for_status()
-            data = response.json()
-            return data.get('data', [])
+            url = f"{self.rest_endpoint}/sampling-markets"
+            markets: List[Dict[str, Any]] = []
+            next_cursor = None
+
+            while len(markets) < limit:
+                page_limit = min(max(limit - len(markets), 1), 1000)
+                params = {"limit": page_limit}
+                if next_cursor:
+                    params["next_cursor"] = next_cursor
+
+                response = self._request("GET", url, params=params)
+                response.raise_for_status()
+                data = response.json()
+                page = data.get('data', []) if isinstance(data, dict) else []
+                if not isinstance(page, list):
+                    page = []
+
+                markets.extend(page)
+                next_cursor = data.get("next_cursor") if isinstance(data, dict) else None
+                if not next_cursor or next_cursor == "LTE=" or len(page) < page_limit:
+                    break
+
+            return markets[:limit]
         except requests.exceptions.RequestException as e:
             raise Exception(f"Failed to get current markets: {e}")
     

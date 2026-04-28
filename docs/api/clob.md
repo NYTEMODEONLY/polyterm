@@ -4,7 +4,7 @@
 
 ## Overview
 
-The `CLOBClient` class provides access to Polymarket's CLOB API via both REST endpoints and two separate WebSocket connections. The REST interface covers order books, price history, tickers, trades, and market depth. The RTDS (Real-Time Data Service) WebSocket streams live trade activity, while the CLOB Order Book WebSocket streams real-time order book updates and market resolution events. The client includes a two-tier supervisor pattern for WebSocket resilience.
+The `CLOBClient` class provides access to Polymarket's CLOB V2 API via both REST endpoints and two separate WebSocket connections. The production REST host remains `https://clob.polymarket.com`. The REST interface covers order books, price history, price/spread/last-trade helpers, fee-rate lookup, sampling markets, and order-book-derived depth. The RTDS (Real-Time Data Service) WebSocket streams live trade activity, while the CLOB Order Book WebSocket streams real-time order book updates and market resolution events. The client includes a two-tier supervisor pattern for WebSocket resilience.
 
 ## Key Classes and Functions
 
@@ -35,10 +35,14 @@ Client for the Polymarket CLOB API, managing both REST requests and WebSocket co
 |--------|-----------|-------------|
 | `get_price_history` | `(token_id: str, interval: str = "1h", fidelity: int = 60, start_ts: Optional[int] = None, end_ts: Optional[int] = None) -> List[Dict[str, Any]]` | Get historical price data points |
 | `get_order_book` | `(token_id: str, depth: int = 20) -> Dict[str, Any]` | Get order book (bids and asks) for a token |
-| `get_ticker` | `(market_id: str) -> Dict[str, Any]` | Get ticker data (last price, volume) |
-| `get_recent_trades` | `(market_id: str, limit: int = 100) -> List[Dict[str, Any]]` | Get recent trades for a market |
-| `get_market_depth` | `(market_id: str) -> Dict[str, Any]` | Get market depth statistics |
-| `get_current_markets` | `(limit: int = 100) -> List[Dict[str, Any]]` | Get active markets via sampling-markets endpoint |
+| `get_price` | `(token_id: str, side: str = "BUY") -> Dict[str, Any]` | Get current CLOB V2 price for a token and side |
+| `get_spread` | `(token_id: str) -> Dict[str, Any]` | Get current spread for a token |
+| `get_last_trade_price` | `(token_id: str) -> Dict[str, Any]` | Get latest trade price and side for a token |
+| `get_fee_rate` | `(token_id: str) -> Dict[str, Any]` | Get CLOB fee-rate metadata for a token |
+| `get_ticker` | `(token_id: str) -> Dict[str, Any]` | Compatibility helper composed from V2 last-trade and spread endpoints |
+| `get_recent_trades` | `(market: str, limit: int = 100) -> List[Dict[str, Any]]` | Get trades via V2 `/trades`; unauthenticated callers should prefer RTDS when public trade history is restricted |
+| `get_market_depth` | `(token_id: str) -> Dict[str, Any]` | Derive depth statistics from `/book` |
+| `get_current_markets` | `(limit: int = 100) -> List[Dict[str, Any]]` | Get active markets via paginated `/sampling-markets` endpoint |
 | `calculate_spread` | `(order_book: Dict[str, Any]) -> float` | Calculate bid-ask spread percentage from order book data |
 | `is_market_current` | `(market: Dict[str, Any]) -> bool` | Check if a market is current (future end date, not closed) |
 | `detect_large_trade` | `(trade: Dict[str, Any], threshold: float = 10000) -> bool` | Detect whale trades by notional value |
@@ -74,10 +78,12 @@ Client for the Polymarket CLOB API, managing both REST requests and WebSocket co
 |----------|--------|-------------|
 | `/prices-history` | GET | Historical price data. Params: `market`, `interval`, `fidelity`, `startTs`, `endTs` |
 | `/book` | GET | Order book for a token. Params: `token_id` |
-| `/ticker/{market_id}` | GET | Ticker data for a market |
-| `/trades/{market_id}` | GET | Recent trades. Params: `limit` |
-| `/depth/{market_id}` | GET | Market depth statistics |
-| `/sampling-markets` | GET | Currently active markets. Params: `limit` |
+| `/price` | GET | Current price. Params: `token_id`, `side` |
+| `/spread` | GET | Current spread. Params: `token_id` |
+| `/last-trade-price` | GET | Latest trade price. Params: `token_id` |
+| `/fee-rate` | GET | Fee-rate metadata. Params: `token_id` |
+| `/trades` | GET | Recent/user trades when available. Params include `market`, `limit`, `maker_address`, `asset_id` |
+| `/sampling-markets` | GET | Currently active markets. Params: `limit`, `next_cursor` |
 
 ### WebSocket Endpoints
 
@@ -171,7 +177,7 @@ Setting `custom_feature_enabled: true` enables `market_resolved` events for real
 1. **REST**: Caller invokes a method -> `_request` applies retry/backoff -> returns parsed JSON.
 2. **RTDS trades**: `connect_websocket` -> `subscribe_to_trades` (registers callbacks) -> `listen_for_trades` (supervisor loop dispatches to callbacks by slug match).
 3. **Order book**: `connect_clob_websocket` -> `subscribe_orderbook` (registers callbacks and token IDs) -> `listen_orderbook` (dispatches `book`/`price_change` to callback, `market_resolved` to resolution callback).
-4. **Fallback path**: When `_ws_permanently_failed` is set, upstream consumers (e.g., `WhaleTracker`) can switch to REST polling via `get_recent_trades`.
+4. **Fallback path**: When `_ws_permanently_failed` is set, upstream consumers can switch to REST polling where supported. RTDS remains the preferred unauthenticated source for live trade streams.
 
 ## External Dependencies
 

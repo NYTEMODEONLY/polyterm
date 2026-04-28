@@ -4,7 +4,7 @@
 
 ## Overview
 
-The orderbook module provides three layers of functionality: a `LiveOrderBook` class that maintains thread-safe in-memory order book state from CLOB WebSocket updates, an `OrderBookAnalyzer` that performs comprehensive analysis (support/resistance, large orders, imbalance, slippage), and ASCII visualization of bid/ask depth. It supports both REST-fetched snapshots and real-time WebSocket feeds with market resolution detection.
+The orderbook module provides three layers of functionality: a `LiveOrderBook` class that maintains thread-safe in-memory order book state from CLOB WebSocket updates, an `OrderBookAnalyzer` that performs comprehensive analysis (support/resistance, large orders, imbalance, slippage), and ASCII visualization of bid/ask depth. It supports both REST-fetched snapshots and real-time WebSocket feeds with market resolution detection. CLI and TUI live order book surfaces render in a fixed Rich Live screen so top-of-book status and depth rows remain visible while data streams.
 
 ## Key Classes and Functions
 

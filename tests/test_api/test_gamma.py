@@ -441,11 +441,13 @@ class TestGammaGetMarkets:
         """Test getting markets returns list"""
         responses.add(
             responses.GET,
-            f"{GAMMA_ENDPOINT}/markets",
-            json=[
-                {"id": "1", "question": "Market A", "volume": 10000},
-                {"id": "2", "question": "Market B", "volume": 20000},
-            ],
+            f"{GAMMA_ENDPOINT}/markets/keyset",
+            json={
+                "markets": [
+                    {"id": "1", "question": "Market A", "volume": 10000},
+                    {"id": "2", "question": "Market B", "volume": 20000},
+                ]
+            },
             status=200,
         )
 
@@ -456,13 +458,13 @@ class TestGammaGetMarkets:
     @responses.activate
     def test_get_markets_params_passed_correctly(self, client):
         """Test that all parameters are passed correctly"""
-        responses.add(responses.GET, f"{GAMMA_ENDPOINT}/markets", json=[], status=200)
+        responses.add(responses.GET, f"{GAMMA_ENDPOINT}/markets/keyset", json={"markets": []}, status=200)
 
         client.get_markets(limit=50, offset=10, active=True, closed=False, tag="crypto")
 
         request_url = responses.calls[0].request.url
-        assert "limit=50" in request_url
-        assert "offset=10" in request_url
+        assert "limit=60" in request_url
+        assert "offset=" not in request_url
         assert "active=true" in request_url
         assert "closed=false" in request_url
         assert "tag=crypto" in request_url
@@ -470,13 +472,55 @@ class TestGammaGetMarkets:
     @responses.activate
     def test_get_markets_defaults_active_true_closed_false(self, client):
         """Test that default parameters set active=true and closed=false"""
-        responses.add(responses.GET, f"{GAMMA_ENDPOINT}/markets", json=[], status=200)
+        responses.add(responses.GET, f"{GAMMA_ENDPOINT}/markets/keyset", json={"markets": []}, status=200)
 
         client.get_markets()
 
         request_url = responses.calls[0].request.url
         assert "active=true" in request_url
         assert "closed=false" in request_url
+
+    @responses.activate
+    def test_get_markets_keyset_paginates_with_after_cursor(self, client):
+        """Test that keyset pagination follows next_cursor when needed"""
+        responses.add(
+            responses.GET,
+            f"{GAMMA_ENDPOINT}/markets/keyset",
+            json={"markets": [{"id": "1"}], "next_cursor": "cursor-1"},
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            f"{GAMMA_ENDPOINT}/markets/keyset",
+            json={"markets": [{"id": "2"}]},
+            status=200,
+        )
+
+        markets = client.get_markets(limit=2)
+
+        assert [market["id"] for market in markets] == ["1", "2"]
+        assert "after_cursor=cursor-1" in responses.calls[1].request.url
+
+    @responses.activate
+    def test_get_markets_falls_back_to_legacy_when_keyset_missing(self, client):
+        """Legacy /markets is used only if keyset is unavailable."""
+        responses.add(
+            responses.GET,
+            f"{GAMMA_ENDPOINT}/markets/keyset",
+            json={"error": "not found"},
+            status=404,
+        )
+        responses.add(
+            responses.GET,
+            f"{GAMMA_ENDPOINT}/markets",
+            json=[{"id": "legacy"}],
+            status=200,
+        )
+
+        markets = client.get_markets(limit=1)
+
+        assert markets == [{"id": "legacy"}]
+        assert client._markets_keyset_supported is False
 
 
 class TestGammaGetMarket:
@@ -560,12 +604,14 @@ class TestGammaSearchMarkets:
         # Fallback: get_markets returns list
         responses.add(
             responses.GET,
-            f"{GAMMA_ENDPOINT}/markets",
-            json=[
-                {"id": "1", "question": "Bitcoin price target"},
-                {"id": "2", "question": "Ethereum staking"},
-                {"id": "3", "question": "Will Bitcoin hit 100k?"},
-            ],
+            f"{GAMMA_ENDPOINT}/markets/keyset",
+            json={
+                "markets": [
+                    {"id": "1", "question": "Bitcoin price target"},
+                    {"id": "2", "question": "Ethereum staking"},
+                    {"id": "3", "question": "Will Bitcoin hit 100k?"},
+                ]
+            },
             status=200,
         )
 
@@ -585,7 +631,7 @@ class TestGammaSearchMarkets:
         responses.add(responses.GET, f"{GAMMA_ENDPOINT}/markets/search", status=500)
         # Fallback returns many bitcoin markets
         markets = [{"id": str(i), "question": f"Bitcoin market {i}"} for i in range(10)]
-        responses.add(responses.GET, f"{GAMMA_ENDPOINT}/markets", json=markets, status=200)
+        responses.add(responses.GET, f"{GAMMA_ENDPOINT}/markets/keyset", json={"markets": markets}, status=200)
 
         with patch("time.sleep", return_value=None):
             results = client.search_markets("bitcoin", limit=3)
@@ -605,8 +651,8 @@ class TestGammaSearchMarkets:
         # Fallback
         responses.add(
             responses.GET,
-            f"{GAMMA_ENDPOINT}/markets",
-            json=[{"id": "1", "question": "Bitcoin futures"}],
+            f"{GAMMA_ENDPOINT}/markets/keyset",
+            json={"markets": [{"id": "1", "question": "Bitcoin futures"}]},
             status=200,
         )
 
@@ -625,14 +671,14 @@ class TestGammaSearchMarkets:
         )
         responses.add(
             responses.GET,
-            f"{GAMMA_ENDPOINT}/markets",
-            json=[{"id": "1", "question": "Bitcoin market alpha"}],
+            f"{GAMMA_ENDPOINT}/markets/keyset",
+            json={"markets": [{"id": "1", "question": "Bitcoin market alpha"}]},
             status=200,
         )
         responses.add(
             responses.GET,
-            f"{GAMMA_ENDPOINT}/markets",
-            json=[{"id": "2", "question": "Bitcoin market beta"}],
+            f"{GAMMA_ENDPOINT}/markets/keyset",
+            json={"markets": [{"id": "2", "question": "Bitcoin market beta"}]},
             status=200,
         )
 
@@ -643,8 +689,8 @@ class TestGammaSearchMarkets:
         assert len(second) == 1
         assert len(responses.calls) == 3
         assert "/markets/search" in responses.calls[0].request.url
-        assert "/markets?" in responses.calls[1].request.url
-        assert "/markets?" in responses.calls[2].request.url
+        assert "/markets/keyset?" in responses.calls[1].request.url
+        assert "/markets/keyset?" in responses.calls[2].request.url
 
     @responses.activate
     def test_search_markets_keeps_search_endpoint_after_transient_500(self, client):
@@ -654,8 +700,8 @@ class TestGammaSearchMarkets:
         responses.add(responses.GET, f"{GAMMA_ENDPOINT}/markets/search", status=500)
         responses.add(
             responses.GET,
-            f"{GAMMA_ENDPOINT}/markets",
-            json=[{"id": "1", "question": "Bitcoin fallback result"}],
+            f"{GAMMA_ENDPOINT}/markets/keyset",
+            json={"markets": [{"id": "1", "question": "Bitcoin fallback result"}]},
             status=200,
         )
         responses.add(
@@ -675,7 +721,7 @@ class TestGammaSearchMarkets:
         assert second[0]["id"] == "2"
         assert client._search_endpoint_supported is True
         assert len(responses.calls) == 5
-        assert "/markets?" in responses.calls[3].request.url
+        assert "/markets/keyset?" in responses.calls[3].request.url
         assert "/markets/search" in responses.calls[4].request.url
 
 
@@ -693,8 +739,8 @@ class TestGammaGetTrendingMarkets:
         """Test that trending markets uses correct parameters"""
         responses.add(
             responses.GET,
-            f"{GAMMA_ENDPOINT}/markets",
-            json=[{"id": "1", "volume": 100000}],
+            f"{GAMMA_ENDPOINT}/markets/keyset",
+            json={"markets": [{"id": "1", "volume": 100000}]},
             status=200,
         )
 
@@ -712,11 +758,13 @@ class TestGammaGetTrendingMarkets:
         """Test that trending markets returns a list"""
         responses.add(
             responses.GET,
-            f"{GAMMA_ENDPOINT}/markets",
-            json=[
-                {"id": "1", "volume": 100000},
-                {"id": "2", "volume": 80000},
-            ],
+            f"{GAMMA_ENDPOINT}/markets/keyset",
+            json={
+                "markets": [
+                    {"id": "1", "volume": 100000},
+                    {"id": "2", "volume": 80000},
+                ]
+            },
             status=200,
         )
 

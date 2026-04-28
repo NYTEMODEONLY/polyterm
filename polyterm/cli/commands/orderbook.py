@@ -166,6 +166,7 @@ def orderbook(ctx, market_id, depth, chart, live, refresh, slippage, side, outpu
                         _render_live_panel(live_book, depth),
                         console=console,
                         refresh_per_second=1.0 / refresh if refresh > 0 else 1.0,
+                        screen=True,
                     ) as rich_live:
                         while True:
                             time.sleep(refresh)

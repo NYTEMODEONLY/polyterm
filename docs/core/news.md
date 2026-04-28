@@ -64,7 +64,7 @@ Main class for fetching, parsing, caching, and matching news articles.
 | Default cache TTL | `300` seconds (5 min) | Time before re-fetching a feed |
 | HTTP timeout | `10` seconds | Per-feed request timeout |
 | Summary truncation | `200` characters | Max length of cleaned article summaries |
-| User-Agent | `PolyTerm/0.9.0 News Reader` | HTTP User-Agent header |
+| User-Agent | `PolyTerm/{polyterm.__version__} News Reader` | HTTP User-Agent header |
 
 ### Default RSS Feeds
 

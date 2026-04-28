@@ -4,7 +4,7 @@
 
 ## Overview
 
-Monitor markets in real-time with live updates.
+Monitor markets in real time with polling updates. In live table mode, PolyTerm uses a fixed Rich Live screen so the table header and update timestamp stay visible while market data refreshes.
 
 ## Usage
 

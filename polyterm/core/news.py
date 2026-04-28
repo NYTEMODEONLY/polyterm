@@ -11,6 +11,8 @@ from datetime import datetime, timedelta, timezone
 
 import requests
 
+from polyterm import __version__
+
 
 class NewsAggregator:
     """Aggregate market-relevant news from multiple RSS sources"""
@@ -33,7 +35,7 @@ class NewsAggregator:
         self.cache_ttl = cache_ttl
         self.session = requests.Session()
         self.session.headers.update({
-            'User-Agent': 'PolyTerm/0.9.0 News Reader',
+            'User-Agent': f'PolyTerm/{__version__} News Reader',
         })
 
     def fetch_feed(self, name, url):

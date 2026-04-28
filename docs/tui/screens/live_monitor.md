@@ -4,7 +4,7 @@
 
 ## Overview
 
-The Live Monitor Screen provides an interactive setup flow for launching a real-time market monitor. It supports monitoring a specific market, a category of markets, or all active markets. The monitor launches in a new terminal window (with a fallback to the current terminal).
+The Live Monitor Screen provides an interactive setup flow for launching a real-time market monitor. It supports monitoring a specific market, a category of markets, or all active markets. The monitor launches in a new terminal window (with a fallback to the current terminal) and uses a fixed live dashboard while trades stream.
 
 ## Access
 
@@ -23,6 +23,8 @@ A three-step setup flow:
 3. **Launch** -- opens a live monitor in a new terminal window
 
 For category mode, the screen verifies that markets exist for the selected category before launching.
+
+The launched monitor keeps its header, connection state, trade counters, buy/sell totals, last trade time, recent trades table, and status footer visible while RTDS messages arrive.
 
 ## Navigation / Keyboard Shortcuts
 

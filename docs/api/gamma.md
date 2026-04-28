@@ -4,7 +4,7 @@
 
 ## Overview
 
-The `GammaClient` class is the primary API client for Polymarket market data. It provides access to the Gamma REST API for listing markets, searching, fetching prices, volume, trades, liquidity, and resolution data. All requests pass through a `SharedRateLimiter` that coordinates rate limits across concurrent PolyTerm processes using file-based locking. The module also includes a per-process `RateLimiter` fallback.
+The `GammaClient` class is the primary API client for Polymarket market data. It provides access to the Gamma REST API for listing markets, searching, fetching prices, volume, trades, liquidity, and resolution data. In `0.9.1`, market listing uses the current `/markets/keyset` endpoint by default because legacy `/markets` offset pagination is deprecated. All requests pass through a `SharedRateLimiter` that coordinates rate limits across concurrent PolyTerm processes using file-based locking. The module also includes a per-process `RateLimiter` fallback.
 
 ## Key Classes and Functions
 
@@ -58,7 +58,7 @@ Client for the Gamma Markets REST API.
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `get_markets` | `(limit: int = 100, offset: int = 0, active: Optional[bool] = None, closed: Optional[bool] = None, tag: Optional[str] = None) -> List[Dict[str, Any]]` | List markets with filtering. Defaults to active, non-closed |
+| `get_markets` | `(limit: int = 100, offset: int = 0, active: Optional[bool] = None, closed: Optional[bool] = None, tag: Optional[str] = None, market_id: Optional[str] = None) -> List[Dict[str, Any]]` | List markets with filtering via keyset pagination. Defaults to active, non-closed; keeps list-shaped return values for callers |
 | `get_market` | `(market_id: str) -> Dict[str, Any]` | Get single market details by ID or slug |
 | `get_market_prices` | `(market_id: str) -> Dict[str, Any]` | Get current prices and probabilities |
 | `get_market_volume` | `(market_id: str, interval: str = "1h") -> List[Dict[str, Any]]` | Get volume data at specified interval |
@@ -93,7 +93,8 @@ All endpoints are on `https://gamma-api.polymarket.com`:
 
 | Endpoint | Method | Parameters | Description |
 |----------|--------|------------|-------------|
-| `/markets` | GET | `limit`, `offset`, `active`, `closed`, `tag`, `order`, `ascending` | List markets with filters |
+| `/markets/keyset` | GET | `limit`, `next_cursor`, `active`, `closed`, `tag`, `order`, `ascending` | Current market listing endpoint with keyset pagination |
+| `/markets` | GET | `limit`, `offset`, `active`, `closed`, `tag`, `order`, `ascending` | Deprecated legacy fallback only when keyset is unavailable |
 | `/markets/{market_id}` | GET | -- | Single market details |
 | `/markets/{market_id}/prices` | GET | -- | Current prices and probabilities |
 | `/markets/{market_id}/volume` | GET | `interval` | Volume data at interval (1m, 5m, 15m, 1h, 4h, 1d) |
@@ -143,7 +144,7 @@ The `_request` method implements exponential backoff:
 ## Data Flow
 
 1. All REST calls go through `_request` which applies the `SharedRateLimiter` before each HTTP request.
-2. `get_markets` returns raw market dicts from the `/markets` endpoint with optional filters.
+2. `get_markets` returns raw market dicts from `/markets/keyset`, unwrapping the API's `{markets, next_cursor}` response into the legacy list shape expected by PolyTerm tools.
 3. `filter_fresh_markets` applies freshness checks using `is_market_fresh` (prefers `active`/`closed` flags, falls back to date parsing).
 4. `get_resolution` fetches a single market and parses resolution status from `outcomePrices` and `closed`/`active` flags.
 5. `get_resolved_markets` fetches closed markets ordered by end date and attaches `_resolution` data to each.

@@ -4,7 +4,7 @@
 
 ## Overview
 
-The Order Book screen provides two modes: a live WebSocket-fed depth display that updates in real time, and a static one-shot analysis with ASCII depth charts and slippage calculation. The live mode uses the CLOB WebSocket for streaming order book data with automatic REST polling fallback.
+The Order Book screen provides two modes: a live WebSocket-fed depth display that updates in real time, and a static one-shot analysis with ASCII depth charts and slippage calculation. The live mode uses the CLOB WebSocket for streaming order book data with automatic REST polling fallback and renders in a fixed live screen so the header/status remain visible.
 
 ## Access
 

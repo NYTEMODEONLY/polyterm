@@ -5,7 +5,7 @@
 ## Overview
 
 Calculate trading fees and slippage. Understand the true cost of your trades including:
-- Platform fees (2% on winnings)
+- Dynamic protocol fee estimates from the current CLOB V2 fee schedule
 - Estimated slippage based on order book
 - Gas fees for on-chain transactions
 
@@ -44,12 +44,19 @@ In the TUI main menu, use any of these shortcuts: `fee`, `fees`
 # Interactive mode
 polyterm fees -i
 
-# With side option
-polyterm fees --side buy
+# Estimate fees and show the source used
+polyterm fees --amount 100 --price 0.65
+
+# Include market-specific fee schedule lookup when available
+polyterm fees --amount 1000 --price 0.50 --market "bitcoin"
 
 # JSON output
 polyterm fees --format json
 ```
+
+## Notes
+
+PolyTerm no longer treats an old fixed taker-fee assumption as authoritative. The calculator uses the CLOB V2 market fee schedule when available and falls back to a generic protocol estimate when the market does not expose schedule metadata.
 
 ## Data Sources
 

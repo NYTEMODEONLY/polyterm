@@ -7,7 +7,7 @@
 Quick trade calculator - analyze before you trade. Shows everything you need to know before placing a trade:
 - Current price and spread
 - Estimated shares and avg fill price
-- Fees and total cost
+- Dynamic CLOB V2 protocol fee estimate and total cost
 - Breakeven and profit scenarios
 - Risk/reward analysis
 
@@ -42,15 +42,19 @@ In the TUI main menu, use any of these shortcuts: `tr`, `trade`
 ## Examples
 
 ```bash
-# Interactive mode
-polyterm trade -i
+# Analyze $500 YES trade
+polyterm trade -m "bitcoin" -a 500
 
-# With amount option
-polyterm trade --amount 100
+# Analyze $200 NO trade
+polyterm trade -m "election" -s no -a 200
 
 # JSON output
 polyterm trade --format json
 ```
+
+## Notes
+
+The trade calculator is analysis-only. It does not submit orders or handle private keys. Fee estimates use CLOB V2 market fee schedules where available and include the fee source in the output.
 
 ## Data Sources
 

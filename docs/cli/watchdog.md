@@ -5,7 +5,7 @@
 ## Overview
 
 Continuous monitoring with custom alert conditions. Watch markets and alert when conditions are met.
-Runs until stopped (Ctrl+C) or duration expires.
+Runs until stopped (Ctrl+C) or duration expires. The table output uses a fixed Rich Live dashboard with condition summary, check count, watched market state, and recent alerts.
 
 Examples:
 polyterm watchdog -m "bitcoin" --above 0.70
@@ -42,14 +42,14 @@ In the TUI main menu, use any of these shortcuts: `wd`, `watchdog`
 ## Examples
 
 ```bash
-# Interactive mode
-polyterm watchdog -i
+# Watch for any significant movement
+polyterm watchdog -m "bitcoin"
 
-# With interval option
-polyterm watchdog --interval 30
+# Price above threshold
+polyterm watchdog -m "bitcoin" --above 0.70
 
 # JSON output
-polyterm watchdog --format json
+polyterm watchdog -m "bitcoin" --format json
 ```
 
 ## Data Sources

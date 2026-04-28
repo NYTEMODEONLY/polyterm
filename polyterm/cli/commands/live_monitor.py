@@ -17,6 +17,7 @@ from rich.panel import Panel
 from rich.text import Text
 from rich.layout import Layout
 from rich.align import Align
+from rich.markup import escape
 
 from ...api.gamma import GammaClient
 from ...api.clob import CLOBClient
@@ -160,6 +161,21 @@ class LiveMarketMonitor:
         self._ws_status = "disconnected"  # connected | reconnecting | polling | disconnected
         self._ws_reconnect_attempt = 0
         self._ws_max_reconnects = 5
+
+        # Fixed live dashboard state
+        self.trade_count = 0
+        self.total_volume = 0.0
+        self.buy_count = 0
+        self.sell_count = 0
+        self.recent_trades: List[Dict[str, Any]] = []
+        self.max_recent_trades = 50
+        self.status_messages: List[Dict[str, str]] = []
+        self.max_status_messages = 4
+        self.market_titles: Dict[str, str] = {}
+        self.market_prices: Dict[str, float] = {}
+        self.markets_count = 0
+        self._last_trade_at: Optional[datetime] = None
+        self._dashboard_started_at: Optional[datetime] = None
     
     def _signal_handler(self, signum, frame):
         """Handle interrupt signals"""
@@ -406,14 +422,7 @@ class LiveMarketMonitor:
     def run_live_monitor(self):
         """Run the live monitoring loop with real-time trade feeds"""
         self._running = True
-
-        # Stats tracking
-        self.trade_count = 0
-        self.total_volume = 0.0
-        self.buy_count = 0
-        self.sell_count = 0
-        self.recent_trades = []  # Store last N trades for display
-        self.max_recent_trades = 50
+        self._reset_live_dashboard_state()
 
         try:
             # Get markets to monitor
@@ -451,12 +460,19 @@ class LiveMarketMonitor:
             self.market_titles = market_titles
             self.market_prices = market_prices
             self.markets_count = len(market_slugs)
+            self._dashboard_started_at = datetime.now(timezone.utc)
+            self._add_status_message("Starting live trade monitor", "cyan")
 
-            # Print fixed header (this stays at top)
-            self._print_header()
-
-            # Run async WebSocket monitoring with market slugs
-            asyncio.run(self._run_websocket_monitor(market_slugs, market_titles))
+            with Live(
+                self._render_live_dashboard(),
+                console=self.console,
+                refresh_per_second=4,
+                screen=True,
+                vertical_overflow="crop",
+            ) as live_display:
+                self._live_display = live_display
+                self._refresh_live_dashboard()
+                asyncio.run(self._run_websocket_monitor(market_slugs, market_titles))
 
         except KeyboardInterrupt:
             self.console.print(f"\n[yellow]🔴 Live monitoring stopped[/yellow]")
@@ -466,35 +482,129 @@ class LiveMarketMonitor:
             self._running = False
             self.cleanup()
 
-    def _print_header(self):
-        """Print the fixed header with metrics"""
-        self.console.clear()
+    def _reset_live_dashboard_state(self):
+        """Reset counters and render state for a new monitor session."""
+        self.trade_count = 0
+        self.total_volume = 0.0
+        self.buy_count = 0
+        self.sell_count = 0
+        self.recent_trades = []
+        self.status_messages = []
+        self._last_trade_at = None
 
-        # Category/market info
+    def _monitor_type_label(self) -> str:
+        """Return the human-readable monitor target."""
         if self.category:
-            monitor_type = f"Category: {self.category.upper()}"
-        elif self.market_id:
-            monitor_type = f"Market: {self.market_id[:20]}..."
-        else:
-            monitor_type = "All Active Markets"
+            return f"Category: {self.category.upper()}"
+        if self.market_id:
+            return f"Market: {self.market_id[:20]}..."
+        return "All Active Markets"
 
-        # Header panel
-        header = Panel(
+    def _render_live_dashboard(self) -> Layout:
+        """Build the fixed live dashboard renderable."""
+        layout = Layout()
+        layout.split_column(
+            Layout(self._build_header_panel(), size=7),
+            Layout(self._build_trades_table(), ratio=1),
+            Layout(self._build_status_panel(), size=6),
+        )
+        return layout
+
+    def _build_header_panel(self) -> Panel:
+        """Build the always-visible header and metrics panel."""
+        started = (
+            self._dashboard_started_at.astimezone().strftime("%H:%M:%S")
+            if self._dashboard_started_at
+            else "--:--:--"
+        )
+        last_trade = (
+            self._last_trade_at.astimezone().strftime("%H:%M:%S")
+            if self._last_trade_at
+            else "waiting"
+        )
+
+        header_text = (
             f"[bold red]🔴 LIVE TRADE MONITOR[/bold red]\n"
-            f"[cyan]{monitor_type}[/cyan] | [green]{self.markets_count} markets[/green]\n"
-            f"[dim]Press Ctrl+C to stop[/dim]",
+            f"[cyan]{escape(self._monitor_type_label())}[/cyan] | "
+            f"[green]{self.markets_count} markets[/green] | "
+            f"Started: [white]{started}[/white] | Last trade: [white]{last_trade}[/white]\n"
+            f"{self._format_ws_status()} | "
+            f"[bold]Trades:[/bold] [cyan]{self.trade_count:,}[/cyan] | "
+            f"[bold]Volume:[/bold] [cyan]${self.total_volume:,.0f}[/cyan] | "
+            f"[green]Buys:[/green] {self.buy_count:,} | "
+            f"[red]Sells:[/red] {self.sell_count:,}\n"
+            f"[dim]Press Ctrl+C to stop[/dim]"
+        )
+        return Panel(
+            Align.left(Text.from_markup(header_text)),
             border_style="red",
             padding=(0, 2),
         )
-        self.console.print(header)
 
-        # Stats bar (will be updated)
-        self._print_stats_bar()
+    def _build_trades_table(self) -> Table:
+        """Build the recent trades table."""
+        table = Table(
+            title="🔴 LIVE TRADES (Real-time)",
+            title_style="bold red",
+            expand=True,
+            show_lines=False,
+        )
+        table.add_column("Time", style="dim", width=8, no_wrap=True)
+        table.add_column("Market", style="white", ratio=1, overflow="ellipsis")
+        table.add_column("Side", justify="center", width=16)
+        table.add_column("Size", justify="right", width=10)
+        table.add_column("Price", justify="right", width=9)
+        table.add_column("Total", justify="right", width=11)
 
-        # Column headers
-        self.console.print()
-        self.console.print("[bold cyan]TIME     │ MARKET                      │ SIDE      │ SIZE      │ PRICE    │ TOTAL[/bold cyan]")
-        self.console.print("[dim]─" * 90 + "[/dim]")
+        if not self.recent_trades:
+            table.add_row(
+                "--:--:--",
+                Text("Waiting for RTDS trades...", style="dim"),
+                Text(""),
+                Text(""),
+                Text(""),
+                Text(""),
+            )
+            return table
+
+        for trade in self.recent_trades[: self.max_recent_trades]:
+            side = trade["side"]
+            side_style = "green" if side == "BUY" else "red"
+            outcome = f" ({trade['outcome']})" if trade.get("outcome") else ""
+            table.add_row(
+                trade["timestamp"],
+                Text(trade["market_title"]),
+                Text(f"● {side}{outcome}", style=side_style),
+                f"{trade['size']:,.0f}",
+                f"${trade['price']:.3f}",
+                f"${trade['notional']:,.0f}",
+            )
+
+        return table
+
+    def _build_status_panel(self) -> Panel:
+        """Build the bottom status/event panel."""
+        status_table = Table.grid(expand=True)
+        status_table.add_column(ratio=1)
+
+        messages = self.status_messages[-self.max_status_messages :]
+        if not messages:
+            status_table.add_row(Text("No status messages yet.", style="dim"))
+        else:
+            for message in messages:
+                status_table.add_row(
+                    Text(
+                        f"{message['timestamp']}  {message['message']}",
+                        style=message["style"],
+                    )
+                )
+
+        return Panel(
+            status_table,
+            title="Connection",
+            border_style="cyan",
+            padding=(0, 1),
+        )
 
     def _format_ws_status(self) -> str:
         """Format WebSocket connection status indicator"""
@@ -507,16 +617,20 @@ class LiveMarketMonitor:
         else:
             return "[dim]⚪ Disconnected[/dim]"
 
-    def _print_stats_bar(self):
-        """Print/update the stats bar"""
-        stats = (
-            f"{self._format_ws_status()} | "
-            f"[bold]Trades:[/bold] {self.trade_count:,} | "
-            f"[bold]Volume:[/bold] ${self.total_volume:,.0f} | "
-            f"[green]Buys:[/green] {self.buy_count} | "
-            f"[red]Sells:[/red] {self.sell_count}"
-        )
-        self.console.print(f"[on black] {stats} [/on black]")
+    def _refresh_live_dashboard(self):
+        """Refresh the fixed live dashboard if it is active."""
+        if self._live_display:
+            self._live_display.update(self._render_live_dashboard())
+
+    def _add_status_message(self, message: str, style: str = "white"):
+        """Append a status message to the fixed dashboard footer."""
+        self.status_messages.append({
+            "timestamp": datetime.now(timezone.utc).astimezone().strftime("%H:%M:%S"),
+            "message": message,
+            "style": style,
+        })
+        self.status_messages = self.status_messages[-self.max_status_messages :]
+        self._refresh_live_dashboard()
 
     async def _run_websocket_monitor(self, market_slugs: List[str], market_titles: Dict[str, str]):
         """Run WebSocket monitoring for live trades"""
@@ -527,33 +641,44 @@ class LiveMarketMonitor:
             await self.clob_client.connect_websocket()
             self._ws_status = "connected"
             self._ws_reconnect_attempt = 0
-            self.console.print(f"{self._format_ws_status()} Connected to PolyMarket RTDS WebSocket")
+            self._add_status_message("Connected to PolyMarket RTDS WebSocket", "green")
 
             # When monitoring a category, subscribe to ALL trades and filter client-side
             # This is because RTDS slugs may not match Gamma API slugs exactly
             if self.category:
                 # Subscribe to all trades, we'll filter by category keywords
                 await self.clob_client.subscribe_to_trades([], lambda trade: self._handle_trade(trade, market_titles))
-                self.console.print(f"[green]✅ Monitoring {self.category.upper()} trades (keyword filtering)[/green]")
+                self._add_status_message(
+                    f"Monitoring {self.category.upper()} trades with keyword filtering",
+                    "green",
+                )
             else:
                 # For specific markets or all markets, use slug-based stream registration
                 await self.clob_client.subscribe_to_trades(market_slugs, lambda trade: self._handle_trade(trade, market_titles))
-                self.console.print(f"[green]✅ Subscribed to {len(market_slugs)} market feeds[/green]")
-            self.console.print()
-            self.console.print("[bold]🔴 LIVE TRADES (Real-time):[/bold]")
-            self.console.print("=" * 80)
+                self._add_status_message(
+                    f"Subscribed to {len(market_slugs)} market feeds",
+                    "green",
+                )
 
             # Start listening for trades
-            await self.clob_client.listen_for_trades()
+            await self.clob_client.listen_for_trades(on_error=self._handle_ws_error)
             
         except Exception as e:
             self._ws_status = "polling"
-            self.console.print(f"\n{self._format_ws_status()}")
-            self.console.print(f"[red]❌ WebSocket error: {e}[/red]")
-            self.console.print("[yellow]⚠️ Falling back to REST polling mode...[/yellow]")
+            self._add_status_message(f"WebSocket error: {e}", "red")
+            self._add_status_message("Falling back to REST polling mode", "yellow")
             await self._run_polling_monitor(market_slugs, market_titles)
         finally:
             await self.clob_client.close_websocket()
+
+    def _handle_ws_error(self, exc: Exception):
+        """Update dashboard state when the RTDS client reports reconnect trouble."""
+        self._ws_status = "reconnecting"
+        self._ws_reconnect_attempt = min(
+            self._ws_reconnect_attempt + 1,
+            self._ws_max_reconnects,
+        )
+        self._add_status_message(str(exc), "yellow")
 
     async def _handle_trade(self, trade_data: Dict[str, Any], market_titles: Dict[str, str]):
         """Handle incoming trade data from RTDS"""
@@ -597,22 +722,19 @@ class LiveMarketMonitor:
                 self.buy_count += 1
             else:
                 self.sell_count += 1
+            self._last_trade_at = datetime.now(timezone.utc)
 
-            # Format and display trade
-            side_color = "green" if side == "BUY" else "red"
-            side_icon = "🟢" if side == "BUY" else "🔴"
-            title_short = market_title[:27] + "..." if len(market_title) > 27 else market_title.ljust(30)
-            outcome_str = f"({outcome})" if outcome else ""
-
-            trade_line = (
-                f"[dim]{timestamp}[/dim] │ "
-                f"{title_short} │ "
-                f"[{side_color}]{side_icon} {side:<4} {outcome_str:<5}[/{side_color}] │ "
-                f"{size:>8,.0f} │ "
-                f"${price:>6.3f} │ "
-                f"[bold]${notional:>8,.0f}[/bold]"
-            )
-            self.console.print(trade_line)
+            self.recent_trades.insert(0, {
+                "timestamp": timestamp,
+                "market_title": market_title,
+                "side": side,
+                "outcome": outcome,
+                "size": size,
+                "price": price,
+                "notional": notional,
+            })
+            self.recent_trades = self.recent_trades[: self.max_recent_trades]
+            self._refresh_live_dashboard()
 
         except Exception as e:
             # Silently ignore parse errors for non-trade messages
@@ -620,7 +742,7 @@ class LiveMarketMonitor:
 
     async def _run_polling_monitor(self, market_slugs: List[str], market_titles: Dict[str, str]):
         """Fallback polling mode when WebSocket fails"""
-        self.console.print("[yellow]📊 Polling mode - checking for changes every 2 seconds...[/yellow]")
+        self._add_status_message("Polling mode - checking for changes every 2 seconds", "yellow")
         
         last_prices = {}
         
@@ -660,9 +782,9 @@ class LiveMarketMonitor:
                                     mt = market_titles.get(market_id, "Unknown")
                                     title_short = mt[:30] + "..." if len(mt) > 30 else mt
                                     color = "green" if outcome == "YES" else "red"
-                                    self.console.print(
-                                        f"[bold {color}]{current_time} | {title_short:<33} | "
-                                        f"RESOLVED {outcome} | Market settled[/bold {color}]"
+                                    self._add_status_message(
+                                        f"{current_time} {title_short}: resolved {outcome}",
+                                        color,
                                     )
 
                     # Get current price
@@ -671,15 +793,16 @@ class LiveMarketMonitor:
 
                     if previous_price is not None and current_price != previous_price:
                         # Price changed - simulate a trade
-                        direction = "🟢 BUY" if current_price > previous_price else "🔴 SELL"
+                        direction = "BUY" if current_price > previous_price else "SELL"
                         color = "green" if current_price > previous_price else "red"
 
                         market_title = market_titles.get(market_id, "Unknown")
                         title_short = market_title[:30] + "..." if len(market_title) > 30 else market_title
 
-                        self.console.print(
-                            f"[{color}]{current_time} | {title_short:<33} | {direction} | "
-                            f"PRICE CHANGE | ${previous_price:.4f} → ${current_price:.4f}[/{color}]"
+                        self._add_status_message(
+                            f"{current_time} {title_short}: {direction} price "
+                            f"${previous_price:.4f} -> ${current_price:.4f}",
+                            color,
                         )
 
                     last_prices[market_id] = current_price
@@ -688,7 +811,7 @@ class LiveMarketMonitor:
                 
             except Exception as e:
                 if self._running:
-                    self.console.print(f"[red]{datetime.now(timezone.utc).strftime('%H:%M:%S')} | ERROR: {e}[/red]")
+                    self._add_status_message(f"Polling error: {e}", "red")
                 await asyncio.sleep(5)
     
     def cleanup(self):

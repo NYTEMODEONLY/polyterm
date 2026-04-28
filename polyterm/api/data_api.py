@@ -49,7 +49,7 @@ class DataAPIClient:
                 raise
         raise Exception(f"API request failed after {retries} retries: {url}")
 
-    def get_positions(self, address, limit=100, offset=0, sort_by="CURRENT_VALUE"):
+    def get_positions(self, address, limit=100, offset=0, sort_by="CURRENT"):
         """Get wallet positions
         GET /positions?user={address}&limit={limit}&offset={offset}&sortBy={sort_by}
         Returns list of position dicts
@@ -82,11 +82,12 @@ class DataAPIClient:
         return response.json()
 
     def get_profit_summary(self, address):
-        """Get profit/loss summary for a wallet by aggregating positions sorted by PNL
-        GET /positions?user={address}&sortBy=PNL
+        """Get profit/loss summary for a wallet by aggregating positions sorted by cash P&L.
+
+        GET /positions?user={address}&sortBy=CASHPNL
         Returns dict with total_pnl, total_invested, position_count
         """
-        response = self._request("GET", "/positions", params={"user": address, "sortBy": "PNL", "limit": 500})
+        response = self._request("GET", "/positions", params={"user": address, "sortBy": "CASHPNL", "limit": 500})
         response.raise_for_status()
         positions = response.json()
 

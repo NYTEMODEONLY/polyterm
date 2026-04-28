@@ -7,6 +7,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.prompt import Prompt, FloatPrompt, Confirm
 
+from ...core.fees import estimate_taker_fee, fee_source_label
 from ...utils.json_output import print_json
 
 
@@ -166,10 +167,11 @@ def _calculate_parlay(probs: List[float], amount: float) -> dict:
     # ROI if all legs hit
     roi = (potential_profit / amount) * 100
 
-    # Fee-adjusted (2% on winnings)
-    fee_rate = 0.02
-    profit_after_fees = potential_profit * (1 - fee_rate)
+    # Fee-adjusted using the generic CLOB V2 protocol fee curve.
+    fee_estimate = estimate_taker_fee(amount, combined_prob)
+    profit_after_fees = potential_profit - fee_estimate
     payout_after_fees = amount + profit_after_fees
+    roi_after_fees = (profit_after_fees / amount) * 100
 
     # Risk assessment
     if combined_prob >= 0.25:
@@ -187,9 +189,12 @@ def _calculate_parlay(probs: List[float], amount: float) -> dict:
         'american_odds': american_odds,
         'potential_payout': potential_payout,
         'potential_profit': potential_profit,
+        'fee_estimate': fee_estimate,
+        'fee_source': fee_source_label(None),
         'profit_after_fees': profit_after_fees,
         'payout_after_fees': payout_after_fees,
         'roi': roi,
+        'roi_after_fees': roi_after_fees,
         'risk_level': risk_level,
     }
 
@@ -245,6 +250,7 @@ def _display_result(console: Console, probs: List[float], amount: float, result:
     )
     results_table.add_row("Decimal Odds", f"{result['decimal_odds']:.2f}x")
     results_table.add_row("Risk Level", f"[{prob_color}]{result['risk_level']}[/{prob_color}]")
+    results_table.add_row("Protocol Fee Estimate", f"${result['fee_estimate']:,.2f} ({result['fee_source']})")
 
     console.print(results_table)
     console.print()
@@ -263,7 +269,7 @@ def _display_result(console: Console, probs: List[float], amount: float, result:
         "[green]ALL legs win[/green]",
         f"[green]${result['payout_after_fees']:,.2f}[/green]",
         f"[green]+${result['profit_after_fees']:,.2f}[/green]",
-        f"[green]+{result['roi']*(1-0.02):.0f}%[/green]",
+        f"[green]+{result['roi_after_fees']:.0f}%[/green]",
     )
     payout_table.add_row(
         "[red]ANY leg loses[/red]",

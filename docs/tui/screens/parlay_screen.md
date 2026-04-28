@@ -4,7 +4,7 @@
 
 ## Overview
 
-The Parlay screen calculates combined probability, odds, and expected payout for multi-leg parlay bets. All legs must win for the parlay to pay out. Supports 2-10 legs and accounts for Polymarket's 2% fee on winnings.
+The Parlay screen calculates combined probability, odds, and expected payout for multi-leg parlay bets. All legs must win for the parlay to pay out. Supports 2-10 legs and includes a generic CLOB V2 protocol fee estimate.
 
 ## Access
 

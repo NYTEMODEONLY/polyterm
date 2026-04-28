@@ -76,13 +76,13 @@ PolyTerm automatically checks for updates on launch:
 **Current Version:**
 ```
 Main Menu
-PolyTerm v0.9.0
+PolyTerm v0.9.1
 ```
 
 **Update Available:**
 ```
 Main Menu
-PolyTerm v0.9.0 Update Available: v0.9.1
+PolyTerm v0.9.1 Update Available: v0.9.2
 ```
 
 Press `u` to quick update directly from the menu.

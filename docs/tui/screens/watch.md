@@ -4,7 +4,7 @@
 
 ## Overview
 
-The Watch screen lets you track a specific market in real time, alerting you when the probability changes by more than a configurable threshold. It accepts either a market search term or a direct Market ID, and runs continuously until stopped.
+The Watch screen lets you track a specific market in real time, alerting you when the probability changes by more than a configurable threshold. It accepts either a market search term or a direct Market ID, and runs continuously until stopped. The underlying CLI dashboard keeps status, market metrics, and recent alerts fixed while polling continues.
 
 ## Access
 
@@ -13,7 +13,7 @@ The Watch screen lets you track a specific market in real time, alerting you whe
 
 ## What It Shows
 
-A live updating view of a single market's probability, refreshing at a configurable interval. Alerts are triggered when the probability change exceeds the threshold.
+A live updating view of a single market's probability, refreshing at a configurable interval. Alerts are triggered when the probability or volume change exceeds the configured threshold. The display includes check count, last check time, current market state, and recent alerts.
 
 ## Navigation / Keyboard Shortcuts
 

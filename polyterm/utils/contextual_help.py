@@ -137,7 +137,7 @@ HELP_CONTENT = {
         ],
         "tips": [
             "Always calculate your max loss before trading",
-            "Consider fees (2% on winnings)",
+            "Consider market-specific protocol fees",
             "Use conservative probability estimates",
         ],
         "shortcuts": "sim, simulate",

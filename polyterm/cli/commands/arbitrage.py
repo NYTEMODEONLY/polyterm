@@ -167,7 +167,7 @@ def _run_live_mode(config, console, min_spread, limit, include_kalshi, output_fo
         scan_count = 0
 
         try:
-            with Live(console=console, refresh_per_second=1, screen=False) as live_display:
+            with Live(console=console, refresh_per_second=1, screen=True) as live_display:
                 while True:
                     scan_count += 1
                     all_opps = []

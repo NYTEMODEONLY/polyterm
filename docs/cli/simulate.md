@@ -7,6 +7,8 @@
 Simulate a prediction market position. Calculate potential profit/loss before placing a trade.
 Great for understanding how prediction markets work!
 
+Fee estimates use the CLOB V2 protocol fee curve, and market-specific schedules are used when a market can be resolved.
+
 Examples:
 polyterm simulate --price 0.65 --amount 100 --side yes
 polyterm simulate -i   # Interactive mode.

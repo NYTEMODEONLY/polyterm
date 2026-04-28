@@ -7,6 +7,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.live import Live
+from rich.layout import Layout
+from rich.text import Text
 
 from ...api.gamma import GammaClient
 from ...db.database import Database
@@ -109,28 +111,16 @@ def _run_watchdog(console: Console, gamma_client: GammaClient, watched_markets: 
     start_time = time.time()
     end_time = start_time + (duration * 60) if duration > 0 else float('inf')
 
-    console.print()
-    console.print(Panel("[bold]Watchdog Active[/bold]", border_style="green"))
-    console.print()
-
-    console.print(f"[bold]Watching:[/bold] {len(watched_markets)} market(s)")
-    console.print(f"[bold]Conditions:[/bold] {_describe_conditions(conditions)}")
-    console.print(f"[bold]Interval:[/bold] {interval}s")
-    if duration > 0:
-        console.print(f"[bold]Duration:[/bold] {duration} minutes")
-    console.print()
-    console.print("[dim]Press Ctrl+C to stop[/dim]")
-    console.print()
-
     check_count = 0
+    last_check = "waiting"
+    recent_alerts = []
 
-    while time.time() < end_time:
+    def run_check():
+        nonlocal check_count, last_check, recent_alerts
         check_count += 1
         check_time = datetime.now().strftime("%H:%M:%S")
+        last_check = check_time
 
-        console.print(f"[dim]Check #{check_count} at {check_time}[/dim]")
-
-        # Check each market
         for wm in watched_markets:
             try:
                 # Refresh market data
@@ -147,7 +137,15 @@ def _run_watchdog(console: Console, gamma_client: GammaClient, watched_markets: 
 
                 if triggered:
                     for alert in triggered:
-                        _display_alert(console, wm['title'], alert, output_format)
+                        if output_format == 'json':
+                            _display_alert(console, wm['title'], alert, output_format)
+                        else:
+                            recent_alerts.insert(0, {
+                                'time': check_time,
+                                'market': wm['title'],
+                                'alert': alert,
+                            })
+                            recent_alerts = recent_alerts[:8]
                         wm['alerts'].append({
                             'time': check_time,
                             'alert': alert,
@@ -158,21 +156,157 @@ def _run_watchdog(console: Console, gamma_client: GammaClient, watched_markets: 
                 wm['last_volume'] = current_volume
 
             except Exception as e:
-                handle_api_error(console, e, f"checking {wm['title']}")
+                if output_format == 'json':
+                    handle_api_error(console, e, f"checking {wm['title']}")
+                else:
+                    recent_alerts.insert(0, {
+                        'time': check_time,
+                        'market': wm['title'],
+                        'alert': {
+                            'type': 'error',
+                            'message': str(e),
+                        },
+                    })
+                    recent_alerts = recent_alerts[:8]
 
-        # Wait for next check
-        try:
-            time.sleep(interval)
-        except KeyboardInterrupt:
-            break
+    if output_format == 'json':
+        while time.time() < end_time:
+            run_check()
+            try:
+                time.sleep(interval)
+            except KeyboardInterrupt:
+                break
+    else:
+        with Live(
+            _render_watchdog_dashboard(
+                watched_markets,
+                conditions,
+                interval,
+                duration,
+                start_time,
+                check_count,
+                last_check,
+                recent_alerts,
+            ),
+            console=console,
+            refresh_per_second=1,
+            screen=True,
+        ) as live:
+            while time.time() < end_time:
+                run_check()
+                live.update(_render_watchdog_dashboard(
+                    watched_markets,
+                    conditions,
+                    interval,
+                    duration,
+                    start_time,
+                    check_count,
+                    last_check,
+                    recent_alerts,
+                ))
+
+                try:
+                    time.sleep(interval)
+                except KeyboardInterrupt:
+                    break
+
+    total_alerts = sum(len(wm['alerts']) for wm in watched_markets)
 
     # Summary
-    console.print()
-    console.print("[bold]Watchdog Summary:[/bold]")
+    if output_format != 'json':
+        console.print()
+        console.print("[bold]Watchdog Summary:[/bold]")
+        console.print(f"  Checks: {check_count}")
+        console.print(f"  Alerts: {total_alerts}")
+        console.print()
+
+
+def _render_watchdog_dashboard(
+    watched_markets: list,
+    conditions: list,
+    interval: int,
+    duration: int,
+    start_time: float,
+    check_count: int,
+    last_check: str,
+    recent_alerts: list,
+) -> Layout:
+    """Render the fixed watchdog dashboard."""
+    elapsed = int(time.time() - start_time)
+    elapsed_text = f"{elapsed // 60}m {elapsed % 60}s"
+    duration_text = "until stopped" if duration <= 0 else f"{duration}m"
     total_alerts = sum(len(wm['alerts']) for wm in watched_markets)
-    console.print(f"  Checks: {check_count}")
-    console.print(f"  Alerts: {total_alerts}")
-    console.print()
+
+    header = Panel(
+        Text.from_markup(
+            "[bold green]Watchdog Active[/bold green]\n"
+            f"Watching: [cyan]{len(watched_markets)} market(s)[/cyan] | "
+            f"Conditions: [white]{_describe_conditions(conditions)}[/white]\n"
+            f"Checks: [cyan]{check_count}[/cyan] | "
+            f"Alerts: [yellow]{total_alerts}[/yellow] | "
+            f"Last check: [white]{last_check}[/white] | "
+            f"Interval: [white]{interval}s[/white] | "
+            f"Elapsed: [white]{elapsed_text}[/white] | Duration: [white]{duration_text}[/white]\n"
+            "[dim]Press Ctrl+C to stop[/dim]"
+        ),
+        border_style="green",
+        padding=(0, 2),
+    )
+
+    market_table = Table(
+        title="Watched Markets",
+        title_style="bold cyan",
+        expand=True,
+    )
+    market_table.add_column("Market", style="white", ratio=1, overflow="ellipsis")
+    market_table.add_column("Price", justify="right", width=10)
+    market_table.add_column("Initial", justify="right", width=10)
+    market_table.add_column("Change", justify="right", width=10)
+    market_table.add_column("24h Volume", justify="right", width=14)
+    market_table.add_column("Alerts", justify="right", width=8)
+
+    for wm in watched_markets:
+        current_price = float(wm.get('last_price', 0) or 0)
+        initial_price = float(wm.get('initial_price', 0) or 0)
+        price_change = current_price - initial_price
+        change_style = "green" if price_change > 0 else "red" if price_change < 0 else "yellow"
+        market_table.add_row(
+            wm.get('title', 'Unknown'),
+            f"{current_price:.1%}",
+            f"{initial_price:.1%}",
+            f"[{change_style}]{price_change:+.1%}[/{change_style}]",
+            f"${float(wm.get('last_volume', 0) or 0):,.0f}",
+            str(len(wm.get('alerts', []))),
+        )
+
+    alerts_table = Table(
+        title="Recent Alerts",
+        title_style="bold yellow",
+        expand=True,
+    )
+    alerts_table.add_column("Time", style="dim", width=8)
+    alerts_table.add_column("Market", style="white", ratio=1, overflow="ellipsis")
+    alerts_table.add_column("Condition", style="cyan", ratio=1, overflow="ellipsis")
+
+    if recent_alerts:
+        for item in recent_alerts:
+            alert = item['alert']
+            style = "red" if alert.get('type') == 'error' else "yellow"
+            alerts_table.add_row(
+                item['time'],
+                item['market'],
+                Text(alert.get('message', ''), style=style),
+            )
+    else:
+        alerts_table.add_row("--:--:--", "No alerts yet", Text("Waiting", style="dim"))
+
+    layout = Layout()
+    layout.split_column(
+        Layout(header, size=7),
+        Layout(market_table, ratio=2),
+        Layout(alerts_table, ratio=1),
+    )
+    return layout
 
 
 def _check_conditions(wm: dict, current_price: float, current_volume: float, conditions: list) -> list:

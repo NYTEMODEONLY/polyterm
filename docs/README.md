@@ -219,6 +219,7 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 | [charts](core/charts.md) | ASCII chart generation (line, bar, sparkline) | Visualization |
 | [cluster_detector](core/cluster_detector.md) | Wallet cluster detection (same-entity analysis) | Cluster analysis |
 | [correlation](core/correlation.md) | Market correlation analysis | Correlation engine |
+| [fees](core/fees.md) | CLOB V2 fee schedule parsing and protocol fee estimates | Fee model |
 | [historical](core/historical.md) | Historical data management | Data history |
 | [negrisk](core/negrisk.md) | NegRisk multi-outcome arbitrage detection | NegRisk arb |
 | [news](core/news.md) | RSS news aggregation engine | News feeds |

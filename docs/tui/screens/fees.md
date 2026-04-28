@@ -4,7 +4,7 @@
 
 ## Overview
 
-The Fees screen launches an interactive calculator that breaks down trading costs on Polymarket. It covers the taker fee structure (0% maker, 2% taker on winnings), estimates slippage from order book depth, projects net profit/loss, and includes Polygon network gas fee estimates.
+The Fees screen launches an interactive calculator that breaks down trading costs on Polymarket. It covers dynamic CLOB V2 protocol fee estimates, estimates slippage from order book depth, projects net profit/loss, and includes Polygon network gas fee estimates.
 
 ## Access
 
@@ -15,7 +15,7 @@ The Fees screen launches an interactive calculator that breaks down trading cost
 
 An interactive calculator that computes:
 
-- Polymarket fee breakdown (2% taker fee on winnings)
+- Dynamic CLOB V2 protocol fee estimate
 - Slippage estimation based on order book depth
 - Net profit/loss projections after all costs
 - Gas fee estimates for Polygon network transactions
@@ -32,8 +32,8 @@ polyterm fees -i
 
 ## Data Sources
 
-- CLOB API for order book data (slippage estimation)
-- Hardcoded Polymarket fee structure (2% taker on winnings)
+- CLOB API for order book data and fee schedule context
+- Gamma API market metadata for fee schedule context
 - Polygon network gas estimates
 
 ## Related Screens

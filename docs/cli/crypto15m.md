@@ -6,6 +6,8 @@
 
 Monitor 15-minute crypto prediction markets (BTC, ETH, SOL, XRP). These markets resolve every 15 minutes based on whether the crypto price
 goes UP or DOWN. Resolution uses Chainlink price feeds.
+Live table mode uses a fixed Rich Live screen so the header and market rows stay visible while polling refreshes.
+Trade scenario estimates use CLOB V2 protocol fee schedules when available.
 
 Note: 15M markets may not always be available via API. Use --links to get
 direct Polymarket URLs for live 15M trading.

@@ -35,7 +35,7 @@ polyterm simulate -i
 ## Data Sources
 
 - User input (entry price, position size, exit scenarios)
-- Fee calculations (2% taker fee on winnings)
+- CLOB V2 protocol fee estimates, using market schedules when available
 
 ## Related Screens
 

@@ -4,7 +4,7 @@
 
 ## Overview
 
-Scan for arbitrage opportunities across markets.
+Scan for arbitrage opportunities across markets. Live mode uses CLOB WebSocket-fed prices where available and renders in a fixed screen with scan status and opportunity table.
 
 ## Usage
 
@@ -37,6 +37,9 @@ polyterm arbitrage
 
 # With min-spread option
 polyterm arbitrage --min-spread 0.03
+
+# Live WebSocket-fed scanner
+polyterm arbitrage --live --min-spread 0.025
 
 # JSON output
 polyterm arbitrage --format json

@@ -7,6 +7,8 @@
 Calculate optimal position size. Uses Kelly Criterion and other strategies to recommend bet sizes
 based on your edge and bankroll.
 
+Kelly and EV estimates account for the CLOB V2 protocol fee curve instead of a fixed taker-fee assumption.
+
 Examples:
 polyterm size --bankroll 1000 --probability 0.65 --odds 0.50
 polyterm size -i   # Interactive mode.

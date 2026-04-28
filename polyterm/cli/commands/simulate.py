@@ -6,6 +6,9 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.prompt import Prompt, FloatPrompt, Confirm
 
+from ...api.gamma import GammaClient
+from ...core.fees import estimate_taker_fee, fee_schedule_from_market, fee_source_label
+
 
 @click.command()
 @click.option("--market", "-m", default=None, help="Market ID or name (optional)")
@@ -13,7 +16,8 @@ from rich.prompt import Prompt, FloatPrompt, Confirm
 @click.option("--amount", "-a", type=float, default=None, help="Amount to invest in USD")
 @click.option("--side", "-s", type=click.Choice(["yes", "no"]), default=None, help="Position side (yes/no)")
 @click.option("--interactive", "-i", is_flag=True, help="Interactive mode with prompts")
-def simulate(market, price, amount, side, interactive):
+@click.pass_context
+def simulate(ctx, market, price, amount, side, interactive):
     """Simulate a prediction market position
 
     Calculate potential profit/loss before placing a trade.
@@ -49,8 +53,10 @@ def simulate(market, price, amount, side, interactive):
         console.print("[red]Amount must be positive[/red]")
         return
 
+    fee_schedule = _get_market_fee_schedule(ctx.obj["config"], market) if market else None
+
     # Calculate position metrics
-    _display_simulation(console, market, price, amount, side)
+    _display_simulation(console, market, price, amount, side, fee_schedule)
 
 
 def _get_interactive_inputs(console: Console, price, amount, side):
@@ -97,7 +103,7 @@ def _get_interactive_inputs(console: Console, price, amount, side):
         return None, None, None
 
 
-def _display_simulation(console: Console, market: str, price: float, amount: float, side: str):
+def _display_simulation(console: Console, market: str, price: float, amount: float, side: str, fee_schedule=None):
     """Display the simulation results"""
 
     # Calculate metrics
@@ -106,6 +112,7 @@ def _display_simulation(console: Console, market: str, price: float, amount: flo
 
     # If YES position
     if side == "yes":
+        entry_price = price
         max_profit = shares * (1.0 - price)  # Win: receive $1 after entering at $price
         max_loss = amount  # Lose: lose entire investment
         breakeven = price  # Need price at or above entry to not lose
@@ -113,6 +120,7 @@ def _display_simulation(console: Console, market: str, price: float, amount: flo
     else:  # NO position
         # NO shares cost (1 - YES_price) and pay $1 if event doesn't happen
         no_price = 1.0 - price
+        entry_price = no_price
         shares = amount / no_price
         max_profit = shares * price  # Win: receive $1 after entering at $(1-price)
         max_loss = amount
@@ -120,9 +128,10 @@ def _display_simulation(console: Console, market: str, price: float, amount: flo
         win_payout = shares * 1.0
         implied_prob = (1 - price) * 100  # NO implied probability
 
-    # Fee calculation (2% on winnings)
-    fee_rate = 0.02
-    max_profit_after_fees = max_profit * (1 - fee_rate)
+    # CLOB V2 fee estimates are price-sensitive and may vary by market.
+    taker_fee = estimate_taker_fee(amount, entry_price, fee_schedule)
+    fee_rate = (taker_fee / amount) if amount > 0 else 0
+    max_profit_after_fees = max_profit - taker_fee
 
     # ROI calculation
     roi = (max_profit / amount) * 100
@@ -136,7 +145,7 @@ def _display_simulation(console: Console, market: str, price: float, amount: flo
     # Position summary
     console.print("[bold yellow]Position Summary[/bold yellow]")
     summary = Table(show_header=False, box=None, padding=(0, 2))
-    summary.add_column(style="cyan", width=20)
+    summary.add_column(style="cyan", width=24)
     summary.add_column(style="white")
 
     summary.add_row("Side", f"[bold]{'YES' if side == 'yes' else 'NO'}[/bold]")
@@ -144,6 +153,7 @@ def _display_simulation(console: Console, market: str, price: float, amount: flo
     summary.add_row("Investment", f"${amount:,.2f}")
     summary.add_row("Shares", f"{shares:,.2f}")
     summary.add_row("Implied Probability", f"{implied_prob:.1f}%")
+    summary.add_row("Protocol Fee Estimate", f"${taker_fee:,.2f}")
 
     console.print(summary)
     console.print()
@@ -177,9 +187,9 @@ def _display_simulation(console: Console, market: str, price: float, amount: flo
 
     # Breakeven analysis
     console.print("[bold yellow]Breakeven Analysis[/bold yellow]")
-    console.print(f"  Entry price: ${price:.2f} ({price*100:.1f}%)")
+    console.print(f"  Entry price: ${entry_price:.2f} ({entry_price*100:.1f}%)")
     console.print(f"  Breakeven: Market must resolve in your favor")
-    console.print(f"  Fee: 2% on winnings (${max_profit * fee_rate:,.2f} if you win)")
+    console.print(f"  Protocol fee: ${taker_fee:,.2f} estimate ({fee_rate:.2%} of notional, {fee_source_label(fee_schedule)})")
     console.print()
 
     # Price scenarios
@@ -224,7 +234,7 @@ def _display_simulation(console: Console, market: str, price: float, amount: flo
     tips = [
         "The lower the price, the higher potential ROI (but lower probability)",
         "You can sell your position anytime before resolution",
-        "Polymarket charges 2% fee only on winnings",
+        "Protocol fees vary by market schedule and trade price",
         "Consider the implied probability - does your analysis support it?",
     ]
 
@@ -232,3 +242,18 @@ def _display_simulation(console: Console, market: str, price: float, amount: flo
         console.print(f"  [dim]{tip}[/dim]")
 
     console.print()
+
+
+def _get_market_fee_schedule(config, market: str):
+    """Resolve the market fee schedule for a market search term."""
+    gamma_client = GammaClient(
+        base_url=config.gamma_base_url,
+        api_key=config.gamma_api_key,
+    )
+    try:
+        markets = gamma_client.search_markets(market, limit=1)
+        return fee_schedule_from_market(markets[0]) if markets else None
+    except Exception:
+        return None
+    finally:
+        gamma_client.close()

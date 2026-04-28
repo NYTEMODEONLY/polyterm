@@ -21,7 +21,7 @@ Polymarket released their official CLI on Feb 24, 2026. It gained 1,016 GitHub s
 
 ### Feature Matrix
 
-| Capability | PolyTerm (v0.9.0) | Polymarket CLI (v0.1.4) | Gap Owner |
+| Capability | PolyTerm (v0.9.1) | Polymarket CLI (v0.1.4) | Gap Owner |
 |---|---|---|---|
 | **Market browsing** | monitor, search, hot | markets list/get/search, events, tags, series | Parity |
 | **Order book** | ASCII depth charts, iceberg detection, slippage calc | Full CLOB read (book, books, spreads, midpoints) | Polymarket CLI |
@@ -65,7 +65,7 @@ Polymarket released their official CLI on Feb 24, 2026. It gained 1,016 GitHub s
 | **Self-update** | PyPI check + auto-restart | `polymarket upgrade` + Homebrew | Polymarket CLI |
 | **Install methods** | pip | Homebrew, curl script, cargo | Polymarket CLI |
 | **Performance** | Python (~300ms startup) | Rust (native binary, ~10ms startup) | Polymarket CLI |
-| **Test suite** | 975 tests | 40 integration tests | PolyTerm |
+| **Test suite** | 1068 tests | 40 integration tests | PolyTerm |
 
 ---
 

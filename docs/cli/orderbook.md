@@ -4,7 +4,7 @@
 
 ## Overview
 
-Analyze order book for a market. MARKET_ID is the market token ID to analyze.
+Analyze order book for a market. `MARKET_ID` is the CLOB token ID to analyze. Live mode uses a fixed Rich Live screen so top-of-book status, depth rows, and message counts stay visible while WebSocket data streams.
 
 ## Usage
 
@@ -45,6 +45,9 @@ polyterm orderbook <market_id>
 
 # With depth option
 polyterm orderbook <market_id> --depth 30
+
+# Live fixed-screen order book
+polyterm orderbook <token_id> --live --refresh 0.5
 
 # JSON output
 polyterm orderbook <market_id> --format json

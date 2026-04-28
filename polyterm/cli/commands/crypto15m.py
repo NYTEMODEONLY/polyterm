@@ -14,6 +14,7 @@ from rich.prompt import Prompt
 
 from ...api.gamma import GammaClient
 from ...api.clob import CLOBClient
+from ...core.fees import estimate_taker_fee, fee_schedule_from_market, fee_source_label
 from ...utils.json_output import print_json
 from ...utils.errors import handle_api_error
 
@@ -510,7 +511,12 @@ def crypto15m(ctx, crypto, refresh, interactive, output_format, once, links):
 
     # Live display mode
     try:
-        with Live(generate_display(), refresh_per_second=1/refresh, console=console) as live:
+        with Live(
+            generate_display(),
+            refresh_per_second=1/refresh,
+            console=console,
+            screen=True,
+        ) as live:
             while True:
                 time.sleep(refresh)
                 live.update(generate_display())
@@ -566,10 +572,12 @@ def _display_trade_analysis(console: Console, market: dict, clob_client: CLOBCli
 
     amount = 100
 
-    # UP scenario (net of 2% fee on winnings)
+    fee_schedule = fee_schedule_from_market(market)
+
+    # UP scenario (net of estimated CLOB V2 protocol fee)
     up_shares = amount / yes_prob if yes_prob > 0 else 0
     up_gross = up_shares - amount
-    up_fee = max(0, up_gross) * 0.02
+    up_fee = estimate_taker_fee(amount, yes_prob, fee_schedule)
     up_win = up_gross - up_fee
     up_lose = -amount
     up_roi = (up_win / amount) * 100 if amount > 0 else 0
@@ -583,10 +591,10 @@ def _display_trade_analysis(console: Console, market: dict, clob_client: CLOBCli
         f"[green]+{up_roi:.0f}%[/green]",
     )
 
-    # DOWN scenario (net of 2% fee on winnings)
+    # DOWN scenario (net of estimated CLOB V2 protocol fee)
     down_shares = amount / no_prob if no_prob > 0 else 0
     down_gross = down_shares - amount
-    down_fee = max(0, down_gross) * 0.02
+    down_fee = estimate_taker_fee(amount, no_prob, fee_schedule)
     down_win = down_gross - down_fee
     down_lose = -amount
     down_roi = (down_win / amount) * 100 if amount > 0 else 0
@@ -601,6 +609,7 @@ def _display_trade_analysis(console: Console, market: dict, clob_client: CLOBCli
     )
 
     console.print(scenarios_table)
+    console.print(f"[dim]Protocol fee estimates use {fee_source_label(fee_schedule)}.[/dim]")
     console.print()
 
     # Risk warning

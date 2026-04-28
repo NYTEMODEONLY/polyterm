@@ -4,7 +4,7 @@
 
 ## Overview
 
-Launch dedicated live market monitor in new terminal window.
+Launch dedicated live market monitor in a new terminal window. The monitor uses a fixed Rich Live dashboard so the header, connection state, counters, volume, buy/sell totals, last trade time, recent trades table, and status footer stay visible while RTDS trades stream in.
 
 ## Usage
 
@@ -41,7 +41,7 @@ polyterm live-monitor --interactive
 
 - Gamma Markets REST API
 - CLOB REST API
-- WebSocket real-time feed
+- RTDS WebSocket real-time trade feed
 - User configuration (`~/.polyterm/config.toml`)
 
 

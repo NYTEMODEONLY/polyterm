@@ -14,7 +14,7 @@ The Quick Trade Calculator provides a comprehensive pre-trade analysis for any m
 ## What It Shows
 
 - Entry price and share count
-- Fee breakdown (2% taker fee on winnings)
+- Dynamic CLOB V2 protocol fee estimate
 - Slippage estimate from order book
 - Breakeven price
 - Profit if win / loss if lose scenarios

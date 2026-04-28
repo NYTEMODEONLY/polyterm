@@ -11,6 +11,12 @@ from rich.prompt import Prompt, Confirm
 
 from ...api.gamma import GammaClient
 from ...api.clob import CLOBClient
+from ...core.fees import (
+    breakeven_price,
+    estimate_taker_fee,
+    fee_schedule_from_market,
+    fee_source_label,
+)
 from ...utils.json_output import print_json
 
 
@@ -44,20 +50,19 @@ def get_market_price(market: dict) -> tuple:
     return 0.5, 0.5
 
 
-def calculate_trade(amount: float, price: float, side: str) -> dict:
+def calculate_trade(amount: float, price: float, side: str, fee_schedule=None) -> dict:
     """Calculate trade details"""
     shares = amount / price if price > 0 else 0
 
-    # Polymarket fee: 2% on winnings (taker)
     win_payout = shares * 1.0  # $1 per share if wins
     gross_profit = win_payout - amount
-    fee_on_profit = max(0, gross_profit) * 0.02
+    fee_on_profit = estimate_taker_fee(amount, price, fee_schedule)
     net_profit = gross_profit - fee_on_profit
 
     loss = -amount  # Lose entire stake if wrong
 
     roi = (net_profit / amount) * 100 if amount > 0 else 0
-    breakeven = price / (0.98 + 0.02 * price)  # Exact breakeven accounting for 2% fee on winnings
+    breakeven = breakeven_price(price, fee_schedule)
 
     # Expected value (assuming market price = fair probability)
     prob = price
@@ -71,6 +76,7 @@ def calculate_trade(amount: float, price: float, side: str) -> dict:
         'win_payout': win_payout,
         'gross_profit': gross_profit,
         'fee': fee_on_profit,
+        'fee_source': fee_source_label(fee_schedule),
         'net_profit': net_profit,
         'loss': loss,
         'roi': roi,
@@ -206,7 +212,7 @@ def quicktrade(ctx, search_term, amount, side, open_browser, interactive, output
 
         # Calculate trade
         price = yes_price if side == "yes" else no_price
-        trade = calculate_trade(amount, price, side)
+        trade = calculate_trade(amount, price, side, fee_schedule_from_market(market))
 
         # Generate Polymarket URL
         # Format: https://polymarket.com/event/{slug} or /event/{id}
@@ -272,7 +278,8 @@ def quicktrade(ctx, search_term, amount, side, open_browser, interactive, output
         trade_table.add_row("[bold]If You Win:[/bold]", "")
         trade_table.add_row("  Payout", f"${trade['win_payout']:,.2f}")
         trade_table.add_row("  Profit (gross)", f"[green]+${trade['gross_profit']:,.2f}[/green]")
-        trade_table.add_row("  Fee (2%)", f"[yellow]-${trade['fee']:,.2f}[/yellow]")
+        trade_table.add_row("  Protocol Fee", f"[yellow]-${trade['fee']:,.2f}[/yellow]")
+        trade_table.add_row("  Fee Source", trade['fee_source'])
         trade_table.add_row("  Profit (net)", f"[green]+${trade['net_profit']:,.2f}[/green]")
         trade_table.add_row("  ROI", f"[green]+{trade['roi']:.1f}%[/green]")
         trade_table.add_row("", "")

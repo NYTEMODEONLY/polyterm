@@ -23,7 +23,7 @@ Client for Polymarket Data API providing wallet-level data.
 | Method | Signature | Description |
 |--------|-----------|-------------|
 | `__init__` | `(base_url=None)` | Initialize client with optional custom base URL |
-| `get_positions` | `(address, limit=100, offset=0, sort_by="CURRENT_VALUE")` | Get wallet positions sorted by current value |
+| `get_positions` | `(address, limit=100, offset=0, sort_by="CURRENT")` | Get wallet positions sorted by current value |
 | `get_activity` | `(address, limit=100, offset=0)` | Get wallet activity feed |
 | `get_trades` | `(address, limit=100, market=None)` | Get wallet trades, optionally filtered by market |
 | `get_profit_summary` | `(address)` | Aggregate P&L summary across all positions |
@@ -35,7 +35,7 @@ All endpoints are on `https://data-api.polymarket.com`:
 
 | Endpoint | Method | Parameters | Description |
 |----------|--------|------------|-------------|
-| `/positions` | GET | `user`, `limit`, `offset`, `sortBy` | Wallet positions. `sortBy` options: `CURRENT_VALUE`, `PNL` |
+| `/positions` | GET | `user`, `limit`, `offset`, `sortBy` | Wallet positions. Current sort keys include `CURRENT` and `CASHPNL` |
 | `/activity` | GET | `user`, `limit`, `offset` | Wallet activity feed |
 | `/trades` | GET | `user`, `limit`, `market` (optional) | Wallet trade history |
 
@@ -60,10 +60,10 @@ The `_request` method follows the same retry pattern as `CLOBClient`:
 
 ## Data Flow
 
-1. **Positions**: `get_positions(address)` -> GET `/positions?user={address}&sortBy=CURRENT_VALUE` -> returns list of position dicts with fields like `pnl`, `initialValue`, `currentValue`.
+1. **Positions**: `get_positions(address)` -> GET `/positions?user={address}&sortBy=CURRENT` -> returns list of position dicts with fields like `pnl`, `initialValue`, `currentValue`.
 2. **Activity**: `get_activity(address)` -> GET `/activity?user={address}` -> returns list of activity items.
 3. **Trades**: `get_trades(address, market=...)` -> GET `/trades?user={address}` -> returns list of trade dicts; optionally filtered by `market` parameter.
-4. **Profit summary**: `get_profit_summary(address)` -> fetches up to 500 positions sorted by PNL -> aggregates `total_pnl`, `total_invested`, `position_count` across all positions. Silently skips positions with unparseable numeric values.
+4. **Profit summary**: `get_profit_summary(address)` -> fetches up to 500 positions sorted by `CASHPNL` -> aggregates `total_pnl`, `total_invested`, `position_count` across all positions. Silently skips positions with unparseable numeric values.
 
 ## External Dependencies
 

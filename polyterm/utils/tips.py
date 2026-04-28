@@ -37,7 +37,7 @@ WHALE_TIPS = [
 ARBITRAGE_TIPS = [
     "Intra-market arb: When YES + NO < $1.00, buy both for guaranteed profit.",
     "Cross-platform arb compares Polymarket vs Kalshi prices.",
-    "Remember to account for fees (2% on Polymarket winnings).",
+    "Remember to account for market-specific protocol fees.",
     "Arbitrage opportunities close fast - act quickly!",
 ]
 

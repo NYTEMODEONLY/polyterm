@@ -161,6 +161,7 @@ class GammaClient:
         self.rate_limiter = SharedRateLimiter(requests_per_minute=60)
         self.session = requests.Session()
         self._search_endpoint_supported = True
+        self._markets_keyset_supported = True
         
         if api_key:
             self.session.headers.update({"Authorization": f"Bearer {api_key}"})
@@ -220,27 +221,33 @@ class GammaClient:
         active: Optional[bool] = None,
         closed: Optional[bool] = None,
         tag: Optional[str] = None,
+        market_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Get list of markets (uses /events endpoint for current data)
-        
+        """Get list of markets using Gamma keyset pagination.
+
         Args:
             limit: Maximum number of markets to return
-            offset: Offset for pagination
+            offset: Compatibility offset. Gamma keyset rejects offset, so this
+                is emulated client-side by fetching and slicing.
             active: Filter for active markets (default: True for live data)
             closed: Filter for closed markets (default: False for live data)
             tag: Filter by tag (e.g., 'politics', 'crypto', 'sports')
-        
+            market_id: Compatibility filter for older callers that used
+                get_markets(limit=1, market_id=...)
+
         Returns:
             List of market dictionaries with live data
         """
+        if market_id:
+            return self._get_market_as_list(market_id)
+
         # Default to active, non-closed markets for live data
         if active is None:
             active = True
         if closed is None:
             closed = False
-            
-        params = {"limit": limit, "offset": offset}
 
+        params: Dict[str, Any] = {}
         if active is not None:
             params["active"] = str(active).lower()
         if closed is not None:
@@ -248,8 +255,66 @@ class GammaClient:
         if tag:
             params["tag"] = tag
 
-        # Use /markets endpoint which returns individual markets with price data
-        return self._request("GET", "/markets", params=params)
+        if self._markets_keyset_supported:
+            try:
+                return self._get_markets_keyset(limit=limit, offset=offset, params=params)
+            except Exception as exc:
+                err = str(exc)
+                if "422 Client Error" in err or "404 Client Error" in err or " 422 " in err or " 404 " in err:
+                    self._markets_keyset_supported = False
+                else:
+                    raise
+
+        legacy_params = params.copy()
+        legacy_params["limit"] = limit
+        if offset:
+            legacy_params["offset"] = offset
+        return self._request("GET", "/markets", params=legacy_params)
+
+    def _get_market_as_list(self, market_id: str) -> List[Dict[str, Any]]:
+        """Return a single market as a list for legacy get_markets callers."""
+        try:
+            market = self.get_market(market_id)
+            return [market] if market else []
+        except Exception:
+            return []
+
+    def _get_markets_keyset(
+        self,
+        limit: int,
+        offset: int,
+        params: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        """Fetch markets from /markets/keyset and preserve the old list return."""
+        target_count = max(limit + max(offset, 0), limit, 1)
+        collected: List[Dict[str, Any]] = []
+        after_cursor = None
+
+        while len(collected) < target_count:
+            page_params = params.copy()
+            page_params["limit"] = min(target_count - len(collected), 1000)
+            if after_cursor:
+                page_params["after_cursor"] = after_cursor
+
+            data = self._request("GET", "/markets/keyset", params=page_params)
+            page_markets = self._extract_markets_page(data)
+            collected.extend(page_markets)
+
+            after_cursor = data.get("next_cursor") if isinstance(data, dict) else None
+            if not after_cursor or not page_markets:
+                break
+
+        return collected[offset:offset + limit]
+
+    @staticmethod
+    def _extract_markets_page(data: Any) -> List[Dict[str, Any]]:
+        """Normalize Gamma list responses from keyset or legacy endpoints."""
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            markets = data.get("markets", data.get("data", []))
+            return markets if isinstance(markets, list) else []
+        return []
     
     def get_market(self, market_id: str) -> Dict[str, Any]:
         """Get single market details
@@ -358,13 +423,12 @@ class GammaClient:
             List of trending market dictionaries sorted by 24hr volume
         """
         params = {
-            "limit": limit,
             "active": "true",
             "closed": "false",
             "order": "volume24hr",
             "ascending": "false",
         }
-        return self._request("GET", "/markets", params=params)
+        return self._get_markets_keyset(limit=limit, offset=0, params=params)
     
     def get_market_liquidity(self, market_id: str) -> Dict[str, Any]:
         """Get liquidity information for a market

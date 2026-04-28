@@ -8,12 +8,11 @@ from rich.prompt import Prompt, FloatPrompt
 
 from ...api.gamma import GammaClient
 from ...api.clob import CLOBClient
+from ...core.fees import estimate_taker_fee, fee_schedule_from_market, fee_source_label
 from ...utils.json_output import print_json
 
 
-# Polymarket fee structure (as of 2024)
 MAKER_FEE = 0.0  # Makers pay no fees
-TAKER_FEE = 0.02  # 2% on winnings (not on principal)
 MATIC_GAS_ESTIMATE = 0.01  # Approximate gas in MATIC
 
 
@@ -29,7 +28,7 @@ def fees(ctx, amount, price, market, side, interactive, output_format):
     """Calculate trading fees and slippage
 
     Understand the true cost of your trades including:
-    - Platform fees (2% on winnings)
+    - Protocol fee estimate from current CLOB fee schedule
     - Estimated slippage based on order book
     - Gas fees for on-chain transactions
 
@@ -56,8 +55,12 @@ def fees(ctx, amount, price, market, side, interactive, output_format):
         console.print("[red]Please provide a valid price (0.01-0.99)[/red]")
         return
 
+    fee_schedule = None
+    if market:
+        fee_schedule = _get_market_fee_schedule(config, market)
+
     # Calculate fees
-    result = _calculate_fees(amount, price, side)
+    result = _calculate_fees(amount, price, side, fee_schedule)
 
     # Get slippage estimate if market specified
     slippage_info = None
@@ -88,7 +91,7 @@ def _interactive_mode(console: Console, config):
         "[dim]Calculate the true cost of your trades.[/dim]\n\n"
         "[bold]Polymarket Fees:[/bold]\n"
         "  - Makers: [green]0%[/green] (limit orders that add liquidity)\n"
-        "  - Takers: [yellow]2%[/yellow] on winnings (market orders)\n"
+        "  - Takers: [yellow]dynamic[/yellow] protocol fee by market\n"
         "  - Gas: ~$0.01 per transaction (Polygon)",
         title="[cyan]Fee Calculator[/cyan]",
         border_style="cyan",
@@ -136,7 +139,7 @@ def _interactive_mode(console: Console, config):
         return None
 
 
-def _calculate_fees(amount: float, price: float, side: str) -> dict:
+def _calculate_fees(amount: float, price: float, side: str, fee_schedule=None) -> dict:
     """Calculate fees for a trade"""
     # Guard against invalid prices
     if price <= 0 or price >= 1:
@@ -151,11 +154,7 @@ def _calculate_fees(amount: float, price: float, side: str) -> dict:
         payout_if_win = shares * 1.0  # Each share pays $1 if YES wins
         gross_profit = payout_if_win - amount
 
-        # Taker fee (2% on winnings, not on return of principal)
-        if gross_profit > 0:
-            taker_fee = gross_profit * TAKER_FEE
-        else:
-            taker_fee = 0
+        taker_fee = estimate_taker_fee(amount, price, fee_schedule)
 
         net_profit = gross_profit - taker_fee
         loss_if_no = amount  # Lose entire investment
@@ -170,10 +169,7 @@ def _calculate_fees(amount: float, price: float, side: str) -> dict:
         payout_if_win = no_shares * 1.0  # Each NO share pays $1 if NO wins
         gross_profit = payout_if_win - amount
 
-        if gross_profit > 0:
-            taker_fee = gross_profit * TAKER_FEE
-        else:
-            taker_fee = 0
+        taker_fee = estimate_taker_fee(amount, no_price, fee_schedule)
 
         net_profit = gross_profit - taker_fee
         loss_if_no = amount
@@ -200,7 +196,23 @@ def _calculate_fees(amount: float, price: float, side: str) -> dict:
         'gas_estimate': gas_estimate,
         'maker_fee': 0.0,
         'effective_fee_rate': (taker_fee / gross_profit * 100) if gross_profit > 0 else 0,
+        'fee_source': fee_source_label(fee_schedule),
     }
+
+
+def _get_market_fee_schedule(config, market: str):
+    """Resolve the market fee schedule for a market search term."""
+    gamma_client = GammaClient(
+        base_url=config.gamma_base_url,
+        api_key=config.gamma_api_key,
+    )
+    try:
+        markets = gamma_client.search_markets(market, limit=1)
+        return fee_schedule_from_market(markets[0]) if markets else None
+    except Exception:
+        return None
+    finally:
+        gamma_client.close()
 
 
 def _estimate_slippage(console: Console, config, market: str, amount: float, price: float, side: str) -> dict:
@@ -345,7 +357,7 @@ def _display_results(console: Console, amount: float, price: float, side: str, r
     fee_table.add_row(
         "Taker Fee",
         f"${result['taker_fee']:,.2f}",
-        "2% on winnings only"
+        result["fee_source"]
     )
     fee_table.add_row(
         "Gas (est.)",
@@ -412,7 +424,7 @@ def _display_results(console: Console, amount: float, price: float, side: str, r
     # Tips
     console.print("[dim]Tips:[/dim]")
     console.print("[dim]  - Use limit orders (maker) to pay 0% fees[/dim]")
-    console.print("[dim]  - Fees are only charged on profits, not on your stake[/dim]")
+    console.print("[dim]  - CLOB V2 taker fees vary by market and price[/dim]")
     console.print("[dim]  - Large orders may experience significant slippage[/dim]")
     console.print("[dim]  - Split large orders to minimize market impact[/dim]")
     console.print()

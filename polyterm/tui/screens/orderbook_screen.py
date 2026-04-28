@@ -376,7 +376,7 @@ class LiveOrderbookDisplay:
                 self._render(),
                 console=self.console,
                 refresh_per_second=2,
-                screen=False,
+                screen=True,
             ) as live:
                 while True:
                     # Key handling

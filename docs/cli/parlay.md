@@ -7,6 +7,8 @@
 Calculate combined odds for multi-leg parlays. A parlay combines multiple bets - all must win for you to profit.
 Higher risk, higher reward!
 
+Potential payout estimates include a generic CLOB V2 protocol fee estimate rather than a fixed taker-fee assumption.
+
 Examples:
 polyterm parlay --markets "0.65,0.70,0.80" --amount 100
 polyterm parlay -i   # Interactive mode.

@@ -4,7 +4,7 @@
 
 ## Overview
 
-Watch specific markets with customizable alerts.
+Watch specific markets with customizable alerts. The live mode renders a fixed dashboard with current market state, probability/volume changes, check count, and recent alerts while polling continues.
 
 ## Usage
 
@@ -32,14 +32,14 @@ In the TUI main menu, use any of these shortcuts: `4`
 ## Examples
 
 ```bash
-# Basic usage
-polyterm watch
+# Watch a market search term
+polyterm watch --market "bitcoin"
 
-# With threshold option
-polyterm watch --threshold 10.0
+# Tighten probability threshold and refresh interval
+polyterm watch --market "bitcoin" --threshold 5 --interval 10
 
 # Enable system notifications
-polyterm watch --notify
+polyterm watch --market "bitcoin" --notify
 ```
 
 ## Data Sources

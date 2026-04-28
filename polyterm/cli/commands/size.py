@@ -6,6 +6,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.prompt import Prompt, FloatPrompt
 
+from ...core.fees import estimate_taker_fee, fee_source_label
 from ...utils.json_output import print_json
 
 
@@ -120,10 +121,10 @@ def _interactive_mode(console: Console):
 def _calculate_sizes(bankroll: float, probability: float, odds: float, kelly_fraction: float) -> dict:
     """Calculate position sizes using various strategies"""
 
-    # Calculate edge (net of 2% fee on winnings)
-    # For binary markets: payout on YES = (1 - odds) / odds, net of fee
-    fee_rate = 0.02
-    payout_ratio = (1 - odds) * (1 - fee_rate) / odds  # Net payout per dollar risked
+    # Calculate edge net of the generic CLOB V2 protocol fee estimate.
+    gross_payout_ratio = (1 - odds) / odds
+    fee_per_dollar = estimate_taker_fee(1.0, odds)
+    payout_ratio = max(gross_payout_ratio - fee_per_dollar, 0.0)
 
     # Expected value
     ev_per_dollar = (probability * payout_ratio) - (1 - probability)
@@ -149,11 +150,13 @@ def _calculate_sizes(bankroll: float, probability: float, odds: float, kelly_fra
     if fractional_kelly_amount > 0:
         shares_bought = fractional_kelly_amount / odds
         gross_profit = shares_bought * (1 - odds)  # Each share pays $1, cost was odds
-        profit_if_win = gross_profit * (1 - fee_rate)  # Net of 2% fee on winnings
+        fee_estimate = estimate_taker_fee(fractional_kelly_amount, odds)
+        profit_if_win = gross_profit - fee_estimate
         loss_if_lose = fractional_kelly_amount
         roi_if_win = (profit_if_win / fractional_kelly_amount) * 100 if fractional_kelly_amount > 0 else 0
     else:
         shares_bought = 0
+        fee_estimate = 0
         profit_if_win = 0
         loss_if_lose = 0
         roi_if_win = 0
@@ -180,9 +183,14 @@ def _calculate_sizes(bankroll: float, probability: float, odds: float, kelly_fra
         },
         'outcomes': {
             'shares': shares_bought,
+            'fee_estimate': fee_estimate,
             'profit_if_win': profit_if_win,
             'loss_if_lose': loss_if_lose,
             'roi_if_win': roi_if_win,
+        },
+        'fees': {
+            'fee_estimate_per_dollar': fee_per_dollar,
+            'fee_source': fee_source_label(None),
         },
         'recommendation': _get_recommendation(has_edge, kelly_bet, fractional_kelly_amount),
     }
@@ -210,6 +218,7 @@ def _display_results(console: Console, bankroll: float, probability: float, odds
     kelly_data = result['kelly']
     fixed = result['fixed']
     outcomes = result['outcomes']
+    fees = result['fees']
 
     # Edge analysis
     edge_color = "green" if edge['has_edge'] else "red"
@@ -237,6 +246,7 @@ def _display_results(console: Console, bankroll: float, probability: float, odds
     console.print("[bold yellow]Kelly Criterion[/bold yellow]")
     console.print(f"  Full Kelly:       {kelly_data['full_kelly_pct']:.1f}% (${kelly_data['full_kelly_amount']:,.2f})")
     console.print(f"  {kelly*100:.0f}% Kelly:        {kelly_data['fractional_kelly_pct']:.1f}% ([bold green]${kelly_data['fractional_kelly_amount']:,.2f}[/bold green])")
+    console.print(f"  Protocol fee est: ${fees['fee_estimate_per_dollar']:.4f} per $1 ({fees['fee_source']})")
     console.print()
 
     # Fixed percentages for comparison
@@ -259,6 +269,7 @@ def _display_results(console: Console, bankroll: float, probability: float, odds
     outcomes_table.add_column("Result", justify="right")
 
     outcomes_table.add_row("Shares purchased", f"{outcomes['shares']:,.1f}")
+    outcomes_table.add_row("Protocol fee estimate", f"${outcomes['fee_estimate']:,.2f}")
     outcomes_table.add_row("[green]If YES wins[/green]", f"[green]+${outcomes['profit_if_win']:,.2f}[/green] (+{outcomes['roi_if_win']:.0f}%)")
     outcomes_table.add_row("[red]If NO wins[/red]", f"[red]-${outcomes['loss_if_lose']:,.2f}[/red] (-100%)")
 

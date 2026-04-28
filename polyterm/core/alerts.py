@@ -44,8 +44,13 @@ class Alert:
 class AlertManager:
     """Manages alerts and notifications"""
     
-    def __init__(self, enable_system_notifications: bool = False):
+    def __init__(
+        self,
+        enable_system_notifications: bool = False,
+        enable_terminal_output: bool = True,
+    ):
         self.enable_system_notifications = enable_system_notifications and HAS_PLYER
+        self.enable_terminal_output = enable_terminal_output
         self.alert_history: List[Alert] = []
         self.max_history = 1000
         
@@ -201,7 +206,8 @@ class AlertManager:
             self.alert_history = self.alert_history[-self.max_history:]
         
         # Terminal output
-        self._print_terminal_alert(alert)
+        if self.enable_terminal_output:
+            self._print_terminal_alert(alert)
         
         # System notification
         if self.enable_system_notifications:
@@ -260,4 +266,3 @@ class AlertManager:
     def clear_history(self):
         """Clear alert history"""
         self.alert_history.clear()
-

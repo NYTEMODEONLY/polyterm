@@ -49,7 +49,7 @@ PolyTerm is an analytics and intelligence layer for Polymarket — not just an A
 - **Terminal-native visualization**: ASCII line charts, sparklines, depth charts, and side-by-side market comparison — all without leaving the terminal.
 - **Stateful local database** (SQLite): bookmarks, price alerts, trade journal, position tracking, recently viewed markets, screener presets. Your research accumulates value over time.
 - **Zero custody risk**: PolyTerm never touches private keys. Wallet features are view-only. No attack surface for key theft.
-- **975 tests** across API, core logic, CLI, TUI, and database layers.
+- **1068 tests** across API, core logic, CLI, TUI, and database layers.
 
 For a detailed comparison with the official Polymarket CLI, see [docs/COMPETITIVE_GAP.md](docs/COMPETITIVE_GAP.md).
 
@@ -328,7 +328,7 @@ polyterm quicktrade -m "bitcoin" --format json
 **What you get:**
 - Entry price and share calculation
 - Profit/loss scenarios (win vs lose)
-- Fee calculation (2% taker fee)
+- Dynamic CLOB V2 protocol fee estimate
 - ROI and breakeven analysis
 - Expected value calculation
 - Direct link to trade on Polymarket
@@ -630,8 +630,27 @@ python -m twine upload dist/*
 - **Whale tracker REST fallback**: Automatic switch to REST polling (5s interval) when WebSocket permanently fails
 
 ### Test Suite
-- **975 tests passing** across API, core, CLI, TUI, database, and utility layers (up from 660)
-- 68+ new tests for rate limiter, live orderbook, WebSocket supervisor, and REST fallback edge cases
+- **1068 tests passing** across API, core, CLI, TUI, database, and utility layers
+- New migration coverage for CLOB V2 public endpoints, Gamma keyset pagination, Data API sort compatibility, CLI command inventory, and TUI route inventory
+
+---
+
+## What's New in v0.9.1
+
+### Polymarket CLOB V2 Support
+- **CLOB V2 migration support** for Polymarket's April 28 cutover while keeping the production host `https://clob.polymarket.com`
+- **Gamma keyset pagination** replaces deprecated offset-style `/markets` usage, preserving PolyTerm's existing market list/search behavior
+- **Updated CLOB public data helpers** for current order book, price, spread, last-trade, sampling markets, and fee-rate endpoints
+- **Data API compatibility fixes** for current position and cash P&L sort keys
+
+### Fee Model Updates
+- **Dynamic protocol fee estimates** now use market fee schedules and the CLOB V2 fee curve instead of presenting a fixed 2% assumption
+- `fees`, `trade`, and `quicktrade` now surface the fee source used for each estimate
+
+### Verification
+- **1068 tests passing**, including live production smoke tests against Polymarket's current CLOB/Gamma/Data APIs and fixed-screen live surface coverage
+- Added full CLI command import/help inventory coverage for all 81 registered commands
+- Added TUI route inventory coverage for CLOB/Gamma-heavy screens
 
 ---
 
@@ -706,9 +725,9 @@ python -m twine upload dist/*
 ## What's New in v0.8.2
 
 ### Financial Calculation Fixes
-- **Kelly Criterion now accounts for 2% fee**: Position sizing tool (EV, edge, Kelly fraction, profit projections) now uses net payout ratios after Polymarket's 2% fee on winnings — prevents overbetting recommendations
+- **Kelly Criterion fee-aware sizing**: Position sizing tool (EV, edge, Kelly fraction, profit projections) now uses net payout ratios after protocol fees, preventing overbetting recommendations. v0.9.1 updates this path to the CLOB V2 dynamic fee curve.
 - **Breakeven formula corrected**: Quick trade breakeven now uses exact formula `price / (0.98 + 0.02 * price)` instead of the approximation `price * 1.02` which was up to 1.6pp wrong at high prices
-- **Crypto 15m trade analysis**: UP/DOWN scenario profits now deduct 2% fee on winnings instead of showing gross figures
+- **Crypto 15m trade analysis**: UP/DOWN scenario profits now deduct protocol fees instead of showing gross figures. v0.9.1 updates this path to the CLOB V2 dynamic fee curve.
 
 ### Data Integrity Fixes
 - **JSON double-encoding fixed**: `Wallet.to_dict()` and `Alert.to_dict()` no longer `json.dumps()` nested fields — JSON output now shows proper arrays/objects instead of escaped strings

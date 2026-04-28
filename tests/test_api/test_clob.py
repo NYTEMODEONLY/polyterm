@@ -311,41 +311,108 @@ class TestCLOBGetTicker:
         """Test successful ticker retrieval"""
         responses.add(
             responses.GET,
-            f"{CLOB_ENDPOINT}/ticker/market123",
-            json={
-                "last": "0.65",
-                "volume_24h": "50000",
-                "high_24h": "0.70",
-                "low_24h": "0.60",
-            },
+            f"{CLOB_ENDPOINT}/last-trade-price",
+            json={"price": "0.65", "side": "BUY"},
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            f"{CLOB_ENDPOINT}/spread",
+            json={"spread": "0.02"},
             status=200,
         )
 
-        ticker = client.get_ticker("market123")
+        ticker = client.get_ticker("token123")
         assert ticker["last"] == "0.65"
-        assert ticker["volume_24h"] == "50000"
-        assert ticker["high_24h"] == "0.70"
+        assert ticker["side"] == "BUY"
+        assert ticker["spread"] == "0.02"
+        assert "token_id=token123" in responses.calls[0].request.url
 
     @responses.activate
     def test_get_ticker_uses_request_with_retry(self, client):
-        """Test that get_ticker uses _request (which has retry logic)"""
+        """Test that get_ticker uses documented pricing endpoints with retry"""
         responses.add(
             responses.GET,
-            f"{CLOB_ENDPOINT}/ticker/market123",
-            json={"error": "server error"},
+            f"{CLOB_ENDPOINT}/last-trade-price",
             status=500,
         )
         responses.add(
             responses.GET,
-            f"{CLOB_ENDPOINT}/ticker/market123",
-            json={"last": "0.70"},
+            f"{CLOB_ENDPOINT}/last-trade-price",
+            json={"price": "0.70", "side": "SELL"},
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            f"{CLOB_ENDPOINT}/spread",
+            json={"spread": "0.01"},
             status=200,
         )
 
         with patch("time.sleep", return_value=None):
-            ticker = client.get_ticker("market123")
+            ticker = client.get_ticker("token123")
         assert ticker["last"] == "0.70"
-        assert len(responses.calls) == 2
+        assert ticker["spread"] == "0.01"
+        assert len(responses.calls) == 3
+
+
+class TestCLOBPricingEndpoints:
+    """Test documented CLOB V2 pricing helpers"""
+
+    @pytest.fixture
+    def client(self):
+        return CLOBClient(rest_endpoint=CLOB_ENDPOINT)
+
+    @responses.activate
+    def test_get_price_success(self, client):
+        responses.add(
+            responses.GET,
+            f"{CLOB_ENDPOINT}/price",
+            json={"price": "0.45"},
+            status=200,
+        )
+
+        price = client.get_price("token123", "buy")
+
+        assert price == {"price": "0.45"}
+        assert "token_id=token123" in responses.calls[0].request.url
+        assert "side=BUY" in responses.calls[0].request.url
+
+    @responses.activate
+    def test_get_spread_success(self, client):
+        responses.add(
+            responses.GET,
+            f"{CLOB_ENDPOINT}/spread",
+            json={"spread": "0.02"},
+            status=200,
+        )
+
+        assert client.get_spread("token123") == {"spread": "0.02"}
+        assert "token_id=token123" in responses.calls[0].request.url
+
+    @responses.activate
+    def test_get_last_trade_price_success(self, client):
+        responses.add(
+            responses.GET,
+            f"{CLOB_ENDPOINT}/last-trade-price",
+            json={"price": "0.53", "side": "SELL"},
+            status=200,
+        )
+
+        assert client.get_last_trade_price("token123") == {"price": "0.53", "side": "SELL"}
+        assert "token_id=token123" in responses.calls[0].request.url
+
+    @responses.activate
+    def test_get_fee_rate_success(self, client):
+        responses.add(
+            responses.GET,
+            f"{CLOB_ENDPOINT}/fee-rate",
+            json={"base_fee": 30},
+            status=200,
+        )
+
+        assert client.get_fee_rate("token123") == {"base_fee": 30}
+        assert "token_id=token123" in responses.calls[0].request.url
 
 
 class TestCLOBGetRecentTrades:
@@ -360,11 +427,13 @@ class TestCLOBGetRecentTrades:
         """Test successful trades retrieval"""
         responses.add(
             responses.GET,
-            f"{CLOB_ENDPOINT}/trades/market123",
-            json=[
-                {"id": "1", "price": "0.65", "size": "100", "side": "buy"},
-                {"id": "2", "price": "0.64", "size": "200", "side": "sell"},
-            ],
+            f"{CLOB_ENDPOINT}/trades",
+            json={
+                "data": [
+                    {"id": "1", "price": "0.65", "size": "100", "side": "buy"},
+                    {"id": "2", "price": "0.64", "size": "200", "side": "sell"},
+                ]
+            },
             status=200,
         )
 
@@ -374,13 +443,14 @@ class TestCLOBGetRecentTrades:
         assert trades[1]["side"] == "sell"
         # Verify limit param was passed
         assert "limit=100" in responses.calls[0].request.url
+        assert "market=market123" in responses.calls[0].request.url
 
     @responses.activate
     def test_get_recent_trades_request_exception(self, client):
         """Test that exception is wrapped properly"""
         responses.add(
             responses.GET,
-            f"{CLOB_ENDPOINT}/trades/market123",
+            f"{CLOB_ENDPOINT}/trades",
             body=requests.exceptions.ConnectionError("failed"),
         )
 
@@ -400,17 +470,17 @@ class TestCLOBGetMarketDepth:
         """Test successful market depth retrieval"""
         responses.add(
             responses.GET,
-            f"{CLOB_ENDPOINT}/depth/market123",
+            f"{CLOB_ENDPOINT}/book",
             json={
-                "bid_depth": 10000,
-                "ask_depth": 12000,
-                "total_depth": 22000,
+                "bids": [{"price": "0.50", "size": "20000"}],
+                "asks": [{"price": "0.60", "size": "20000"}],
             },
             status=200,
         )
 
-        depth = client.get_market_depth("market123")
+        depth = client.get_market_depth("token123")
         assert depth["bid_depth"] == 10000
+        assert depth["ask_depth"] == 12000
         assert depth["total_depth"] == 22000
 
     @responses.activate
@@ -418,18 +488,18 @@ class TestCLOBGetMarketDepth:
         """Test that get_market_depth uses _request (was recently fixed from session.get)"""
         responses.add(
             responses.GET,
-            f"{CLOB_ENDPOINT}/depth/market123",
+            f"{CLOB_ENDPOINT}/book",
             status=500,
         )
         responses.add(
             responses.GET,
-            f"{CLOB_ENDPOINT}/depth/market123",
-            json={"bid_depth": 5000},
+            f"{CLOB_ENDPOINT}/book",
+            json={"bids": [{"price": "0.50", "size": "10000"}], "asks": []},
             status=200,
         )
 
         with patch("time.sleep", return_value=None):
-            depth = client.get_market_depth("market123")
+            depth = client.get_market_depth("token123")
         assert depth["bid_depth"] == 5000
         assert len(responses.calls) == 2
 
@@ -438,12 +508,12 @@ class TestCLOBGetMarketDepth:
         """Test that market depth wraps exceptions"""
         responses.add(
             responses.GET,
-            f"{CLOB_ENDPOINT}/depth/market123",
+            f"{CLOB_ENDPOINT}/book",
             body=requests.exceptions.ConnectionError("failed"),
         )
 
         with pytest.raises(Exception, match="Failed to get market depth"):
-            client.get_market_depth("market123")
+            client.get_market_depth("token123")
 
 
 class TestCLOBGetCurrentMarkets:
@@ -532,6 +602,29 @@ class TestCLOBGetCurrentMarkets:
 
         with pytest.raises(Exception, match="Failed to get current markets"):
             client.get_current_markets()
+
+    @responses.activate
+    def test_get_current_markets_paginates_when_page_is_full(self, client):
+        """Test that full pages with next_cursor fetch additional pages."""
+        first_page = [{"id": str(i)} for i in range(1000)]
+        responses.add(
+            responses.GET,
+            f"{CLOB_ENDPOINT}/sampling-markets",
+            json={"data": first_page, "next_cursor": "cursor-1"},
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            f"{CLOB_ENDPOINT}/sampling-markets",
+            json={"data": [{"id": "1000"}], "next_cursor": "LTE="},
+            status=200,
+        )
+
+        markets = client.get_current_markets(limit=1001)
+
+        assert len(markets) == 1001
+        assert markets[-1]["id"] == "1000"
+        assert "next_cursor=cursor-1" in responses.calls[1].request.url
 
 
 class TestCLOBCalculateSpread:

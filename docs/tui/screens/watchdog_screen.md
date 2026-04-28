@@ -4,7 +4,7 @@
 
 ## Overview
 
-The Watchdog Monitor provides advanced market surveillance with configurable alert conditions. Unlike the basic Watch screen, it supports directional triggers (price above/below a threshold) and change-based alerts, making it suited for setting up specific monitoring rules.
+The Watchdog Monitor provides advanced market surveillance with configurable alert conditions. Unlike the basic Watch screen, it supports directional triggers (price above/below a threshold), change-based alerts, and volume triggers, making it suited for setting up specific monitoring rules.
 
 ## Access
 
@@ -13,7 +13,7 @@ The Watchdog Monitor provides advanced market surveillance with configurable ale
 
 ## What It Shows
 
-Continuous monitoring output for a market, with alerts triggered when the selected condition is met. Runs until stopped with `Ctrl+C`.
+Continuous monitoring output for one or more markets, with alerts triggered when the selected condition is met. Runs until stopped with `Ctrl+C`. The display uses a fixed dashboard with condition summary, check count, watched market table, and recent alerts.
 
 ## Navigation / Keyboard Shortcuts
 

@@ -52,7 +52,10 @@ Central alert engine that processes market shifts, evaluates rules, and dispatch
 #### Constructor
 
 ```python
-AlertManager(enable_system_notifications: bool = False)
+AlertManager(
+    enable_system_notifications: bool = False,
+    enable_terminal_output: bool = True,
+)
 ```
 
 System notifications require the `plyer` package. If `plyer` is not installed, system notifications are silently disabled.
@@ -101,6 +104,7 @@ Custom rules are evaluated via a `condition` callable that receives the raw `shi
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `enable_system_notifications` | `False` | Enable OS-level desktop notifications |
+| `enable_terminal_output` | `True` | Print alerts to terminal. Fixed live dashboards set this to `False` so alerts are retained and notifications still send without breaking the live layout |
 | `max_history` | `1000` | Maximum alerts retained in memory |
 | Default probability threshold | `10.0` | Minimum probability change (%) |
 | Default volume threshold | `50.0` | Minimum volume change (%) |
@@ -113,11 +117,13 @@ Custom rules are evaluated via a `condition` callable that receives the raw `shi
 
 ## Output Format
 
-Alerts are dispatched through three channels:
+Alerts can be dispatched through three channels:
 
 1. **Terminal**: ANSI-colored output with timestamp, e.g., `[14:30:05] [WARNING] Market Title: Probability increased by 15.2%`
 2. **System notification**: Desktop notification via `plyer` (title truncated to 50 chars, 10-second timeout)
 3. **Callbacks**: Registered callables receive the full `Alert` object
+
+Terminal output is optional. Commands that render fixed Rich Live dashboards, such as `watch`, can disable terminal printing while still storing alerts, sending system notifications, and invoking callbacks.
 
 ## External Dependencies
 

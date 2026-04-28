@@ -389,7 +389,12 @@ def monitor(ctx, limit, category, refresh, active_only, sort, output_format, onc
 
     # Live display
     try:
-        with Live(generate_table(), refresh_per_second=1/refresh, console=console) as live:
+        with Live(
+            generate_table(),
+            refresh_per_second=1/refresh,
+            console=console,
+            screen=True,
+        ) as live:
             while True:
                 time.sleep(refresh)
                 live.update(generate_table())
