@@ -1,7 +1,8 @@
 """Explainable market-level trade thesis generation."""
 
+from collections import Counter
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from ..api.clob import CLOBClient
 from ..api.gamma import GammaClient
@@ -33,6 +34,7 @@ class TradeThesisEngine:
         orderbook = self._orderbook(token_ids[0] if token_ids else "")
         risk = self._risk(market_data)
         local_history = self._local_history(market_data.get("id") or condition_id or market)
+        whale_flow = self._whale_flow(market_data, hours=72, min_notional=10000)
 
         signal_direction = "neutral"
         evidence = []
@@ -64,6 +66,15 @@ class TradeThesisEngine:
         else:
             risks.append("Limited local history; thesis relies mostly on live API snapshots.")
 
+        if whale_flow.get("trade_count", 0):
+            evidence.append(
+                "Cached whale flow shows "
+                f"{whale_flow['trade_count']} large trade(s) from {whale_flow['wallet_count']} wallet(s) "
+                f"totaling ${whale_flow['total_notional']:,.0f}; top outcome: {whale_flow.get('top_outcome') or 'unknown'}."
+            )
+        else:
+            risks.append("No cached whale flow for this market; run wallet.whales to enrich local evidence.")
+
         confidence = self._confidence(probability, orderbook, risk, local_history)
 
         return {
@@ -94,7 +105,8 @@ class TradeThesisEngine:
             "orderbook": orderbook,
             "risk": risk,
             "local_history": local_history,
-            "quality_flags": self._quality_flags(market_data, token_ids, orderbook),
+            "whale_flow": whale_flow,
+            "quality_flags": self._quality_flags(market_data, token_ids, orderbook, whale_flow),
             "generated_at": datetime.utcnow().isoformat() + "Z",
         }
 
@@ -153,6 +165,42 @@ class TradeThesisEngine:
             "oldest_probability": history[-1].probability if history else None,
         }
 
+    def _whale_flow(self, market_data: Dict[str, Any], hours: int = 72, min_notional: float = 10000) -> Dict[str, Any]:
+        """Summarize cached large trades for the resolved market."""
+        identifiers = _market_identifiers(market_data)
+        if not identifiers:
+            return {
+                "source": "local_cache",
+                "hours": hours,
+                "min_notional": min_notional,
+                "trade_count": 0,
+                "wallet_count": 0,
+                "total_notional": 0.0,
+                "top_outcome": None,
+                "trades": [],
+            }
+
+        try:
+            large_trades = self.db.get_large_trades(min_notional=min_notional, hours=hours)
+        except Exception:
+            large_trades = []
+
+        matched = [trade for trade in large_trades if _trade_matches_market(trade, identifiers)]
+        matched.sort(key=lambda trade: (trade.notional, trade.timestamp), reverse=True)
+        outcomes = Counter(trade.outcome for trade in matched if trade.outcome)
+        wallets = {trade.wallet_address for trade in matched if trade.wallet_address}
+
+        return {
+            "source": "local_cache",
+            "hours": hours,
+            "min_notional": min_notional,
+            "trade_count": len(matched),
+            "wallet_count": len(wallets),
+            "total_notional": sum(trade.notional for trade in matched),
+            "top_outcome": outcomes.most_common(1)[0][0] if outcomes else None,
+            "trades": [trade.to_dict() for trade in matched[:5]],
+        }
+
     def _confidence(self, probability: float, orderbook: Dict[str, Any], risk: Dict[str, Any], local_history: Dict[str, Any]) -> float:
         score = 0.35
         if probability and (probability >= 0.65 or probability <= 0.35):
@@ -169,7 +217,13 @@ class TradeThesisEngine:
         risk_note = " with notable caveats" if risks else ""
         return f"{direction.upper()} lean at {confidence:.0%} confidence{risk_note}."
 
-    def _quality_flags(self, market_data: Dict[str, Any], token_ids: list, orderbook: Dict[str, Any]) -> list:
+    def _quality_flags(
+        self,
+        market_data: Dict[str, Any],
+        token_ids: list,
+        orderbook: Dict[str, Any],
+        whale_flow: Dict[str, Any],
+    ) -> list:
         flags = []
         if not market_data:
             flags.append("market_not_found")
@@ -177,8 +231,35 @@ class TradeThesisEngine:
             flags.append("missing_clob_token_ids")
         if not orderbook.get("available"):
             flags.append("orderbook_unavailable")
+        if whale_flow.get("trade_count", 0):
+            flags.append("cached_whale_flow")
+        else:
+            flags.append("whale_flow_unavailable")
         flags.append("no_trade_execution")
         return flags
+
+
+def _market_identifiers(market_data: Dict[str, Any]) -> set[str]:
+    """Return every local-cache identifier that can refer to a resolved market."""
+    identifiers = {
+        str(market_data.get("id") or ""),
+        str(market_data.get("slug") or ""),
+        str(get_market_condition_id(market_data) or ""),
+    }
+    for token_id in get_clob_token_ids(market_data):
+        identifiers.add(str(token_id))
+    return {identifier for identifier in identifiers if identifier}
+
+
+def _trade_matches_market(trade: Any, identifiers: set[str]) -> bool:
+    """Return whether a cached trade belongs to the resolved market."""
+    return any(
+        str(value or "") in identifiers
+        for value in (
+            getattr(trade, "market_id", ""),
+            getattr(trade, "market_slug", ""),
+        )
+    )
 
 
 def _prefer_active_market(markets: list) -> Dict[str, Any]:

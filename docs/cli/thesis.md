@@ -4,7 +4,7 @@
 
 ## Overview
 
-`polyterm thesis` combines market metadata, CLOB identifiers, current probability, order book shape, risk scoring, and local historical evidence into one market-level thesis. The output is designed for terminal users and agent runtimes that need a compact decision object with evidence and caveats.
+`polyterm thesis` combines market metadata, CLOB identifiers, current probability, order book shape, risk scoring, local historical evidence, and cached whale-flow evidence into one market-level thesis. The output is designed for terminal users and agent runtimes that need a compact decision object with evidence and caveats.
 
 The command is read-only. It does not submit orders, manage keys, or mutate local state except for normal API client caching outside the command surface.
 
@@ -44,7 +44,7 @@ polyterm thesis -m "will-bitcoin-hit-100k" --format json
 
 ## How It Works
 
-The command instantiates `TradeThesisEngine` from `polyterm/core/trade_thesis.py`. The engine resolves the market through Gamma, extracts CLOB token IDs with `market_utils`, probes the CLOB order book when a token ID is available, scores market risk with `MarketRiskScorer`, and checks local snapshot history in SQLite.
+The command instantiates `TradeThesisEngine` from `polyterm/core/trade_thesis.py`. The engine resolves the market through Gamma, extracts CLOB token IDs with `market_utils`, probes the CLOB order book when a token ID is available, scores market risk with `MarketRiskScorer`, checks local snapshot history in SQLite, and summarizes cached large trades for the resolved market.
 
 It then builds a deterministic thesis object with direction, confidence, evidence, risks, next actions, quality flags, and current market identifiers.
 
@@ -53,6 +53,7 @@ It then builds a deterministic thesis object with direction, confidence, evidenc
 - Gamma API for market metadata, slug lookup, and current probability fields.
 - CLOB API for order book bids, asks, and spread.
 - Local SQLite snapshots for recent archive evidence.
+- Local SQLite trades cached by `wallet.whales` for market-specific whale-flow evidence.
 - Existing risk scoring logic in `core/risk_score.py`.
 
 ## Identifier Requirements
@@ -61,7 +62,7 @@ Gamma market IDs and slugs are used for discovery. CLOB condition IDs and CLOB t
 
 ## Agent Workflow
 
-Agents should call `polyterm thesis --format json` after resolving a market and before deciding whether to run deeper wallet, order book, or archive tools. The command is marked read-only in the agent manifest.
+Agents should call `polyterm thesis --format json` after resolving a market and before deciding whether to run deeper wallet, order book, or archive tools. The command is marked read-only in the agent manifest. If the result has `whale_flow_unavailable`, agents can call `wallet.whales` first to populate the local cache and then rerun the thesis for richer evidence.
 
 ## Verification
 
