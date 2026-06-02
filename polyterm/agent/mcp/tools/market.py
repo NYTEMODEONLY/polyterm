@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from ...contracts import envelope
 from ....api.gamma import GammaClient
 from ....api.market_utils import get_clob_token_ids, get_market_condition_id, market_probability_price
+from ....core.market_research import MarketResearchEngine
 
 
 def search(query: str, limit: int = 10) -> dict:
@@ -40,6 +41,26 @@ def resolve(identifier: str) -> dict:
         return envelope(data, meta={"tool": "market.resolve"})
     finally:
         gamma.close()
+
+
+def research(
+    market: str,
+    prefetch_whales: bool = False,
+    min_notional: float = 100000,
+    hours: int = 72,
+    limit: int = 5,
+) -> dict:
+    engine = MarketResearchEngine()
+    return envelope(
+        engine.build(
+            market,
+            prefetch_whales=prefetch_whales,
+            min_notional=min_notional,
+            hours=hours,
+            limit=limit,
+        ),
+        meta={"tool": "market.research"},
+    )
 
 
 def _is_current_market(market):

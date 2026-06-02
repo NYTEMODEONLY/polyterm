@@ -71,6 +71,19 @@ TOOLS: List[AgentTool] = [
         schema="docs/schemas/market.price_history.schema.json",
     ),
     AgentTool(
+        name="market.research",
+        description="Generate a flagship one-call market research brief with thesis, evidence, gaps, and workflow.",
+        command="polyterm research --market {market} --format json",
+        args={
+            "market": "string",
+            "prefetch_whales": "boolean",
+            "min_notional": "number",
+            "hours": "integer",
+            "limit": "integer",
+        },
+        schema="docs/schemas/market.research.schema.json",
+    ),
+    AgentTool(
         name="analytics.arbitrage",
         description="Scan Polymarket and optional venues for arbitrage opportunities.",
         command="polyterm arbitrage --format json",

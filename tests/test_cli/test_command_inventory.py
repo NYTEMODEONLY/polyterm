@@ -8,6 +8,10 @@ from click.testing import CliRunner
 from polyterm.cli.main import cli
 
 
+def test_research_command_is_registered():
+    assert "research" in cli.list_commands(None)
+
+
 @pytest.mark.parametrize("command_name", sorted(cli.list_commands(None)))
 def test_all_registered_commands_expose_help(command_name, monkeypatch, tmp_path):
     """Every command should import lazily and expose help without network access."""

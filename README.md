@@ -85,6 +85,7 @@ For a detailed comparison with the official Polymarket CLI, see [docs/COMPETITIV
 | Cross-Venue Monitor | `polyterm arbitrage --venues polymarket,kalshi` | Match venue prices with confidence and quality flags |
 | NegRisk Arbitrage | `polyterm negrisk` | Multi-outcome market arbitrage scanning |
 | Signal-based Predictions | `polyterm predict` | Multi-factor market predictions using live data |
+| Market Research | `polyterm research` | Flagship one-call agent research brief with thesis, evidence, gaps, and workflow |
 | Trade Thesis | `polyterm thesis` | Explainable market-level thesis with evidence, risks, and caveats |
 | Order Book Analysis | `polyterm orderbook` | Depth charts, slippage, icebergs |
 | Live Order Book | `polyterm orderbook --live` | Real-time WebSocket depth display |
@@ -129,6 +130,7 @@ For a detailed comparison with the official Polymarket CLI, see [docs/COMPETITIV
 |---------|---------|-------------|
 | Agent Manifest | `polyterm agent manifest` | Machine-readable tool registry with safety flags |
 | Agent Schemas | `polyterm agent schemas` | JSON Schemas for agent-facing tools |
+| Market Research Tool | `market.research` | MCP/agent tool for complete market briefs |
 | MCP Server | `polyterm agent mcp-server` | Real FastMCP stdio server for MCP clients |
 | JSONL Adapter | `polyterm agent jsonl-server` | Legacy JSON-lines adapter for simple pipe-based runtimes |
 | Agent Docs | `docs/AGENT_MODE.md` | Hermes/OpenClaw workflow notes and safety model |

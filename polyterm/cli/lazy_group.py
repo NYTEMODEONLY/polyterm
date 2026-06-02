@@ -91,6 +91,7 @@ LAZY_COMMANDS = {
     "news": ("news", "news"),
     "agent": ("agent", "agent"),
     "thesis": ("thesis", "thesis"),
+    "research": ("research", "research"),
     "collect": ("collect", "collect"),
 }
 

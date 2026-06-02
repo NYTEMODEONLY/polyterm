@@ -50,7 +50,9 @@ def test_all_schemas_returns_rich_schema_for_every_registered_tool():
     schemas = all_schemas()
 
     assert "agent.schemas" in schemas
+    assert "market.research" in schemas
     assert "analytics.thesis" in schemas
+    assert schemas["market.research"]["input_schema"]["required"] == ["market"]
     assert "input_schema" in schemas["analytics.thesis"]
     assert "output_schema" in schemas["analytics.thesis"]
     assert "safety" in schemas["alerts.create_price_rule"]

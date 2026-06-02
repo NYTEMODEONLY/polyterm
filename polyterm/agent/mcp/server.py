@@ -17,6 +17,7 @@ from .tools import analytics, market, wallet
 TOOL_HANDLERS: Dict[str, Callable[..., dict]] = {
     "market.search": market.search,
     "market.resolve": market.resolve,
+    "market.research": market.research,
     "analytics.arbitrage": analytics.arbitrage,
     "analytics.thesis": analytics.thesis,
     "wallet.inspect": wallet.inspect,

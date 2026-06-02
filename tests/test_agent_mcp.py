@@ -19,6 +19,7 @@ async def test_fastmcp_server_lists_agent_tools():
     assert "agent.schemas" in tool_names
     assert "market.search" in tool_names
     assert "market.resolve" in tool_names
+    assert "market.research" in tool_names
     assert "analytics.thesis" in tool_names
     assert "wallet.inspect" in tool_names
 
@@ -42,6 +43,30 @@ async def test_fastmcp_server_calls_existing_tool_handlers(monkeypatch):
     assert result["data"]["query"] == "bitcoin"
     assert result["data"]["count"] == 1
     assert result["meta"]["tool"] == "market.search"
+
+
+@pytest.mark.asyncio
+async def test_fastmcp_server_calls_market_research_handler(monkeypatch):
+    def fake_research(market, prefetch_whales=False, min_notional=100000, hours=72, limit=5):
+        return envelope(
+            {"query": market, "brief": {"headline": "Research ready"}, "quality_flags": ["research_brief"]},
+            meta={"tool": "market.research"},
+        )
+
+    monkeypatch.setitem(jsonl_server.TOOL_HANDLERS, "market.research", fake_research)
+
+    server = create_server()
+    content, structured = await server.call_tool(
+        "market.research",
+        {"market": "bitcoin", "prefetch_whales": True, "min_notional": 100000, "hours": 72, "limit": 5},
+    )
+    result = structured["result"]
+
+    assert content
+    assert result["success"] is True
+    assert result["data"]["query"] == "bitcoin"
+    assert result["data"]["brief"]["headline"] == "Research ready"
+    assert result["meta"]["tool"] == "market.research"
 
 
 @pytest.mark.asyncio

@@ -77,6 +77,26 @@ def create_server() -> Any:
         return _call_tool("market.resolve", identifier=identifier)
 
     @mcp.tool(
+        name="market.research",
+        description="Generate a flagship one-call market research brief with thesis, evidence, gaps, and workflow.",
+    )
+    def market_research(
+        market: str,
+        prefetch_whales: bool = False,
+        min_notional: float = 100000,
+        hours: int = 72,
+        limit: int = 5,
+    ) -> Dict[str, Any]:
+        return _call_tool(
+            "market.research",
+            market=market,
+            prefetch_whales=prefetch_whales,
+            min_notional=min_notional,
+            hours=hours,
+            limit=limit,
+        )
+
+    @mcp.tool(
         name="analytics.arbitrage",
         description="Scan Polymarket and optional venues for arbitrage opportunities.",
     )
