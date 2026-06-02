@@ -1,6 +1,7 @@
 """Enhanced whale tracking system with individual wallet tracking"""
 
 import asyncio
+import inspect
 import json
 import logging
 from typing import Dict, List, Optional, Any, Callable
@@ -194,10 +195,9 @@ class WhaleTracker:
         # Trigger callbacks
         for callback in self.whale_callbacks:
             try:
-                if asyncio.iscoroutinefunction(callback):
-                    await callback(trade, wallet)
-                else:
-                    callback(trade, wallet)
+                result = callback(trade, wallet)
+                if inspect.isawaitable(result):
+                    await result
             except Exception as e:
                 print(f"Error in whale callback: {e}")
 
@@ -221,10 +221,9 @@ class WhaleTracker:
         # Trigger callbacks
         for callback in self.smart_money_callbacks:
             try:
-                if asyncio.iscoroutinefunction(callback):
-                    await callback(trade, wallet)
-                else:
-                    callback(trade, wallet)
+                result = callback(trade, wallet)
+                if inspect.isawaitable(result):
+                    await result
             except Exception as e:
                 print(f"Error in smart money callback: {e}")
 

@@ -286,13 +286,11 @@ class NotificationManager:
                     'critical': 'Basso',
                 }
                 sound_name = sounds.get(level, 'Pop')
-                subprocess.Popen(['afplay', f'/System/Library/Sounds/{sound_name}.aiff'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                return True
+                return self._play_command(['afplay', f'/System/Library/Sounds/{sound_name}.aiff'])
 
             elif sys.platform.startswith('linux'):
                 # Try paplay (PulseAudio)
-                subprocess.Popen(['paplay', '/usr/share/sounds/freedesktop/stereo/message.oga'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                return True
+                return self._play_command(['paplay', '/usr/share/sounds/freedesktop/stereo/message.oga'])
 
             return False
 
@@ -304,15 +302,25 @@ class NotificationManager:
         """Play a custom sound file"""
         try:
             if sys.platform == 'darwin':
-                subprocess.Popen(['afplay', filepath], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return self._play_command(['afplay', filepath])
             elif sys.platform.startswith('linux'):
-                subprocess.Popen(['aplay', filepath], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return self._play_command(['aplay', filepath])
             elif sys.platform == 'win32':
                 import winsound
                 winsound.PlaySound(filepath, winsound.SND_FILENAME | winsound.SND_ASYNC)
             return True
         except Exception:
             return False
+
+    def _play_command(self, command: List[str]) -> bool:
+        """Start a sound process and reap it in the background."""
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        threading.Thread(target=process.wait, daemon=True).start()
+        return True
 
     def _send_email(self, title: str, message: str) -> bool:
         """Send email notification"""

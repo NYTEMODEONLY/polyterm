@@ -1182,6 +1182,7 @@ class TestCLOBSyncClose:
 
         mock_loop = Mock()
         mock_loop.is_running.return_value = True
+        mock_loop.create_task.side_effect = lambda coro: coro.close()
 
         with patch("asyncio.get_running_loop", return_value=mock_loop):
             client.close()
@@ -1196,7 +1197,7 @@ class TestCLOBSyncClose:
         client.session = Mock()
 
         with patch("asyncio.get_running_loop", side_effect=RuntimeError("no loop")):
-            with patch("asyncio.run") as mock_run:
+            with patch("asyncio.run", side_effect=lambda coro: coro.close()) as mock_run:
                 client.close()
 
         client.session.close.assert_called_once()
