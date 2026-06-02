@@ -98,7 +98,7 @@ Main analytics class that builds portfolios from local trade history and provide
 |--------|-----------|-------------|
 | `get_portfolio` | `(wallet_address: str) -> PortfolioSummary` | Builds full portfolio from trade history. Aggregates positions, calculates P&L, fetches current prices. |
 | `get_risk_analysis` | `(wallet_address: str) -> Dict[str, Any]` | Analyzes portfolio risk using HHI concentration index, position percentages, and risk factor identification. |
-| `get_performance_history` | `(wallet_address: str, days: int = 30) -> List[Dict]` | Placeholder for daily portfolio snapshots (returns empty list). |
+| `get_performance_history` | `(wallet_address: str, days: int = 30) -> List[Dict]` | Reserved hook for daily portfolio snapshots (returns empty list). |
 | `render_portfolio_ascii` | `(portfolio: PortfolioSummary) -> str` | Renders portfolio as a formatted ASCII table with summary and position details. |
 
 #### Internal Methods

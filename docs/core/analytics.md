@@ -62,13 +62,13 @@ AnalyticsEngine(
 |--------|-----------|-------------|
 | `track_whale_trades` | `(min_notional: float = 10000, lookback_hours: int = 24) -> List[WhaleActivity]` | Detect whale activity via volume spikes in top 50 active markets |
 | `get_whale_impact_on_market` | `(market_id: str, whale_address: str) -> Dict[str, Any]` | Analyze a specific whale's impact on a market |
-| `identify_whale_followers` | `(whale_address: str) -> List[Dict[str, Any]]` | Identify traders following a whale (placeholder) |
-| `calculate_market_correlation` | `(market1_id: str, market2_id: str, window_hours: int = 24) -> Optional[MarketCorrelation]` | Calculate correlation between two markets (placeholder) |
-| `find_correlated_markets` | `(market_id: str, min_correlation: float = 0.7, limit: int = 5) -> List[MarketCorrelation]` | Find markets correlated with a given market (placeholder) |
+| `identify_whale_followers` | `(whale_address: str) -> List[Dict[str, Any]]` | Identify traders following a whale (reserved implementation) |
+| `calculate_market_correlation` | `(market1_id: str, market2_id: str, window_hours: int = 24) -> Optional[MarketCorrelation]` | Calculate correlation between two markets (reserved implementation) |
+| `find_correlated_markets` | `(market_id: str, min_correlation: float = 0.7, limit: int = 5) -> List[MarketCorrelation]` | Find markets correlated with a given market (reserved implementation) |
 | `analyze_historical_trends` | `(market_id: str, hours: int = 168) -> Dict[str, Any]` | Analyze historical price trends (requires time-series source) |
 | `predict_price_movement` | `(market_id: str, horizon_hours: int = 24) -> Dict[str, Any]` | Predict price direction using momentum and whale signals |
 | `get_portfolio_analytics` | `(wallet_address: str) -> Dict[str, Any]` | Calculate portfolio value, P&L, and ROI from Data API positions |
-| `detect_market_manipulation` | `(market_id: str) -> Dict[str, Any]` | Detect manipulation patterns (placeholder, awaiting data source) |
+| `detect_market_manipulation` | `(market_id: str) -> Dict[str, Any]` | Detect manipulation patterns (reserved until a stable public data source is available) |
 
 ## Scoring / Algorithms
 

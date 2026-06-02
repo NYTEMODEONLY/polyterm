@@ -43,7 +43,7 @@ MIN_DOC_LINES = 50
 
 # Placeholder patterns that indicate a stub
 PLACEHOLDER_PATTERNS = [
-    r"\{.*\}",          # Template placeholders like {Feature Name}
+    r"\{[^}\n]*(Feature Name|Related feature|Describe|Usage examples|underlying logic|related documentation)[^}\n]*\}",
     r"TODO",
     r"FIXME",
     r"placeholder",

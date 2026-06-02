@@ -13,6 +13,12 @@ polyterm --help       # See all commands
 
 ## Table of Contents
 
+### Current Audit
+
+| Report | Scope | Status |
+|--------|-------|--------|
+| [June 1, 2026 Audit](AUDIT_2026-06-01.md) | Current Polymarket API standards, command health, docs validation, and live endpoint proof | Complete |
+
 ### CLI Commands
 
 Each CLI command has its own documentation page with usage, options, and examples.
@@ -207,6 +213,7 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 | [clob](api/clob.md) | CLOB REST + WebSocket (order book, trades, settlement) | Real-time data |
 | [data_api](api/data_api.md) | Data API client (wallet positions, activity) | Wallet data |
 | [gamma](api/gamma.md) | Gamma REST API + SharedRateLimiter | Market data |
+| [market_utils](api/market_utils.md) | Identifier and metadata normalization helpers | ID routing |
 | [subgraph](api/subgraph.md) | Subgraph client (legacy) | Historical data |
 
 ### Core Modules
