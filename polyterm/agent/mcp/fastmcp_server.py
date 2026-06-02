@@ -99,6 +99,13 @@ def create_server() -> Any:
         )
 
     @mcp.tool(
+        name="market.explain_move",
+        description="Explain a recent YES price move with CLOB price history, order book context, and quality flags.",
+    )
+    def market_explain_move(market: str, hours: int = 24) -> Dict[str, Any]:
+        return _call_tool("market.explain_move", market=market, hours=hours)
+
+    @mcp.tool(
         name="analytics.arbitrage",
         description="Scan Polymarket and optional venues for arbitrage opportunities.",
     )

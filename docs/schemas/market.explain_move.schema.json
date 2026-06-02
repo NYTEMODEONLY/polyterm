@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PolyTerm market.explain_move response",
+  "description": "Stable envelope for recent market move explanations.",
+  "type": "object",
+  "required": ["schema_version", "success", "data", "error", "meta"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "success": {"type": "boolean"},
+    "error": {"type": ["string", "null"]},
+    "meta": {"type": "object"},
+    "data": {
+      "type": "object",
+      "required": ["query", "market", "move", "headline", "drivers", "caveats", "evidence_sources", "quality_flags", "generated_at"],
+      "properties": {
+        "query": {"type": "string"},
+        "market": {
+          "type": "object",
+          "properties": {
+            "input": {"type": "string"},
+            "gamma_market_id": {"type": ["string", "number", "null"]},
+            "slug": {"type": ["string", "null"]},
+            "condition_id": {"type": ["string", "null"]},
+            "clob_token_ids": {"type": "array", "items": {"type": "string"}},
+            "title": {"type": ["string", "null"]},
+            "probability": {"type": "number"},
+            "volume_24h": {"type": ["number", "string", "null"]},
+            "liquidity": {"type": ["number", "string", "null"]}
+          }
+        },
+        "move": {
+          "type": "object",
+          "required": ["direction", "start_price", "end_price", "absolute_change", "relative_change", "hours", "points"],
+          "properties": {
+            "direction": {"type": "string", "enum": ["up", "down", "flat", "unknown"]},
+            "start_price": {"type": ["number", "null"]},
+            "end_price": {"type": ["number", "null"]},
+            "absolute_change": {"type": ["number", "null"]},
+            "relative_change": {"type": ["number", "null"]},
+            "hours": {"type": "integer"},
+            "points": {"type": "integer"}
+          }
+        },
+        "headline": {"type": "string"},
+        "drivers": {"type": "array", "items": {"type": "string"}},
+        "caveats": {"type": "array", "items": {"type": "string"}},
+        "orderbook": {"type": "object"},
+        "evidence_sources": {"type": "array", "items": {"type": "object"}},
+        "quality_flags": {"type": "array", "items": {"type": "string"}},
+        "generated_at": {"type": "string"}
+      }
+    }
+  }
+}

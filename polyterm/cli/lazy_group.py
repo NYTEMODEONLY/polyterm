@@ -93,6 +93,7 @@ LAZY_COMMANDS = {
     "archive": ("archive", "archive"),
     "thesis": ("thesis", "thesis"),
     "research": ("research", "research"),
+    "explain-move": ("explain_move", "explain_move"),
     "collect": ("collect", "collect"),
 }
 

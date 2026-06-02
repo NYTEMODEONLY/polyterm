@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from ...contracts import envelope
 from ....api.gamma import GammaClient
 from ....api.market_utils import get_clob_token_ids, get_market_condition_id, market_probability_price
+from ....core.market_move import MarketMoveExplainer
 from ....core.market_research import MarketResearchEngine
 
 
@@ -63,6 +64,11 @@ def research(
         ),
         meta={"tool": "market.research"},
     )
+
+
+def explain_move(market: str, hours: int = 24) -> dict:
+    engine = MarketMoveExplainer()
+    return envelope(engine.explain(market, hours=hours), meta={"tool": "market.explain_move"})
 
 
 def _is_current_market(market):

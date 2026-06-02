@@ -51,6 +51,7 @@ Each CLI command has its own documentation page with usage, options, and example
 | [depth](cli/depth.md) | Order book depth analysis | `polyterm depth` |
 | [digest](cli/digest.md) | Market digest / summary report | `polyterm digest` |
 | [ev](cli/ev.md) | Expected value calculator | `polyterm ev` |
+| [explain_move](cli/explain_move.md) | Recent market price movement explanation | `polyterm explain-move` |
 | [exit](cli/exit.md) | Exit plan calculator | `polyterm exit` |
 | [export](cli/export.md) | Data export utilities | `polyterm export` |
 | [fees](cli/fees.md) | Fee and slippage calculator | `polyterm fees` |
@@ -239,8 +240,8 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 | [cross_venue](core/cross_venue.md) | Cross-venue hedge and arbitrage monitor | Venue matching |
 | [fees](core/fees.md) | CLOB V2 fee schedule parsing and protocol fee estimates | Fee model |
 | [historical](core/historical.md) | Historical data management | Data history |
-| [market_research](core/market_research.md) | Flagship agent-native market research composer | Research engine |
-| [negrisk](core/negrisk.md) | NegRisk multi-outcome arbitrage detection | NegRisk arb |
+| [market_research](core/market_research.md) | Agent-native market research brief composer | Market research engine |
+| [market_move](core/market_move.md) | Recent market price movement explanation | Move explanation engine |
 | [news](core/news.md) | RSS news aggregation engine | News feeds |
 | [notifications](core/notifications.md) | Multi-channel notifications (Telegram, Discord, email) | Notification dispatch |
 | [orderbook](core/orderbook.md) | Order book analysis + LiveOrderBook WebSocket | Order book engine |

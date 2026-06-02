@@ -85,6 +85,13 @@ TOOLS: List[AgentTool] = [
         schema="docs/schemas/market.research.schema.json",
     ),
     AgentTool(
+        name="market.explain_move",
+        description="Explain a recent YES price move with CLOB price history, order book context, and quality flags.",
+        command="polyterm explain-move --market {market} --format json",
+        args={"market": "string", "hours": "integer"},
+        schema="docs/schemas/market.explain_move.schema.json",
+    ),
+    AgentTool(
         name="analytics.arbitrage",
         description="Scan Polymarket and optional venues for arbitrage opportunities.",
         command="polyterm arbitrage --format json",

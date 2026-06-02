@@ -50,6 +50,7 @@ def test_all_schemas_returns_rich_schema_for_every_registered_tool():
     schemas = all_schemas()
 
     assert "agent.schemas" in schemas
+    assert "market.explain_move" in schemas
     assert "market.research" in schemas
     assert "archive.search" in schemas
     assert "archive.status" in schemas
@@ -57,6 +58,7 @@ def test_all_schemas_returns_rich_schema_for_every_registered_tool():
     assert schemas["market.research"]["input_schema"]["required"] == ["market"]
     assert "input_schema" in schemas["analytics.thesis"]
     assert "output_schema" in schemas["analytics.thesis"]
+    assert schemas["market.explain_move"]["input_schema"]["required"] == ["market"]
     assert "safety" in schemas["alerts.create_price_rule"]
     assert schemas["alerts.create_price_rule"]["safety"]["mutates_local_state"] is True
 
