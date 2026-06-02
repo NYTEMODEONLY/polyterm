@@ -45,11 +45,11 @@ The result contains:
 - `thesis`: complete `TradeThesisEngine.build()` output, including `evidence_sources`.
 - `quality_flags`: flattened flags beginning with `research_brief` plus thesis flags.
 - `workflow`: ordered tool calls that ran, including optional `wallet.whales` prefetch and `analytics.thesis`.
-- `archive`: persistence metadata with `persisted` and `brief_id`.
+- `archive`: persistence metadata with `persisted`, `brief_id`, and `captured_evidence` for market/orderbook/price-history snapshots when persistence is enabled.
 
 ## How It Works
 
-The engine optionally runs live whale prefetch to populate local cache evidence, then builds a thesis with `TradeThesisEngine`. It derives a compact research brief from the thesis evidence, risks, next actions, and quality flags while preserving the full thesis for deeper inspection. When `persist=True`, the completed research object is written to the local `research_briefs` archive for later `archive.search` queries.
+The engine optionally runs live whale prefetch to populate local cache evidence, then builds a thesis with `TradeThesisEngine`. It derives a compact research brief from the thesis evidence, risks, next actions, and quality flags while preserving the full thesis for deeper inspection. When `persist=True`, the completed research object is written to the local `research_briefs` archive for later `archive.search` queries. Persistence also stores live public evidence snapshots: normalized market metadata in `market_snapshots`, the thesis orderbook snapshot in `evidence_snapshots`, and a CLOB `prices-history` response when a token id is available. Missing live data remains explicitly unavailable; PolyTerm never hardcodes or fabricates market evidence.
 
 ## Recommendation Labels
 

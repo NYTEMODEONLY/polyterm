@@ -1,7 +1,9 @@
 """JSON Schema helpers for PolyTerm agent tools."""
 
 import copy
+import json
 import re
+from pathlib import Path
 from typing import Any, Dict, List
 
 from .registry import AgentTool, get_tools
@@ -27,9 +29,7 @@ def schema_for_tool(tool_name: str) -> Dict[str, Any]:
         raise KeyError(f"Unknown agent tool: {tool_name}")
 
     tool = tools[tool_name]
-    output_schema = copy.deepcopy(BASE_ENVELOPE_SCHEMA)
-    output_schema["title"] = f"PolyTerm {tool_name} response"
-    output_schema["description"] = tool.description
+    output_schema = _output_schema(tool)
 
     return {
         "tool": tool.name,
@@ -61,6 +61,19 @@ def _input_schema(tool: AgentTool) -> Dict[str, Any]:
         "required": _required_args(tool),
         "additionalProperties": False,
     }
+
+
+def _output_schema(tool: AgentTool) -> Dict[str, Any]:
+    """Load a documented output schema when present, otherwise use the generic envelope."""
+    schema_path = Path(__file__).resolve().parents[2] / tool.schema
+    if schema_path.exists():
+        with schema_path.open("r", encoding="utf-8") as handle:
+            output_schema = json.load(handle)
+    else:
+        output_schema = copy.deepcopy(BASE_ENVELOPE_SCHEMA)
+    output_schema.setdefault("title", f"PolyTerm {tool.name} response")
+    output_schema.setdefault("description", tool.description)
+    return output_schema
 
 
 def _json_type(arg_type: Any) -> Dict[str, str]:

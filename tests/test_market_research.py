@@ -80,3 +80,56 @@ def test_market_research_prefetches_whales_and_reruns_thesis():
     assert whale_step["status"] == "completed"
     assert whale_step["result"]["cached_trade_count"] == 7
     assert result["quality_flags"][0] == "research_brief"
+
+
+class FakeClobClient:
+    def __init__(self):
+        self.calls = []
+
+    def get_price_history(self, token_id, interval="1h", fidelity=60):
+        self.calls.append({"token_id": token_id, "interval": interval, "fidelity": fidelity})
+        return [{"t": 1717351200, "p": "0.71"}]
+
+
+class FakeSnapshotThesisEngine(FakeThesisEngine):
+    def __init__(self):
+        super().__init__()
+        self.clob = FakeClobClient()
+
+    def build(self, market):
+        thesis = super().build(market)
+        thesis["orderbook"] = {
+            "available": True,
+            "token_id": "token-yes",
+            "best_bid": 0.70,
+            "best_ask": 0.72,
+            "spread": 0.02,
+            "bid_levels": 3,
+            "ask_levels": 4,
+        }
+        return thesis
+
+
+def test_market_research_persist_captures_live_evidence_snapshots(tmp_path):
+    from polyterm.core.archive import ArchiveCollector
+    from polyterm.db.database import Database
+
+    db = Database(str(tmp_path / "polyterm.db"))
+    thesis_engine = FakeSnapshotThesisEngine()
+    engine = MarketResearchEngine(thesis_engine=thesis_engine, database=db)
+
+    result = engine.build("bitcoin", persist=True)
+
+    assert result["archive"]["persisted"] is True
+    assert result["archive"]["brief_id"] == 1
+    assert result["archive"]["captured_evidence"]["market_snapshot"]["persisted"] is True
+    assert result["archive"]["captured_evidence"]["orderbook_snapshot"]["persisted"] is True
+    assert result["archive"]["captured_evidence"]["price_history_snapshot"]["persisted"] is True
+    assert thesis_engine.clob.calls == [{"token_id": "token-yes", "interval": "1h", "fidelity": 60}]
+
+    status = ArchiveCollector(database=db).status(query="bitcoin", market_id="2362221", max_age_hours=24)
+    assert status["evidence_counts"]["market_snapshots"] == 1
+    assert status["evidence_counts"]["orderbook_snapshots"] == 1
+    assert status["evidence_counts"]["price_history_snapshots"] == 1
+    assert status["freshness"]["orderbook_snapshots"]["status"] == "fresh"
+    assert status["freshness"]["price_history_snapshots"]["status"] == "fresh"

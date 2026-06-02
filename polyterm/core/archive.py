@@ -108,12 +108,22 @@ class ArchiveCollector:
         briefs = self.db.search_research_briefs(query=query or market_id, limit=100)
         inferred_market_id = market_id or _first_nonempty([b.get("market_id") for b in briefs])
         snapshots = self.db.get_market_history(inferred_market_id, hours=24 * 365 * 10, limit=1000) if inferred_market_id else []
+        orderbook_snapshots = self.db.get_evidence_snapshots("orderbook", inferred_market_id, limit=1000) if inferred_market_id else []
+        price_history_snapshots = self.db.get_evidence_snapshots("price_history", inferred_market_id, limit=1000) if inferred_market_id else []
         latest_brief = briefs[0] if briefs else None
         latest_snapshot = snapshots[0] if snapshots else None
+        latest_orderbook = orderbook_snapshots[0] if orderbook_snapshots else None
+        latest_price_history = price_history_snapshots[0] if price_history_snapshots else None
 
         freshness = {
             "research_briefs": self._freshness(latest_brief.get("generated_at") if latest_brief else None, max_age_hours),
             "market_snapshots": self._freshness(latest_snapshot.timestamp.isoformat() if latest_snapshot else None, max_age_hours),
+            "orderbook_snapshots": self._freshness(
+                latest_orderbook.get("captured_at") if latest_orderbook else None, max_age_hours
+            ),
+            "price_history_snapshots": self._freshness(
+                latest_price_history.get("captured_at") if latest_price_history else None, max_age_hours
+            ),
         }
         quality_flags = ["archive_status", "local_sqlite_dataset", "read_only_export"]
         recommended_actions = []
@@ -127,10 +137,22 @@ class ArchiveCollector:
 
         if freshness["market_snapshots"]["status"] == "stale":
             quality_flags.append("stale_market_snapshots")
-            recommended_actions.append("Run polyterm collect for this market to refresh local market snapshots.")
+            recommended_actions.append("Run market.research with persist=true to refresh local market snapshots.")
         elif freshness["market_snapshots"]["status"] == "missing":
             quality_flags.append("missing_market_snapshots")
-            recommended_actions.append("Run polyterm collect for this market to create local market snapshots.")
+            recommended_actions.append("Run market.research with persist=true to create local market snapshots.")
+
+        for key, label in [
+            ("orderbook_snapshots", "order book"),
+            ("price_history_snapshots", "price history"),
+        ]:
+            status = freshness[key]["status"]
+            if status == "stale":
+                quality_flags.append(f"stale_{key}")
+                recommended_actions.append(f"Run market.research with persist=true to refresh local {label} snapshots.")
+            elif status == "missing":
+                quality_flags.append(f"missing_{key}")
+                recommended_actions.append(f"Run market.research with persist=true to create local {label} snapshots.")
 
         return {
             "success": True,
@@ -140,11 +162,15 @@ class ArchiveCollector:
             "evidence_counts": {
                 "research_briefs": len(briefs),
                 "market_snapshots": len(snapshots),
+                "orderbook_snapshots": len(orderbook_snapshots),
+                "price_history_snapshots": len(price_history_snapshots),
             },
             "freshness": freshness,
             "latest": {
                 "research_brief": latest_brief,
                 "market_snapshot": latest_snapshot.to_dict() if latest_snapshot else None,
+                "orderbook_snapshot": latest_orderbook,
+                "price_history_snapshot": latest_price_history,
             },
             "recommended_actions": recommended_actions,
             "quality_flags": quality_flags,

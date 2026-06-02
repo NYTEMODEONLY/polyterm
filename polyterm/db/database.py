@@ -131,6 +131,20 @@ class Database:
                 )
             """)
 
+            # Raw public evidence snapshots captured during research workflows.
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS evidence_snapshots (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    evidence_type TEXT NOT NULL,
+                    market_id TEXT DEFAULT '',
+                    market_slug TEXT DEFAULT '',
+                    token_id TEXT DEFAULT '',
+                    source TEXT DEFAULT '',
+                    payload_json TEXT NOT NULL,
+                    captured_at TIMESTAMP NOT NULL
+                )
+            """)
+
             # Arbitrage opportunities table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS arbitrage_opportunities (
@@ -272,6 +286,9 @@ class Database:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_research_briefs_market ON research_briefs(market_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_research_briefs_slug ON research_briefs(market_slug)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_research_briefs_generated ON research_briefs(generated_at)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_evidence_snapshots_type ON evidence_snapshots(evidence_type)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_evidence_snapshots_market ON evidence_snapshots(market_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_evidence_snapshots_captured ON evidence_snapshots(captured_at)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_price_alerts_created ON price_alerts(created_at)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_positions_entry ON positions(entry_date)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_alerts_ack ON alerts(acknowledged)")
@@ -1166,6 +1183,78 @@ class Database:
         row["brief"] = json.loads(row.pop("brief_json") or "{}")
         row["quality_flags"] = json.loads(row.pop("quality_flags") or "[]")
         row["workflow"] = json.loads(row.pop("workflow_json") or "[]")
+        row["payload"] = json.loads(row.pop("payload_json") or "{}")
+        return row
+
+    # Evidence snapshot operations
+
+    def insert_evidence_snapshot(
+        self,
+        evidence_type: str,
+        payload: Dict[str, Any],
+        *,
+        market_id: str = "",
+        market_slug: str = "",
+        token_id: str = "",
+        source: str = "",
+        captured_at: Optional[datetime] = None,
+    ) -> int:
+        """Persist a raw public evidence snapshot for agent archive workflows."""
+        captured_at = captured_at or datetime.utcnow()
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO evidence_snapshots (
+                    evidence_type, market_id, market_slug, token_id,
+                    source, payload_json, captured_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    evidence_type,
+                    market_id,
+                    market_slug,
+                    token_id,
+                    source,
+                    json.dumps(payload, default=str),
+                    captured_at.isoformat(),
+                ),
+            )
+            return int(cursor.lastrowid or 0)
+
+    def get_evidence_snapshots(
+        self,
+        evidence_type: str,
+        market_id: str = "",
+        *,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """Return archived public evidence snapshots, newest first."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            if market_id:
+                cursor.execute(
+                    """
+                    SELECT * FROM evidence_snapshots
+                    WHERE evidence_type = ? AND market_id = ?
+                    ORDER BY captured_at DESC, id DESC
+                    LIMIT ?
+                    """,
+                    (evidence_type, market_id, limit),
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT * FROM evidence_snapshots
+                    WHERE evidence_type = ?
+                    ORDER BY captured_at DESC, id DESC
+                    LIMIT ?
+                    """,
+                    (evidence_type, limit),
+                )
+            return [self._evidence_snapshot_row(dict(row)) for row in cursor.fetchall()]
+
+    def _evidence_snapshot_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
         row["payload"] = json.loads(row.pop("payload_json") or "{}")
         return row
 

@@ -55,12 +55,19 @@ Status output adds local evidence counts and freshness:
   "success": true,
   "archive": {
     "success": true,
-    "evidence_counts": {"research_briefs": 1, "market_snapshots": 0},
+    "evidence_counts": {
+      "research_briefs": 1,
+      "market_snapshots": 1,
+      "orderbook_snapshots": 1,
+      "price_history_snapshots": 1
+    },
     "freshness": {
       "research_briefs": {"status": "fresh"},
-      "market_snapshots": {"status": "missing"}
+      "market_snapshots": {"status": "fresh"},
+      "orderbook_snapshots": {"status": "fresh"},
+      "price_history_snapshots": {"status": "fresh"}
     },
-    "recommended_actions": ["Run polyterm collect for this market to create local market snapshots."]
+    "recommended_actions": []
   }
 }
 ```

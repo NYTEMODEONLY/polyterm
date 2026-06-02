@@ -61,6 +61,18 @@ def test_all_schemas_returns_rich_schema_for_every_registered_tool():
     assert schemas["alerts.create_price_rule"]["safety"]["mutates_local_state"] is True
 
 
+def test_schema_for_tool_loads_documented_output_schema_when_available():
+    schema = schema_for_tool("market.research")
+
+    data_props = schema["output_schema"]["properties"]["data"]["properties"]
+    assert "archive" in data_props
+    assert "captured_evidence" in data_props["archive"]["properties"]
+
+    status_props = schema_for_tool("archive.status")["output_schema"]["properties"]["data"]["properties"]
+    assert "orderbook_snapshots" in status_props["evidence_counts"]["properties"]
+    assert "price_history_snapshots" in status_props["freshness"]["properties"]
+
+
 def test_schema_for_tool_rejects_unknown_tool():
     with pytest.raises(KeyError):
         schema_for_tool("missing.tool")

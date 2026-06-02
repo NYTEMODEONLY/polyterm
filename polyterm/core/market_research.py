@@ -5,6 +5,7 @@ from typing import Any, Callable, Dict, Optional
 
 from .trade_thesis import TradeThesisEngine
 from ..db.database import Database
+from ..db.models import MarketSnapshot
 
 WhalePrefetcher = Callable[[str, float, int, int], Dict[str, Any]]
 
@@ -69,14 +70,100 @@ class MarketResearchEngine:
             "workflow": workflow,
             "generated_at": datetime.utcnow().isoformat() + "Z",
         }
-        result["archive"] = self._archive_result(result, persist=persist)
+        result["archive"] = self._archive_result(result, thesis=thesis, persist=persist)
         return result
 
-    def _archive_result(self, payload: Dict[str, Any], *, persist: bool) -> Dict[str, Any]:
+    def _archive_result(self, payload: Dict[str, Any], *, thesis: Dict[str, Any], persist: bool) -> Dict[str, Any]:
         if not persist:
-            return {"persisted": False, "brief_id": None}
+            return {"persisted": False, "brief_id": None, "captured_evidence": {}}
         brief_id = self.db.insert_research_brief(payload)
-        return {"persisted": True, "brief_id": brief_id}
+        captured = self._capture_evidence_snapshots(payload, thesis)
+        return {"persisted": True, "brief_id": brief_id, "captured_evidence": captured}
+
+    def _capture_evidence_snapshots(self, payload: Dict[str, Any], thesis: Dict[str, Any]) -> Dict[str, Any]:
+        market = payload.get("market", {}) or {}
+        market_id = str(market.get("gamma_market_id") or market.get("id") or "")
+        market_slug = market.get("slug", "") or ""
+        title = market.get("question") or market.get("title") or payload.get("query", "")
+        token_ids = market.get("clob_token_ids") or []
+        token_id = str(token_ids[0]) if token_ids else str((thesis.get("orderbook") or {}).get("token_id") or "")
+        captured: Dict[str, Any] = {}
+
+        captured["market_snapshot"] = self._capture_market_snapshot(market, market_id, market_slug, title, thesis)
+        captured["orderbook_snapshot"] = self._capture_orderbook_snapshot(
+            thesis.get("orderbook") or {}, market_id, market_slug, token_id
+        )
+        captured["price_history_snapshot"] = self._capture_price_history_snapshot(market_id, market_slug, token_id)
+        return captured
+
+    def _capture_market_snapshot(
+        self,
+        market: Dict[str, Any],
+        market_id: str,
+        market_slug: str,
+        title: str,
+        thesis: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        if not market_id:
+            return {"persisted": False, "reason": "missing_market_id"}
+        orderbook = thesis.get("orderbook") or {}
+        snapshot = MarketSnapshot(
+            market_id=market_id,
+            market_slug=market_slug,
+            title=title,
+            probability=float(market.get("probability") or 0),
+            volume_24h=float(market.get("volume_24h") or market.get("volume24hr") or market.get("volume") or 0),
+            liquidity=float(market.get("liquidity") or 0),
+            best_bid=float(orderbook.get("best_bid") or 0),
+            best_ask=float(orderbook.get("best_ask") or 0),
+            spread=float(orderbook.get("spread") or 0),
+            timestamp=datetime.utcnow(),
+        )
+        return {"persisted": True, "snapshot_id": self.db.insert_snapshot(snapshot), "source": "market.research"}
+
+    def _capture_orderbook_snapshot(
+        self,
+        orderbook: Dict[str, Any],
+        market_id: str,
+        market_slug: str,
+        token_id: str,
+    ) -> Dict[str, Any]:
+        if not orderbook.get("available"):
+            return {"persisted": False, "reason": orderbook.get("quality") or "orderbook_unavailable"}
+        snapshot_id = self.db.insert_evidence_snapshot(
+            "orderbook",
+            orderbook,
+            market_id=market_id,
+            market_slug=market_slug,
+            token_id=token_id,
+            source="clob_orderbook",
+        )
+        return {"persisted": True, "snapshot_id": snapshot_id, "source": "clob_orderbook"}
+
+    def _capture_price_history_snapshot(self, market_id: str, market_slug: str, token_id: str) -> Dict[str, Any]:
+        if not token_id:
+            return {"persisted": False, "reason": "missing_token_id"}
+        clob = getattr(self.thesis_engine, "clob", None)
+        if clob is None:
+            return {"persisted": False, "reason": "missing_clob_client"}
+        try:
+            history = clob.get_price_history(token_id, interval="1h", fidelity=60)
+        except Exception as exc:
+            return {"persisted": False, "reason": str(exc)}
+        snapshot_id = self.db.insert_evidence_snapshot(
+            "price_history",
+            {"token_id": token_id, "interval": "1h", "fidelity": 60, "history": history},
+            market_id=market_id,
+            market_slug=market_slug,
+            token_id=token_id,
+            source="clob_price_history",
+        )
+        return {
+            "persisted": True,
+            "snapshot_id": snapshot_id,
+            "source": "clob_price_history",
+            "point_count": len(history),
+        }
 
     def _prefetch_whales(self, market: str, *, min_notional: float, hours: int, limit: int) -> Dict[str, Any]:
         if self.whale_prefetcher is not None:

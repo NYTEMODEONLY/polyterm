@@ -35,6 +35,13 @@ def test_archive_status_reports_fresh_counts_and_actions(tmp_path):
             timestamp=datetime.utcnow(),
         )
     )
+    db.insert_evidence_snapshot("orderbook", {"available": True}, market_id="m1", market_slug="bitcoin-market")
+    db.insert_evidence_snapshot(
+        "price_history",
+        {"history": [{"t": 1717351200, "p": "0.42"}]},
+        market_id="m1",
+        market_slug="bitcoin-market",
+    )
 
     status = ArchiveCollector(database=db).status(query="bitcoin", market_id="m1", max_age_hours=24)
 
@@ -58,7 +65,10 @@ def test_archive_status_marks_stale_and_missing_evidence(tmp_path):
 
     assert status["freshness"]["research_briefs"]["status"] == "stale"
     assert status["freshness"]["market_snapshots"]["status"] == "missing"
+    assert status["freshness"]["orderbook_snapshots"]["status"] == "missing"
+    assert status["freshness"]["price_history_snapshots"]["status"] == "missing"
     assert "stale_research_briefs" in status["quality_flags"]
     assert "missing_market_snapshots" in status["quality_flags"]
+    assert "missing_orderbook_snapshots" in status["quality_flags"]
+    assert "missing_price_history_snapshots" in status["quality_flags"]
     assert any("market.research" in action for action in status["recommended_actions"])
-    assert any("collect" in action for action in status["recommended_actions"])

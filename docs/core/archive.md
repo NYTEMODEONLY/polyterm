@@ -8,7 +8,9 @@
 
 It also exposes `search_research_briefs()` for Phase 3 agent memory: market research briefs persisted by `market.research` / `polyterm research --persist` can be searched by query, slug, title, market id, or condition id.
 
-`status()` reports archive coverage and freshness for a query/market id, including local research brief counts, market snapshot counts, latest timestamps, stale/missing flags, and recommended refresh actions.
+`status()` reports archive coverage and freshness for a query/market id, including local research brief counts, market snapshot counts, orderbook snapshot counts, price-history snapshot counts, latest timestamps, stale/missing flags, and recommended refresh actions.
+
+When `market.research` is run with `persist=True`, it now captures a research brief plus live evidence snapshots: normalized market metadata, the thesis orderbook snapshot, and a CLOB price-history snapshot when a token id is available. Unavailable evidence is marked missing/stale by `archive.status`; PolyTerm does not synthesize replacement data.
 
 The module writes only to PolyTerm's local SQLite database. It does not mutate Polymarket state.
 
