@@ -46,7 +46,7 @@ polyterm thesis -m "will-bitcoin-hit-100k" --format json
 
 The command instantiates `TradeThesisEngine` from `polyterm/core/trade_thesis.py`. The engine resolves the market through Gamma, extracts CLOB token IDs with `market_utils`, probes the CLOB order book when a token ID is available, scores market risk with `MarketRiskScorer`, checks local snapshot history in SQLite, and summarizes cached large trades for the resolved market.
 
-It then builds a deterministic thesis object with direction, confidence, evidence, risks, next actions, quality flags, and current market identifiers.
+It then builds a deterministic thesis object with direction, confidence, evidence, risks, next actions, quality flags, current market identifiers, and structured `evidence_sources` for agent citations.
 
 ## Data Sources
 
@@ -62,7 +62,7 @@ Gamma market IDs and slugs are used for discovery. CLOB condition IDs and CLOB t
 
 ## Agent Workflow
 
-Agents should call `polyterm thesis --format json` after resolving a market and before deciding whether to run deeper wallet, order book, or archive tools. The command is marked read-only in the agent manifest. If the result has `whale_flow_unavailable`, agents can call `wallet.whales` first to populate the local cache and then rerun the thesis for richer evidence.
+Agents should call `polyterm thesis --format json` after resolving a market and before deciding whether to run deeper wallet, order book, or archive tools. The command is marked read-only in the agent manifest. If the result has `whale_flow_unavailable`, agents can call `wallet.whales` first to populate the local cache and then rerun the thesis for richer evidence. Use `evidence_sources` for citations in synthesized reports instead of scraping prose bullets.
 
 ## Verification
 

@@ -76,6 +76,7 @@ class TradeThesisEngine:
             risks.append("No cached whale flow for this market; run wallet.whales to enrich local evidence.")
 
         confidence = self._confidence(probability, orderbook, risk, local_history)
+        evidence_sources = self._evidence_sources(market_data, orderbook, risk, local_history, whale_flow)
 
         return {
             "market": {
@@ -106,6 +107,7 @@ class TradeThesisEngine:
             "risk": risk,
             "local_history": local_history,
             "whale_flow": whale_flow,
+            "evidence_sources": evidence_sources,
             "quality_flags": self._quality_flags(market_data, token_ids, orderbook, whale_flow),
             "generated_at": datetime.utcnow().isoformat() + "Z",
         }
@@ -200,6 +202,82 @@ class TradeThesisEngine:
             "top_outcome": outcomes.most_common(1)[0][0] if outcomes else None,
             "trades": [trade.to_dict() for trade in matched[:5]],
         }
+
+    def _evidence_sources(
+        self,
+        market_data: Dict[str, Any],
+        orderbook: Dict[str, Any],
+        risk: Dict[str, Any],
+        local_history: Dict[str, Any],
+        whale_flow: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        """Return structured source records so agents can cite thesis inputs."""
+        return [
+            {
+                "id": "gamma_market",
+                "label": "Gamma market metadata",
+                "source": "gamma_api",
+                "status": "available" if market_data else "unavailable",
+                "metrics": {
+                    "probability": market_probability_price(market_data),
+                    "volume_24h": market_data.get("volume24hr") or market_data.get("volume24Hr") or market_data.get("volume"),
+                    "liquidity": market_data.get("liquidity"),
+                },
+                "records": [
+                    {
+                        "id": market_data.get("id"),
+                        "slug": market_data.get("slug"),
+                        "condition_id": get_market_condition_id(market_data),
+                    }
+                ] if market_data else [],
+            },
+            {
+                "id": "clob_orderbook",
+                "label": "CLOB order book",
+                "source": "clob_api",
+                "status": "available" if orderbook.get("available") else "unavailable",
+                "metrics": {
+                    "spread": orderbook.get("spread"),
+                    "best_bid": orderbook.get("best_bid"),
+                    "best_ask": orderbook.get("best_ask"),
+                    "bid_levels": orderbook.get("bid_levels"),
+                    "ask_levels": orderbook.get("ask_levels"),
+                },
+                "records": [{"token_id": orderbook.get("token_id"), "quality": orderbook.get("quality")}],
+            },
+            {
+                "id": "risk_score",
+                "label": "PolyTerm risk score",
+                "source": "risk_score",
+                "status": "available" if risk else "unavailable",
+                "metrics": {
+                    "overall_grade": risk.get("overall_grade"),
+                    "overall_score": risk.get("overall_score"),
+                },
+                "records": risk.get("factors", [])[:5] if isinstance(risk.get("factors"), list) else [],
+            },
+            {
+                "id": "local_history",
+                "label": "Local market snapshot archive",
+                "source": "local_sqlite_market_snapshots",
+                "status": "available" if local_history.get("data_points", 0) else "unavailable",
+                "metrics": local_history,
+                "records": [],
+            },
+            {
+                "id": "cached_whale_flow",
+                "label": "Cached whale flow",
+                "source": "local_sqlite_trades",
+                "status": "available" if whale_flow.get("trade_count", 0) else "unavailable",
+                "metrics": {
+                    "trade_count": whale_flow.get("trade_count", 0),
+                    "wallet_count": whale_flow.get("wallet_count", 0),
+                    "total_notional": whale_flow.get("total_notional", 0.0),
+                    "top_outcome": whale_flow.get("top_outcome"),
+                },
+                "records": whale_flow.get("trades", []),
+            },
+        ]
 
     def _confidence(self, probability: float, orderbook: Dict[str, Any], risk: Dict[str, Any], local_history: Dict[str, Any]) -> float:
         score = 0.35

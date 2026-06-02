@@ -36,11 +36,12 @@ The result contains:
 - `risk`: existing PolyTerm risk assessment.
 - `local_history`: recent SQLite snapshot count and probability endpoints.
 - `whale_flow`: market-specific cached large-trade summary from the local `trades` table.
+- `evidence_sources`: structured source records for agents, including source ID, status, metrics, and source-specific records.
 - `quality_flags`: missing token IDs, unavailable order book, no execution, and related caveats.
 
 ## How It Works
 
-The engine resolves an identifier through Gamma, extracts CLOB token IDs with `market_utils`, queries CLOB order book depth for the primary token, scores market risk with `MarketRiskScorer`, checks local snapshot history, summarizes cached large trades matching the resolved market identifiers, and builds evidence and risk lists from those signals.
+The engine resolves an identifier through Gamma, extracts CLOB token IDs with `market_utils`, queries CLOB order book depth for the primary token, scores market risk with `MarketRiskScorer`, checks local snapshot history, summarizes cached large trades matching the resolved market identifiers, and builds evidence, risk, and `evidence_sources` lists from those signals.
 
 Confidence is intentionally explainable and conservative. It increases when probability is decisive, the order book is available, the risk grade is acceptable, and local history exists.
 
@@ -54,7 +55,7 @@ Confidence is intentionally explainable and conservative. It increases when prob
 
 ## Agent Notes
 
-Agents should treat `trade_thesis` as a decision-support object, not a command to trade. The manifest marks `analytics.thesis` as read-only and non-mutating. Agents should inspect `quality_flags` before relying on the thesis. `cached_whale_flow` means the thesis included market-specific local whale evidence; `whale_flow_unavailable` means the local cache has no matching large trades yet.
+Agents should treat `trade_thesis` as a decision-support object, not a command to trade. The manifest marks `analytics.thesis` as read-only and non-mutating. Agents should inspect `quality_flags` before relying on the thesis. `cached_whale_flow` means the thesis included market-specific local whale evidence; `whale_flow_unavailable` means the local cache has no matching large trades yet. Use `evidence_sources` when generating reports so each claim can point back to Gamma, CLOB, local snapshots, risk scoring, or cached whale-flow evidence.
 
 ## Verification
 
