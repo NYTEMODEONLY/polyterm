@@ -1,8 +1,10 @@
 """JSON Schema helpers for PolyTerm agent tools."""
 
-from typing import Any, Dict
+import copy
+import re
+from typing import Any, Dict, List
 
-from .registry import get_tools
+from .registry import AgentTool, get_tools
 
 
 BASE_ENVELOPE_SCHEMA: Dict[str, Any] = {
@@ -19,20 +21,60 @@ BASE_ENVELOPE_SCHEMA: Dict[str, Any] = {
 
 
 def schema_for_tool(tool_name: str) -> Dict[str, Any]:
-    """Return a lightweight output schema for one tool."""
+    """Return an agent-usable schema packet for one tool."""
     tools = {tool.name: tool for tool in get_tools()}
     if tool_name not in tools:
         raise KeyError(f"Unknown agent tool: {tool_name}")
 
-    schema = dict(BASE_ENVELOPE_SCHEMA)
-    schema["title"] = f"PolyTerm {tool_name} response"
-    schema["description"] = tools[tool_name].description
-    return schema
+    tool = tools[tool_name]
+    output_schema = copy.deepcopy(BASE_ENVELOPE_SCHEMA)
+    output_schema["title"] = f"PolyTerm {tool_name} response"
+    output_schema["description"] = tool.description
+
+    return {
+        "tool": tool.name,
+        "description": tool.description,
+        "command": tool.command,
+        "schema_path": tool.schema,
+        "safety": {
+            "read_only": tool.read_only,
+            "mutates_local_state": tool.mutates_local_state,
+            "requires_confirmation": tool.requires_confirmation,
+            "may_prompt": tool.may_prompt,
+            "long_running": tool.long_running,
+        },
+        "input_schema": _input_schema(tool),
+        "output_schema": output_schema,
+    }
 
 
 def all_schemas() -> Dict[str, Dict[str, Any]]:
     """Return schemas keyed by tool name."""
     return {tool.name: schema_for_tool(tool.name) for tool in get_tools()}
+
+
+def _input_schema(tool: AgentTool) -> Dict[str, Any]:
+    """Build a JSON Schema object for one tool's arguments."""
+    return {
+        "type": "object",
+        "properties": {name: _json_type(arg_type) for name, arg_type in tool.args.items()},
+        "required": _required_args(tool),
+        "additionalProperties": False,
+    }
+
+
+def _json_type(arg_type: Any) -> Dict[str, str]:
+    """Convert registry argument shorthand into JSON Schema primitive declarations."""
+    kind = str(arg_type).lower()
+    if kind in {"string", "integer", "number", "boolean"}:
+        return {"type": kind}
+    return {"type": "string"}
+
+
+def _required_args(tool: AgentTool) -> List[str]:
+    """Infer required args from command placeholders such as ``{query}``."""
+    placeholders = re.findall(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}", tool.command)
+    return [name for name in tool.args if name in placeholders]
 
 
 def validate_envelope(payload: Dict[str, Any]) -> bool:

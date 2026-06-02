@@ -648,7 +648,7 @@ python -m twine upload dist/*
 ## What's New in v0.10.0
 
 ### Agent-Ready Polymarket Intelligence
-- **Agent manifest and schemas**: `polyterm agent manifest --format json` and `polyterm agent schemas --format json` expose machine-readable tool metadata, safety flags, and output contracts.
+- **Agent manifest and schemas**: `polyterm agent manifest --format json` and `polyterm agent schemas --format json` expose machine-readable tool metadata, safety flags, input schemas, and stable output contracts.
 - **FastMCP stdio server**: `polyterm agent mcp-server` exposes PolyTerm as a real MCP protocol server for Hermes Agent, OpenClaw, Codex, and other MCP clients.
 - **Legacy JSON-lines adapter**: `polyterm agent jsonl-server` keeps simple pipe-based tool calls available for runtimes that do not speak MCP.
 - **Agent documentation**: `docs/AGENT_MODE.md`, `docs/tool-manifest.json`, `docs/schemas/*.schema.json`, and `llms.txt` give Hermes Agent, OpenClaw, Codex, and other agents a clear repo map.

@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 
 from ..contracts import envelope, error_envelope
 from ..registry import get_manifest
+from ..schemas import all_schemas, schema_for_tool
 from .server import TOOL_HANDLERS
 
 try:  # pragma: no cover - exercised by CLI/integration tests when installed
@@ -52,6 +53,17 @@ def create_server() -> Any:
     )
     def agent_manifest() -> Dict[str, Any]:
         return envelope(get_manifest(), meta={"tool": "agent.manifest"})
+
+    @mcp.tool(
+        name="agent.schemas",
+        description="Return rich input/output schemas for one PolyTerm tool or every agent tool.",
+    )
+    def agent_schemas(tool: str = "") -> Dict[str, Any]:
+        try:
+            data = schema_for_tool(tool) if tool else all_schemas()
+            return envelope(data, meta={"tool": "agent.schemas"})
+        except KeyError as exc:
+            return error_envelope(str(exc), meta={"tool": "agent.schemas"})
 
     @mcp.tool(name="market.search", description="Search active Polymarket markets by query.")
     def market_search(query: str, limit: int = 10) -> Dict[str, Any]:

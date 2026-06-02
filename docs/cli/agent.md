@@ -89,9 +89,39 @@ Every manifest row includes:
 
 Agent runtimes should refuse tools that mutate local state unless their policy explicitly allows local state changes. They should also treat `long_running` tools as foreground processes that may need interruption.
 
+## Schema Contract
+
+`polyterm agent schemas [tool] --format json` returns agent-usable schema packets. Each packet includes:
+
+- `tool`: registry tool name such as `wallet.whales`
+- `description`: human-readable purpose
+- `command`: equivalent CLI command pattern
+- `schema_path`: checked-in schema path for docs/reference
+- `safety`: `read_only`, `mutates_local_state`, `requires_confirmation`, `may_prompt`, and `long_running`
+- `input_schema`: JSON Schema object for tool arguments, including inferred required args from command argument tokens
+- `output_schema`: JSON Schema for PolyTerm's stable response envelope
+
+Example single-tool payload inside the standard envelope:
+
+```json
+{
+  "tool": "wallet.whales",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "min_notional": {"type": "number"},
+      "hours": {"type": "integer"},
+      "limit": {"type": "integer"}
+    },
+    "required": [],
+    "additionalProperties": false
+  }
+}
+```
+
 ## Output Contract
 
-Agent outputs use:
+Agent command outputs use:
 
 ```json
 {

@@ -36,6 +36,13 @@ class AgentTool:
 
 TOOLS: List[AgentTool] = [
     AgentTool(
+        name="agent.schemas",
+        description="Return rich input/output schemas and safety metadata for one or all PolyTerm tools.",
+        command="polyterm agent schemas --format json",
+        args={"tool": "string"},
+        schema="docs/schemas/agent.schemas.schema.json",
+    ),
+    AgentTool(
         name="market.search",
         description="Search active Polymarket markets by query.",
         command="polyterm search {query} --format json",

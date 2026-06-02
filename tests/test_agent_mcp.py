@@ -16,6 +16,7 @@ async def test_fastmcp_server_lists_agent_tools():
     tool_names = {tool.name for tool in tools}
 
     assert "agent.manifest" in tool_names
+    assert "agent.schemas" in tool_names
     assert "market.search" in tool_names
     assert "market.resolve" in tool_names
     assert "analytics.thesis" in tool_names
@@ -41,6 +42,21 @@ async def test_fastmcp_server_calls_existing_tool_handlers(monkeypatch):
     assert result["data"]["query"] == "bitcoin"
     assert result["data"]["count"] == 1
     assert result["meta"]["tool"] == "market.search"
+
+
+@pytest.mark.asyncio
+async def test_fastmcp_server_returns_rich_agent_schema():
+    server = create_server()
+
+    content, structured = await server.call_tool("agent.schemas", {"tool": "wallet.whales"})
+    result = structured["result"]
+
+    assert content
+    assert result["success"] is True
+    assert result["data"]["tool"] == "wallet.whales"
+    assert "input_schema" in result["data"]
+    assert "output_schema" in result["data"]
+    assert result["meta"]["tool"] == "agent.schemas"
 
 
 def test_legacy_jsonl_handler_still_available():

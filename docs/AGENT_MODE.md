@@ -84,7 +84,7 @@ mcp_servers:
     connect_timeout: 60
 ```
 
-After restarting the client, tools are exposed through MCP as `agent.manifest`, `market.search`, `market.resolve`, `analytics.arbitrage`, `analytics.thesis`, `wallet.inspect`, and `wallet.whales`.
+After restarting the client, tools are exposed through MCP as `agent.manifest`, `agent.schemas`, `market.search`, `market.resolve`, `analytics.arbitrage`, `analytics.thesis`, `wallet.inspect`, and `wallet.whales`.
 
 ```bash
 polyterm agent mcp-server

@@ -3,6 +3,7 @@
   "schema_version": "2026-06-02",
   "description": "No-custody Polymarket intelligence, wallet, research, and alert tools.",
   "tools": [
+    {"name": "agent.schemas", "schema": "docs/schemas/agent.schemas.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
     {"name": "market.search", "schema": "docs/schemas/market.search.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
     {"name": "market.resolve", "schema": "docs/schemas/market.resolve.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
     {"name": "market.orderbook", "schema": "docs/schemas/market.orderbook.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
