@@ -13,11 +13,14 @@ polyterm --help       # See all commands
 
 ## Table of Contents
 
-### Current Audit
+### Current Planning
 
 | Report | Scope | Status |
 |--------|-------|--------|
 | [June 1, 2026 Audit](AUDIT_2026-06-01.md) | Current Polymarket API standards, command health, docs validation, and live endpoint proof | Complete |
+| [Agent Mode](AGENT_MODE.md) | Hermes/OpenClaw/Codex tool manifest, schemas, safety model, and MCP-ready stdio usage | Current |
+| [Execution Roadmap](EXECUTION_ROADMAP.md) | Next five implementation tracks: agent tooling, wallet intelligence, trade thesis, research archive, and alert automation | Current |
+| [TODO Backlog](TODO_BACKLOG.md) | Scoped implementation tasks linked to the current roadmap | Current |
 
 ### CLI Commands
 
@@ -27,6 +30,7 @@ Each CLI command has its own documentation page with usage, options, and example
 |---------|-------------|-----|
 | [center](cli/center.md) | Alert center management | `polyterm center` |
 | [alerts](cli/alerts.md) | Alert configuration and management | `polyterm alerts` |
+| [agent](cli/agent.md) | Agent manifests, schemas, and MCP-ready stdio adapter | `polyterm agent` |
 | [analyze](cli/analyze.md) | Market analytics and trending | `polyterm analyze` |
 | [arbitrage](cli/arbitrage.md) | Arbitrage opportunity scanner | `polyterm arbitrage` |
 | [attribution](cli/attribution.md) | Trade attribution analysis | `polyterm attribution` |
@@ -37,6 +41,7 @@ Each CLI command has its own documentation page with usage, options, and example
 | [calibrate](cli/calibrate.md) | Prediction calibration analysis | `polyterm calibrate` |
 | [chart](cli/chart.md) | ASCII price history charts | `polyterm chart` |
 | [clusters](cli/clusters.md) | Wallet cluster detection | `polyterm clusters` |
+| [collect](cli/collect.md) | Research archive snapshot collection | `polyterm collect` |
 | [compare](cli/compare.md) | Compare markets side by side | `polyterm compare` |
 | [config](cli/config.md) | Configuration management | `polyterm config` |
 | [correlate](cli/correlate.md) | Market correlation analysis | `polyterm correlate` |
@@ -96,6 +101,7 @@ Each CLI command has its own documentation page with usage, options, and example
 | [stats](cli/stats.md) | Market statistics and technicals | `polyterm stats` |
 | [streak](cli/streak.md) | Win/loss streak tracking | `polyterm streak` |
 | [summary](cli/summary.md) | Market summary generation | `polyterm summary` |
+| [thesis](cli/thesis.md) | Explainable market-level trade thesis | `polyterm thesis` |
 | [timeline](cli/timeline.md) | Market event timeline | `polyterm timeline` |
 | [timing](cli/timing.md) | Trade timing analysis | `polyterm timing` |
 | [trade](cli/trade.md) | Trade management | `polyterm trade` |
@@ -221,11 +227,14 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 | Module | Description | Doc |
 |--------|-------------|-----|
 | [alerts](core/alerts.md) | Alert generation and management | Alert engine |
+| [alert_engine](core/alert_engine.md) | Unified local alert rule engine | Rule evaluation |
 | [analytics](core/analytics.md) | Market analytics and trending analysis | Analytics engine |
+| [archive](core/archive.md) | Research archive snapshot collection and dataset manifests | Data collection |
 | [arbitrage](core/arbitrage.md) | Intra-market, correlated, and cross-platform arbitrage | Arb scanner |
 | [charts](core/charts.md) | ASCII chart generation (line, bar, sparkline) | Visualization |
 | [cluster_detector](core/cluster_detector.md) | Wallet cluster detection (same-entity analysis) | Cluster analysis |
 | [correlation](core/correlation.md) | Market correlation analysis | Correlation engine |
+| [cross_venue](core/cross_venue.md) | Cross-venue hedge and arbitrage monitor | Venue matching |
 | [fees](core/fees.md) | CLOB V2 fee schedule parsing and protocol fee estimates | Fee model |
 | [historical](core/historical.md) | Historical data management | Data history |
 | [negrisk](core/negrisk.md) | NegRisk multi-outcome arbitrage detection | NegRisk arb |
@@ -237,9 +246,11 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 | [rewards](core/rewards.md) | Holding and liquidity rewards calculator | Rewards estimator |
 | [risk_score](core/risk_score.md) | Market risk scoring (A-F grades, 6 factors) | Risk engine |
 | [scanner](core/scanner.md) | Market monitoring and shift detection | Market scanner |
+| [trade_thesis](core/trade_thesis.md) | Explainable market-level thesis composer | Decision support |
 | [uma_tracker](core/uma_tracker.md) | UMA oracle dispute risk analysis | Dispute tracking |
 | [wash_trade_detector](core/wash_trade_detector.md) | Wash trade detection indicators | Volume quality |
 | [whale_tracker](core/whale_tracker.md) | Whale tracking + insider detection | Whale engine |
+| [wallet_intelligence](core/wallet_intelligence.md) | Data API and local wallet intelligence | Smart money analysis |
 
 ### Database Layer
 
@@ -282,8 +293,8 @@ polyterm/
 
 ## Global Features
 
-All CLI commands support:
-- `--format json` — JSON output for scripting and automation
+Most analysis and data commands support:
+- `--format json` — JSON output for scripting and automation where documented by the command help page
 - `--help` — Command-specific help
 - Rich terminal formatting with color and tables
 

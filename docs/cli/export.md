@@ -59,3 +59,14 @@ polyterm export --format json
 ---
 
 *Source: `polyterm/cli/commands/export_cmd.py`*
+
+## June 2026 Dataset Export
+
+`polyterm export` can export a local archive dataset manifest in addition to a single market snapshot.
+
+```bash
+polyterm export --dataset latest --format json
+polyterm export --dataset latest --format csv --output dataset.csv
+```
+
+Dataset exports summarize local SQLite row counts and recent snapshots through `ArchiveCollector.dataset_manifest()`. Use `polyterm collect` to add new market snapshots before exporting a dataset.

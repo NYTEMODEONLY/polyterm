@@ -1,0 +1,81 @@
+# Archive
+
+> Research archive snapshot collection and dataset manifest helpers.
+
+## Overview
+
+`polyterm/core/archive.py` records repeatable market snapshots and exports local dataset manifests. It makes PolyTerm useful as a research instrument for agents, data collectors, and analysts who need reproducible local records.
+
+The module writes only to PolyTerm's local SQLite database. It does not mutate Polymarket state.
+
+## Usage
+
+### CLI
+
+```bash
+polyterm collect -m bitcoin
+polyterm collect -m bitcoin --interval 30s --duration 10m
+polyterm export --dataset latest --format json
+polyterm export --dataset latest --format csv
+```
+
+### Python
+
+```python
+from polyterm.core.archive import ArchiveCollector
+
+collector = ArchiveCollector()
+collector.collect_once("bitcoin")
+manifest = collector.dataset_manifest("latest")
+```
+
+## Public API
+
+| Method | Description |
+|--------|-------------|
+| `collect_once(market)` | Resolve and store one `MarketSnapshot`. |
+| `collect_for_duration(market, interval_seconds, duration_seconds)` | Foreground loop for repeated collection. |
+| `dataset_manifest(dataset)` | Return local dataset metadata and recent snapshots. |
+| `export_dataset(dataset, output_format)` | Export manifest data as JSON or CSV. |
+
+## How It Works
+
+The collector resolves a market through Gamma, normalizes current probability with `market_utils`, builds a `MarketSnapshot`, and inserts it through `Database.insert_snapshot()`. Dataset manifests use `Database.get_database_stats()` and recent snapshots to give agents a quick inventory without reading SQLite directly.
+
+## Data Sources
+
+- Gamma API for market metadata.
+- Local SQLite `market_snapshots`.
+- Local SQLite row counts for wallets, trades, alerts, positions, bookmarks, and related tables.
+
+## Quality Flags
+
+Archive output includes flags such as:
+
+- `live_gamma_snapshot`
+- `missing_token_ids`
+- `missing_24h_volume`
+- `local_sqlite_dataset`
+- `read_only_export`
+
+These flags help researchers distinguish complete datasets from partial snapshots.
+
+## Agent Notes
+
+Agents should use archive manifests before replay or dataset export workflows. For long-running collection, agents should set a finite `--duration` and should be prepared to interrupt the foreground process.
+
+## Verification
+
+```bash
+polyterm collect -m bitcoin --format json
+polyterm export --dataset latest --format json
+```
+
+Run database tests if schema or row-count behavior changes.
+
+## Related Features
+
+- [Collect CLI](../cli/collect.md)
+- [Export CLI](../cli/export.md)
+- [Database](../db/database.md)
+- [Agent Mode](../AGENT_MODE.md)

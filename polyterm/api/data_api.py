@@ -85,6 +85,59 @@ class DataAPIClient:
         response.raise_for_status()
         return response.json()
 
+    def get_holders(self, market=None, token_id=None, limit=100, offset=0):
+        """Get holders for a market or token when the public endpoint supports it."""
+        params = {"limit": limit, "offset": offset}
+        if market:
+            params["market"] = market
+        if token_id:
+            params["token"] = token_id
+        response = self._request("GET", "/holders", params=params)
+        response.raise_for_status()
+        return response.json()
+
+    def get_value(self, address):
+        """Get account value for a wallet when available from the Data API."""
+        response = self._request("GET", "/value", params={"user": address})
+        response.raise_for_status()
+        return response.json()
+
+    def get_market_positions(self, market, limit=100, offset=0):
+        """Get current user positions for a specific market when available."""
+        params = {"market": market, "limit": limit, "offset": offset}
+        response = self._request("GET", "/positions", params=params)
+        response.raise_for_status()
+        return response.json()
+
+    def get_leaderboard(self, period="7d", limit=50, sort_by="profit"):
+        """Get public leaderboard rows if exposed by the current Data API.
+
+        The public Data API has changed this surface more often than positions
+        and trades, so callers should handle an empty list or request error.
+        """
+        params = {"period": period, "limit": limit, "sortBy": sort_by}
+        response = self._request("GET", "/leaderboard", params=params)
+        response.raise_for_status()
+        data = response.json()
+        if isinstance(data, dict):
+            return data.get("data", data.get("leaderboard", data.get("users", [])))
+        return data
+
+    def get_wallet_profile(self, address, trades_limit=100, positions_limit=100):
+        """Build a wallet profile from public Data API position/trade surfaces."""
+        positions = self.get_positions(address, limit=positions_limit)
+        trades = self.get_trades(address=address, limit=trades_limit)
+        try:
+            value = self.get_value(address)
+        except Exception:
+            value = {}
+        return {
+            "address": address,
+            "positions": positions if isinstance(positions, list) else [],
+            "trades": trades if isinstance(trades, list) else [],
+            "value": value if isinstance(value, dict) else {},
+        }
+
     def get_profit_summary(self, address):
         """Get profit/loss summary for a wallet by aggregating positions sorted by cash P&L.
 

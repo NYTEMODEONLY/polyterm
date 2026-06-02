@@ -1,0 +1,19 @@
+{
+  "name": "polyterm",
+  "schema_version": "2026-06-02",
+  "description": "No-custody Polymarket intelligence, wallet, research, and alert tools.",
+  "tools": [
+    {"name": "market.search", "schema": "docs/schemas/market.search.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
+    {"name": "market.resolve", "schema": "docs/schemas/market.resolve.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
+    {"name": "market.orderbook", "schema": "docs/schemas/market.orderbook.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
+    {"name": "market.price_history", "schema": "docs/schemas/market.price_history.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
+    {"name": "analytics.arbitrage", "schema": "docs/schemas/analytics.arbitrage.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
+    {"name": "analytics.risk", "schema": "docs/schemas/analytics.risk.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
+    {"name": "wallet.inspect", "schema": "docs/schemas/wallet.inspect.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
+    {"name": "wallet.whales", "schema": "docs/schemas/wallet.whales.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
+    {"name": "analytics.thesis", "schema": "docs/schemas/analytics.thesis.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
+    {"name": "archive.manifest", "schema": "docs/schemas/archive.manifest.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
+    {"name": "alerts.create_price_rule", "schema": "docs/schemas/alerts.create_price_rule.schema.json", "read_only": false, "mutates_local_state": true, "may_prompt": false, "long_running": false},
+    {"name": "watch.scheduled_scan", "schema": "docs/schemas/watch.scheduled_scan.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": true}
+  ]
+}

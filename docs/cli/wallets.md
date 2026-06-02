@@ -59,3 +59,13 @@ polyterm wallets --format json
 ---
 
 *Source: `polyterm/cli/commands/wallets.py`*
+
+## June 2026 Data API Refresh
+
+`polyterm wallets --analyze <address> --refresh` calls the public Polymarket Data API through `WalletIntelligence`. This produces a richer profile than local SQLite alone.
+
+```bash
+polyterm wallets --analyze 0xabc... --refresh --format json
+```
+
+The refreshed payload includes positions, recent trades, value data when available, P&L summary, win rate, concentration, top categories, top markets, tags, and quality flags. This remains view-only and no-custody.

@@ -60,3 +60,14 @@ polyterm alerts --format json
 ---
 
 *Source: `polyterm/cli/commands/alerts.py`*
+
+## June 2026 Local Alert Rules
+
+`polyterm alerts` supports agent-safe local price rule creation.
+
+```bash
+polyterm alerts --add-rule price --market bitcoin --above 0.70 --dry-run --format json
+polyterm alerts --add-rule price --market bitcoin --below 0.35 --format json
+```
+
+Rule creation mutates local SQLite state by adding a price alert row. The agent manifest marks `alerts.create_price_rule` as `mutates_local_state: true`. Use `--dry-run` to preview a rule before saving.

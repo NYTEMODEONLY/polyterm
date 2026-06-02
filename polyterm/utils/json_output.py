@@ -7,6 +7,9 @@ from datetime import datetime
 from dataclasses import asdict, is_dataclass
 
 
+AGENT_SCHEMA_VERSION = "2026-06-02"
+
+
 def safe_float(value, default=0.0):
     """Safely convert a value to float, returning default on failure"""
     try:
@@ -49,6 +52,39 @@ def output_json(data: Any, pretty: bool = True) -> str:
 def print_json(data: Any, pretty: bool = True) -> None:
     """Print data as JSON to stdout"""
     print(output_json(data, pretty))
+
+
+def make_envelope(
+    data: Any = None,
+    *,
+    success: bool = True,
+    error: Optional[str] = None,
+    meta: Optional[Dict[str, Any]] = None,
+    schema_version: str = AGENT_SCHEMA_VERSION,
+) -> Dict[str, Any]:
+    """Build a stable JSON envelope for agent-facing tools."""
+    return {
+        "schema_version": schema_version,
+        "success": success,
+        "data": data if data is not None else {},
+        "error": error,
+        "meta": meta or {},
+    }
+
+
+def print_envelope(
+    data: Any = None,
+    *,
+    success: bool = True,
+    error: Optional[str] = None,
+    meta: Optional[Dict[str, Any]] = None,
+    pretty: bool = True,
+) -> None:
+    """Print a stable agent-facing JSON envelope."""
+    print_json(
+        make_envelope(data=data, success=success, error=error, meta=meta),
+        pretty=pretty,
+    )
 
 
 def format_market_json(market: Dict[str, Any]) -> Dict[str, Any]:

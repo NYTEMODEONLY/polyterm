@@ -507,3 +507,17 @@ deleted_count = db.cleanup_old_data(days=14)
 - **Dashboard**: `polyterm dashboard` reads bookmarks, alerts, followed wallets, and positions from this database.
 - **Position Tracking**: P&L calculations in `get_position_summary()` account for side direction (YES profits when price rises, NO profits when price falls).
 - **Real-Time Settlement**: The `resolutions` table stores outcomes detected via CLOB WebSocket `market_resolved` events (see `core/orderbook.py` and `api/clob.py`).
+
+## June 2026 Archive Helpers
+
+The database manager exposes archive-friendly helpers for agent and dataset workflows:
+
+```python
+db.get_recent_snapshots(limit=100)
+db.get_database_stats()
+db.get_all_positions()
+```
+
+`get_recent_snapshots()` returns recent rows from `market_snapshots` across all markets. `get_database_stats()` includes row counts for wallets, trades, alerts, market snapshots, arbitrage opportunities, positions, bookmarks, price alerts, notes, and resolutions. `get_all_positions()` is a compatibility wrapper around `get_positions()`.
+
+These helpers are read-only and are used by `ArchiveCollector.dataset_manifest()` so agents can inspect local dataset state without opening SQLite directly.

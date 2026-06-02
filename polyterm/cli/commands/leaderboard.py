@@ -7,6 +7,7 @@ from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from ...api.gamma import GammaClient
+from ...api.data_api import DataAPIClient
 from ...db.database import Database
 from ...utils.json_output import print_json
 from ...utils.errors import handle_api_error
@@ -18,9 +19,10 @@ from ...utils.errors import handle_api_error
 @click.option("--period", "-p", type=click.Choice(["24h", "7d", "30d", "all"]), default="7d", help="Time period")
 @click.option("--limit", "-l", type=int, default=20, help="Number of traders to show")
 @click.option("--me", is_flag=True, help="Show your ranking")
+@click.option("--source", type=click.Choice(["data-api", "local"]), default="data-api", help="Leaderboard data source")
 @click.option("--format", "output_format", type=click.Choice(["table", "json"]), default="table")
 @click.pass_context
-def leaderboard(ctx, board_type, period, limit, me, output_format):
+def leaderboard(ctx, board_type, period, limit, me, source, output_format):
     """View top traders and your ranking
 
     See the best performers on Polymarket and compare
@@ -45,6 +47,7 @@ def leaderboard(ctx, board_type, period, limit, me, output_format):
         base_url=config.gamma_base_url,
         api_key=config.gamma_api_key,
     )
+    data_api = DataAPIClient()
 
     try:
         with Progress(
@@ -55,14 +58,10 @@ def leaderboard(ctx, board_type, period, limit, me, output_format):
         ) as progress:
             progress.add_task("Fetching leaderboard data...", total=None)
 
-            # In production, this would fetch real leaderboard data from the API
-            # For now, we'll generate representative data based on whale activity
-
-            # Get recent whale activity to build leaderboard
-            markets = gamma.get_markets(limit=50)
-
-            # Aggregate trader stats from available data
-            traders = _build_trader_stats(markets, period, gamma)
+            if source == "data-api":
+                traders = _fetch_data_api_leaderboard(data_api, board_type, period, limit)
+            else:
+                traders = _build_local_trader_stats(Database(), limit=limit)
 
         # Sort by type
         if board_type == "profit":
@@ -78,8 +77,10 @@ def leaderboard(ctx, board_type, period, limit, me, output_format):
 
         if output_format == 'json':
             print_json({
+                'success': True,
                 'type': board_type,
                 'period': period,
+                'source': source,
                 'traders': traders,
             })
             return
@@ -162,71 +163,40 @@ def leaderboard(ctx, board_type, period, limit, me, output_format):
             handle_api_error(console, e, "leaderboard")
     finally:
         gamma.close()
+        data_api.close()
 
 
-def _build_trader_stats(markets: list, period: str, gamma: GammaClient) -> list:
-    """Build trader statistics from market data"""
-    import random
-    import hashlib
-
-    # In production, this would aggregate real trader data from the API
-    # For now, generate representative data based on market characteristics
-
-    # Seed for consistency
-    random.seed(42)
-
+def _fetch_data_api_leaderboard(data_api: DataAPIClient, board_type: str, period: str, limit: int) -> list:
+    """Fetch and normalize leaderboard rows from the public Data API."""
+    rows = data_api.get_leaderboard(period=period, limit=limit, sort_by=board_type)
     traders = []
-
-    # Generate diverse set of traders
-    for i in range(50):
-        # Generate pseudo-address
-        seed = f"trader_{i}_{period}"
-        address = "0x" + hashlib.sha256(seed.encode()).hexdigest()[:40]
-
-        # Band-based stats (top traders vs average)
-        if i < 5:
-            # Top band
-            profit = random.uniform(50000, 500000)
-            volume = random.uniform(500000, 5000000)
-            trades = random.randint(100, 500)
-            win_rate = random.uniform(0.60, 0.75)
-        elif i < 15:
-            # High band
-            profit = random.uniform(10000, 100000)
-            volume = random.uniform(100000, 1000000)
-            trades = random.randint(50, 200)
-            win_rate = random.uniform(0.55, 0.65)
-        elif i < 30:
-            # Medium band
-            profit = random.uniform(-5000, 30000)
-            volume = random.uniform(10000, 200000)
-            trades = random.randint(20, 100)
-            win_rate = random.uniform(0.45, 0.58)
-        else:
-            # Lower band
-            profit = random.uniform(-20000, 10000)
-            volume = random.uniform(1000, 50000)
-            trades = random.randint(5, 50)
-            win_rate = random.uniform(0.35, 0.52)
-
-        # Adjust for period
-        period_multiplier = {
-            "24h": 0.05,
-            "7d": 0.25,
-            "30d": 1.0,
-            "all": 3.0,
-        }.get(period, 1.0)
-
+    for row in rows[:limit]:
+        address = row.get("address") or row.get("user") or row.get("proxyWallet") or row.get("wallet") or ""
         traders.append({
-            'address': address,
-            'profit': profit * period_multiplier,
-            'volume': volume * period_multiplier,
-            'trades': int(trades * period_multiplier),
-            'win_rate': win_rate,
-            'avg_size': volume * period_multiplier / max(1, int(trades * period_multiplier)),
+            "address": address,
+            "profit": float(row.get("profit") or row.get("pnl") or row.get("cashPnl") or 0),
+            "volume": float(row.get("volume") or row.get("totalVolume") or 0),
+            "trades": int(row.get("trades") or row.get("tradeCount") or 0),
+            "win_rate": float(row.get("winRate") or row.get("win_rate") or 0),
+            "avg_size": float(row.get("avgSize") or row.get("averageTradeSize") or 0),
         })
-
     return traders
+
+
+def _build_local_trader_stats(db: Database, limit: int = 20) -> list:
+    """Build a real local leaderboard from tracked wallets."""
+    wallets = db.get_all_wallets(limit=limit)
+    return [
+        {
+            "address": wallet.address,
+            "profit": 0.0,
+            "volume": wallet.total_volume,
+            "trades": wallet.total_trades,
+            "win_rate": wallet.win_rate,
+            "avg_size": wallet.avg_position_size,
+        }
+        for wallet in wallets
+    ]
 
 
 def _show_my_ranking(console: Console, traders: list):

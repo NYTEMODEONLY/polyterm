@@ -7,7 +7,9 @@ from rich.table import Table
 
 from ...db.database import Database
 from ...db.models import Wallet
+from ...api.data_api import DataAPIClient
 from ...core.whale_tracker import InsiderDetector
+from ...core.wallet_intelligence import WalletIntelligence
 from ...utils.json_output import print_json
 from ...utils.errors import handle_api_error
 
@@ -16,11 +18,12 @@ from ...utils.errors import handle_api_error
 @click.option("--type", "wallet_type", type=click.Choice(["whales", "smart", "suspicious", "all"]), default="whales", help="Type of wallets to show")
 @click.option("--limit", default=20, help="Maximum wallets to show")
 @click.option("--analyze", default=None, help="Analyze specific wallet address")
+@click.option("--refresh", is_flag=True, help="Refresh analyzed wallet from the public Data API")
 @click.option("--track", default=None, help="Add wallet to tracking list")
 @click.option("--untrack", default=None, help="Remove wallet from tracking list")
 @click.option("--format", "output_format", type=click.Choice(["table", "json"]), default="table", help="Output format")
 @click.pass_context
-def wallets(ctx, wallet_type, limit, analyze, track, untrack, output_format):
+def wallets(ctx, wallet_type, limit, analyze, refresh, track, untrack, output_format):
     """Track and analyze whale and smart money wallets"""
 
     config = ctx.obj["config"]
@@ -47,6 +50,27 @@ def wallets(ctx, wallet_type, limit, analyze, track, untrack, output_format):
 
         # Analyze specific wallet
         if analyze:
+            if refresh:
+                data_api = DataAPIClient()
+                try:
+                    intelligence = WalletIntelligence(data_api=data_api, database=db)
+                    profile = intelligence.analyze_wallet(analyze, limit=limit, refresh=True)
+                finally:
+                    data_api.close()
+
+                if output_format == 'json':
+                    print_json({'success': True, 'wallet_intelligence': profile})
+                else:
+                    metrics = profile["metrics"]
+                    console.print(f"\n[bold]Wallet Intelligence: {analyze[:30]}...[/bold]\n")
+                    console.print(f"Positions: {metrics['position_count']}")
+                    console.print(f"Trades: {metrics['trade_count']}")
+                    console.print(f"Total Volume: ${metrics['total_volume']:,.0f}")
+                    console.print(f"Win Rate: {metrics['win_rate']:.0%}")
+                    console.print(f"Tags: {', '.join(profile['tags']) if profile['tags'] else 'None'}")
+                    console.print(f"[dim]Quality flags: {', '.join(profile['quality_flags'])}[/dim]")
+                return
+
             wallet = db.get_wallet(analyze)
             if not wallet:
                 if output_format == 'json':

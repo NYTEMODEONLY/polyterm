@@ -1,0 +1,46 @@
+# PolyTerm
+
+PolyTerm is a no-custody Polymarket intelligence terminal for traders, researchers, data collectors, whale watchers, and external agents.
+
+## Agent Entry Points
+
+- Human docs: `docs/AGENT_MODE.md`
+- Tool manifest: `polyterm agent manifest --format json`
+- Schemas: `polyterm agent schemas --format json`
+- MCP-ready stdio adapter: `polyterm agent mcp-server`
+- Static manifest: `docs/tool-manifest.json`
+- Static schemas: `docs/schemas/`
+
+## Safe Read-Only Commands
+
+- `polyterm search --format json`
+- `polyterm lookup --format json`
+- `polyterm orderbook --format json`
+- `polyterm chart --format json`
+- `polyterm thesis --format json`
+- `polyterm wallets --analyze ADDRESS --refresh --format json`
+- `polyterm whales --wallets --format json`
+- `polyterm arbitrage --format json`
+- `polyterm arbitrage --venues polymarket,kalshi --format json`
+- `polyterm export --dataset latest --format json`
+
+## Local-State Mutation Commands
+
+- `polyterm alerts --add-rule price ...`
+- Position, notes, bookmarks, presets, and config commands can mutate local SQLite or config state.
+
+## Identifier Rules
+
+- Gamma market IDs and slugs are for discovery.
+- CLOB condition IDs identify markets for CLOB workflows.
+- CLOB token IDs identify YES/NO order book tokens.
+- Data API wallet calls use wallet addresses.
+
+## APIs
+
+- Gamma: `https://gamma-api.polymarket.com`
+- Data API: `https://data-api.polymarket.com`
+- CLOB: `https://clob.polymarket.com`
+- CLOB market websocket: `wss://ws-subscriptions-clob.polymarket.com/ws/market`
+
+PolyTerm does not place trades or manage private keys.

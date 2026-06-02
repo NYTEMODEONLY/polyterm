@@ -1,0 +1,1 @@
+{"type":"object","required":["schema_version","success","data","error","meta"],"properties":{"schema_version":{"type":"string"},"success":{"type":"boolean"},"data":{"type":["object","array","string","number","boolean","null"]},"error":{"type":["string","null"]},"meta":{"type":"object"}}}

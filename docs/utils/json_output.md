@@ -128,3 +128,28 @@ polyterm whales --format json --hours 4 | jq '.trades | length'
 - **API clients** (`api/`) -- return raw dictionaries that the format functions normalize.
 
 Source: `polyterm/utils/json_output.py`
+
+## June 2026 Agent Envelope
+
+`utils/json_output.py` includes a stable envelope helper for agent-facing tools:
+
+```python
+from polyterm.utils.json_output import make_envelope, print_envelope
+
+payload = make_envelope(data={"tool": "analytics.thesis"})
+print_envelope(data={"status": "ok"})
+```
+
+The envelope shape is:
+
+```json
+{
+  "schema_version": "2026-06-02",
+  "success": true,
+  "data": {},
+  "error": null,
+  "meta": {}
+}
+```
+
+Existing command JSON payloads remain supported. New agent commands and MCP-ready tool functions should use the envelope so Hermes Agent, OpenClaw, and other tool callers can rely on one response contract.

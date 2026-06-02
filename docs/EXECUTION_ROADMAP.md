@@ -1,136 +1,255 @@
 # Execution Roadmap
 
-**Last updated:** 2026-03-14
-**Context:** Response to Polymarket official CLI launch (Feb 24, 2026)
-**Team model:** 1 engineer + swarm agents
+**Last updated:** 2026-06-02  
+**Scope:** Next five implementation tracks for PolyTerm after the June 1 API audit  
+**Team model:** 1 engineer + focused subagents  
+**Primary objective:** Make PolyTerm the best no-custody intelligence and data terminal for Polymarket traders, researchers, data collectors, whale watchers, and external agents such as Hermes Agent and OpenClaw.
 
----
+This roadmap supersedes the March 2026 roadmap. Several earlier P0 items are already done or partially done: CLOB price history exists, lazy CLI loading exists, docs validation is clean, and `analyze` is registered. The remaining work should focus on features that users are actively asking for and gaps found in the current repo.
 
-## Priority Tiers
+## Evidence Basis
 
-### P0: Defend Core Value (Week 1-2) — Ship or lose users
+- Repo audit: PolyTerm already has broad CLI/TUI coverage, CLOB price history, CLOB WebSocket order book support, local SQLite state, and current Gamma/CLOB/Data API documentation.
+- Repo gaps: agent schemas/manifests are absent, JSON contracts are not stable enough, `whales` is still partly a volume-spike proxy, leaderboard/profile data is not real Data API-backed, and exports are too narrow.
+- Public demand scan: current Polymarket users and tool directories emphasize alerts, wallet intelligence, copy-trade controls, cross-venue arbitrage, P&L reconciliation, and research-grade data archives.
+- Current API contracts: global Polymarket read surfaces are Gamma, Data API, and CLOB; CLOB market data uses token IDs, user WebSocket uses condition IDs, and authenticated trading requires L1/L2 credentials.
 
-These items close gaps that could cause users to switch to the official CLI for basic market browsing, or fail to capitalize on our unique advantages.
+Source references for product and API direction:
 
-| # | Initiative | Owner Role | Effort | Success Metric | Acceptance Criteria |
-|---|-----------|------------|--------|----------------|---------------------|
-| P0-1 | **Add CLOB price-history API** | Backend | M | Price history available without local snapshots | `polyterm chart -m <slug>` shows data on first run (no cold start). Supports 1m, 1h, 6h, 1d, 1w intervals. Falls back to local snapshots if API fails. |
-| P0-2 | **Unified "Trade Thesis" view** | Full-stack | L | Single command shows signals + risk + whale + wash trade status | `polyterm analyze -m <slug>` returns prediction signal, risk grade (A-F), whale alignment (for/against), wash trade risk level, UMA dispute risk, and arbitrage opportunity (if any). All in one screen. |
-| P0-3 | **Startup time optimization** | Backend | S | CLI startup < 150ms (from ~300ms) | Lazy-import all heavy modules (Rich, requests, sqlite3). Measure with `time polyterm --version`. Benchmark before/after in CI. |
-| P0-4 | **"Why PolyTerm" README section** | Docs | S | README clearly differentiates from official CLI | 8-12 line section with measurable claims. No hype. Links to COMPETITIVE_GAP.md for details. |
-| P0-5 | **Fix stale Subgraph references** | Backend | S | No deprecation warnings in normal usage | Audit all Subgraph calls. Replace with Gamma/CLOB equivalents or remove. Zero deprecation warnings printed to user. |
+- [Polymarket API Reference](https://docs.polymarket.com/api-reference)
+- [Polymarket market concepts and identifiers](https://docs.polymarket.com/concepts)
+- [Polymarket market WebSocket channel](https://docs.polymarket.com/market-data/websocket/market-channel)
+- [Polymarket agents repository](https://github.com/Polymarket/agents)
+- [pm.wiki Polymarket tools overview](https://pm.wiki/learn/best-polymarket-tools)
+- [Tagwise wallet analytics](https://tagwise.xyz/)
+- [Polyloly wallet and alert tooling](https://polyloly.com/)
 
-### P1: Widen the Moat (Week 2-4) — Build what they can't easily copy
+## Product Stance
 
-These items deepen PolyTerm's analytics advantage and make the local database more valuable over time.
+PolyTerm should stay no-custody by default. Do not make private-key management, approvals, bridging, or authenticated order placement part of this five-feature roadmap. The durable advantage is pre-trade intelligence, risk explanation, wallet intelligence, data collection, and agent-safe automation.
 
-| # | Initiative | Owner Role | Effort | Success Metric | Acceptance Criteria |
-|---|-----------|------------|--------|----------------|---------------------|
-| P1-1 | **Portfolio risk aggregation** | Backend | M | Portfolio-level risk view across all tracked positions | `polyterm risk --portfolio` shows: total exposure, correlation between positions, concentration risk, weighted risk grade. Requires >= 2 positions in DB. |
-| P1-2 | **Market comments integration** | Backend | S | Users can view market comments without leaving terminal | `polyterm comments -m <slug>` shows latest 20 comments with timestamps and usernames. Uses Gamma or CLOB API. |
-| P1-3 | **Leaderboard + profiles** | Backend | S | Users can look up trader performance | `polyterm leaderboard --top 25` shows top traders. `polyterm profile <address>` shows trader stats. Data from Polymarket data API. |
-| P1-4 | **Scheduled analytics scans** | Backend | M | Automated periodic scans with notification output | `polyterm watch --schedule 15m --notify telegram` runs arbitrage + whale + prediction scans every N minutes and pushes results to configured notification channel. |
-| P1-5 | **Cross-session trend detection** | Backend | M | Insights from accumulated local data | `polyterm trends` shows: markets with accelerating volume, new whale entries, risk grade changes, price momentum shifts. Requires >= 3 days of snapshots. |
-| P1-6 | **Homebrew formula** | DevOps | S | `brew install polyterm` works | Formula published to homebrew-polyterm tap. CI auto-updates formula on release. Install tested on macOS ARM and x86. |
+If execution support is considered later, it should be a separate optional builder track with explicit credentials, builder attribution, slippage checks, heartbeat/cancel safety, and no silent mutation. That is not in scope for the next five.
 
-### P2: Strategic Expansion (Month 2-3) — New user segments
+## Next Five Features
 
-These items open PolyTerm to new audiences and use cases.
+| Rank | Feature | Primary User | Agent Priority | Why Now |
+|------|---------|--------------|----------------|---------|
+| 1 | Agent Tool Contracts + MCP-Ready Surface | Hermes/OpenClaw, researchers, automators | Critical | Agents need stable schemas, tool manifests, safety flags, and non-interactive commands before any higher-level automation is trustworthy. |
+| 2 | Wallet Intelligence + True Whale Pipeline | Whale watchers, copy-traders, researchers | High | Current `whales` is not yet true wallet-level whale tracking; public demand is strongest around smart money, top wallets, and consensus moves. |
+| 3 | Trade Thesis + Explainable Market Intelligence | Traders, researchers | High | PolyTerm has many signals, but users and agents need one market-level decision object with confidence, risk, evidence, and caveats. |
+| 4 | Research Archive + Dataset Export Suite | Data collectors, researchers, agents | High | Researchers need repeatable snapshots, replay, quality flags, and exports beyond one market snapshot. |
+| 5 | Alert Automation + Cross-Venue Hedge Monitor | Active traders, whale watchers | Medium-High | Users want fewer manual checks: whale moves, price breaks, volume anomalies, new markets, resolution changes, and cross-venue spreads. |
 
-| # | Initiative | Owner Role | Effort | Success Metric | Acceptance Criteria |
-|---|-----------|------------|--------|----------------|---------------------|
-| P2-1 | **Multi-platform arbitrage (Kalshi, Metaculus)** | Backend | L | Cross-platform price comparison for 3+ platforms | `polyterm arbitrage --platforms polymarket,kalshi,metaculus` shows price deltas. Requires API keys for non-Polymarket platforms. Fee-adjusted profit calculation. |
-| P2-2 | **Export to spreadsheet** | Backend | S | Users can export analytics to CSV/Excel | `polyterm export --format xlsx` generates spreadsheet with market data, positions, alerts, and snapshots. Works with `--format csv` too. |
-| P2-3 | **Plugin/extension system** | Arch | L | Third-party analytics modules can be loaded | `polyterm plugin install <name>` loads Python modules from a registry. Plugins can add commands, screens, and data sources. Documented API with 1 example plugin. |
-| P2-4 | **Web dashboard companion** | Full-stack | L | Browser-based read-only dashboard for PolyTerm data | `polyterm serve` starts local web server showing charts, positions, alerts. Uses local SQLite DB. No auth required (localhost only). |
-| P2-5 | **AI agent mode** | Backend | M | PolyTerm usable as a tool by AI coding agents | `polyterm agent <query>` returns structured JSON analysis. Optimized for LLM consumption. Documented tool schema for Claude, GPT, etc. |
+## Feature 1: Agent Tool Contracts + MCP-Ready Surface
 
----
+**Goal:** Make PolyTerm easy and safe for Hermes Agent, OpenClaw, Codex, and other agents to call without scraping terminal text or guessing command behavior.
 
-## Sprint 1 Plan (Weeks 1-2)
+### Implementation Ownership
 
-**Goal:** Close critical data gaps, ship the unified analysis view, and establish competitive positioning in docs.
+- `polyterm/agent/registry.py`: command/tool registry generated from `LAZY_COMMANDS`, enriched with hand-authored safety metadata.
+- `polyterm/agent/contracts.py`: stable JSON envelope helpers with `schema_version`, `success`, `data`, `error`, and `meta`.
+- `polyterm/agent/schemas.py`: JSON Schema generation and validation helpers.
+- `polyterm/agent/mcp/server.py`: thin MCP adapter over stable read-only tools.
+- `polyterm/agent/mcp/tools/market.py`: market lookup, search, order book, price history.
+- `polyterm/agent/mcp/tools/wallet.py`: wallet positions, trades, profile, whale signals.
+- `polyterm/agent/mcp/tools/analytics.py`: arbitrage, risk, prediction, trade thesis.
+- `docs/AGENT_MODE.md`: agent usage, safety model, examples for Hermes/OpenClaw.
+- `docs/tool-manifest.json`: generated tool manifest.
+- `docs/schemas/*.schema.json`: generated or checked-in schemas for public agent tools.
+- `llms.txt`: concise LLM-facing project map.
 
-### Day 1-2: Foundation
+### Acceptance Criteria
 
-| Task | Items | Est. Hours |
-|------|-------|------------|
-| Competitive docs | P0-4 (README section) | 2h |
-| Audit Subgraph usage | P0-5 (find all deprecation paths) | 3h |
-| CLOB price-history research | P0-1 (API contract, test endpoint) | 2h |
+- `polyterm agent manifest --format json` emits every public agent tool with name, description, args, output schema path, `read_only`, `mutates_local_state`, `requires_confirmation`, and `may_prompt`.
+- Stable envelope is used by all agent tools: `schema_version`, `success`, `data`, `error`, `meta`.
+- MCP server exposes at least 8 read-only tools: search markets, resolve market, get order book, get price history, scan arbitrage, assess risk, inspect wallet, and generate trade thesis.
+- JSON-mode agent tools never print Rich preamble text to stdout.
+- Prompting and local mutation are rejected unless the tool manifest explicitly allows them.
+- Tests cover manifest generation, schema validation, and pure JSON output for every schema-declared tool.
 
-**Deliverable:** README updated, Subgraph audit complete, CLOB price-history API tested manually.
+### Verification
 
-### Day 3-5: Core Data
+```bash
+.venv/bin/python -m pytest tests/test_cli/test_output_contracts.py
+.venv/bin/python -m pytest tests/test_agent
+.venv/bin/python scripts/validate_docs.py
+./test_all_commands.sh
+```
 
-| Task | Items | Est. Hours |
-|------|-------|------------|
-| Implement CLOB price-history | P0-1 (API client, chart integration) | 8h |
-| Remove/replace Subgraph calls | P0-5 (implement replacements) | 4h |
-| Startup optimization | P0-3 (lazy imports, measurement) | 4h |
+## Feature 2: Wallet Intelligence + True Whale Pipeline
 
-**Deliverable:** `polyterm chart` works on first run without local data. No Subgraph deprecation warnings. Startup under 150ms.
+**Goal:** Turn wallet and whale tracking into a real smart-money product surface, not just market-level volume detection.
 
-### Day 6-8: Intelligence Layer
+### Implementation Ownership
 
-| Task | Items | Est. Hours |
-|------|-------|------------|
-| Design analyze command output | P0-2 (mockup, data flow) | 2h |
-| Implement analyze command | P0-2 (aggregate existing signals) | 10h |
-| Add tests for analyze | P0-2 (unit + integration) | 4h |
+- `polyterm/api/data_api.py`: add Data API methods for leaderboard, holders, value, market positions, and paginated user trades if supported by current endpoints.
+- `polyterm/core/wallet_intelligence.py`: wallet profile scoring, ROI/P&L metrics, win rate, market concentration, category exposure, and consensus-move detection.
+- `polyterm/core/whale_tracker.py`: expose the richer wallet-level pipeline through CLI/TUI paths.
+- `polyterm/cli/commands/whales.py`: add `--wallets`, `--market`, `--min-notional`, `--since`, and agent-safe JSON output.
+- `polyterm/cli/commands/wallets.py`: add real profile refresh from Data API and ranking filters.
+- `polyterm/cli/commands/leaderboard.py`: replace pseudo-random representative data with live Data API-backed data.
+- `polyterm/cli/commands/follow.py`: add per-wallet max exposure, category filters, and read-only consensus alerts.
+- `docs/cli/whales.md`, `docs/cli/wallets.md`, `docs/cli/leaderboard.md`, `docs/core/whale_tracker.md`: document source contracts and limitations.
 
-**Deliverable:** `polyterm analyze -m <slug>` returns unified trade thesis with all signal types.
+### Acceptance Criteria
 
-### Day 9-10: Polish & Ship
+- `polyterm whales --wallets --format json` returns wallet addresses, not just high-volume markets.
+- `polyterm wallets --analyze <address> --refresh --format json` returns positions, trades, P&L summary, concentration, category exposure, and recent large moves from Data API.
+- `polyterm leaderboard --source data-api --format json` no longer uses seeded pseudo-trader data.
+- `polyterm follow --list --format json` includes caps, filters, and consensus-tracking metadata.
+- The docs are explicit about public trade direction limitations and any endpoint fields that are inferred.
+- Tests mock Data API wallet/profile/leaderboard responses and cover empty, rate-limited, and malformed responses.
 
-| Task | Items | Est. Hours |
-|------|-------|------------|
-| Integration testing | All P0 items | 4h |
-| Update CLAUDE.md | Document new commands | 1h |
-| Version bump + release | Tag v0.9.0 | 2h |
-| Backlog grooming | P1 items scoped for Sprint 2 | 2h |
+### Verification
 
-**Deliverable:** v0.9.0 released with all P0 items complete. P1 backlog ready.
+```bash
+.venv/bin/python -m pytest tests/test_api/test_data_api.py
+.venv/bin/python -m pytest tests/test_core/test_whale_tracker.py
+.venv/bin/python -m pytest tests/test_cli/test_whales.py tests/test_cli/test_wallets.py tests/test_cli/test_leaderboard.py
+.venv/bin/python scripts/validate_docs.py
+./test_all_commands.sh
+```
 
-### Sprint 1 Success Criteria
+## Feature 3: Trade Thesis + Explainable Market Intelligence
 
-- [ ] `polyterm chart -m bitcoin` returns data on a fresh install (no local snapshots needed)
-- [ ] `polyterm analyze -m bitcoin` returns unified trade thesis in <3 seconds
-- [ ] `time polyterm --version` completes in <150ms
-- [ ] Zero Subgraph deprecation warnings in normal usage
-- [ ] README has "Why PolyTerm" section with measurable claims
-- [x] 975 tests passing (no regression)
-- [x] v0.9.0 published to PyPI
+**Goal:** Give traders and agents a single market-level analysis object that explains what PolyTerm thinks, why it thinks it, and what data quality limits apply.
 
----
+### Implementation Ownership
 
-## Sprint 2 Preview (Weeks 3-4)
+- `polyterm/core/trade_thesis.py`: compose market metadata, price history, order book, risk score, prediction signals, whale signals, wash-trade indicators, UMA/resolution risk, news, and arbitrage.
+- `polyterm/cli/commands/thesis.py`: new command to avoid overloading the current portfolio-oriented `analyze`.
+- `polyterm/cli/lazy_group.py`: register `thesis`.
+- `polyterm/tui/screens/thesis_screen.py`: compact market thesis screen if TUI scope is included in the sprint.
+- `docs/cli/thesis.md`, `docs/core/trade_thesis.md`, `docs/tui/screens/thesis_screen.md`: document command, shortcuts, output modes, and data sources.
 
-**Focus:** P1-1 (portfolio risk), P1-2 (comments), P1-3 (leaderboard), P1-6 (Homebrew)
+### Acceptance Criteria
 
-These items widen the feature gap in areas where the official CLI will not invest (portfolio analytics, trend detection) and close parity gaps in areas where users expect basics (comments, leaderboard, Homebrew install).
+- `polyterm thesis -m <slug-or-url> --format json` returns a deterministic schema with market identifiers, current prices, liquidity, signal direction, confidence, top evidence, top risks, caveats, and next actions.
+- `polyterm thesis -m <market> --brief` fits in one terminal screen.
+- The command resolves Polymarket URLs, Gamma slugs, Gamma IDs, condition IDs, and CLOB token IDs through the existing market utility layer.
+- Confidence and recommendations are explainable; no opaque “buy/sell” output without factors.
+- Runtime target: under 5 seconds for one market with live APIs available.
+- Agent manifest marks this as read-only and non-mutating.
 
----
+### Verification
 
-## Risk Register
+```bash
+.venv/bin/python -m pytest tests/test_core/test_trade_thesis.py
+.venv/bin/python -m pytest tests/test_cli/test_thesis.py
+.venv/bin/python scripts/validate_docs.py
+./test_all_commands.sh
+```
+
+## Feature 4: Research Archive + Dataset Export Suite
+
+**Goal:** Make PolyTerm valuable for data collectors and researchers who need reproducible market datasets, not just terminal views.
+
+### Implementation Ownership
+
+- `polyterm/core/archive.py`: scheduled collection of market snapshots, order book summaries, price history, wallet activity, alerts, and quality flags.
+- `polyterm/db/database.py`: focused migrations for archive runs, dataset metadata, and export records.
+- `polyterm/cli/commands/collect.py`: read-only live collection command with interval, duration, market filters, and stdout-safe status.
+- `polyterm/cli/commands/export_cmd.py`: expand from single market snapshot to dataset exports for markets, positions, alerts, snapshots, trades, wallet profiles, and archive runs.
+- `polyterm/core/replay.py` or existing replay path: replay archived datasets with timestamp filters.
+- `docs/cli/collect.md`, `docs/cli/export.md`, `docs/core/archive.md`, `docs/db/database.md`: document storage, schemas, retention, and verification notes.
+
+### Acceptance Criteria
+
+- `polyterm collect --market <slug> --interval 30s --duration 10m` records a dataset with metadata and quality flags.
+- `polyterm export --dataset latest --format csv` exports multiple tables with stable column names.
+- `polyterm export --dataset latest --format json` returns a machine-readable dataset envelope.
+- Optional XLSX export is behind an optional dependency and gracefully reports if unavailable.
+- Archive quality flags note API fallback, stale data, missing token IDs, rate-limit backoff, and partial runs.
+- Agents can request dataset manifests without reading SQLite directly.
+
+### Verification
+
+```bash
+.venv/bin/python -m pytest tests/test_core/test_archive.py
+.venv/bin/python -m pytest tests/test_cli/test_export.py tests/test_cli/test_collect.py
+.venv/bin/python -m pytest tests/test_db/test_database.py
+.venv/bin/python scripts/validate_docs.py
+./test_all_commands.sh
+```
+
+## Feature 5: Alert Automation + Cross-Venue Hedge Monitor
+
+**Goal:** Reduce manual market checking for traders and whale watchers while expanding PolyTerm’s edge in arbitrage and hedging workflows.
+
+### Implementation Ownership
+
+- `polyterm/core/alert_engine.py`: unified rules for price breaks, whale trades, volume anomalies, new markets, resolution changes, risk changes, and cross-venue spreads.
+- `polyterm/core/cross_venue.py`: market matching and hedge state for Polymarket, Kalshi, and future venue adapters.
+- `polyterm/api/kalshi.py`: focused Kalshi read-only client if not already present.
+- `polyterm/cli/commands/alerts.py`: rule creation, listing, testing, and export.
+- `polyterm/cli/commands/watch.py`: scheduled foreground scans with notification delivery.
+- `polyterm/cli/commands/arbitrage.py`: add `--venues` and hedge-monitor output.
+- `docs/core/alerts.md`, `docs/cli/alerts.md`, `docs/cli/watch.md`, `docs/core/arbitrage.md`: document exact mutating local-state behavior and notification channels.
+
+### Acceptance Criteria
+
+- `polyterm alerts add price --market <slug> --above 0.70` creates a local rule with JSON confirmation.
+- `polyterm watch --schedule 15m --notify telegram --format json` runs scheduled scans without interactive prompts.
+- `polyterm arbitrage --venues polymarket,kalshi --format json` reports matched markets, confidence, fee-adjusted spread, and stale-data risk.
+- Alert rules can be dry-run tested before saving.
+- Notifications include source, timestamp, market identifiers, rule ID, and a reproducible command.
+- Agent manifest clearly marks alert creation as local-state mutation and scheduled watch as long-running.
+
+### Verification
+
+```bash
+.venv/bin/python -m pytest tests/test_core/test_alerts.py tests/test_core/test_arbitrage.py
+.venv/bin/python -m pytest tests/test_cli/test_alerts.py tests/test_cli/test_watch.py
+.venv/bin/python scripts/validate_docs.py
+./test_all_commands.sh
+```
+
+## Implementation Sequence
+
+### Sprint 1: Agent Foundation
+
+Ship Feature 1 first. Every later feature should publish schemas and manifest entries as it lands. This prevents another round of ad hoc JSON payloads.
+
+### Sprint 2: Wallet and Whale Intelligence
+
+Ship Feature 2. This directly addresses high-demand whale watching and fixes the current `whales` command mismatch.
+
+### Sprint 3: Trade Thesis
+
+Ship Feature 3. Use the Feature 1 contract layer and Feature 2 wallet intelligence so the thesis output is agent-safe from day one.
+
+### Sprint 4: Archive and Export
+
+Ship Feature 4. This turns PolyTerm from a live terminal into a durable research instrument.
+
+### Sprint 5: Alerts and Cross-Venue Monitor
+
+Ship Feature 5. This builds on the archive, wallet, and thesis outputs to create automated monitoring.
+
+## Quality Gate
+
+Before any feature is considered complete:
+
+- Update matching docs under `docs/cli`, `docs/core`, `docs/api`, `docs/db`, `docs/tui/screens`, or `docs/utils` when modules are added or renamed.
+- Update `docs/README.md` when new commands, modules, or screens are added.
+- Keep API-facing docs explicit about Gamma market IDs, Gamma slugs, CLOB condition IDs, and CLOB token IDs.
+- Mark agent tools with read-only/mutating/prompting/long-running flags.
+- Run:
+
+```bash
+./test_all_commands.sh
+.venv/bin/python scripts/validate_docs.py
+```
+
+- Also run focused tests for every touched module and command.
+
+## Risks
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| Polymarket CLI adds analytics features | Reduces PolyTerm's unique value | Ship faster. Our Python analytics ecosystem (Rich, numpy-style calculations) gives us speed-to-feature advantage over their Rust codebase. |
-| CLOB price-history API changes | Breaks chart command | Use API aggregator fallback pattern. Local snapshots as secondary source. |
-| Official CLI gets massive adoption | Reduces PolyTerm's addressable market | Position as complementary tool ("use both"). Cross-reference in docs. |
-| Startup optimization hits diminishing returns | Can't match Rust performance | Target 150ms (acceptable), don't chase 10ms. Focus on perceived speed (TUI loading indicators). |
-| Plugin system scope creep | Delays core analytics work | Defer to P2. Don't design until P0/P1 are shipped. |
-
----
-
-## Metrics to Track
-
-| Metric | Current | Sprint 1 Target | Sprint 2 Target |
-|--------|---------|-----------------|-----------------|
-| PyPI monthly downloads | Baseline TBD | +20% | +50% |
-| GitHub stars | Current count | +50 | +150 |
-| CLI commands | 81 | 85 (+analyze) | 88 (+comments, leaderboard, trends) |
-| Test count | 975 | 980 | 1000 |
-| Startup time (ms) | ~300 | <150 | <150 |
-| Cold-start chart support | No | Yes | Yes |
+| JSON contract churn | Breaks Hermes/OpenClaw integrations | Ship schemas and versioned envelopes first. |
+| Public Data API field drift | Wallet intelligence regressions | Centralize Data API parsing and cover malformed/empty response tests. |
+| Overclaiming whale/trade direction | Misleads users | Label inferred fields and quality flags in CLI, docs, and schemas. |
+| Alert spam | Users ignore notifications | Add rule test mode, severity thresholds, cooldowns, and grouped digests. |
+| Cross-venue false matches | Bad arbitrage decisions | Include match confidence, source links, and manual review flags. |
+| Scope creep into execution | Custody/security risk | Keep roadmap read-only/no-custody; make execution a separate future track. |

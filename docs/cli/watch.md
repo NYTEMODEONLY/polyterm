@@ -60,3 +60,14 @@ polyterm watch --market "bitcoin" --notify
 ---
 
 *Source: `polyterm/cli/commands/watch.py`*
+
+## June 2026 Scheduled Agent Mode
+
+`polyterm watch` supports scheduled foreground scans with JSON output.
+
+```bash
+polyterm watch --market bitcoin --format json
+polyterm watch --market bitcoin --schedule 15m --runs 1 --notify telegram --format json
+```
+
+Scheduled mode avoids interactive market selection and returns scan results as JSON. The command is marked long-running in the agent manifest when `--schedule` is used.

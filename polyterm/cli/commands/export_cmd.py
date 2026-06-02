@@ -10,16 +10,19 @@ from rich.console import Console
 
 from ...api.gamma import GammaClient
 from ...api.clob import CLOBClient
+from ...core.archive import ArchiveCollector
+from ...db.database import Database
 from ...utils.errors import handle_api_error
 
 
 @click.command(name="export")
-@click.option("--market", required=True, help="Market ID or search term")
+@click.option("--market", required=False, help="Market ID or search term")
+@click.option("--dataset", default=None, help="Export local archive dataset manifest, e.g. latest")
 @click.option("--format", "output_format", type=click.Choice(["json", "csv"]), default="json", help="Output format")
 @click.option("--hours", default=24, help="Hours of data to export")
 @click.option("--output", "-o", default=None, help="Output file (default: stdout)")
 @click.pass_context
-def export(ctx, market, output_format, hours, output):
+def export(ctx, market, dataset, output_format, hours, output):
     """Export market data to JSON or CSV"""
 
     config = ctx.obj["config"]
@@ -36,6 +39,21 @@ def export(ctx, market, output_format, hours, output):
     )
 
     try:
+        if dataset:
+            collector = ArchiveCollector(Database(), gamma_client)
+            output_data = collector.export_dataset(dataset=dataset, output_format=output_format)
+            if output:
+                with open(output, "w") as f:
+                    f.write(output_data)
+                console.print(f"[green]Dataset exported to:[/green] {output}")
+            else:
+                print(output_data)
+            return
+
+        if not market:
+            console.print("[red]Either --market or --dataset is required.[/red]")
+            return
+
         # Find market
         try:
             market_data = gamma_client.get_market(market)
@@ -148,4 +166,3 @@ def export(ctx, market, output_format, hours, output):
     finally:
         gamma_client.close()
         clob_client.close()
-

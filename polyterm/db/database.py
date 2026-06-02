@@ -1057,6 +1057,17 @@ class Database:
                 return MarketSnapshot.from_dict(dict(row))
             return None
 
+    def get_recent_snapshots(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get recent market snapshots across all markets."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT * FROM market_snapshots
+                ORDER BY timestamp DESC
+                LIMIT ?
+            """, (limit,))
+            return [dict(row) for row in cursor.fetchall()]
+
     # Arbitrage operations
 
     def insert_arbitrage(self, arb: ArbitrageOpportunity) -> int:
@@ -1209,7 +1220,18 @@ class Database:
 
     def get_database_stats(self) -> Dict[str, int]:
         """Get database statistics"""
-        VALID_TABLES = {'wallets', 'trades', 'alerts', 'market_snapshots', 'arbitrage_opportunities'}
+        VALID_TABLES = {
+            'wallets',
+            'trades',
+            'alerts',
+            'market_snapshots',
+            'arbitrage_opportunities',
+            'positions',
+            'bookmarks',
+            'price_alerts',
+            'market_notes',
+            'resolutions',
+        }
 
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -1220,6 +1242,10 @@ class Database:
                 stats[table] = cursor.fetchone()[0]
 
             return stats
+
+    def get_all_positions(self) -> List[Dict[str, Any]]:
+        """Compatibility helper for callers that expect all tracked positions."""
+        return self.get_positions()
 
     # Resolution operations
 

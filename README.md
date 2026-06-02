@@ -44,12 +44,13 @@ polyterm
 
 PolyTerm is an analytics and intelligence layer for Polymarket — not just an API wrapper.
 
-- **20+ analytics features** no other CLI has: whale tracking, insider detection scoring, arbitrage scanning (including cross-platform vs Kalshi), signal-based multi-factor predictions, wash trade detection, UMA dispute risk analysis, and market risk grading (A-F).
+- **20+ analytics features** no other CLI has: wallet-level whale tracking, insider detection scoring, arbitrage scanning (including cross-platform vs Kalshi), signal-based multi-factor predictions, wash trade detection, UMA dispute risk analysis, and market risk grading (A-F).
+- **Agent-ready tooling**: manifest, JSON Schemas, MCP-ready stdio adapter, `llms.txt`, and read-only market/wallet/thesis tools for Hermes Agent, OpenClaw, Codex, and other automations.
 - **73+ interactive TUI screens** with menu navigation, contextual help, and an onboarding tutorial. No other Polymarket terminal tool has a TUI.
 - **Terminal-native visualization**: ASCII line charts, sparklines, depth charts, and side-by-side market comparison — all without leaving the terminal.
 - **Stateful local database** (SQLite): bookmarks, price alerts, trade journal, position tracking, recently viewed markets, screener presets. Your research accumulates value over time.
 - **Zero custody risk**: PolyTerm never touches private keys. Wallet features are view-only. No attack surface for key theft.
-- **1068 tests** across API, core logic, CLI, TUI, and database layers.
+- **1076 tests** across API, core logic, CLI, TUI, and database layers.
 
 For a detailed comparison with the official Polymarket CLI, see [docs/COMPETITIVE_GAP.md](docs/COMPETITIVE_GAP.md).
 
@@ -63,8 +64,11 @@ For a detailed comparison with the official Polymarket CLI, see [docs/COMPETITIV
 | Market Monitoring | `polyterm monitor` | Real-time market tracking with live updates |
 | Live Monitor | `polyterm live-monitor` | Dedicated terminal window for focused monitoring |
 | Whale Activity | `polyterm whales` | Volume-based whale detection |
+| Wallet-Level Whales | `polyterm whales --wallets` | Local wallet-level whale activity from observed trades |
 | Watch Markets | `polyterm watch` | Track specific markets with alerts |
+| Scheduled Watch | `polyterm watch --schedule 15m --format json` | Agent-safe scheduled scans |
 | Export Data | `polyterm export` | Export to JSON/CSV |
+| Dataset Export | `polyterm export --dataset latest` | Export local archive manifests |
 | Historical Replay | `polyterm replay` | Replay market history |
 
 ### Trading & Crypto
@@ -78,8 +82,10 @@ For a detailed comparison with the official Polymarket CLI, see [docs/COMPETITIV
 | Feature | Command | Description |
 |---------|---------|-------------|
 | Arbitrage Scanner | `polyterm arbitrage` | Find cross-market profit opportunities |
+| Cross-Venue Monitor | `polyterm arbitrage --venues polymarket,kalshi` | Match venue prices with confidence and quality flags |
 | NegRisk Arbitrage | `polyterm negrisk` | Multi-outcome market arbitrage scanning |
 | Signal-based Predictions | `polyterm predict` | Multi-factor market predictions using live data |
+| Trade Thesis | `polyterm thesis` | Explainable market-level thesis with evidence, risks, and caveats |
 | Order Book Analysis | `polyterm orderbook` | Depth charts, slippage, icebergs |
 | Live Order Book | `polyterm orderbook --live` | Real-time WebSocket depth display |
 | Wallet Tracking | `polyterm wallets` | Smart money & whale wallet analysis |
@@ -104,6 +110,7 @@ For a detailed comparison with the official Polymarket CLI, see [docs/COMPETITIV
 | Feature | Command | Description |
 |---------|---------|-------------|
 | Market Search | `polyterm search` | Advanced filtering and search |
+| Research Collection | `polyterm collect` | Store repeatable market snapshots locally |
 | Market Stats | `polyterm stats -m "market"` | Volatility, RSI, trends |
 | Price Charts | `polyterm chart -m "market"` | ASCII price history |
 | Compare Markets | `polyterm compare -i` | Side-by-side comparison |
@@ -116,6 +123,14 @@ For a detailed comparison with the official Polymarket CLI, see [docs/COMPETITIV
 |---------|---------|-------------|
 | Tutorial | `polyterm tutorial` | Interactive beginner guide |
 | Glossary | `polyterm glossary` | Prediction market terminology |
+
+### Agent Tooling
+| Feature | Command | Description |
+|---------|---------|-------------|
+| Agent Manifest | `polyterm agent manifest` | Machine-readable tool registry with safety flags |
+| Agent Schemas | `polyterm agent schemas` | JSON Schemas for agent-facing tools |
+| MCP-Ready Adapter | `polyterm agent mcp-server` | JSON-lines stdio adapter for agent runtimes |
+| Agent Docs | `docs/AGENT_MODE.md` | Hermes/OpenClaw workflow notes and safety model |
 
 ---
 
@@ -438,7 +453,7 @@ polyterm alerts --test-discord
 
 ## JSON Output Mode
 
-All commands support `--format json` for scripting and automation:
+Most analysis and data commands support `--format json` for scripting and automation:
 
 ```bash
 # Get markets as JSON
@@ -456,11 +471,40 @@ polyterm wallets --format json --type smart | jq '.wallets[] | select(.win_rate 
 
 ---
 
+## Agent Workflows
+
+PolyTerm includes an agent-safe surface for Hermes Agent, OpenClaw, Codex, and other automation systems:
+
+```bash
+# Discover tool metadata and safety flags
+polyterm agent manifest --format json
+
+# Print all output schemas
+polyterm agent schemas --format json
+
+# Run the MCP-ready JSON-lines adapter
+printf '{"tool":"market.search","args":{"query":"bitcoin","limit":3}}\n' | polyterm agent mcp-server
+
+# Generate a read-only market thesis
+polyterm thesis -m bitcoin --format json
+
+# Inspect a wallet with public Data API context
+polyterm wallets --analyze 0xabc... --refresh --format json
+```
+
+Agent tools are documented in [docs/AGENT_MODE.md](docs/AGENT_MODE.md), indexed in [docs/tool-manifest.json](docs/tool-manifest.json), and summarized for LLM crawlers in [llms.txt](llms.txt). The manifest marks tools as read-only, local-state mutating, prompting, or long-running.
+
+**Agent note:** Hermes, OpenClaw, Codex, and other agents still need to inspect this README, read `docs/AGENT_MODE.md`, or call `polyterm agent manifest --format json` before assuming they know how to use PolyTerm. The repo provides the agent-facing contracts and docs, but an agent only benefits from them if its workflow includes repo/document/tool-manifest inspection.
+
+PolyTerm stays no-custody: agent workflows do not place trades, manage private keys, approve contracts, or bridge funds.
+
+---
+
 ## Database & Storage
 
 PolyTerm stores data locally in SQLite:
 - **Location**: `~/.polyterm/data.db`
-- **Tables**: wallets, trades, alerts, market_snapshots, arbitrage_opportunities
+- **Tables**: wallets, trades, alerts, market_snapshots, arbitrage_opportunities, positions, price alerts, bookmarks, notes, and resolutions
 
 ### Data Tracked
 - Wallet profiles with win rates and tags
@@ -630,7 +674,7 @@ python -m twine upload dist/*
 - **Whale tracker REST fallback**: Automatic switch to REST polling (5s interval) when WebSocket permanently fails
 
 ### Test Suite
-- **1068 tests passing** across API, core, CLI, TUI, database, and utility layers
+- **1076 tests passing** across API, core, CLI, TUI, database, and utility layers
 - New migration coverage for CLOB V2 public endpoints, Gamma keyset pagination, Data API sort compatibility, CLI command inventory, and TUI route inventory
 
 ---
@@ -648,8 +692,8 @@ python -m twine upload dist/*
 - `fees`, `trade`, and `quicktrade` now surface the fee source used for each estimate
 
 ### Verification
-- **1068 tests passing**, including live production smoke tests against Polymarket's current CLOB/Gamma/Data APIs and fixed-screen live surface coverage
-- Added full CLI command import/help inventory coverage for all 81 registered commands
+- **1076 tests passing**, including live production smoke tests against Polymarket's current CLOB/Gamma/Data APIs and fixed-screen live surface coverage
+- Added full CLI command import/help inventory coverage for all 83 registered commands
 - Added TUI route inventory coverage for CLOB/Gamma-heavy screens
 
 ---

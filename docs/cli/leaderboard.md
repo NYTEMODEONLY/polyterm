@@ -72,3 +72,14 @@ polyterm leaderboard --format json
 ---
 
 *Source: `polyterm/cli/commands/leaderboard.py`*
+
+## June 2026 Data API Source
+
+`polyterm leaderboard` now defaults to the public Data API source instead of representative pseudo-trader data.
+
+```bash
+polyterm leaderboard --source data-api --format json
+polyterm leaderboard --source local --format json
+```
+
+Use `--source local` to rank wallets already tracked in local SQLite. If the Data API leaderboard surface changes, JSON mode reports a normal error instead of silently generating fake trader rows.

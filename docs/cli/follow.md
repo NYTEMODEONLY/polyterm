@@ -62,3 +62,14 @@ polyterm follow --list
 ---
 
 *Source: `polyterm/cli/commands/follow.py`*
+
+## June 2026 Follow Metadata
+
+Followed wallets can include local metadata for max exposure and category filters.
+
+```bash
+polyterm follow --add 0xabc... --max-exposure 2500 --category crypto --format json
+polyterm follow --list --format json
+```
+
+The metadata is stored as local wallet tags and returned under `follow_metadata` in JSON list output. This supports read-only copy-trade monitoring and agent policies without automating trade execution.

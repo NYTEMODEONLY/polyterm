@@ -16,6 +16,7 @@ from ...api.gamma import GammaClient
 from ...api.clob import CLOBClient
 from ...db.database import Database
 from ...core.arbitrage import ArbitrageScanner, KalshiArbitrageScanner
+from ...core.cross_venue import CrossVenueMonitor
 from ...core.orderbook import OrderBookAnalyzer, LiveOrderBook
 from ...utils.json_output import print_json
 from ...utils.errors import handle_api_error, show_error
@@ -245,10 +246,12 @@ def _run_live_mode(config, console, min_spread, limit, include_kalshi, output_fo
 @click.option("--min-spread", default=0.025, help="Minimum spread for arbitrage (default: 2.5%)")
 @click.option("--limit", default=10, help="Maximum opportunities to show")
 @click.option("--include-kalshi", is_flag=True, help="Include Kalshi cross-platform arbitrage")
+@click.option("--venues", default=None, help="Comma-separated venues for cross-venue scan, e.g. polymarket,kalshi")
+@click.option("--query", default="", help="Search query for cross-venue market matching")
 @click.option("--live", is_flag=True, help="Live mode: stream arb opportunities using WebSocket price data")
 @click.option("--format", "output_format", type=click.Choice(["table", "json"]), default="table", help="Output format")
 @click.pass_context
-def arbitrage(ctx, min_spread, limit, include_kalshi, live, output_format):
+def arbitrage(ctx, min_spread, limit, include_kalshi, venues, query, live, output_format):
     """Scan for arbitrage opportunities across markets"""
 
     config = ctx.obj["config"]
@@ -257,6 +260,38 @@ def arbitrage(ctx, min_spread, limit, include_kalshi, live, output_format):
     if live:
         _run_live_mode(config, console, min_spread, limit, include_kalshi, output_format)
         return
+
+    if venues:
+        venue_list = [venue.strip() for venue in venues.split(",") if venue.strip()]
+        monitor = CrossVenueMonitor()
+        try:
+            result = monitor.scan(query=query, min_spread=min_spread, venues=venue_list, limit=limit)
+            if output_format == "json":
+                print_json({"success": True, **result})
+                return
+
+            table = Table(title=f"Cross-Venue Hedge Monitor ({','.join(venue_list)})")
+            table.add_column("Polymarket", style="green", max_width=35)
+            table.add_column("Other", style="cyan", max_width=35)
+            table.add_column("Spread", justify="right", style="yellow")
+            table.add_column("Match", justify="right")
+            table.add_column("Flags", style="dim")
+            for opp in result["opportunities"]:
+                table.add_row(
+                    opp["polymarket"]["title"][:35],
+                    opp["other"]["title"][:35],
+                    f"{opp['spread_pct']:.1f}%",
+                    f"{opp['match_confidence']:.0%}",
+                    ", ".join(opp["quality_flags"]),
+                )
+            console.print(table if result["opportunities"] else "[yellow]No cross-venue opportunities found.[/yellow]")
+            return
+        except Exception as e:
+            if output_format == "json":
+                print_json({"success": False, "error": str(e)})
+            else:
+                handle_api_error(console, e, "cross-venue arbitrage")
+            return
 
     # Initialize clients
     gamma_client = GammaClient(

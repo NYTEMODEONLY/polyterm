@@ -12,8 +12,10 @@ from rich.text import Text
 
 from ...api.gamma import GammaClient
 from ...api.clob import CLOBClient
+from ...core.alert_engine import AlertEngine
 from ...core.scanner import MarketScanner
 from ...core.alerts import AlertManager
+from ...utils.json_output import print_json
 
 
 @click.command()
@@ -21,13 +23,43 @@ from ...core.alerts import AlertManager
 @click.option("--threshold", default=10.0, help="Probability change threshold (%)")
 @click.option("--volume-threshold", default=50.0, help="Volume change threshold (%)")
 @click.option("--interval", default=60, help="Check interval in seconds")
-@click.option("--notify", is_flag=True, help="Enable system notifications")
+@click.option("--schedule", default=None, help="Run scheduled foreground scans, e.g. 15m")
+@click.option("--runs", default=1, help="Number of scheduled scans in JSON/scheduled mode")
+@click.option("--notify", default=None, help="Notification channel label, e.g. telegram or discord")
+@click.option("--format", "output_format", type=click.Choice(["table", "json"]), default="table")
 @click.pass_context
-def watch(ctx, market, threshold, volume_threshold, interval, notify):
+def watch(ctx, market, threshold, volume_threshold, interval, schedule, runs, notify, output_format):
     """Watch specific markets with customizable alerts"""
     
     config = ctx.obj["config"]
     console = Console()
+
+    if schedule or output_format == "json":
+        engine = AlertEngine()
+        delay = _parse_schedule(schedule) if schedule else interval
+        results = []
+        try:
+            for index in range(max(runs, 1)):
+                results.append(engine.run_once(market=market))
+                if schedule and index < runs - 1:
+                    time.sleep(delay)
+        except KeyboardInterrupt:
+            pass
+
+        payload = {
+            "success": True,
+            "market": market,
+            "schedule": schedule,
+            "runs": len(results),
+            "notify": notify,
+            "results": results,
+            "long_running": bool(schedule),
+        }
+        if output_format == "json":
+            print_json(payload)
+        else:
+            console.print(f"[green]Completed {len(results)} scheduled scan(s).[/green]")
+        return
     
     # Initialize clients
     gamma_client = GammaClient(
@@ -226,3 +258,15 @@ def _format_change(value: float, suffix: str = "") -> Text:
     if value < 0:
         return Text(f"{value:.2f}{suffix}", style="red")
     return Text(f"{value:.2f}{suffix}", style="yellow")
+
+
+def _parse_schedule(value: str) -> int:
+    """Parse schedule values such as 15m, 1h, or 30s."""
+    value = str(value).strip().lower()
+    if value.endswith("m"):
+        return int(float(value[:-1]) * 60)
+    if value.endswith("h"):
+        return int(float(value[:-1]) * 3600)
+    if value.endswith("s"):
+        return int(float(value[:-1]))
+    return int(float(value))

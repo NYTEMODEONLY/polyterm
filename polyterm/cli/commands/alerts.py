@@ -6,6 +6,7 @@ from rich.console import Console
 from rich.table import Table
 
 from ...db.database import Database
+from ...core.alert_engine import AlertEngine
 from ...core.notifications import NotificationConfig, NotificationManager
 from ...utils.json_output import print_json
 from ...utils.errors import handle_api_error
@@ -16,11 +17,16 @@ from ...utils.errors import handle_api_error
 @click.option("--limit", default=20, help="Maximum alerts to show")
 @click.option("--unread", is_flag=True, help="Show only unacknowledged alerts")
 @click.option("--ack", default=None, type=int, help="Acknowledge alert by ID")
+@click.option("--add-rule", type=click.Choice(["price"]), default=None, help="Create a local alert rule")
+@click.option("--market", default=None, help="Market for a new alert rule")
+@click.option("--above", type=float, default=None, help="Trigger price rule at or above this probability")
+@click.option("--below", type=float, default=None, help="Trigger price rule at or below this probability")
+@click.option("--dry-run", is_flag=True, help="Preview rule creation without mutating local state")
 @click.option("--test-telegram", is_flag=True, help="Send test Telegram notification")
 @click.option("--test-discord", is_flag=True, help="Send test Discord notification")
 @click.option("--format", "output_format", type=click.Choice(["table", "json"]), default="table", help="Output format")
 @click.pass_context
-def alerts(ctx, alert_type, limit, unread, ack, test_telegram, test_discord, output_format):
+def alerts(ctx, alert_type, limit, unread, ack, add_rule, market, above, below, dry_run, test_telegram, test_discord, output_format):
     """View and manage alerts"""
 
     config = ctx.obj["config"]
@@ -28,6 +34,27 @@ def alerts(ctx, alert_type, limit, unread, ack, test_telegram, test_discord, out
     db = Database()
 
     try:
+        if add_rule:
+            if not market:
+                if output_format == 'json':
+                    print_json({'success': False, 'error': '--market is required for --add-rule'})
+                else:
+                    console.print("[red]--market is required for --add-rule[/red]")
+                return
+            engine = AlertEngine(database=db)
+            result = engine.create_price_rule(
+                market=market,
+                above=above,
+                below=below,
+                dry_run=dry_run,
+            )
+            if output_format == 'json':
+                print_json({'success': True, **result})
+            else:
+                action = "Previewed" if dry_run else "Created"
+                console.print(f"[green]{action} price alert rule for {result['rule']['title']}[/green]")
+            return
+
         # Handle acknowledgment
         if ack:
             db.acknowledge_alert(ack)

@@ -8,6 +8,8 @@ from rich.table import Table
 from ...api.gamma import GammaClient
 from ...api.clob import CLOBClient
 from ...core.analytics import AnalyticsEngine
+from ...core.wallet_intelligence import WalletIntelligence
+from ...db.database import Database
 from ...utils.formatting import format_timestamp, format_volume
 from ...utils.json_output import print_json
 from ...utils.errors import handle_api_error, show_error
@@ -18,13 +20,44 @@ from ...utils.errors import handle_api_error, show_error
 @click.option("--market", default=None, help="Filter by market ID")
 @click.option("--hours", default=24, help="Hours of history to check")
 @click.option("--limit", default=20, help="Maximum number of trades to show")
+@click.option("--wallets", is_flag=True, help="Show wallet-level whale activity from local trade history")
 @click.option("--format", "output_format", type=click.Choice(["table", "json"]), default="table", help="Output format")
 @click.pass_context
-def whales(ctx, min_amount, market, hours, limit, output_format):
+def whales(ctx, min_amount, market, hours, limit, wallets, output_format):
     """Track large trades (whale activity)"""
 
     config = ctx.obj["config"]
     console = Console()
+
+    if wallets:
+        intelligence = WalletIntelligence(database=Database())
+        result = intelligence.local_whales(min_notional=min_amount, hours=hours)
+        result["wallets"] = result["wallets"][:limit]
+
+        if output_format == "json":
+            print_json({"success": True, **result})
+            return
+
+        table = Table(title=f"Wallet-Level Whale Activity (Last {hours}h)")
+        table.add_column("Wallet", style="cyan")
+        table.add_column("Trades", justify="right")
+        table.add_column("Notional", justify="right", style="yellow")
+        table.add_column("Largest", justify="right")
+        table.add_column("Top Markets", style="dim")
+        for wallet in result["wallets"]:
+            table.add_row(
+                wallet["address"][:14] + "...",
+                str(wallet["trade_count"]),
+                f"${wallet['notional']:,.0f}",
+                f"${wallet['largest_trade']:,.0f}",
+                ", ".join(market_id for market_id, _ in wallet["top_markets"][:3]),
+            )
+        if result["wallets"]:
+            console.print(table)
+        else:
+            console.print("[yellow]No local wallet-level whale trades found.[/yellow]")
+        console.print(f"[dim]Quality flags: {', '.join(result['quality_flags'])}[/dim]")
+        return
     
     # Initialize clients
     gamma_client = GammaClient(

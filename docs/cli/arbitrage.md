@@ -61,3 +61,14 @@ polyterm arbitrage --format json
 ---
 
 *Source: `polyterm/cli/commands/arbitrage.py`*
+
+## June 2026 Cross-Venue Monitor
+
+`polyterm arbitrage` includes a cross-venue hedge monitor branch.
+
+```bash
+polyterm arbitrage --venues polymarket,kalshi --query bitcoin --format json
+polyterm arbitrage --venues polymarket,kalshi --query election
+```
+
+Cross-venue output includes Polymarket market data, external venue data, spread, match confidence, fee-adjusted spread, and quality flags such as `manual_review_match`. Agents should treat low-confidence matches as research leads because venue identifiers are not interchangeable.

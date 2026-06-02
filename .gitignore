@@ -140,6 +140,9 @@ Thumbs.db
 .polyterm/
 *.json
 *.csv
+!docs/tool-manifest.json
+!docs/schemas/
+!docs/schemas/*.schema.json
 !setup.py
 !requirements.txt
 

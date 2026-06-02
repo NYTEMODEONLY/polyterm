@@ -14,8 +14,10 @@ from ...utils.json_output import print_json
 @click.option("--add", "-a", default=None, help="Follow a wallet address")
 @click.option("--remove", "-r", default=None, help="Unfollow a wallet address")
 @click.option("--list", "list_followed", is_flag=True, help="List followed wallets")
+@click.option("--max-exposure", type=float, default=None, help="Optional exposure cap metadata for this wallet")
+@click.option("--category", default=None, help="Optional category filter metadata for this wallet")
 @click.option("--format", "output_format", type=click.Choice(["table", "json"]), default="table")
-def follow(add, remove, list_followed, output_format):
+def follow(add, remove, list_followed, max_exposure, category, output_format):
     """Manage followed wallets for copy trading
 
     Follow successful traders to see their moves and learn from their strategies.
@@ -41,7 +43,7 @@ def follow(add, remove, list_followed, output_format):
             print_json({
                 'success': True,
                 'count': len(followed),
-                'wallets': [w.to_dict() for w in followed],
+                'wallets': [_wallet_with_follow_metadata(w) for w in followed],
             })
             return
 
@@ -74,9 +76,26 @@ def follow(add, remove, list_followed, output_format):
             return
 
         db.follow_wallet(address)
+        wallet = db.get_wallet(address)
+        if wallet:
+            if max_exposure is not None:
+                tag = f"max_exposure:{max_exposure:g}"
+                if tag not in wallet.tags:
+                    wallet.tags.append(tag)
+            if category:
+                tag = f"category:{category}"
+                if tag not in wallet.tags:
+                    wallet.tags.append(tag)
+            db.upsert_wallet(wallet)
 
         if output_format == 'json':
-            print_json({'success': True, 'action': 'followed', 'address': address})
+            print_json({
+                'success': True,
+                'action': 'followed',
+                'address': address,
+                'max_exposure': max_exposure,
+                'category': category,
+            })
         else:
             console.print(f"[green]Now following {address}[/green]")
             console.print("[dim]You'll see this wallet's activity in alerts.[/dim]")
@@ -212,3 +231,18 @@ def _display_followed(console: Console, wallets):
     console.print(table)
     console.print()
     console.print("[dim]Tip: Set up alerts to get notified when followed wallets trade.[/dim]")
+
+
+def _wallet_with_follow_metadata(wallet):
+    data = wallet.to_dict()
+    metadata = {"max_exposure": None, "categories": []}
+    for tag in wallet.tags:
+        if tag.startswith("max_exposure:"):
+            try:
+                metadata["max_exposure"] = float(tag.split(":", 1)[1])
+            except ValueError:
+                metadata["max_exposure"] = tag.split(":", 1)[1]
+        if tag.startswith("category:"):
+            metadata["categories"].append(tag.split(":", 1)[1])
+    data["follow_metadata"] = metadata
+    return data
