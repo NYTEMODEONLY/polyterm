@@ -72,3 +72,23 @@ def test_mywallet_positions_json_output_is_valid_json(tmp_path, monkeypatch):
     assert payload["success"] is True
     assert payload["wallet"] == wallet
     assert payload["positions"] == []
+
+
+@patch("polyterm.cli.commands.compare.MarketComparisonEngine")
+def test_compare_json_output_uses_stable_envelope_without_preamble(mock_engine_cls, tmp_path, monkeypatch):
+    """`compare --format json` should be pure agent-envelope JSON."""
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    mock_engine = Mock()
+    mock_engine.compare.return_value = {"query": ["a", "b"], "count": 2, "pairwise": []}
+    mock_engine_cls.return_value = mock_engine
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["compare", "-m", "a", "-m", "b", "--format", "json"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["schema_version"] == "2026-06-02"
+    assert payload["success"] is True
+    assert payload["data"] == {"query": ["a", "b"], "count": 2, "pairwise": []}
+    assert payload["meta"]["tool"] == "market.compare"
+    mock_engine.compare.assert_called_once_with(["a", "b"], hours=24)

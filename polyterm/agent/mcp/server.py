@@ -19,6 +19,7 @@ TOOL_HANDLERS: Dict[str, Callable[..., dict]] = {
     "market.resolve": market.resolve,
     "market.research": market.research,
     "market.explain_move": market.explain_move,
+    "market.compare": market.compare,
     "analytics.arbitrage": analytics.arbitrage,
     "analytics.thesis": analytics.thesis,
     "archive.search": archive.search,

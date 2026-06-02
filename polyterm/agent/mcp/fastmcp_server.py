@@ -106,6 +106,13 @@ def create_server() -> Any:
         return _call_tool("market.explain_move", market=market, hours=hours)
 
     @mcp.tool(
+        name="market.compare",
+        description="Compare markets side by side with YES price gaps, recent moves, liquidity, and evidence quality flags.",
+    )
+    def market_compare(markets: list[str], hours: int = 24) -> Dict[str, Any]:
+        return _call_tool("market.compare", markets=markets, hours=hours)
+
+    @mcp.tool(
         name="analytics.arbitrage",
         description="Scan Polymarket and optional venues for arbitrage opportunities.",
     )

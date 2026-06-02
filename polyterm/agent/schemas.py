@@ -76,11 +76,13 @@ def _output_schema(tool: AgentTool) -> Dict[str, Any]:
     return output_schema
 
 
-def _json_type(arg_type: Any) -> Dict[str, str]:
+def _json_type(arg_type: Any) -> Dict[str, Any]:
     """Convert registry argument shorthand into JSON Schema primitive declarations."""
     kind = str(arg_type).lower()
     if kind in {"string", "integer", "number", "boolean"}:
         return {"type": kind}
+    if kind == "array":
+        return {"type": "array", "items": {"type": "string"}}
     return {"type": "string"}
 
 

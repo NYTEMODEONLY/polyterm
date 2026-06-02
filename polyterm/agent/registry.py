@@ -92,6 +92,13 @@ TOOLS: List[AgentTool] = [
         schema="docs/schemas/market.explain_move.schema.json",
     ),
     AgentTool(
+        name="market.compare",
+        description="Compare markets side by side with YES price gaps, recent moves, liquidity, and evidence quality flags.",
+        command="polyterm compare --markets <market> --markets <market> --format json",
+        args={"markets": "array", "hours": "integer"},
+        schema="docs/schemas/market.compare.schema.json",
+    ),
+    AgentTool(
         name="analytics.arbitrage",
         description="Scan Polymarket and optional venues for arbitrage opportunities.",
         command="polyterm arbitrage --format json",

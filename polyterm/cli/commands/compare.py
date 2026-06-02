@@ -8,6 +8,8 @@ from rich.table import Table
 from rich.prompt import Prompt
 
 from ...api.gamma import GammaClient
+from ...agent.contracts import envelope, error_envelope
+from ...core.market_compare import MarketComparisonEngine
 from ...db.database import Database
 from ...core.charts import ASCIIChart
 from ...utils.json_output import print_json
@@ -32,6 +34,14 @@ def compare(ctx, markets, time_hours, interactive, output_format):
     console = Console()
     config = ctx.obj["config"]
     db = Database()
+
+    if output_format == 'json' and not interactive:
+        if len(markets) < 2:
+            print_json(error_envelope("Need at least 2 markets to compare", meta={"tool": "market.compare"}))
+            return
+        engine = MarketComparisonEngine()
+        print_json(envelope(engine.compare(list(markets), hours=time_hours), meta={"tool": "market.compare"}))
+        return
 
     if interactive or not markets:
         result = _interactive_mode(console, config, db, time_hours)

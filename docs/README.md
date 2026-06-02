@@ -242,6 +242,7 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 | [historical](core/historical.md) | Historical data management | Data history |
 | [market_research](core/market_research.md) | Agent-native market research brief composer | Market research engine |
 | [market_move](core/market_move.md) | Recent market price movement explanation | Move explanation engine |
+| [market_compare](core/market_compare.md) | Agent-native market comparison and divergence analysis | Compare engine |
 | [news](core/news.md) | RSS news aggregation engine | News feeds |
 | [notifications](core/notifications.md) | Multi-channel notifications (Telegram, Discord, email) | Notification dispatch |
 | [orderbook](core/orderbook.md) | Order book analysis + LiveOrderBook WebSocket | Order book engine |
