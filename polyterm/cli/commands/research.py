@@ -20,9 +20,10 @@ from ...utils.json_output import print_json
 @click.option("--hours", default=72, show_default=True, type=int, help="Whale activity lookback window")
 @click.option("--limit", default=5, show_default=True, type=int, help="Displayed whale result limit")
 @click.option("--brief", is_flag=True, help="Show compact human output")
+@click.option("--persist", is_flag=True, help="Persist this research brief to the local archive")
 @click.option("--format", "output_format", type=click.Choice(["table", "json"]), default="table")
 @click.pass_context
-def research(ctx, market, prefetch_whales, min_notional, hours, limit, brief, output_format):
+def research(ctx, market, prefetch_whales, min_notional, hours, limit, brief, persist, output_format):
     """Generate a flagship agent-native market research brief"""
     config = ctx.obj["config"]
     console = Console()
@@ -30,14 +31,16 @@ def research(ctx, market, prefetch_whales, min_notional, hours, limit, brief, ou
     clob = CLOBClient(rest_endpoint=config.clob_rest_endpoint, ws_endpoint=config.clob_endpoint)
 
     try:
-        thesis_engine = TradeThesisEngine(gamma_client=gamma, clob_client=clob, database=Database())
-        engine = MarketResearchEngine(thesis_engine=thesis_engine)
+        database = Database()
+        thesis_engine = TradeThesisEngine(gamma_client=gamma, clob_client=clob, database=database)
+        engine = MarketResearchEngine(thesis_engine=thesis_engine, database=database)
         result = engine.build(
             market,
             prefetch_whales=prefetch_whales,
             min_notional=min_notional,
             hours=hours,
             limit=limit,
+            persist=persist,
         )
 
         if output_format == "json":

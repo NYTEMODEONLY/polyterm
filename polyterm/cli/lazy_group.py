@@ -90,6 +90,7 @@ LAZY_COMMANDS = {
     "clusters": ("clusters", "clusters"),
     "news": ("news", "news"),
     "agent": ("agent", "agent"),
+    "archive": ("archive", "archive"),
     "thesis": ("thesis", "thesis"),
     "research": ("research", "research"),
     "collect": ("collect", "collect"),

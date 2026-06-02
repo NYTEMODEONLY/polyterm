@@ -114,6 +114,23 @@ class Database:
                 )
             """)
 
+            # Research briefs table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS research_briefs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    query TEXT NOT NULL,
+                    market_id TEXT DEFAULT '',
+                    market_slug TEXT DEFAULT '',
+                    title TEXT DEFAULT '',
+                    condition_id TEXT DEFAULT '',
+                    brief_json TEXT NOT NULL,
+                    quality_flags TEXT DEFAULT '[]',
+                    workflow_json TEXT DEFAULT '[]',
+                    payload_json TEXT NOT NULL,
+                    generated_at TIMESTAMP NOT NULL
+                )
+            """)
+
             # Arbitrage opportunities table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS arbitrage_opportunities (
@@ -252,6 +269,9 @@ class Database:
             # Compound indexes for common query patterns
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_trades_market_ts ON trades(market_id, timestamp)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_snapshots_market_ts ON market_snapshots(market_id, timestamp)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_research_briefs_market ON research_briefs(market_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_research_briefs_slug ON research_briefs(market_slug)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_research_briefs_generated ON research_briefs(generated_at)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_price_alerts_created ON price_alerts(created_at)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_positions_entry ON positions(entry_date)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_alerts_ack ON alerts(acknowledged)")
@@ -1085,6 +1105,69 @@ class Database:
                 LIMIT ?
             """, (limit,))
             return [dict(row) for row in cursor.fetchall()]
+
+    # Research brief operations
+
+    def insert_research_brief(self, payload: Dict[str, Any]) -> int:
+        """Persist an agent-native market research brief."""
+        market = payload.get("market", {}) or {}
+        generated_at = payload.get("generated_at") or datetime.utcnow().isoformat() + "Z"
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO research_briefs (
+                    query, market_id, market_slug, title, condition_id,
+                    brief_json, quality_flags, workflow_json, payload_json, generated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    payload.get("query", ""),
+                    str(market.get("gamma_market_id") or market.get("id") or ""),
+                    market.get("slug", ""),
+                    market.get("question") or market.get("title") or "",
+                    market.get("condition_id") or market.get("conditionId") or "",
+                    json.dumps(payload.get("brief", {}), default=str),
+                    json.dumps(payload.get("quality_flags", []), default=str),
+                    json.dumps(payload.get("workflow", []), default=str),
+                    json.dumps(payload, default=str),
+                    generated_at,
+                ),
+            )
+            return int(cursor.lastrowid or 0)
+
+    def search_research_briefs(self, query: str = "", limit: int = 20) -> List[Dict[str, Any]]:
+        """Search archived research briefs by query, slug, title, or market id."""
+        pattern = f"%{query}%"
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            if query:
+                cursor.execute(
+                    """
+                    SELECT * FROM research_briefs
+                    WHERE query LIKE ? OR market_slug LIKE ? OR title LIKE ? OR market_id LIKE ? OR condition_id LIKE ?
+                    ORDER BY generated_at DESC, id DESC
+                    LIMIT ?
+                    """,
+                    (pattern, pattern, pattern, pattern, pattern, limit),
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT * FROM research_briefs
+                    ORDER BY generated_at DESC, id DESC
+                    LIMIT ?
+                    """,
+                    (limit,),
+                )
+            return [self._research_brief_row(dict(row)) for row in cursor.fetchall()]
+
+    def _research_brief_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        row["brief"] = json.loads(row.pop("brief_json") or "{}")
+        row["quality_flags"] = json.loads(row.pop("quality_flags") or "[]")
+        row["workflow"] = json.loads(row.pop("workflow_json") or "[]")
+        row["payload"] = json.loads(row.pop("payload_json") or "{}")
+        return row
 
     # Arbitrage operations
 

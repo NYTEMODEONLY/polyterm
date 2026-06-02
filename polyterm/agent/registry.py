@@ -80,6 +80,7 @@ TOOLS: List[AgentTool] = [
             "min_notional": "number",
             "hours": "integer",
             "limit": "integer",
+            "persist": "boolean",
         },
         schema="docs/schemas/market.research.schema.json",
     ),
@@ -96,6 +97,13 @@ TOOLS: List[AgentTool] = [
         command="polyterm risk --market {market} --format json",
         args={"market": "string"},
         schema="docs/schemas/analytics.risk.schema.json",
+    ),
+    AgentTool(
+        name="archive.search",
+        description="Search locally archived PolyTerm research briefs.",
+        command="polyterm archive search --query {query} --format json",
+        args={"query": "string", "limit": "integer"},
+        schema="docs/schemas/archive.search.schema.json",
     ),
     AgentTool(
         name="wallet.inspect",

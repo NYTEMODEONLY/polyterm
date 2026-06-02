@@ -112,6 +112,7 @@ For a detailed comparison with the official Polymarket CLI, see [docs/COMPETITIV
 |---------|---------|-------------|
 | Market Search | `polyterm search` | Advanced filtering and search |
 | Research Collection | `polyterm collect` | Store repeatable market snapshots locally |
+| Research Archive | `polyterm archive search` | Search persisted market research briefs |
 | Market Stats | `polyterm stats -m "market"` | Volatility, RSI, trends |
 | Price Charts | `polyterm chart -m "market"` | ASCII price history |
 | Compare Markets | `polyterm compare -i` | Side-by-side comparison |
@@ -131,6 +132,7 @@ For a detailed comparison with the official Polymarket CLI, see [docs/COMPETITIV
 | Agent Manifest | `polyterm agent manifest` | Machine-readable tool registry with safety flags |
 | Agent Schemas | `polyterm agent schemas` | JSON Schemas for agent-facing tools |
 | Market Research Tool | `market.research` | MCP/agent tool for complete market briefs |
+| Archive Search Tool | `archive.search` | MCP/agent tool for local research memory |
 | MCP Server | `polyterm agent mcp-server` | Real FastMCP stdio server for MCP clients |
 | JSONL Adapter | `polyterm agent jsonl-server` | Legacy JSON-lines adapter for simple pipe-based runtimes |
 | Agent Docs | `docs/AGENT_MODE.md` | Hermes/OpenClaw workflow notes and safety model |

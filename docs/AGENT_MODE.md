@@ -84,7 +84,7 @@ mcp_servers:
     connect_timeout: 60
 ```
 
-After restarting the client, tools are exposed through MCP as `agent.manifest`, `agent.schemas`, `market.search`, `market.resolve`, `market.research`, `analytics.arbitrage`, `analytics.thesis`, `wallet.inspect`, and `wallet.whales`.
+After restarting the client, tools are exposed through MCP as `agent.manifest`, `agent.schemas`, `market.search`, `market.resolve`, `market.research`, `archive.search`, `analytics.arbitrage`, `analytics.thesis`, `wallet.inspect`, and `wallet.whales`.
 
 ```bash
 polyterm agent mcp-server
@@ -108,6 +108,7 @@ OpenClaw-style tools that need line-delimited JSON without a full MCP client can
 printf '{"method":"manifest"}\n' | polyterm agent jsonl-server
 printf '{"tool":"market.search","args":{"query":"bitcoin","limit":3}}\n' | polyterm agent jsonl-server
 printf '{"tool":"market.research","args":{"market":"bitcoin"}}\n' | polyterm agent jsonl-server
+printf '{"tool":"archive.search","args":{"query":"bitcoin","limit":5}}\n' | polyterm agent jsonl-server
 printf '{"tool":"analytics.thesis","args":{"market":"bitcoin"}}\n' | polyterm agent jsonl-server
 ```
 
@@ -117,7 +118,7 @@ The legacy JSON-lines adapter does not require an MCP Python dependency. The pro
 
 | Class | Meaning | Examples |
 |-------|---------|----------|
-| Read-only | Reads APIs or local state only | `market.research`, `analytics.thesis`, `market.search`, `wallet.inspect` |
+| Read-only | Reads APIs or local state only | `market.research`, `archive.search`, `analytics.thesis`, `market.search`, `wallet.inspect` |
 | Local mutation | Changes local SQLite state | `alerts.create_price_rule`, future notes/bookmark tools |
 | Long-running | Foreground process that may need cancellation | `watch.scheduled_scan`, collection workflows |
 | Prompting | Not suitable for unattended agents | Interactive table commands without JSON mode |

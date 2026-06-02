@@ -49,6 +49,7 @@ def research(
     min_notional: float = 100000,
     hours: int = 72,
     limit: int = 5,
+    persist: bool = False,
 ) -> dict:
     engine = MarketResearchEngine()
     return envelope(
@@ -58,6 +59,7 @@ def research(
             min_notional=min_notional,
             hours=hours,
             limit=limit,
+            persist=persist,
         ),
         meta={"tool": "market.research"},
     )

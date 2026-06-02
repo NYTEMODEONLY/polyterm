@@ -1,8 +1,10 @@
 """Flagship agent-native market research workflow."""
 
+from datetime import datetime
 from typing import Any, Callable, Dict, Optional
 
 from .trade_thesis import TradeThesisEngine
+from ..db.database import Database
 
 WhalePrefetcher = Callable[[str, float, int, int], Dict[str, Any]]
 
@@ -10,9 +12,20 @@ WhalePrefetcher = Callable[[str, float, int, int], Dict[str, Any]]
 class MarketResearchEngine:
     """Compose PolyTerm tools into one agent-ready market research brief."""
 
-    def __init__(self, thesis_engine: Optional[Any] = None, whale_prefetcher: Optional[WhalePrefetcher] = None):
-        self.thesis_engine = thesis_engine or TradeThesisEngine()
+    def __init__(
+        self,
+        thesis_engine: Optional[Any] = None,
+        whale_prefetcher: Optional[WhalePrefetcher] = None,
+        database: Optional[Database] = None,
+    ):
+        if thesis_engine is not None:
+            self.thesis_engine = thesis_engine
+        elif database is not None:
+            self.thesis_engine = TradeThesisEngine(database=database)
+        else:
+            self.thesis_engine = TradeThesisEngine()
         self.whale_prefetcher = whale_prefetcher
+        self.db = database or Database()
 
     def build(
         self,
@@ -22,6 +35,7 @@ class MarketResearchEngine:
         min_notional: float = 100000,
         hours: int = 72,
         limit: int = 5,
+        persist: bool = False,
     ) -> Dict[str, Any]:
         """Build a one-call market research brief for agents."""
         workflow = []
@@ -46,14 +60,23 @@ class MarketResearchEngine:
         thesis = self.thesis_engine.build(market)
         workflow.append({"tool": "analytics.thesis", "status": "completed", "args": {"market": market}})
 
-        return {
+        result = {
             "query": market,
             "market": thesis.get("market", {}),
             "brief": self._brief(thesis),
             "thesis": thesis,
             "quality_flags": self._quality_flags(thesis),
             "workflow": workflow,
+            "generated_at": datetime.utcnow().isoformat() + "Z",
         }
+        result["archive"] = self._archive_result(result, persist=persist)
+        return result
+
+    def _archive_result(self, payload: Dict[str, Any], *, persist: bool) -> Dict[str, Any]:
+        if not persist:
+            return {"persisted": False, "brief_id": None}
+        brief_id = self.db.insert_research_brief(payload)
+        return {"persisted": True, "brief_id": brief_id}
 
     def _prefetch_whales(self, market: str, *, min_notional: float, hours: int, limit: int) -> Dict[str, Any]:
         if self.whale_prefetcher is not None:

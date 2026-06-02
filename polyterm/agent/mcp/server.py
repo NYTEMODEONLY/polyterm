@@ -11,7 +11,7 @@ from typing import Callable, Dict
 
 from ..contracts import envelope, error_envelope
 from ..registry import get_manifest
-from .tools import analytics, market, wallet
+from .tools import analytics, archive, market, wallet
 
 
 TOOL_HANDLERS: Dict[str, Callable[..., dict]] = {
@@ -20,6 +20,7 @@ TOOL_HANDLERS: Dict[str, Callable[..., dict]] = {
     "market.research": market.research,
     "analytics.arbitrage": analytics.arbitrage,
     "analytics.thesis": analytics.thesis,
+    "archive.search": archive.search,
     "wallet.inspect": wallet.inspect,
     "wallet.whales": wallet.whales,
 }

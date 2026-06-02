@@ -14,6 +14,7 @@ The command is read-only and no-custody. It never places trades, never handles p
 polyterm research --market bitcoin
 polyterm research --market bitcoin --brief
 polyterm research --market bitcoin --format json
+polyterm research --market bitcoin --persist --format json
 polyterm research --market bitcoin --prefetch-whales --min-notional 100000 --hours 72 --limit 5 --format json
 ```
 
@@ -24,6 +25,7 @@ polyterm research --market bitcoin --prefetch-whales --min-notional 100000 --hou
 - `--min-notional`: minimum notional for whale prefetch, default `100000`.
 - `--hours`: whale lookback window, default `72`.
 - `--limit`: displayed whale result limit, default `5`.
+- `--persist`: persist the generated research brief into the local archive.
 - `--brief`: compact table output.
 - `--format`: `table` or `json`.
 
@@ -50,6 +52,8 @@ JSON mode returns:
 Agents should prefer `market.research` / `polyterm research --format json` when the user asks for a complete market read. Use the returned `brief` for concise answers, `thesis.evidence_sources` for citations, `quality_flags` for caveats, and `workflow` to explain which PolyTerm tools ran.
 
 If `quality_flags` includes `whale_flow_unavailable`, rerun with `--prefetch-whales` or call `wallet.whales` separately, then run research again.
+
+Use `--persist` when the user wants PolyTerm to remember the research run locally. Persisted briefs are searchable with `polyterm archive search` and the `archive.search` agent/MCP tool.
 
 ## Verification
 

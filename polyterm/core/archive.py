@@ -92,6 +92,17 @@ class ArchiveCollector:
             return self._manifest_csv(manifest)
         raise ValueError(f"Unsupported dataset export format: {output_format}")
 
+    def search_research_briefs(self, query: str = "", limit: int = 20) -> Dict[str, Any]:
+        """Search archived agent-native research briefs."""
+        briefs = self.db.search_research_briefs(query=query, limit=limit)
+        return {
+            "success": True,
+            "query": query,
+            "count": len(briefs),
+            "briefs": briefs,
+            "quality_flags": ["research_brief_archive", "local_sqlite_dataset", "read_only_export"],
+        }
+
     def _resolve_market(self, market: str) -> Dict[str, Any]:
         try:
             data = self.gamma.get_market(market)

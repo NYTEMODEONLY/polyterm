@@ -17,6 +17,12 @@ engine = MarketResearchEngine()
 result = engine.build("bitcoin")
 ```
 
+Persist to the local archive:
+
+```python
+result = engine.build("bitcoin", persist=True)
+```
+
 With live whale prefetch:
 
 ```python
@@ -39,10 +45,11 @@ The result contains:
 - `thesis`: complete `TradeThesisEngine.build()` output, including `evidence_sources`.
 - `quality_flags`: flattened flags beginning with `research_brief` plus thesis flags.
 - `workflow`: ordered tool calls that ran, including optional `wallet.whales` prefetch and `analytics.thesis`.
+- `archive`: persistence metadata with `persisted` and `brief_id`.
 
 ## How It Works
 
-The engine optionally runs live whale prefetch to populate local cache evidence, then builds a thesis with `TradeThesisEngine`. It derives a compact research brief from the thesis evidence, risks, next actions, and quality flags while preserving the full thesis for deeper inspection.
+The engine optionally runs live whale prefetch to populate local cache evidence, then builds a thesis with `TradeThesisEngine`. It derives a compact research brief from the thesis evidence, risks, next actions, and quality flags while preserving the full thesis for deeper inspection. When `persist=True`, the completed research object is written to the local `research_briefs` archive for later `archive.search` queries.
 
 ## Recommendation Labels
 

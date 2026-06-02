@@ -4,7 +4,9 @@
 
 ## Overview
 
-`polyterm/core/archive.py` records repeatable market snapshots and exports local dataset manifests. It makes PolyTerm useful as a research instrument for agents, data collectors, and analysts who need reproducible local records.
+`ArchiveCollector` stores repeatable market snapshots and exports local dataset manifests for agent workflows.
+
+It also exposes `search_research_briefs()` for Phase 3 agent memory: market research briefs persisted by `market.research` / `polyterm research --persist` can be searched by query, slug, title, market id, or condition id.
 
 The module writes only to PolyTerm's local SQLite database. It does not mutate Polymarket state.
 
@@ -62,7 +64,8 @@ These flags help researchers distinguish complete datasets from partial snapshot
 
 ## Agent Notes
 
-Agents should use archive manifests before replay or dataset export workflows. For long-running collection, agents should set a finite `--duration` and should be prepared to interrupt the foreground process.
+The archive is local SQLite state and never mutates external Polymarket state.
+Agents should use `archive.search` before rerunning research when the user asks what PolyTerm already knows about a market. Returned briefs include the compact brief, quality flags, workflow trace, and full payload.
 
 ## Verification
 

@@ -86,6 +86,7 @@ def create_server() -> Any:
         min_notional: float = 100000,
         hours: int = 72,
         limit: int = 5,
+        persist: bool = False,
     ) -> Dict[str, Any]:
         return _call_tool(
             "market.research",
@@ -94,6 +95,7 @@ def create_server() -> Any:
             min_notional=min_notional,
             hours=hours,
             limit=limit,
+            persist=persist,
         )
 
     @mcp.tool(
@@ -109,6 +111,13 @@ def create_server() -> Any:
     )
     def analytics_thesis(market: str) -> Dict[str, Any]:
         return _call_tool("analytics.thesis", market=market)
+
+    @mcp.tool(
+        name="archive.search",
+        description="Search locally archived PolyTerm research briefs.",
+    )
+    def archive_search(query: str = "", limit: int = 20) -> Dict[str, Any]:
+        return _call_tool("archive.search", query=query, limit=limit)
 
     @mcp.tool(
         name="wallet.inspect",
