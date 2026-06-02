@@ -14,12 +14,23 @@ The archive is local SQLite state. It does not mutate Polymarket and does not re
 polyterm archive search
 polyterm archive search --query bitcoin
 polyterm archive search --query bitcoin --limit 5 --format json
+polyterm archive status --query bitcoin --format json
+polyterm archive status --query bitcoin --market-id 2362221 --max-age-hours 24 --format json
 ```
 
 ## Options
 
+### `archive search`
+
 - `--query`: optional search term matching original query, market slug, title, Gamma market id, or condition id.
 - `--limit`: maximum archived briefs to return, default `20`.
+- `--format`: `table` or `json`.
+
+### `archive status`
+
+- `--query`: optional search term matching archived briefs.
+- `--market-id`: optional resolved market id for snapshot lookup.
+- `--max-age-hours`: freshness threshold, default `24`.
 - `--format`: `table` or `json`.
 
 ## JSON Output
@@ -37,9 +48,26 @@ polyterm archive search --query bitcoin --limit 5 --format json
 }
 ```
 
+Status output adds local evidence counts and freshness:
+
+```json
+{
+  "success": true,
+  "archive": {
+    "success": true,
+    "evidence_counts": {"research_briefs": 1, "market_snapshots": 0},
+    "freshness": {
+      "research_briefs": {"status": "fresh"},
+      "market_snapshots": {"status": "missing"}
+    },
+    "recommended_actions": ["Run polyterm collect for this market to create local market snapshots."]
+  }
+}
+```
+
 ## Agent Notes
 
-Agents should call `archive.search` before rerunning expensive or live workflows when the user asks what PolyTerm already knows about a market. Use archived `brief`, `quality_flags`, `workflow`, and `payload` fields to compare prior and current research.
+Agents should call `archive.status` first when freshness matters. If it reports stale or missing evidence, follow `recommended_actions` before treating archive evidence as current. Call `archive.search` when the user asks what PolyTerm already knows about a market. Use archived `brief`, `quality_flags`, `workflow`, and `payload` fields to compare prior and current research.
 
 Because archive rows are local evidence, agents should cite them as prior PolyTerm research, not as live market state. Re-run `market.research` when freshness matters.
 

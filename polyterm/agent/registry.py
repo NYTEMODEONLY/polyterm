@@ -106,6 +106,13 @@ TOOLS: List[AgentTool] = [
         schema="docs/schemas/archive.search.schema.json",
     ),
     AgentTool(
+        name="archive.status",
+        description="Report local archive coverage, freshness, and recommended refresh actions.",
+        command="polyterm archive status --query {query} --format json",
+        args={"query": "string", "market_id": "string", "max_age_hours": "integer"},
+        schema="docs/schemas/archive.status.schema.json",
+    ),
+    AgentTool(
         name="wallet.inspect",
         description="Inspect a wallet using public Data API and local PolyTerm evidence.",
         command="polyterm wallets --analyze {address} --refresh --format json",

@@ -120,6 +120,13 @@ def create_server() -> Any:
         return _call_tool("archive.search", query=query, limit=limit)
 
     @mcp.tool(
+        name="archive.status",
+        description="Report local archive coverage, freshness, and recommended refresh actions.",
+    )
+    def archive_status(query: str = "", market_id: str = "", max_age_hours: int = 24) -> Dict[str, Any]:
+        return _call_tool("archive.status", query=query, market_id=market_id, max_age_hours=max_age_hours)
+
+    @mcp.tool(
         name="wallet.inspect",
         description="Inspect a wallet using public Data API and local PolyTerm evidence.",
     )

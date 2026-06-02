@@ -8,6 +8,8 @@
 
 It also exposes `search_research_briefs()` for Phase 3 agent memory: market research briefs persisted by `market.research` / `polyterm research --persist` can be searched by query, slug, title, market id, or condition id.
 
+`status()` reports archive coverage and freshness for a query/market id, including local research brief counts, market snapshot counts, latest timestamps, stale/missing flags, and recommended refresh actions.
+
 The module writes only to PolyTerm's local SQLite database. It does not mutate Polymarket state.
 
 ## Usage
@@ -66,6 +68,7 @@ These flags help researchers distinguish complete datasets from partial snapshot
 
 The archive is local SQLite state and never mutates external Polymarket state.
 Agents should use `archive.search` before rerunning research when the user asks what PolyTerm already knows about a market. Returned briefs include the compact brief, quality flags, workflow trace, and full payload.
+Agents should use `archive.status` when deciding whether local evidence is fresh enough for the user's question. `fresh`, `stale`, and `missing` statuses are computed against `max_age_hours` and never call live Polymarket APIs.
 
 ## Verification
 

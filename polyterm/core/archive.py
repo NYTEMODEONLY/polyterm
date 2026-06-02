@@ -103,6 +103,65 @@ class ArchiveCollector:
             "quality_flags": ["research_brief_archive", "local_sqlite_dataset", "read_only_export"],
         }
 
+    def status(self, query: str = "", market_id: str = "", max_age_hours: int = 24) -> Dict[str, Any]:
+        """Return local archive coverage and freshness for a market/query."""
+        briefs = self.db.search_research_briefs(query=query or market_id, limit=100)
+        inferred_market_id = market_id or _first_nonempty([b.get("market_id") for b in briefs])
+        snapshots = self.db.get_market_history(inferred_market_id, hours=24 * 365 * 10, limit=1000) if inferred_market_id else []
+        latest_brief = briefs[0] if briefs else None
+        latest_snapshot = snapshots[0] if snapshots else None
+
+        freshness = {
+            "research_briefs": self._freshness(latest_brief.get("generated_at") if latest_brief else None, max_age_hours),
+            "market_snapshots": self._freshness(latest_snapshot.timestamp.isoformat() if latest_snapshot else None, max_age_hours),
+        }
+        quality_flags = ["archive_status", "local_sqlite_dataset", "read_only_export"]
+        recommended_actions = []
+
+        if freshness["research_briefs"]["status"] == "stale":
+            quality_flags.append("stale_research_briefs")
+            recommended_actions.append("Run market.research with persist=true to refresh the archived research brief.")
+        elif freshness["research_briefs"]["status"] == "missing":
+            quality_flags.append("missing_research_briefs")
+            recommended_actions.append("Run market.research with persist=true to create an archived research brief.")
+
+        if freshness["market_snapshots"]["status"] == "stale":
+            quality_flags.append("stale_market_snapshots")
+            recommended_actions.append("Run polyterm collect for this market to refresh local market snapshots.")
+        elif freshness["market_snapshots"]["status"] == "missing":
+            quality_flags.append("missing_market_snapshots")
+            recommended_actions.append("Run polyterm collect for this market to create local market snapshots.")
+
+        return {
+            "success": True,
+            "query": query,
+            "market_id": inferred_market_id or market_id,
+            "max_age_hours": max_age_hours,
+            "evidence_counts": {
+                "research_briefs": len(briefs),
+                "market_snapshots": len(snapshots),
+            },
+            "freshness": freshness,
+            "latest": {
+                "research_brief": latest_brief,
+                "market_snapshot": latest_snapshot.to_dict() if latest_snapshot else None,
+            },
+            "recommended_actions": recommended_actions,
+            "quality_flags": quality_flags,
+        }
+
+    def _freshness(self, timestamp: Optional[str], max_age_hours: int) -> Dict[str, Any]:
+        if not timestamp:
+            return {"status": "missing", "timestamp": None, "age_hours": None, "max_age_hours": max_age_hours}
+        parsed = _parse_datetime(timestamp)
+        age_hours = (datetime.now(timezone.utc) - parsed).total_seconds() / 3600
+        return {
+            "status": "fresh" if age_hours <= max_age_hours else "stale",
+            "timestamp": timestamp,
+            "age_hours": round(age_hours, 3),
+            "max_age_hours": max_age_hours,
+        }
+
     def _resolve_market(self, market: str) -> Dict[str, Any]:
         try:
             data = self.gamma.get_market(market)
@@ -131,6 +190,20 @@ class ArchiveCollector:
         for table, rows in manifest.get("tables", {}).items():
             writer.writerow({"table": table, "rows": rows})
         return buffer.getvalue()
+
+
+def _first_nonempty(values: Iterable[Any]) -> str:
+    for value in values:
+        if value:
+            return str(value)
+    return ""
+
+
+def _parse_datetime(value: str) -> datetime:
+    parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _is_current_market(market: Dict[str, Any]) -> bool:

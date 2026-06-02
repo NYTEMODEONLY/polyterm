@@ -12,6 +12,7 @@
     {"name": "analytics.arbitrage", "schema": "docs/schemas/analytics.arbitrage.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
     {"name": "analytics.risk", "schema": "docs/schemas/analytics.risk.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
     {"name": "archive.search", "schema": "docs/schemas/archive.search.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
+    {"name": "archive.status", "schema": "docs/schemas/archive.status.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
     {"name": "wallet.inspect", "schema": "docs/schemas/wallet.inspect.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
     {"name": "wallet.whales", "schema": "docs/schemas/wallet.whales.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
     {"name": "analytics.thesis", "schema": "docs/schemas/analytics.thesis.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},

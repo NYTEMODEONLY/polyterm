@@ -31,7 +31,7 @@ Each CLI command has its own documentation page with usage, options, and example
 | [center](cli/center.md) | Alert center management | `polyterm center` |
 | [alerts](cli/alerts.md) | Alert configuration and management | `polyterm alerts` |
 | [agent](cli/agent.md) | Agent manifests, schemas, FastMCP server, and legacy JSON-lines adapter | `polyterm agent` |
-| [archive](cli/archive.md) | Search local research briefs | `polyterm archive` |
+| [archive](cli/archive.md) | Search local research briefs and check freshness | `polyterm archive` |
 | [analyze](cli/analyze.md) | Market analytics and trending | `polyterm analyze` |
 | [arbitrage](cli/arbitrage.md) | Arbitrage opportunity scanner | `polyterm arbitrage` |
 | [attribution](cli/attribution.md) | Trade attribution analysis | `polyterm attribution` |

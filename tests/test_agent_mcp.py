@@ -21,6 +21,7 @@ async def test_fastmcp_server_lists_agent_tools():
     assert "market.resolve" in tool_names
     assert "market.research" in tool_names
     assert "archive.search" in tool_names
+    assert "archive.status" in tool_names
     assert "analytics.thesis" in tool_names
     assert "wallet.inspect" in tool_names
 
@@ -89,6 +90,25 @@ async def test_fastmcp_server_calls_archive_search_handler(monkeypatch):
     assert result["data"]["count"] == 1
     assert result["data"]["briefs"][0]["query"] == "bitcoin"
     assert result["meta"]["tool"] == "archive.search"
+
+
+@pytest.mark.asyncio
+async def test_fastmcp_server_calls_archive_status_handler(monkeypatch):
+    def fake_archive_status(query="", market_id="", max_age_hours=24):
+        return envelope(
+            {"success": True, "query": query, "market_id": market_id, "freshness": {}, "quality_flags": ["archive_status"]},
+            meta={"tool": "archive.status"},
+        )
+
+    monkeypatch.setitem(jsonl_server.TOOL_HANDLERS, "archive.status", fake_archive_status)
+    mcp = create_server()
+    content, structured = await mcp.call_tool("archive.status", {"query": "bitcoin", "market_id": "m1", "max_age_hours": 12})
+    result = structured["result"]
+
+    assert content
+    assert result["success"] is True
+    assert result["data"]["query"] == "bitcoin"
+    assert result["meta"]["tool"] == "archive.status"
 
 
 @pytest.mark.asyncio

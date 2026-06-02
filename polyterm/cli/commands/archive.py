@@ -45,3 +45,35 @@ def search(query, limit, output_format):
         )
     console.print(table)
     console.print(f"[dim]Quality flags: {', '.join(result['quality_flags'])}[/dim]")
+
+
+@archive.command("status")
+@click.option("--query", default="", help="Search query, market slug, title, or market id")
+@click.option("--market-id", default="", help="Resolved Gamma/local market id for snapshot lookup")
+@click.option("--max-age-hours", default=24, show_default=True, type=int, help="Freshness threshold")
+@click.option("--format", "output_format", type=click.Choice(["table", "json"]), default="table")
+def status(query, market_id, max_age_hours, output_format):
+    """Report local archive coverage and freshness"""
+    collector = ArchiveCollector(database=Database())
+    result = collector.status(query=query, market_id=market_id, max_age_hours=max_age_hours)
+
+    if output_format == "json":
+        print_json({"success": True, "archive": result})
+        return
+
+    console = Console()
+    table = Table(title="Archive Status")
+    table.add_column("Evidence")
+    table.add_column("Count")
+    table.add_column("Freshness")
+    table.add_column("Latest")
+
+    for key, count in result["evidence_counts"].items():
+        fresh = result["freshness"].get(key, {})
+        table.add_row(key, str(count), fresh.get("status", "unknown"), str(fresh.get("timestamp") or ""))
+    console.print(table)
+    if result["recommended_actions"]:
+        console.print("[bold]Recommended actions:[/bold]")
+        for action in result["recommended_actions"]:
+            console.print(f"- {action}")
+    console.print(f"[dim]Quality flags: {', '.join(result['quality_flags'])}[/dim]")

@@ -21,6 +21,7 @@ TOOL_HANDLERS: Dict[str, Callable[..., dict]] = {
     "analytics.arbitrage": analytics.arbitrage,
     "analytics.thesis": analytics.thesis,
     "archive.search": archive.search,
+    "archive.status": archive.status,
     "wallet.inspect": wallet.inspect,
     "wallet.whales": wallet.whales,
 }
