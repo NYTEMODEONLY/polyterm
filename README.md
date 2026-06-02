@@ -641,41 +641,31 @@ python -m twine upload dist/*
 
 ---
 
-## What's New in v0.10.0 (Sprint 2)
+## What's New in v0.10.0
 
-### Real-Time Live Order Book
-- **`polyterm orderbook --live`** — WebSocket-fed real-time order book display with sub-second updates
-- `LiveOrderBook` in-memory book maintained by CLOB WebSocket with thread-safe reads
-- `LiveOrderbookDisplay` TUI screen with keyboard controls: P (pause), D (cycle depth 10/20/50), Q (quit)
-- Automatic REST polling fallback when WebSocket is unavailable
+### Agent-Ready Polymarket Intelligence
+- **Agent manifest and schemas**: `polyterm agent manifest --format json` and `polyterm agent schemas --format json` expose machine-readable tool metadata, safety flags, and output contracts.
+- **MCP-ready stdio adapter**: `polyterm agent mcp-server` provides JSON-lines tool calls without requiring a mandatory MCP dependency.
+- **Agent documentation**: `docs/AGENT_MODE.md`, `docs/tool-manifest.json`, `docs/schemas/*.schema.json`, and `llms.txt` give Hermes Agent, OpenClaw, Codex, and other agents a clear repo map.
+- **README agent caveat**: Agents are explicitly told to inspect the README, `docs/AGENT_MODE.md`, or the agent manifest before assuming they know how to use PolyTerm.
 
-### Real-Time Settlement Detection
-- **`market_resolved` WebSocket event** — Instant settlement notifications via CLOB WebSocket
-- Enabled by `custom_feature_enabled: True` flag in WebSocket subscription
-- Resolution outcome (YES/NO) and winning price displayed immediately in live order book
-- Settlement callbacks propagated to all live systems (order book, arb scanner)
+### Trader, Researcher, and Whale-Watcher Tools
+- **Trade thesis**: `polyterm thesis -m <market>` generates an explainable market-level thesis with identifiers, evidence, risks, quality flags, and no-custody next actions.
+- **Wallet intelligence**: `polyterm wallets --analyze <address> --refresh --format json` uses public Data API context plus local state.
+- **Wallet-level whales**: `polyterm whales --wallets --format json` reports local wallet-level whale activity instead of only market-volume proxies.
+- **Data-backed leaderboards**: `polyterm leaderboard --source data-api` uses public Data API rows; `--source local` ranks locally tracked wallets.
 
-### Shared Cross-Process Rate Limiter
-- **`SharedRateLimiter`** — File-lock-based rate limiter coordinating Gamma API requests across all PolyTerm processes
-- Default 60 requests/minute shared across concurrent instances
-- Automatic stale lock cleanup (120s threshold) for crashed processes
-- Graceful fallback to per-process limiting on Windows or permission errors
+### Research Archive, Alerts, and Cross-Venue Monitoring
+- **Research collection**: `polyterm collect -m <market>` stores repeatable local market snapshots for researchers and data collectors.
+- **Dataset exports**: `polyterm export --dataset latest --format json|csv` exposes local archive manifests without requiring agents to read SQLite directly.
+- **Local alert rules**: `polyterm alerts --add-rule price ...` creates local rules, with `--dry-run` for safe previews.
+- **Scheduled watch mode**: `polyterm watch --schedule 15m --runs N --format json` supports foreground agent scans.
+- **Cross-venue monitor**: `polyterm arbitrage --venues polymarket,kalshi --query <term>` reports matched spreads with match confidence and quality flags.
 
-### Arb Scanner WebSocket Integration
-- **Arbitrage scanner wired to live WebSocket prices** for lower-latency spread detection
-- `ArbitrageScanner` accepts optional `orderbook_analyzer` for real-time mid-prices
-- Falls back to REST API prices when WebSocket data unavailable
-
-### WebSocket Supervisor with Auto-Restart
-- **Two-tier resilience model** for trade WebSocket: inner reconnect loop + outer supervisor
-- Supervisor restarts entire connection cycle after cooldown (default 3 retries, 60s cooldown)
-- Ping/pong timeout detection (configurable `message_timeout`)
-- `on_error` callback for permanent failure notification
-- **Whale tracker REST fallback**: Automatic switch to REST polling (5s interval) when WebSocket permanently fails
-
-### Test Suite
-- **1076 tests passing** across API, core, CLI, TUI, database, and utility layers
-- New migration coverage for CLOB V2 public endpoints, Gamma keyset pagination, Data API sort compatibility, CLI command inventory, and TUI route inventory
+### Release Verification
+- **1076 tests passing** across API, core, CLI, TUI, database, and utility layers.
+- **83 registered commands expose help** through the command smoke suite.
+- **Documentation validation clean** with no missing docs, broken links, or stub pages.
 
 ---
 
