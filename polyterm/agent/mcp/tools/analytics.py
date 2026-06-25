@@ -2,6 +2,7 @@
 
 from ...contracts import envelope
 from ....api.gamma import GammaClient
+from ....api.market_utils import market_probability_price
 from ....core.cross_venue import CrossVenueMonitor
 from ....core.risk_score import MarketRiskScorer
 from ....core.trade_thesis import TradeThesisEngine

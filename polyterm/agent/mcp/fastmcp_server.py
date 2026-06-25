@@ -84,6 +84,13 @@ def create_server() -> Any:
         return _call_tool("market.resolve", identifier=identifier)
 
     @mcp.tool(
+        name="market.top",
+        description="Return top active Polymarket markets from live Gamma market data.",
+    )
+    def market_top(limit: int = 3, sort: str = "volume24h") -> Dict[str, Any]:
+        return _call_tool("market.top", limit=limit, sort=sort)
+
+    @mcp.tool(
         name="market.research",
         description="Generate a flagship one-call market research brief with thesis, evidence, gaps, and workflow.",
     )
@@ -112,6 +119,18 @@ def create_server() -> Any:
     @mcp.tool(name="market.price_history", description="Return CLOB-backed price history for a market.")
     def market_price_history(market: str, hours: int = 24) -> Dict[str, Any]:
         return _call_tool("market.price_history", market=market, hours=hours)
+
+    @mcp.tool(
+        name="market.movers",
+        description="Return active markets that flipped or had large available price changes.",
+    )
+    def market_movers(limit: int = 3, hours: int = 48, min_abs_change: float = 0.05) -> Dict[str, Any]:
+        return _call_tool(
+            "market.movers",
+            limit=limit,
+            hours=hours,
+            min_abs_change=min_abs_change,
+        )
 
     @mcp.tool(
         name="market.explain_move",
@@ -204,6 +223,24 @@ def create_server() -> Any:
         return _call_tool("wallet.whales", min_notional=min_notional, hours=hours, limit=limit)
 
     @mcp.tool(
+        name="wallet.whale_trades",
+        description="Return top public trade rows by notional value for a recent time window.",
+    )
+    def wallet_whale_trades(
+        limit: int = 5,
+        hours: int = 24,
+        min_notional: float = 0,
+        sample_size: int = 1000,
+    ) -> Dict[str, Any]:
+        return _call_tool(
+            "wallet.whale_trades",
+            limit=limit,
+            hours=hours,
+            min_notional=min_notional,
+            sample_size=sample_size,
+        )
+
+    @mcp.tool(
         name="wallet.smart_money",
         description="Return locally identified high win-rate smart-money wallets ranked by edge score.",
     )
@@ -211,13 +248,44 @@ def create_server() -> Any:
         return _call_tool("wallet.smart_money", min_win_rate=min_win_rate, min_trades=min_trades, limit=limit)
 
     @mcp.tool(
+        name="trader.leaderboard",
+        description="Return active traders with recent volume and closed-position win-rate evidence.",
+    )
+    def trader_leaderboard(
+        limit: int = 3,
+        hours: int = 72,
+        min_win_rate: float = 0.8,
+        candidate_count: int = 25,
+    ) -> Dict[str, Any]:
+        return _call_tool(
+            "trader.leaderboard",
+            limit=limit,
+            hours=hours,
+            min_win_rate=min_win_rate,
+            candidate_count=candidate_count,
+        )
+
+    @mcp.tool(
         name="alerts.create_price_rule",
         description="Create a local price alert rule.",
     )
-    def alerts_create_price_rule(market: str, above: float = 0, below: float = 0) -> Dict[str, Any]:
+    def alerts_create_price_rule(
+        market: str,
+        above: float = 0,
+        below: float = 0,
+        dry_run: bool = True,
+        confirm: bool = False,
+    ) -> Dict[str, Any]:
         above_value = above if above else None
         below_value = below if below else None
-        return _call_tool("alerts.create_price_rule", market=market, above=above_value, below=below_value)
+        return _call_tool(
+            "alerts.create_price_rule",
+            market=market,
+            above=above_value,
+            below=below_value,
+            dry_run=dry_run,
+            confirm=confirm,
+        )
 
     @mcp.tool(
         name="watch.scheduled_scan",

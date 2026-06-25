@@ -1,1 +1,1 @@
-"""MCP-ready adapters for PolyTerm."""
+"""MCP protocol and JSON-lines adapters for PolyTerm."""

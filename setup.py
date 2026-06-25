@@ -29,6 +29,16 @@ setup(
     ],
     python_requires=">=3.8",
     install_requires=requirements,
+    extras_require={
+        "dev": [
+            "setuptools>=68.0.0",
+            "build>=1.0.0",
+            "twine>=4.0.0",
+        ],
+        "mcp": [
+            "mcp>=1.0.0; python_version >= '3.10'",
+        ],
+    },
     entry_points={
         "console_scripts": [
             "polyterm=polyterm.cli.main:cli",

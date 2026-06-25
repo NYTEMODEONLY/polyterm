@@ -1,16 +1,16 @@
 # Execution Roadmap
 
-**Last updated:** 2026-06-02  
-**Scope:** Next five implementation tracks for PolyTerm after the June 1 API audit  
-**Team model:** 1 engineer + focused subagents  
+**Last updated:** 2026-06-25
+**Scope:** Next five implementation tracks for PolyTerm after the June 1 API audit, with June 25 agent-native status notes
+**Team model:** 1 engineer + focused subagents
 **Primary objective:** Make PolyTerm the best no-custody intelligence and data terminal for Polymarket traders, researchers, data collectors, whale watchers, and external agents such as Hermes Agent and OpenClaw.
 
-This roadmap supersedes the March 2026 roadmap. Several earlier P0 items are already done or partially done: CLOB price history exists, lazy CLI loading exists, docs validation is clean, and `analyze` is registered. The remaining work should focus on features that users are actively asking for and gaps found in the current repo.
+This roadmap supersedes the March 2026 roadmap. Several earlier P0 items are already done or partially done: CLOB price history exists, lazy CLI loading exists, docs validation is clean, and `analyze` is registered. As of June 25, 2026, the agent-native Feature 1 track is implemented for repo handoff, standard MCP, JSON-lines fallback, live tool calls, checked-in manifests/schemas, and dedicated agent tests. The remaining work should focus on contract hardening, CLI JSON consistency, docs drift detection, and continued intelligence depth.
 
 ## Evidence Basis
 
 - Repo audit: PolyTerm already has broad CLI/TUI coverage, CLOB price history, CLOB WebSocket order book support, local SQLite state, and current Gamma/CLOB/Data API documentation.
-- Repo gaps: agent schemas/manifests are absent, JSON contracts are not stable enough, `whales` is still partly a volume-spike proxy, leaderboard/profile data is not real Data API-backed, and exports are too narrow.
+- Original repo gaps: agent schemas/manifests were absent, JSON contracts were not stable enough, `whales` was still partly a volume-spike proxy, leaderboard/profile data needed current Data API grounding, and exports were too narrow. The June 25 buildout resolved the agent manifest/schema/adapter gap and added current Data API leaderboard support; remaining gaps are tracked in [TODO_BACKLOG.md](./TODO_BACKLOG.md).
 - Public demand scan: current Polymarket users and tool directories emphasize alerts, wallet intelligence, copy-trade controls, cross-venue arbitrage, P&L reconciliation, and research-grade data archives.
 - Current API contracts: global Polymarket read surfaces are Gamma, Data API, and CLOB; CLOB market data uses token IDs, user WebSocket uses condition IDs, and authenticated trading requires L1/L2 credentials.
 
@@ -34,25 +34,29 @@ If execution support is considered later, it should be a separate optional build
 
 | Rank | Feature | Primary User | Agent Priority | Why Now |
 |------|---------|--------------|----------------|---------|
-| 1 | Agent Tool Contracts + MCP-Ready Surface | Hermes/OpenClaw, researchers, automators | Critical | Agents need stable schemas, tool manifests, safety flags, and non-interactive commands before any higher-level automation is trustworthy. |
+| 1 | Agent Tool Contracts + Standard MCP Surface | Hermes/OpenClaw, researchers, automators | Shipped / keep hardening | Agents need stable schemas, tool manifests, safety flags, and non-interactive commands before any higher-level automation is trustworthy. |
 | 2 | Wallet Intelligence + True Whale Pipeline | Whale watchers, copy-traders, researchers | High | Current `whales` is not yet true wallet-level whale tracking; public demand is strongest around smart money, top wallets, and consensus moves. |
 | 3 | Trade Thesis + Explainable Market Intelligence | Traders, researchers | High | PolyTerm has many signals, but users and agents need one market-level decision object with confidence, risk, evidence, and caveats. |
 | 4 | Research Archive + Dataset Export Suite | Data collectors, researchers, agents | High | Researchers need repeatable snapshots, replay, quality flags, and exports beyond one market snapshot. |
 | 5 | Alert Automation + Cross-Venue Hedge Monitor | Active traders, whale watchers | Medium-High | Users want fewer manual checks: whale moves, price breaks, volume anomalies, new markets, resolution changes, and cross-venue spreads. |
 
-## Feature 1: Agent Tool Contracts + MCP-Ready Surface
+## Feature 1: Agent Tool Contracts + Standard MCP Surface
 
 **Goal:** Make PolyTerm easy and safe for Hermes Agent, OpenClaw, Codex, and other agents to call without scraping terminal text or guessing command behavior.
+
+**Current status:** Shipped for the core handoff workflow on June 25, 2026. Use `polyterm agent manifest --format json`, `polyterm agent schemas --format json`, `polyterm agent catalog --format json`, `polyterm agent mcp-server`, and `polyterm agent jsonl-server`. Current remaining tasks are schema depth, adapter snapshots, CLI JSON contract hardening, and docs drift validation.
 
 ### Implementation Ownership
 
 - `polyterm/agent/registry.py`: command/tool registry generated from `LAZY_COMMANDS`, enriched with hand-authored safety metadata.
 - `polyterm/agent/contracts.py`: stable JSON envelope helpers with `schema_version`, `success`, `data`, `error`, and `meta`.
 - `polyterm/agent/schemas.py`: JSON Schema generation and validation helpers.
-- `polyterm/agent/mcp/server.py`: thin MCP adapter over stable read-only tools.
+- `polyterm/agent/mcp/fastmcp_server.py`: standard MCP/FastMCP wrapper over the stable tool functions.
+- `polyterm/agent/mcp/server.py`: legacy JSON-lines stdio adapter over the same tool functions.
 - `polyterm/agent/mcp/tools/market.py`: market lookup, search, order book, price history.
-- `polyterm/agent/mcp/tools/wallet.py`: wallet positions, trades, profile, whale signals.
-- `polyterm/agent/mcp/tools/analytics.py`: arbitrage, risk, prediction, trade thesis.
+- `polyterm/agent/mcp/tools/wallet.py`: wallet positions, profile, local whale signals.
+- `polyterm/agent/mcp/tools/live.py`: top markets, public whale trades, active traders with win-rate evidence, and market movers.
+- `polyterm/agent/mcp/tools/analytics.py`: arbitrage, risk, trade thesis.
 - `docs/AGENT_MODE.md`: agent usage, safety model, examples for Hermes/OpenClaw.
 - `docs/tool-manifest.json`: generated tool manifest.
 - `docs/schemas/*.schema.json`: generated or checked-in schemas for public agent tools.
@@ -62,10 +66,10 @@ If execution support is considered later, it should be a separate optional build
 
 - `polyterm agent manifest --format json` emits every public agent tool with name, description, args, output schema path, `read_only`, `mutates_local_state`, `requires_confirmation`, and `may_prompt`.
 - Stable envelope is used by all agent tools: `schema_version`, `success`, `data`, `error`, `meta`.
-- MCP server exposes at least 8 read-only tools: search markets, resolve market, get order book, get price history, scan arbitrage, assess risk, inspect wallet, and generate trade thesis.
+- Standard MCP and JSON-lines adapters expose the 25 manifest tools, including search markets, resolve market, get order book, get price history, scan arbitrage, assess risk, inspect wallet, whale trades, trader leaderboard, market movers, and generate trade thesis.
 - JSON-mode agent tools never print Rich preamble text to stdout.
 - Prompting and local mutation are rejected unless the tool manifest explicitly allows them.
-- Tests cover manifest generation, schema validation, and pure JSON output for every schema-declared tool.
+- Tests cover manifest generation, schema artifacts, adapter handler coverage, standard MCP registration, mutation safety, and live-tool normalization.
 
 ### Verification
 

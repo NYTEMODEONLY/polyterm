@@ -1,8 +1,8 @@
-"""Small MCP-ready JSON server for PolyTerm agent tools.
+"""Small JSON-lines server for PolyTerm agent tools.
 
 This module deliberately avoids adding a mandatory MCP package dependency. It
 exposes a simple JSON-lines stdio adapter and keeps the callable tool functions
-in small modules so a future FastMCP wrapper can import the same functions.
+in small modules shared with the standard FastMCP wrapper.
 """
 
 import json
@@ -11,15 +11,18 @@ from typing import Callable, Dict
 
 from ..contracts import envelope, error_envelope
 from ..registry import get_manifest
-from .tools import alerts, analytics, archive, market, meta, scan, wallet, watch
+from .tools import alerts, analytics, archive, live, market, meta, scan, wallet, watch
 
 
 TOOL_HANDLERS: Dict[str, Callable[..., dict]] = {
     "market.search": market.search,
+    "agent.schemas": meta.schemas,
     "agent.doctor": meta.doctor,
     "market.resolve": market.resolve,
+    "market.top": live.top_markets,
     "market.orderbook": market.orderbook,
     "market.price_history": market.price_history,
+    "market.movers": live.market_movers,
     "market.research": market.research,
     "market.explain_move": market.explain_move,
     "market.compare": market.compare,
@@ -32,7 +35,9 @@ TOOL_HANDLERS: Dict[str, Callable[..., dict]] = {
     "archive.manifest": archive.manifest,
     "wallet.inspect": wallet.inspect,
     "wallet.whales": wallet.whales,
+    "wallet.whale_trades": live.whale_trades,
     "wallet.smart_money": wallet.smart_money,
+    "trader.leaderboard": live.top_traders,
     "alerts.create_price_rule": alerts.create_price_rule,
     "watch.scheduled_scan": watch.scheduled_scan,
 }

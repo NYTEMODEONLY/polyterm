@@ -2,5 +2,8 @@ include README.md
 include LICENSE
 include requirements.txt
 include pytest.ini
+include llms.txt
+include docs/tool-manifest.json
+recursive-include docs *.md
+recursive-include docs/schemas *.json
 recursive-include tests *.py
-

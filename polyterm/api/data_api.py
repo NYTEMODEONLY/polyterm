@@ -130,14 +130,50 @@ class DataAPIClient:
         response.raise_for_status()
         return response.json()
 
+    def get_closed_positions(self, address, limit=50, offset=0, sort_by="REALIZEDPNL"):
+        """Get closed positions for a wallet.
+
+        GET /closed-positions?user={address}&limit={limit}&offset={offset}&sortBy={sort_by}
+        Returns list of closed position dicts when the public Data API surface is available.
+        """
+        params = {"user": address, "limit": limit, "offset": offset, "sortBy": sort_by}
+        response = self._request("GET", "/closed-positions", params=params)
+        response.raise_for_status()
+        data = response.json()
+        if isinstance(data, dict):
+            return data.get("data", data.get("positions", []))
+        return data
+
     def get_leaderboard(self, period="7d", limit=50, sort_by="profit"):
         """Get public leaderboard rows if exposed by the current Data API.
 
         The public Data API has changed this surface more often than positions
         and trades, so callers should handle an empty list or request error.
         """
-        params = {"period": period, "limit": limit, "sortBy": sort_by}
-        response = self._request("GET", "/leaderboard", params=params)
+        period_map = {
+            "24h": "DAY",
+            "1d": "DAY",
+            "day": "DAY",
+            "7d": "WEEK",
+            "week": "WEEK",
+            "30d": "MONTH",
+            "month": "MONTH",
+            "all": "ALL",
+        }
+        sort_map = {
+            "profit": "PNL",
+            "pnl": "PNL",
+            "volume": "VOL",
+            "vol": "VOL",
+            "winrate": "PNL",
+            "active": "VOL",
+        }
+        params = {
+            "timePeriod": period_map.get(str(period).lower(), str(period).upper()),
+            "limit": limit,
+            "orderBy": sort_map.get(str(sort_by).lower(), str(sort_by).upper()),
+        }
+        response = self._request("GET", "/v1/leaderboard", params=params)
         response.raise_for_status()
         data = response.json()
         if isinstance(data, dict):

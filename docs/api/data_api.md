@@ -85,10 +85,13 @@ client.get_holders(market="0x...", limit=100)
 client.get_value("0xabc...")
 client.get_market_positions("0x...")
 client.get_leaderboard(period="7d", limit=50, sort_by="profit")
+client.get_closed_positions("0xabc...", limit=50)
 client.get_wallet_profile("0xabc...")
 ```
 
-These methods use the public Data API base URL, `https://data-api.polymarket.com`. The exact leaderboard and holder surfaces have changed more often than `/positions` and `/trades`, so callers should handle empty responses or request errors gracefully.
+These methods use the public Data API base URL, `https://data-api.polymarket.com`. Leaderboard calls use the current documented `/v1/leaderboard` endpoint with `timePeriod`, `orderBy`, `limit`, and pagination parameters. The helper maps PolyTerm's `24h`, `7d`, `30d`, and `all` periods to Polymarket's `DAY`, `WEEK`, `MONTH`, and `ALL` values, and maps `profit`/`volume` to `PNL`/`VOL`.
+
+The exact holder and ranking surfaces have changed more often than `/positions`, `/closed-positions`, and `/trades`, so callers should handle empty responses or request errors gracefully.
 
 Wallet profile aggregation combines public positions, trades, and value data when available. It does not authenticate, place trades, or access private wallet data.
 
@@ -97,3 +100,4 @@ Identifier requirements:
 - Wallet calls use wallet or proxy wallet addresses.
 - Market-position and holder calls use public market or token identifiers accepted by the current Data API endpoint.
 - CLOB token IDs are not interchangeable with Gamma market IDs unless the endpoint explicitly asks for a token.
+- Recent-trader agent tooling computes win rate from closed positions and labels that provenance in `quality_flags`.

@@ -507,7 +507,7 @@ polyterm thesis -m bitcoin --format json
 polyterm wallets --analyze 0xabc... --refresh --format json
 ```
 
-Agent tools are documented in [docs/AGENT_MODE.md](docs/AGENT_MODE.md), indexed in [docs/tool-manifest.json](docs/tool-manifest.json), and summarized for LLM crawlers in [llms.txt](llms.txt). The manifest marks tools as read-only, local-state mutating, prompting, or long-running.
+Agent tools are documented in [docs/AGENT_MODE.md](docs/AGENT_MODE.md), indexed in [docs/tool-manifest.json](docs/tool-manifest.json), and summarized for LLM crawlers in [llms.txt](llms.txt). The manifest marks tools as read-only, local-state mutating, prompting, long-running, adapter-available, or live-data-backed, and includes an 88-command CLI catalog for the full PolyTerm suite.
 
 **Agent note:** Hermes, OpenClaw, Codex, and other agents still need to inspect this README, read `docs/AGENT_MODE.md`, or call `polyterm agent manifest --format json` before assuming they know how to use PolyTerm. The repo provides the agent-facing contracts and docs, but an agent only benefits from them if its workflow includes repo/document/tool-manifest inspection.
 
@@ -679,8 +679,8 @@ python -m twine upload dist/*
 - **Cross-venue monitor**: `polyterm arbitrage --venues polymarket,kalshi --query <term>` reports matched spreads with match confidence and quality flags.
 
 ### Release Verification
-- **1076 tests passing** across API, core, CLI, TUI, database, and utility layers.
-- **83 registered commands expose help** through the command smoke suite.
+- **Agent contract tests** cover manifest/static parity, schema artifacts, adapter handler coverage, safety flags, and live-tool normalization.
+- **88 registered commands expose help** through the command smoke suite.
 - **Documentation validation clean** with no missing docs, broken links, or stub pages.
 
 ---

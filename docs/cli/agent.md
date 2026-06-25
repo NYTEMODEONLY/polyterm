@@ -1,6 +1,6 @@
 # Agent
 
-> Agent manifests, schemas, and MCP-ready stdio tooling for PolyTerm.
+> Agent manifests, schemas, standard MCP tooling, and JSON-lines stdio tooling for PolyTerm.
 
 ## Overview
 
@@ -80,6 +80,7 @@ mcp_servers:
 
 - `polyterm.agent.registry` for command metadata and safety flags.
 - `polyterm.agent.schemas` for JSON Schema generation.
+- `polyterm.agent.mcp.protocol` for standard MCP protocol registration through FastMCP.
 - `polyterm.agent.mcp.server` for JSON-lines request dispatch.
 - Gamma, CLOB, Data API, and local SQLite through the grouped tool functions.
 
@@ -92,6 +93,9 @@ Every manifest row includes:
 - `requires_confirmation`
 - `may_prompt`
 - `long_running`
+- `adapter_available`
+- `live_data`
+- `examples`
 
 Agent runtimes should refuse tools that mutate local state unless their policy explicitly allows local state changes. They should also treat `long_running` tools as foreground processes that may need interruption.
 
@@ -131,7 +135,7 @@ Agent command outputs use:
 
 ```json
 {
-  "schema_version": "2026-06-02",
+  "schema_version": "2026-06-25",
   "success": true,
   "data": {},
   "error": null,

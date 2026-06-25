@@ -1,289 +1,159 @@
 # TODO Backlog
 
-Actionable work items linked to [EXECUTION_ROADMAP.md](./EXECUTION_ROADMAP.md). This backlog reflects the June 2, 2026 next-five roadmap and supersedes the older March backlog.
+This backlog reflects the June 25, 2026 agent-native buildout. The older June 2 next-five roadmap remains useful product context, but the original Feature 1 TODOs are now complete.
 
-## P0: Agent Tool Contracts + MCP-Ready Surface
+## Completed In The Agent-Native Buildout
 
-### TODO-1: Add `polyterm/agent` contract package
+- Agent registry, stable envelope helpers, and generated JSON Schemas exist under `polyterm/agent`.
+- `polyterm agent manifest --format json` emits 25 adapter-callable tools plus the 88-command CLI catalog.
+- `polyterm agent catalog --format json` exposes the full CLI command inventory for repo-handoff agents.
+- `docs/tool-manifest.json`, `docs/schemas/*.schema.json`, `docs/AGENT_MODE.md`, `docs/cli/agent.md`, and `llms.txt` are checked in for static discovery.
+- `polyterm agent mcp-server` exposes the manifest tools through the optional standard MCP/FastMCP server.
+- `polyterm agent jsonl-server` remains as a dependency-free JSON-lines adapter.
+- Live agent tools cover top markets, whale trades, active traders with win-rate evidence, and market movers.
+- Mutating local-state tools are flagged and require explicit confirmation.
+- `tests/test_agent` covers manifest/static parity, adapter coverage, standard MCP registration, mutation safety, and live-tool normalization.
 
-**Roadmap:** Feature 1  
-**Priority:** P0  
-**Effort:** M  
+## P0: Keep Agent Contracts Current
+
+### TODO-1: Tighten Lower-Priority Nested Schemas
+
+**Priority:** P0
+**Effort:** M
 **Files:**
 
-- `polyterm/agent/__init__.py`
-- `polyterm/agent/registry.py`
-- `polyterm/agent/contracts.py`
 - `polyterm/agent/schemas.py`
-- `tests/test_agent/test_registry.py`
-- `tests/test_agent/test_contracts.py`
-
-**Acceptance criteria:**
-
-- Tool registry lists public agent tools with name, description, args, output schema, safety flags, and command mapping.
-- Contract helper emits `schema_version`, `success`, `data`, `error`, and `meta`.
-- Schema helper can validate sample payloads for search, resolve, orderbook, wallet, arbitrage, risk, prediction, and thesis tools.
-
-### TODO-2: Generate agent manifest, schemas, and `llms.txt`
-
-**Roadmap:** Feature 1  
-**Priority:** P0  
-**Effort:** M  
-**Files:**
-
-- `polyterm/agent/registry.py`
-- `polyterm/agent/schemas.py`
-- `docs/tool-manifest.json`
 - `docs/schemas/*.schema.json`
-- `docs/AGENT_MODE.md`
-- `llms.txt`
-- `tests/test_agent/test_schema_artifacts.py`
+- `tests/test_agent/test_manifest_contracts.py`
 
 **Acceptance criteria:**
 
-- `polyterm agent manifest --format json` emits a stable manifest.
-- Generated or checked-in schema artifacts validate cleanly.
-- `docs/AGENT_MODE.md` includes Hermes/OpenClaw examples, safety flags, and non-interactive usage rules.
-- `llms.txt` maps the main commands, API clients, identifier rules, and agent-safe entry points.
+- Every manifest tool has a specific nested `data` object schema, not only the shared envelope.
+- Identifier fields distinguish Gamma market IDs, Gamma slugs, CLOB condition IDs, CLOB token IDs, and wallet addresses.
+- Schema regeneration keeps `docs/tool-manifest.json` and `docs/schemas/*.schema.json` in sync with `polyterm.agent.registry`.
 
-### TODO-3: Add MCP read-only adapter
+### TODO-2: Add Adapter Output Snapshot Tests
 
-**Roadmap:** Feature 1  
-**Priority:** P0  
-**Effort:** L  
+**Priority:** P0
+**Effort:** M
 **Files:**
 
-- `polyterm/agent/mcp/server.py`
-- `polyterm/agent/mcp/tools/market.py`
-- `polyterm/agent/mcp/tools/wallet.py`
-- `polyterm/agent/mcp/tools/analytics.py`
-- `docs/AGENT_MODE.md`
 - `tests/test_agent/test_mcp_tools.py`
+- `tests/test_agent/test_mcp_protocol.py`
+- `tests/fixtures/agent/`
 
 **Acceptance criteria:**
 
-- MCP server exposes read-only market search, market resolve, order book, price history, wallet inspect, arbitrage scan, risk assess, and trade thesis tools.
-- Each tool returns the versioned contract envelope.
-- Mutating local-state commands are excluded or explicitly marked unavailable.
+- JSON-lines and standard MCP adapters return the same envelope shape for representative requests.
+- Snapshots cover success and failure paths for `market.top`, `wallet.whale_trades`, `trader.leaderboard`, `market.movers`, and `alerts.create_price_rule`.
+- Snapshot tests normalize timestamps and live API values so they remain deterministic.
 
-### TODO-4: Stabilize CLI JSON behavior for agent-declared tools
+## P1: Harden CLI JSON For Agents
 
-**Roadmap:** Feature 1  
-**Priority:** P0  
-**Effort:** M  
+### TODO-3: Expand CLI JSON Contract Coverage
+
+**Priority:** P1
+**Effort:** L
 **Files:**
 
-- `polyterm/utils/json_output.py`
 - `polyterm/cli/commands/search.py`
 - `polyterm/cli/commands/lookup.py`
 - `polyterm/cli/commands/orderbook.py`
-- `polyterm/cli/commands/arbitrage.py`
+- `polyterm/cli/commands/chart.py`
 - `polyterm/cli/commands/risk.py`
-- `polyterm/cli/commands/predict.py`
-- `tests/test_cli/test_json_contract_inventory.py`
-
-**Acceptance criteria:**
-
-- Every schema-declared command emits parseable JSON with no Rich preamble on stdout.
-- JSON mode never triggers interactive prompts.
-- README and docs no longer claim unsupported commands have `--format json`.
-
-## P1: Wallet Intelligence + True Whale Pipeline
-
-### TODO-5: Add Data API wallet intelligence methods
-
-**Roadmap:** Feature 2  
-**Priority:** P1  
-**Effort:** M  
-**Files:**
-
-- `polyterm/api/data_api.py`
-- `tests/test_api/test_data_api.py`
-- `docs/api/data_api.md`
-
-**Acceptance criteria:**
-
-- Data API client supports current positions, trades, activity, holders/value if available, and leaderboard/profile endpoints if available.
-- Pagination, empty responses, rate limits, and malformed responses are tested.
-- Docs state exact endpoint contracts and identifier requirements.
-
-### TODO-6: Build wallet intelligence core module
-
-**Roadmap:** Feature 2  
-**Priority:** P1  
-**Effort:** L  
-**Files:**
-
-- `polyterm/core/wallet_intelligence.py`
-- `tests/test_core/test_wallet_intelligence.py`
-- `docs/core/wallet_intelligence.md`
-
-**Acceptance criteria:**
-
-- Computes wallet P&L summary, ROI, win rate, market concentration, category exposure, recent large moves, and consensus signals.
-- Labels inferred fields and data-quality caveats.
-- Keeps parsing logic separate from CLI/TUI rendering.
-
-### TODO-7: Upgrade `whales`, `wallets`, `leaderboard`, and `follow`
-
-**Roadmap:** Feature 2  
-**Priority:** P1  
-**Effort:** L  
-**Files:**
-
-- `polyterm/cli/commands/whales.py`
-- `polyterm/cli/commands/wallets.py`
-- `polyterm/cli/commands/leaderboard.py`
-- `polyterm/cli/commands/follow.py`
-- `docs/cli/whales.md`
-- `docs/cli/wallets.md`
-- `docs/cli/leaderboard.md`
-- `docs/cli/follow.md`
-- `tests/test_cli/test_whales.py`
-- `tests/test_cli/test_wallets.py`
-- `tests/test_cli/test_leaderboard.py`
-
-**Acceptance criteria:**
-
-- `polyterm whales --wallets --format json` returns wallet-level whale activity.
-- `polyterm wallets --analyze <address> --refresh --format json` returns live Data API-backed wallet profile data.
-- `polyterm leaderboard --source data-api --format json` does not use seeded pseudo-data.
-- Followed wallets can include max exposure and filter metadata.
-
-## P1: Trade Thesis + Explainable Market Intelligence
-
-### TODO-8: Add `trade_thesis` core module
-
-**Roadmap:** Feature 3  
-**Priority:** P1  
-**Effort:** L  
-**Files:**
-
-- `polyterm/core/trade_thesis.py`
-- `tests/test_core/test_trade_thesis.py`
-- `docs/core/trade_thesis.md`
-
-**Acceptance criteria:**
-
-- Composes market metadata, CLOB prices/history/orderbook, prediction signals, risk score, whale signals, wash-trade indicators, UMA risk, news, and arbitrage.
-- Returns evidence, caveats, confidence, and next actions in a deterministic schema.
-- Uses existing market identifier utilities instead of duplicating slug/token logic.
-
-### TODO-9: Add `thesis` CLI command and optional TUI screen
-
-**Roadmap:** Feature 3  
-**Priority:** P1  
-**Effort:** M  
-**Files:**
-
 - `polyterm/cli/commands/thesis.py`
-- `polyterm/cli/lazy_group.py`
-- `polyterm/tui/screens/thesis_screen.py` (if TUI included)
-- `docs/cli/thesis.md`
-- `docs/tui/screens/thesis_screen.md` (if TUI included)
-- `tests/test_cli/test_thesis.py`
-- `tests/test_tui/test_screens.py` (if TUI included)
+- `tests/test_cli/test_output_contracts.py`
 
 **Acceptance criteria:**
 
-- `polyterm thesis -m <slug-or-url> --format json` returns a stable market-level thesis.
-- `polyterm thesis -m <market> --brief` fits in one terminal screen.
-- Agent manifest marks thesis as read-only and non-mutating.
+- Agent-facing commands with `--format json` emit parseable JSON with no Rich preamble on stdout.
+- Commands do not prompt in JSON mode.
+- Tests cover success, empty result, and API error output for each command.
 
-## P2: Research Archive + Dataset Export Suite
+### TODO-4: Decide Envelope Scope For Non-Agent CLI Commands
 
-### TODO-10: Add archive collection core and command
-
-**Roadmap:** Feature 4  
-**Priority:** P2  
-**Effort:** L  
+**Priority:** P1
+**Effort:** M
 **Files:**
 
-- `polyterm/core/archive.py`
-- `polyterm/cli/commands/collect.py`
-- `polyterm/db/database.py`
-- `docs/core/archive.md`
-- `docs/cli/collect.md`
-- `tests/test_core/test_archive.py`
-- `tests/test_cli/test_collect.py`
+- `polyterm/utils/json_output.py`
+- `docs/utils/json_output.md`
+- Command docs under `docs/cli/`
 
 **Acceptance criteria:**
 
-- `polyterm collect --market <slug> --interval 30s --duration 10m` records snapshots with run metadata.
-- Archive rows include quality flags for API fallback, stale data, missing token IDs, rate-limit backoff, and partial runs.
-- Collection can run in foreground and exits cleanly on Ctrl+C.
+- Docs state which commands emit the versioned agent envelope and which emit command-specific JSON.
+- Any migration to the agent envelope is documented as a compatibility change.
+- Existing downstream command JSON consumers are not silently broken.
 
-### TODO-11: Expand exports to dataset bundles
+## P1: Improve Documentation Drift Detection
 
-**Roadmap:** Feature 4  
-**Priority:** P2  
-**Effort:** M  
+### TODO-5: Compare CLI Docs Against Live Click Help
+
+**Priority:** P1
+**Effort:** L
 **Files:**
 
-- `polyterm/cli/commands/export_cmd.py`
-- `polyterm/core/archive.py`
-- `docs/cli/export.md`
-- `tests/test_cli/test_export.py`
+- `scripts/validate_docs.py`
+- `docs/cli/*.md`
+- `tests/test_cli/test_command_inventory.py`
 
 **Acceptance criteria:**
 
-- `polyterm export --dataset latest --format json` returns a dataset envelope.
-- `polyterm export --dataset latest --format csv` exports multiple tables with stable column names.
-- Optional XLSX export fails gracefully when optional dependency is unavailable.
+- The docs validator can compare documented option tables against `polyterm <command> --help` for selected agent-facing commands.
+- Drift is reported with the command name, missing option, and doc path.
+- The first enforced set includes `agent`, `alerts`, `watch`, `export`, `leaderboard`, `wallets`, `whales`, `search`, `lookup`, `orderbook`, and `thesis`.
 
-## P2: Alert Automation + Cross-Venue Hedge Monitor
+## P2: Keep Live Intelligence Transparent
 
-### TODO-12: Add unified alert engine
+### TODO-6: Strengthen Win-Rate Provenance
 
-**Roadmap:** Feature 5  
-**Priority:** P2  
-**Effort:** L  
+**Priority:** P2
+**Effort:** M
 **Files:**
 
-- `polyterm/core/alert_engine.py`
-- `polyterm/cli/commands/alerts.py`
-- `polyterm/cli/commands/watch.py`
-- `docs/core/alerts.md`
-- `docs/cli/alerts.md`
-- `docs/cli/watch.md`
-- `tests/test_core/test_alerts.py`
-- `tests/test_cli/test_alerts.py`
-- `tests/test_cli/test_watch.py`
+- `polyterm/agent/mcp/tools/live.py`
+- `polyterm/api/data_api.py`
+- `docs/api/data_api.md`
+- `docs/cli/leaderboard.md`
 
 **Acceptance criteria:**
 
-- Alert rules support price breaks, whale trades, volume anomalies, new markets, resolution changes, and risk changes.
-- Rule creation is local-state mutation and is marked as such in docs and manifests.
-- `polyterm watch --schedule 15m --notify telegram --format json` runs without prompts.
+- `trader.leaderboard` continues to label win rate as closed-position-derived evidence.
+- If Polymarket exposes a native win-rate endpoint later, the tool records the endpoint and switches provenance flags explicitly.
+- Tests cover traders with no closed positions, losses, and mixed wins/losses.
 
-### TODO-13: Add cross-venue hedge monitor
+### TODO-7: Add Better Market-Mover Windows When API Supports Them
 
-**Roadmap:** Feature 5  
-**Priority:** P2  
-**Effort:** L  
+**Priority:** P2
+**Effort:** M
 **Files:**
 
-- `polyterm/core/cross_venue.py`
-- `polyterm/api/kalshi.py`
-- `polyterm/cli/commands/arbitrage.py`
-- `docs/core/arbitrage.md`
-- `docs/cli/arbitrage.md`
-- `tests/test_core/test_arbitrage.py`
-- `tests/test_cli/test_arbitrage.py`
+- `polyterm/agent/mcp/tools/live.py`
+- `docs/AGENT_MODE.md`
+- `docs/schemas/market.movers.schema.json`
 
 **Acceptance criteria:**
 
-- `polyterm arbitrage --venues polymarket,kalshi --format json` reports matched markets, match confidence, fee-adjusted spread, and stale-data risk.
-- False-match risk is visible in table and JSON output.
-- Missing venue credentials or unavailable venue APIs degrade gracefully.
+- `market.movers` uses true 48-hour changes when available from an API source or local archive.
+- Until then, output keeps `change_window_uses_available_gamma_change_fields` in `quality_flags`.
+- Docs remain explicit about whether the requested window is exact or best-effort.
 
-## Shared Verification
+## Verification
 
-Run these before finalizing substantial roadmap implementation work:
+Run these before committing agent or documentation changes:
 
 ```bash
 ./test_all_commands.sh
 .venv/bin/python scripts/validate_docs.py
+.venv/bin/python -m pytest tests/test_agent tests/test_api/test_data_api.py -q
 ```
 
-Also run focused tests for touched modules, commands, and docs-sensitive changes.
+For release or handoff changes, also run:
+
+```bash
+.venv/bin/python -m pytest tests --ignore=tests/test_live_data --ignore=tests/test_tui/test_integration.py --tb=short -q
+.venv/bin/python -m pytest tests/test_live_data -q
+.venv/bin/python -m build
+.venv/bin/python -m twine check dist/*
+```

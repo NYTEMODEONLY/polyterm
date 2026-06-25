@@ -1,1 +1,1 @@
-"""Grouped MCP-ready tool functions."""
+"""Grouped tool functions shared by MCP and JSON-lines adapters."""

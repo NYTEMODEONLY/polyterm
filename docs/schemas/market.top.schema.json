@@ -1,0 +1,33 @@
+{
+  "type": "object",
+  "required": [
+    "schema_version",
+    "success",
+    "data",
+    "error",
+    "meta"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    },
+    "success": {
+      "type": "boolean"
+    },
+    "data": {
+      "type": "object",
+      "description": "Tool-specific object payload. See tool docs and quality_flags for field semantics."
+    },
+    "error": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "meta": {
+      "type": "object"
+    }
+  },
+  "title": "PolyTerm market.top response",
+  "description": "Return the top active Polymarket markets from live Gamma market data."
+}

@@ -254,6 +254,61 @@ class TestDataAPIGetPositions:
         assert "offset=10" in responses.calls[0].request.url
         assert "sortBy=CASHPNL" in responses.calls[0].request.url
 
+
+class TestDataAPILeaderboardAndClosedPositions:
+    """Test current Data API leaderboard and closed-position helpers."""
+
+    @pytest.fixture
+    def client(self):
+        return DataAPIClient(base_url=BASE_URL)
+
+    @responses.activate
+    def test_get_leaderboard_uses_v1_endpoint_and_mapped_params(self, client):
+        responses.add(
+            responses.GET,
+            f"{BASE_URL}/v1/leaderboard",
+            json=[
+                {
+                    "rank": "1",
+                    "proxyWallet": "0xabc123",
+                    "userName": "trader",
+                    "vol": 100,
+                    "pnl": 10,
+                }
+            ],
+            status=200,
+        )
+
+        rows = client.get_leaderboard(period="7d", limit=25, sort_by="volume")
+        assert rows[0]["proxyWallet"] == "0xabc123"
+        url = responses.calls[0].request.url
+        assert "/v1/leaderboard" in url
+        assert "timePeriod=WEEK" in url
+        assert "orderBy=VOL" in url
+        assert "limit=25" in url
+
+    @responses.activate
+    def test_get_closed_positions_success(self, client):
+        responses.add(
+            responses.GET,
+            f"{BASE_URL}/closed-positions",
+            json=[
+                {
+                    "proxyWallet": "0xabc123",
+                    "conditionId": "0x1",
+                    "realizedPnl": 12.5,
+                }
+            ],
+            status=200,
+        )
+
+        rows = client.get_closed_positions("0xabc123", limit=10, sort_by="REALIZEDPNL")
+        assert rows[0]["realizedPnl"] == 12.5
+        url = responses.calls[0].request.url
+        assert "user=0xabc123" in url
+        assert "limit=10" in url
+        assert "sortBy=REALIZEDPNL" in url
+
     @responses.activate
     def test_get_positions_empty_response(self, client):
         """Test positions with empty response"""

@@ -82,4 +82,6 @@ polyterm leaderboard --source data-api --format json
 polyterm leaderboard --source local --format json
 ```
 
+Data API mode uses the current `/v1/leaderboard` endpoint. PolyTerm maps `24h`, `7d`, `30d`, and `all` to `DAY`, `WEEK`, `MONTH`, and `ALL`, and maps `profit`/`volume` to Polymarket's `PNL`/`VOL` ordering. The public leaderboard endpoint does not natively sort by win rate; agent-native trader ranking uses the `trader.leaderboard` adapter tool, which combines recent public trade activity with closed-position win-rate evidence and labels that provenance in `quality_flags`.
+
 Use `--source local` to rank wallets already tracked in local SQLite. If the Data API leaderboard surface changes, JSON mode reports a normal error instead of silently generating fake trader rows.

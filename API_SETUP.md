@@ -23,11 +23,11 @@ PolyTerm uses verified PolyMarket API endpoints that return live, current data w
 - **Status**: ✅ Working (fallback when Gamma fails)
 - **Note**: No volume data in response
 
-### Data API - wallet positions & activity
-**Source for wallet data (replaces deprecated Subgraph)**
+### Data API - wallet positions, trades, activity, and leaderboards
+**Source for wallet/trader data (replaces deprecated Subgraph)**
 
 - **URL**: `https://data-api.polymarket.com`
-- **Returns**: Wallet positions, activity, trade history, P&L
+- **Returns**: Wallet positions, closed positions, activity, trade history, trader leaderboard rows, P&L
 - **Status**: Working
 - **Note**: Same retry pattern as CLOB client (429/500/timeout backoff)
 
@@ -36,8 +36,8 @@ PolyTerm uses verified PolyMarket API endpoints that return live, current data w
 
 - **URL**: `https://api.thegraph.com/subgraphs/name/polymarket/matic-markets`
 - **Status**: ❌ Removed by The Graph (returns schema fetch error)
-- **Impact**: Portfolio tracking and individual trade history unavailable
-- **Workaround**: PolyTerm uses Gamma API for whale detection via volume analysis
+- **Impact**: Legacy Subgraph-based portfolio tracking is unavailable
+- **Workaround**: PolyTerm uses Data API `/positions`, `/closed-positions`, `/activity`, `/trades`, `/value`, and `/v1/leaderboard` for wallet/trader workflows
 
 ## Data Validation
 
@@ -57,7 +57,7 @@ PolyTerm includes automatic data validation:
 ### Fallback System
 - ✅ Primary: Gamma /events (has volume)
 - ✅ Fallback: CLOB /sampling-markets (current markets)
-- ✅ Enrichment: Subgraph (on-chain data)
+- ✅ Wallet/trader enrichment: Data API positions, trades, closed positions, values, and leaderboard rows
 
 ## Configuration
 
@@ -70,6 +70,7 @@ gamma_base_url = "https://gamma-api.polymarket.com"
 gamma_markets_endpoint = "/events"
 clob_rest_endpoint = "https://clob.polymarket.com"
 clob_endpoint = "wss://ws-live-data.polymarket.com"
+# Deprecated legacy value; wallet/trader workflows use Data API instead.
 subgraph_endpoint = "https://api.thegraph.com/subgraphs/name/polymarket/matic-markets"
 
 [data_validation]
@@ -248,4 +249,3 @@ polyterm config --set api.gamma_api_key "your-api-key-here"
 ## Last Updated
 
 This guide was verified on **March 14, 2026** with confirmed working endpoints returning live data.
-

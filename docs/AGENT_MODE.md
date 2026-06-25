@@ -32,12 +32,12 @@ Agent tools return this envelope:
 
 ```json
 {
-  "schema_version": "2026-06-02",
+  "schema_version": "2026-06-25",
   "success": true,
   "data": {},
   "error": null,
   "meta": {
-    "generated_at": "2026-06-02T00:00:00Z"
+    "generated_at": "2026-06-25T00:00:00Z"
   }
 }
 ```
@@ -62,13 +62,34 @@ The manifest includes:
 - `requires_confirmation`
 - `may_prompt`
 - `long_running`
+- `adapter_available`
+- `live_data`
+- `examples`
+
+The manifest also includes `cli_commands`, a complete 88-command CLI catalog for agents that need the broader PolyTerm suite beyond stable adapter tools.
+
+The manifest's `adapters` block declares the standard MCP command, the JSON-lines fallback command, required optional extras, transports, and adapter tool counts.
 
 Agents should reject or require explicit approval for tools where `mutates_local_state` is `true`. Long-running tools should be run with finite schedules or cancellation support.
 
 ## Hermes Agent Workflow
 
 ```bash
+pip install -e ".[mcp]"
 polyterm agent manifest --format json
+polyterm agent catalog --format json
+polyterm agent mcp-server
+```
+
+The standard MCP server exposes the same 25 tool names as the manifest, including `market.top`, `wallet.whale_trades`, `trader.leaderboard`, and `market.movers`. It uses the optional MCP SDK, so fresh environments should install the `mcp` extra before launching it.
+
+JSON-lines fallback:
+
+```bash
+printf '{"tool":"market.top","args":{"limit":3}}\n' | polyterm agent jsonl-server
+printf '{"tool":"wallet.whale_trades","args":{"limit":5,"hours":24}}\n' | polyterm agent jsonl-server
+printf '{"tool":"trader.leaderboard","args":{"limit":3,"hours":72,"min_win_rate":0.8}}\n' | polyterm agent jsonl-server
+printf '{"tool":"market.movers","args":{"limit":3,"hours":48}}\n' | polyterm agent jsonl-server
 polyterm thesis -m "bitcoin" --format json
 polyterm wallets --analyze 0xabc... --refresh --format json
 polyterm arbitrage --venues polymarket,kalshi --query bitcoin --format json
@@ -85,7 +106,7 @@ mcp_servers:
     connect_timeout: 60
 ```
 
-After restarting the client, tools are exposed through MCP as `agent.manifest`, `agent.schemas`, `agent.doctor`, `market.search`, `market.resolve`, `market.orderbook`, `market.price_history`, `market.research`, `market.explain_move`, `market.compare`, `scan.opportunities`, `archive.search`, `archive.status`, `archive.manifest`, `analytics.arbitrage`, `analytics.risk`, `analytics.thesis`, `wallet.inspect`, `wallet.whales`, `wallet.smart_money`, `alerts.create_price_rule`, and `watch.scheduled_scan`.
+After restarting the client, tools are exposed through MCP as `agent.manifest`, `agent.schemas`, `agent.doctor`, `market.search`, `market.resolve`, `market.top`, `market.orderbook`, `market.price_history`, `market.movers`, `market.research`, `market.explain_move`, `market.compare`, `scan.opportunities`, `archive.search`, `archive.status`, `archive.manifest`, `analytics.arbitrage`, `analytics.risk`, `analytics.thesis`, `wallet.inspect`, `wallet.whales`, `wallet.whale_trades`, `wallet.smart_money`, `trader.leaderboard`, `alerts.create_price_rule`, and `watch.scheduled_scan`.
 
 ```bash
 polyterm agent mcp-server

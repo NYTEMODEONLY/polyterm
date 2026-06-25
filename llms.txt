@@ -9,15 +9,21 @@ PolyTerm is a no-custody Polymarket intelligence terminal for traders, researche
 - Agent config examples: `docs/AGENT_CONFIG_EXAMPLES.md`
 - Agent cookbook: `docs/AGENT_COOKBOOK.md`
 - Tool manifest: `polyterm agent manifest --format json`
+- Full CLI catalog: `polyterm agent catalog --format json`
 - Schemas: `polyterm agent schemas --format json`
 - Doctor: `polyterm agent doctor --skip-network --format json`
-- MCP-ready stdio adapter: `polyterm agent mcp-server`
+- FastMCP stdio server: `polyterm agent mcp-server`
+- Legacy JSON-lines adapter: `polyterm agent jsonl-server`
 - Static manifest: `docs/tool-manifest.json`
 - Static schemas: `docs/schemas/`
 
 ## Safe Read-Only Commands
 
 - `polyterm search --format json`
+- `printf '{"tool":"market.top","args":{"limit":3}}\n' | polyterm agent jsonl-server`
+- `printf '{"tool":"wallet.whale_trades","args":{"limit":5,"hours":24}}\n' | polyterm agent jsonl-server`
+- `printf '{"tool":"trader.leaderboard","args":{"limit":3,"hours":72,"min_win_rate":0.8}}\n' | polyterm agent jsonl-server`
+- `printf '{"tool":"market.movers","args":{"limit":3,"hours":48}}\n' | polyterm agent jsonl-server`
 - `polyterm lookup --format json`
 - `polyterm orderbook --format json`
 - `polyterm chart --format json`

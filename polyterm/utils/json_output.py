@@ -7,7 +7,7 @@ from datetime import datetime
 from dataclasses import asdict, is_dataclass
 
 
-AGENT_SCHEMA_VERSION = "2026-06-02"
+AGENT_SCHEMA_VERSION = "2026-06-25"
 
 
 def safe_float(value, default=0.0):

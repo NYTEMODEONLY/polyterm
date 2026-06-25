@@ -1,28 +1,1286 @@
 {
   "name": "polyterm",
-  "schema_version": "2026-06-02",
-  "description": "No-custody Polymarket intelligence, wallet, research, and alert tools.",
+  "schema_version": "2026-06-25",
+  "description": "No-custody Polymarket intelligence, wallet, research, alert, and CLI tools.",
+  "adapters": {
+    "mcp": {
+      "command": "polyterm agent mcp-server",
+      "transport": "stdio",
+      "optional_extra": "mcp",
+      "install": "pip install -e \".[mcp]\"",
+      "tool_count": 25
+    },
+    "json_lines": {
+      "command": "polyterm agent jsonl-server",
+      "transport": "stdio-json-lines",
+      "optional_extra": null,
+      "tool_count": 25
+    }
+  },
   "tools": [
-    {"name": "agent.schemas", "schema": "docs/schemas/agent.schemas.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
-    {"name": "agent.doctor", "schema": "docs/schemas/agent.doctor.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
-    {"name": "market.search", "schema": "docs/schemas/market.search.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
-    {"name": "market.resolve", "schema": "docs/schemas/market.resolve.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
-    {"name": "market.orderbook", "schema": "docs/schemas/market.orderbook.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
-    {"name": "market.price_history", "schema": "docs/schemas/market.price_history.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
-    {"name": "market.research", "schema": "docs/schemas/market.research.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
-    {"name": "market.explain_move", "schema": "docs/schemas/market.explain_move.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
-    {"name": "market.compare", "schema": "docs/schemas/market.compare.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
-    {"name": "scan.opportunities", "schema": "docs/schemas/scan.opportunities.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
-    {"name": "analytics.arbitrage", "schema": "docs/schemas/analytics.arbitrage.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
-    {"name": "analytics.risk", "schema": "docs/schemas/analytics.risk.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
-    {"name": "archive.search", "schema": "docs/schemas/archive.search.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
-    {"name": "archive.status", "schema": "docs/schemas/archive.status.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
-    {"name": "wallet.inspect", "schema": "docs/schemas/wallet.inspect.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
-    {"name": "wallet.whales", "schema": "docs/schemas/wallet.whales.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
-    {"name": "wallet.smart_money", "schema": "docs/schemas/wallet.smart_money.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
-    {"name": "analytics.thesis", "schema": "docs/schemas/analytics.thesis.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
-    {"name": "archive.manifest", "schema": "docs/schemas/archive.manifest.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": false},
-    {"name": "alerts.create_price_rule", "schema": "docs/schemas/alerts.create_price_rule.schema.json", "read_only": false, "mutates_local_state": true, "may_prompt": false, "long_running": false},
-    {"name": "watch.scheduled_scan", "schema": "docs/schemas/watch.scheduled_scan.schema.json", "read_only": true, "mutates_local_state": false, "may_prompt": false, "long_running": true}
+    {
+      "name": "agent.schemas",
+      "description": "Return rich input/output schemas and safety metadata for one or all PolyTerm tools.",
+      "command": "polyterm agent schemas --format json",
+      "args": {
+        "tool": "string"
+      },
+      "schema": "docs/schemas/agent.schemas.schema.json",
+      "read_only": true,
+      "mutates_local_state": false,
+      "requires_confirmation": false,
+      "may_prompt": false,
+      "long_running": false,
+      "adapter_available": true,
+      "live_data": true,
+      "examples": []
+    },
+    {
+      "name": "agent.doctor",
+      "description": "Diagnose PolyTerm agent installation, schemas, manifests, MCP boot, APIs, and archive health.",
+      "command": "polyterm agent doctor --format json",
+      "args": {
+        "skip_network": "boolean"
+      },
+      "schema": "docs/schemas/agent.doctor.schema.json",
+      "read_only": true,
+      "mutates_local_state": false,
+      "requires_confirmation": false,
+      "may_prompt": false,
+      "long_running": false,
+      "adapter_available": true,
+      "live_data": true,
+      "examples": []
+    },
+    {
+      "name": "market.search",
+      "description": "Search active Polymarket markets by query.",
+      "command": "polyterm search {query} --format json",
+      "args": {
+        "query": "string",
+        "limit": "integer"
+      },
+      "schema": "docs/schemas/market.search.schema.json",
+      "read_only": true,
+      "mutates_local_state": false,
+      "requires_confirmation": false,
+      "may_prompt": false,
+      "long_running": false,
+      "adapter_available": true,
+      "live_data": true,
+      "examples": []
+    },
+    {
+      "name": "market.resolve",
+      "description": "Resolve a slug, URL, Gamma ID, condition ID, or token ID into market identifiers.",
+      "command": "polyterm lookup {identifier} --format json",
+      "args": {
+        "identifier": "string"
+      },
+      "schema": "docs/schemas/market.resolve.schema.json",
+      "read_only": true,
+      "mutates_local_state": false,
+      "requires_confirmation": false,
+      "may_prompt": false,
+      "long_running": false,
+      "adapter_available": true,
+      "live_data": true,
+      "examples": []
+    },
+    {
+      "name": "market.top",
+      "description": "Return the top active Polymarket markets from live Gamma market data.",
+      "command": "polyterm agent jsonl-server tool=market.top",
+      "args": {
+        "limit": "integer",
+        "sort": "string"
+      },
+      "schema": "docs/schemas/market.top.schema.json",
+      "read_only": true,
+      "mutates_local_state": false,
+      "requires_confirmation": false,
+      "may_prompt": false,
+      "long_running": false,
+      "adapter_available": true,
+      "live_data": true,
+      "examples": [
+        "What are the top 3 Polymarket markets today?",
+        "Show the most active markets right now."
+      ]
+    },
+    {
+      "name": "market.orderbook",
+      "description": "Return order book and spread analysis for a CLOB token ID.",
+      "command": "polyterm orderbook {token_id} --format json",
+      "args": {
+        "token_id": "string",
+        "depth": "integer"
+      },
+      "schema": "docs/schemas/market.orderbook.schema.json",
+      "read_only": true,
+      "mutates_local_state": false,
+      "requires_confirmation": false,
+      "may_prompt": false,
+      "long_running": false,
+      "adapter_available": true,
+      "live_data": true,
+      "examples": []
+    },
+    {
+      "name": "market.price_history",
+      "description": "Return CLOB-backed price history for a market.",
+      "command": "polyterm chart --market {market} --format json",
+      "args": {
+        "market": "string",
+        "hours": "integer"
+      },
+      "schema": "docs/schemas/market.price_history.schema.json",
+      "read_only": true,
+      "mutates_local_state": false,
+      "requires_confirmation": false,
+      "may_prompt": false,
+      "long_running": false,
+      "adapter_available": true,
+      "live_data": true,
+      "examples": []
+    },
+    {
+      "name": "market.movers",
+      "description": "Return active markets that flipped or had large available price changes.",
+      "command": "polyterm agent jsonl-server tool=market.movers",
+      "args": {
+        "limit": "integer",
+        "hours": "integer",
+        "min_abs_change": "number"
+      },
+      "schema": "docs/schemas/market.movers.schema.json",
+      "read_only": true,
+      "mutates_local_state": false,
+      "requires_confirmation": false,
+      "may_prompt": false,
+      "long_running": false,
+      "adapter_available": true,
+      "live_data": true,
+      "examples": [
+        "What markets have flipped or spiked in the last 48 hours?",
+        "Show the biggest Polymarket movers."
+      ]
+    },
+    {
+      "name": "market.research",
+      "description": "Generate a flagship one-call market research brief with thesis, evidence, gaps, and workflow.",
+      "command": "polyterm research --market {market} --format json",
+      "args": {
+        "market": "string",
+        "prefetch_whales": "boolean",
+        "min_notional": "number",
+        "hours": "integer",
+        "limit": "integer",
+        "persist": "boolean"
+      },
+      "schema": "docs/schemas/market.research.schema.json",
+      "read_only": true,
+      "mutates_local_state": false,
+      "requires_confirmation": false,
+      "may_prompt": false,
+      "long_running": false,
+      "adapter_available": true,
+      "live_data": true,
+      "examples": []
+    },
+    {
+      "name": "market.explain_move",
+      "description": "Explain a recent YES price move with CLOB price history, order book context, and quality flags.",
+      "command": "polyterm explain-move --market {market} --format json",
+      "args": {
+        "market": "string",
+        "hours": "integer"
+      },
+      "schema": "docs/schemas/market.explain_move.schema.json",
+      "read_only": true,
+      "mutates_local_state": false,
+      "requires_confirmation": false,
+      "may_prompt": false,
+      "long_running": false,
+      "adapter_available": true,
+      "live_data": true,
+      "examples": []
+    },
+    {
+      "name": "market.compare",
+      "description": "Compare markets side by side with YES price gaps, recent moves, liquidity, and evidence quality flags.",
+      "command": "polyterm compare --markets <market> --markets <market> --format json",
+      "args": {
+        "markets": "array",
+        "hours": "integer"
+      },
+      "schema": "docs/schemas/market.compare.schema.json",
+      "read_only": true,
+      "mutates_local_state": false,
+      "requires_confirmation": false,
+      "may_prompt": false,
+      "long_running": false,
+      "adapter_available": true,
+      "live_data": true,
+      "examples": []
+    },
+    {
+      "name": "scan.opportunities",
+      "description": "Scan active markets for unusual moves, stale archive coverage, and research-worthy opportunities.",
+      "command": "polyterm scan-opportunities --query <query> --format json",
+      "args": {
+        "query": "string",
+        "limit": "integer",
+        "min_volume": "number",
+        "min_liquidity": "number",
+        "max_archive_age_hours": "integer"
+      },
+      "schema": "docs/schemas/scan.opportunities.schema.json",
+      "read_only": true,
+      "mutates_local_state": false,
+      "requires_confirmation": false,
+      "may_prompt": false,
+      "long_running": false,
+      "adapter_available": true,
+      "live_data": true,
+      "examples": []
+    },
+    {
+      "name": "analytics.arbitrage",
+      "description": "Scan Polymarket and optional venues for arbitrage opportunities.",
+      "command": "polyterm arbitrage --format json",
+      "args": {
+        "min_spread": "number",
+        "venues": "string"
+      },
+      "schema": "docs/schemas/analytics.arbitrage.schema.json",
+      "read_only": true,
+      "mutates_local_state": false,
+      "requires_confirmation": false,
+      "may_prompt": false,
+      "long_running": false,
+      "adapter_available": true,
+      "live_data": true,
+      "examples": []
+    },
+    {
+      "name": "analytics.risk",
+      "description": "Assess market risk factors and return a scored explanation.",
+      "command": "polyterm risk --market {market} --format json",
+      "args": {
+        "market": "string"
+      },
+      "schema": "docs/schemas/analytics.risk.schema.json",
+      "read_only": true,
+      "mutates_local_state": false,
+      "requires_confirmation": false,
+      "may_prompt": false,
+      "long_running": false,
+      "adapter_available": true,
+      "live_data": true,
+      "examples": []
+    },
+    {
+      "name": "archive.search",
+      "description": "Search locally archived PolyTerm research briefs.",
+      "command": "polyterm archive search --query {query} --format json",
+      "args": {
+        "query": "string",
+        "limit": "integer"
+      },
+      "schema": "docs/schemas/archive.search.schema.json",
+      "read_only": true,
+      "mutates_local_state": false,
+      "requires_confirmation": false,
+      "may_prompt": false,
+      "long_running": false,
+      "adapter_available": true,
+      "live_data": true,
+      "examples": []
+    },
+    {
+      "name": "archive.status",
+      "description": "Report local archive coverage, freshness, and recommended refresh actions.",
+      "command": "polyterm archive status --query {query} --format json",
+      "args": {
+        "query": "string",
+        "market_id": "string",
+        "max_age_hours": "integer"
+      },
+      "schema": "docs/schemas/archive.status.schema.json",
+      "read_only": true,
+      "mutates_local_state": false,
+      "requires_confirmation": false,
+      "may_prompt": false,
+      "long_running": false,
+      "adapter_available": true,
+      "live_data": true,
+      "examples": []
+    },
+    {
+      "name": "wallet.inspect",
+      "description": "Inspect a wallet using public Data API and local PolyTerm evidence.",
+      "command": "polyterm wallets --analyze {address} --refresh --format json",
+      "args": {
+        "address": "string"
+      },
+      "schema": "docs/schemas/wallet.inspect.schema.json",
+      "read_only": true,
+      "mutates_local_state": false,
+      "requires_confirmation": false,
+      "may_prompt": false,
+      "long_running": false,
+      "adapter_available": true,
+      "live_data": true,
+      "examples": []
+    },
+    {
+      "name": "wallet.whales",
+      "description": "Return wallet-level whale activity and smart-money candidates.",
+      "command": "polyterm whales --wallets --format json",
+      "args": {
+        "min_notional": "number",
+        "hours": "integer",
+        "limit": "integer"
+      },
+      "schema": "docs/schemas/wallet.whales.schema.json",
+      "read_only": true,
+      "mutates_local_state": false,
+      "requires_confirmation": false,
+      "may_prompt": false,
+      "long_running": false,
+      "adapter_available": true,
+      "live_data": true,
+      "examples": []
+    },
+    {
+      "name": "wallet.whale_trades",
+      "description": "Return top public trade rows by notional value for a recent time window.",
+      "command": "polyterm agent jsonl-server tool=wallet.whale_trades",
+      "args": {
+        "limit": "integer",
+        "hours": "integer",
+        "min_notional": "number"
+      },
+      "schema": "docs/schemas/wallet.whale_trades.schema.json",
+      "read_only": true,
+      "mutates_local_state": false,
+      "requires_confirmation": false,
+      "may_prompt": false,
+      "long_running": false,
+      "adapter_available": true,
+      "live_data": true,
+      "examples": [
+        "Give me the top 5 whale trades in the last 24 hours and the markets they were placed in."
+      ]
+    },
+    {
+      "name": "wallet.smart_money",
+      "description": "Return locally identified high win-rate smart-money wallets ranked by edge score.",
+      "command": "polyterm wallets --type smart --format json",
+      "args": {
+        "min_win_rate": "number",
+        "min_trades": "integer",
+        "limit": "integer"
+      },
+      "schema": "docs/schemas/wallet.smart_money.schema.json",
+      "read_only": true,
+      "mutates_local_state": false,
+      "requires_confirmation": false,
+      "may_prompt": false,
+      "long_running": false,
+      "adapter_available": true,
+      "live_data": true,
+      "examples": []
+    },
+    {
+      "name": "trader.leaderboard",
+      "description": "Return active traders with recent volume and closed-position win-rate evidence.",
+      "command": "polyterm leaderboard --source data-api --format json",
+      "args": {
+        "limit": "integer",
+        "hours": "integer",
+        "min_win_rate": "number"
+      },
+      "schema": "docs/schemas/trader.leaderboard.schema.json",
+      "read_only": true,
+      "mutates_local_state": false,
+      "requires_confirmation": false,
+      "may_prompt": false,
+      "long_running": false,
+      "adapter_available": true,
+      "live_data": true,
+      "examples": [
+        "Give me the top 3 traders in the last 72 hours with an 80%+ win rate."
+      ]
+    },
+    {
+      "name": "analytics.thesis",
+      "description": "Generate an explainable market-level trade thesis.",
+      "command": "polyterm thesis --market {market} --format json",
+      "args": {
+        "market": "string"
+      },
+      "schema": "docs/schemas/analytics.thesis.schema.json",
+      "read_only": true,
+      "mutates_local_state": false,
+      "requires_confirmation": false,
+      "may_prompt": false,
+      "long_running": false,
+      "adapter_available": true,
+      "live_data": true,
+      "examples": []
+    },
+    {
+      "name": "archive.manifest",
+      "description": "List local research archive datasets and quality flags.",
+      "command": "polyterm export --dataset latest --format json",
+      "args": {
+        "dataset": "string"
+      },
+      "schema": "docs/schemas/archive.manifest.schema.json",
+      "read_only": true,
+      "mutates_local_state": false,
+      "requires_confirmation": false,
+      "may_prompt": false,
+      "long_running": false,
+      "adapter_available": true,
+      "live_data": true,
+      "examples": []
+    },
+    {
+      "name": "alerts.create_price_rule",
+      "description": "Create a local price alert rule.",
+      "command": "polyterm alerts --add-rule price --market {market} --above {above} --below {below} --format json",
+      "args": {
+        "market": "string",
+        "above": "number",
+        "below": "number",
+        "dry_run": "boolean",
+        "confirm": "boolean"
+      },
+      "schema": "docs/schemas/alerts.create_price_rule.schema.json",
+      "read_only": false,
+      "mutates_local_state": true,
+      "requires_confirmation": true,
+      "may_prompt": false,
+      "long_running": false,
+      "adapter_available": true,
+      "live_data": false,
+      "examples": []
+    },
+    {
+      "name": "watch.scheduled_scan",
+      "description": "Run a long-running scheduled scan with optional notifications.",
+      "command": "polyterm watch --market {market} --schedule {schedule} --runs {runs} --format json",
+      "args": {
+        "market": "string",
+        "schedule": "string",
+        "runs": "integer"
+      },
+      "schema": "docs/schemas/watch.scheduled_scan.schema.json",
+      "read_only": true,
+      "mutates_local_state": false,
+      "requires_confirmation": false,
+      "may_prompt": false,
+      "long_running": true,
+      "adapter_available": true,
+      "live_data": true,
+      "examples": []
+    }
+  ],
+  "cli_commands": [
+    {
+      "name": "agent",
+      "module": "agent",
+      "attribute": "agent",
+      "command": "polyterm agent --help",
+      "doc": "docs/cli/agent.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "alerts",
+      "module": "alerts",
+      "attribute": "alerts",
+      "command": "polyterm alerts --help",
+      "doc": "docs/cli/alerts.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "analyze",
+      "module": "analytics",
+      "attribute": "analyze",
+      "command": "polyterm analyze --help",
+      "doc": "docs/cli/analyze.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "arbitrage",
+      "module": "arbitrage",
+      "attribute": "arbitrage",
+      "command": "polyterm arbitrage --help",
+      "doc": "docs/cli/arbitrage.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "archive",
+      "module": "archive",
+      "attribute": "archive",
+      "command": "polyterm archive --help",
+      "doc": "docs/cli/archive.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "attribution",
+      "module": "attribution",
+      "attribute": "attribution",
+      "command": "polyterm attribution --help",
+      "doc": "docs/cli/attribution.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "backtest",
+      "module": "backtest",
+      "attribute": "backtest",
+      "command": "polyterm backtest --help",
+      "doc": "docs/cli/backtest.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "benchmark",
+      "module": "benchmark",
+      "attribute": "benchmark",
+      "command": "polyterm benchmark --help",
+      "doc": "docs/cli/benchmark.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "bookmarks",
+      "module": "bookmarks",
+      "attribute": "bookmarks",
+      "command": "polyterm bookmarks --help",
+      "doc": "docs/cli/bookmarks.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "calendar",
+      "module": "calendar",
+      "attribute": "calendar",
+      "command": "polyterm calendar --help",
+      "doc": "docs/cli/calendar.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "calibrate",
+      "module": "calibrate",
+      "attribute": "calibrate",
+      "command": "polyterm calibrate --help",
+      "doc": "docs/cli/calibrate.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "center",
+      "module": "alertcenter",
+      "attribute": "center",
+      "command": "polyterm center --help",
+      "doc": "docs/cli/center.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "chart",
+      "module": "chart",
+      "attribute": "chart",
+      "command": "polyterm chart --help",
+      "doc": "docs/cli/chart.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "clusters",
+      "module": "clusters",
+      "attribute": "clusters",
+      "command": "polyterm clusters --help",
+      "doc": "docs/cli/clusters.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "collect",
+      "module": "collect",
+      "attribute": "collect",
+      "command": "polyterm collect --help",
+      "doc": "docs/cli/collect.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "compare",
+      "module": "compare",
+      "attribute": "compare",
+      "command": "polyterm compare --help",
+      "doc": "docs/cli/compare.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "config",
+      "module": "config_cmd",
+      "attribute": "config",
+      "command": "polyterm config --help",
+      "doc": "docs/cli/config.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "correlate",
+      "module": "correlate",
+      "attribute": "correlate",
+      "command": "polyterm correlate --help",
+      "doc": "docs/cli/correlate.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "crypto15m",
+      "module": "crypto15m",
+      "attribute": "crypto15m",
+      "command": "polyterm crypto15m --help",
+      "doc": "docs/cli/crypto15m.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "dashboard",
+      "module": "dashboard",
+      "attribute": "dashboard",
+      "command": "polyterm dashboard --help",
+      "doc": "docs/cli/dashboard.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "depth",
+      "module": "depth",
+      "attribute": "depth",
+      "command": "polyterm depth --help",
+      "doc": "docs/cli/depth.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "digest",
+      "module": "digest",
+      "attribute": "digest",
+      "command": "polyterm digest --help",
+      "doc": "docs/cli/digest.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "ev",
+      "module": "ev",
+      "attribute": "ev",
+      "command": "polyterm ev --help",
+      "doc": "docs/cli/ev.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "exit",
+      "module": "exit",
+      "attribute": "exit",
+      "command": "polyterm exit --help",
+      "doc": "docs/cli/exit.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "explain-move",
+      "module": "explain_move",
+      "attribute": "explain_move",
+      "command": "polyterm explain-move --help",
+      "doc": "docs/cli/explain-move.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "export",
+      "module": "export_cmd",
+      "attribute": "export",
+      "command": "polyterm export --help",
+      "doc": "docs/cli/export.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "fees",
+      "module": "fees",
+      "attribute": "fees",
+      "command": "polyterm fees --help",
+      "doc": "docs/cli/fees.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "follow",
+      "module": "follow",
+      "attribute": "follow",
+      "command": "polyterm follow --help",
+      "doc": "docs/cli/follow.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "glossary",
+      "module": "glossary",
+      "attribute": "glossary",
+      "command": "polyterm glossary --help",
+      "doc": "docs/cli/glossary.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "groups",
+      "module": "groups",
+      "attribute": "groups",
+      "command": "polyterm groups --help",
+      "doc": "docs/cli/groups.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "health",
+      "module": "health",
+      "attribute": "health",
+      "command": "polyterm health --help",
+      "doc": "docs/cli/health.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "history",
+      "module": "history",
+      "attribute": "history",
+      "command": "polyterm history --help",
+      "doc": "docs/cli/history.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "hot",
+      "module": "hot",
+      "attribute": "hot",
+      "command": "polyterm hot --help",
+      "doc": "docs/cli/hot.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "journal",
+      "module": "journal",
+      "attribute": "journal",
+      "command": "polyterm journal --help",
+      "doc": "docs/cli/journal.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "ladder",
+      "module": "ladder",
+      "attribute": "ladder",
+      "command": "polyterm ladder --help",
+      "doc": "docs/cli/ladder.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "leaderboard",
+      "module": "leaderboard",
+      "attribute": "leaderboard",
+      "command": "polyterm leaderboard --help",
+      "doc": "docs/cli/leaderboard.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "liquidity",
+      "module": "liquidity",
+      "attribute": "liquidity",
+      "command": "polyterm liquidity --help",
+      "doc": "docs/cli/liquidity.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "live-monitor",
+      "module": "live_monitor",
+      "attribute": "live_monitor",
+      "command": "polyterm live-monitor --help",
+      "doc": "docs/cli/live-monitor.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "lookup",
+      "module": "lookup",
+      "attribute": "lookup",
+      "command": "polyterm lookup --help",
+      "doc": "docs/cli/lookup.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "monitor",
+      "module": "monitor",
+      "attribute": "monitor",
+      "command": "polyterm monitor --help",
+      "doc": "docs/cli/monitor.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "mywallet",
+      "module": "mywallet",
+      "attribute": "mywallet",
+      "command": "polyterm mywallet --help",
+      "doc": "docs/cli/mywallet.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "negrisk",
+      "module": "negrisk",
+      "attribute": "negrisk",
+      "command": "polyterm negrisk --help",
+      "doc": "docs/cli/negrisk.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "news",
+      "module": "news",
+      "attribute": "news",
+      "command": "polyterm news --help",
+      "doc": "docs/cli/news.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "notes",
+      "module": "notes",
+      "attribute": "notes",
+      "command": "polyterm notes --help",
+      "doc": "docs/cli/notes.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "notify",
+      "module": "notify",
+      "attribute": "notify",
+      "command": "polyterm notify --help",
+      "doc": "docs/cli/notify.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "odds",
+      "module": "odds",
+      "attribute": "odds",
+      "command": "polyterm odds --help",
+      "doc": "docs/cli/odds.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "orderbook",
+      "module": "orderbook",
+      "attribute": "orderbook",
+      "command": "polyterm orderbook --help",
+      "doc": "docs/cli/orderbook.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "parlay",
+      "module": "parlay",
+      "attribute": "parlay",
+      "command": "polyterm parlay --help",
+      "doc": "docs/cli/parlay.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "pin",
+      "module": "pin",
+      "attribute": "pin",
+      "command": "polyterm pin --help",
+      "doc": "docs/cli/pin.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "pnl",
+      "module": "pnl",
+      "attribute": "pnl",
+      "command": "polyterm pnl --help",
+      "doc": "docs/cli/pnl.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "portfolio",
+      "module": "portfolio",
+      "attribute": "portfolio",
+      "command": "polyterm portfolio --help",
+      "doc": "docs/cli/portfolio.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "position",
+      "module": "position",
+      "attribute": "position",
+      "command": "polyterm position --help",
+      "doc": "docs/cli/position.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "predict",
+      "module": "predict",
+      "attribute": "predict",
+      "command": "polyterm predict --help",
+      "doc": "docs/cli/predict.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "presets",
+      "module": "presets",
+      "attribute": "presets",
+      "command": "polyterm presets --help",
+      "doc": "docs/cli/presets.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "pricealert",
+      "module": "pricealert",
+      "attribute": "pricealert",
+      "command": "polyterm pricealert --help",
+      "doc": "docs/cli/pricealert.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "quick",
+      "module": "quick",
+      "attribute": "quick",
+      "command": "polyterm quick --help",
+      "doc": "docs/cli/quick.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "quicktrade",
+      "module": "quicktrade",
+      "attribute": "quicktrade",
+      "command": "polyterm quicktrade --help",
+      "doc": "docs/cli/quicktrade.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "recent",
+      "module": "recent",
+      "attribute": "recent",
+      "command": "polyterm recent --help",
+      "doc": "docs/cli/recent.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "replay",
+      "module": "replay",
+      "attribute": "replay",
+      "command": "polyterm replay --help",
+      "doc": "docs/cli/replay.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "report",
+      "module": "report",
+      "attribute": "report",
+      "command": "polyterm report --help",
+      "doc": "docs/cli/report.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "research",
+      "module": "research",
+      "attribute": "research",
+      "command": "polyterm research --help",
+      "doc": "docs/cli/research.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "rewards",
+      "module": "rewards",
+      "attribute": "rewards",
+      "command": "polyterm rewards --help",
+      "doc": "docs/cli/rewards.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "risk",
+      "module": "risk",
+      "attribute": "risk",
+      "command": "polyterm risk --help",
+      "doc": "docs/cli/risk.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "scan-opportunities",
+      "module": "scan_opportunities",
+      "attribute": "scan_opportunities",
+      "command": "polyterm scan-opportunities --help",
+      "doc": "docs/cli/scan-opportunities.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "scenario",
+      "module": "scenario",
+      "attribute": "scenario",
+      "command": "polyterm scenario --help",
+      "doc": "docs/cli/scenario.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "screener",
+      "module": "screener",
+      "attribute": "screener",
+      "command": "polyterm screener --help",
+      "doc": "docs/cli/screener.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "search",
+      "module": "search",
+      "attribute": "search",
+      "command": "polyterm search --help",
+      "doc": "docs/cli/search.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "sentiment",
+      "module": "sentiment",
+      "attribute": "sentiment",
+      "command": "polyterm sentiment --help",
+      "doc": "docs/cli/sentiment.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "signals",
+      "module": "signals",
+      "attribute": "signals",
+      "command": "polyterm signals --help",
+      "doc": "docs/cli/signals.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "similar",
+      "module": "similar",
+      "attribute": "similar",
+      "command": "polyterm similar --help",
+      "doc": "docs/cli/similar.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "simulate",
+      "module": "simulate",
+      "attribute": "simulate",
+      "command": "polyterm simulate --help",
+      "doc": "docs/cli/simulate.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "size",
+      "module": "size",
+      "attribute": "size",
+      "command": "polyterm size --help",
+      "doc": "docs/cli/size.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "snapshot",
+      "module": "snapshot",
+      "attribute": "snapshot",
+      "command": "polyterm snapshot --help",
+      "doc": "docs/cli/snapshot.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "spread",
+      "module": "spread",
+      "attribute": "spread",
+      "command": "polyterm spread --help",
+      "doc": "docs/cli/spread.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "stats",
+      "module": "stats",
+      "attribute": "stats",
+      "command": "polyterm stats --help",
+      "doc": "docs/cli/stats.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "streak",
+      "module": "streak",
+      "attribute": "streak",
+      "command": "polyterm streak --help",
+      "doc": "docs/cli/streak.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "summary",
+      "module": "summary",
+      "attribute": "summary",
+      "command": "polyterm summary --help",
+      "doc": "docs/cli/summary.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "thesis",
+      "module": "thesis",
+      "attribute": "thesis",
+      "command": "polyterm thesis --help",
+      "doc": "docs/cli/thesis.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "timeline",
+      "module": "timeline",
+      "attribute": "timeline",
+      "command": "polyterm timeline --help",
+      "doc": "docs/cli/timeline.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "timing",
+      "module": "timing",
+      "attribute": "timing",
+      "command": "polyterm timing --help",
+      "doc": "docs/cli/timing.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "trade",
+      "module": "trade",
+      "attribute": "trade",
+      "command": "polyterm trade --help",
+      "doc": "docs/cli/trade.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "tutorial",
+      "module": "tutorial",
+      "attribute": "tutorial",
+      "command": "polyterm tutorial --help",
+      "doc": "docs/cli/tutorial.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "update",
+      "module": "polyterm.cli.main",
+      "attribute": "update",
+      "command": "polyterm update --help",
+      "doc": "docs/cli/update.md",
+      "adapter_available": false,
+      "notes": "Checks package updates and may prompt before installing."
+    },
+    {
+      "name": "volume",
+      "module": "volume",
+      "attribute": "volume",
+      "command": "polyterm volume --help",
+      "doc": "docs/cli/volume.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "wallets",
+      "module": "wallets",
+      "attribute": "wallets",
+      "command": "polyterm wallets --help",
+      "doc": "docs/cli/wallets.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "watch",
+      "module": "watch",
+      "attribute": "watch",
+      "command": "polyterm watch --help",
+      "doc": "docs/cli/watch.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "watchdog",
+      "module": "watchdog",
+      "attribute": "watchdog",
+      "command": "polyterm watchdog --help",
+      "doc": "docs/cli/watchdog.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    },
+    {
+      "name": "whales",
+      "module": "whales",
+      "attribute": "whales",
+      "command": "polyterm whales --help",
+      "doc": "docs/cli/whales.md",
+      "adapter_available": false,
+      "notes": "Use the CLI help and command docs for exact options. Prefer manifest tools for stable adapter calls."
+    }
   ]
 }

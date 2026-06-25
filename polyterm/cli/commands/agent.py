@@ -10,7 +10,7 @@ from ...agent.contracts import envelope
 from ...agent.doctor import AgentDoctor
 from ...agent.mcp.fastmcp_server import main as run_fastmcp_server
 from ...agent.mcp.server import main as run_jsonl_server
-from ...agent.registry import get_manifest
+from ...agent.registry import get_cli_command_catalog, get_manifest
 from ...agent.schemas import all_schemas, schema_for_tool
 from ...utils.json_output import print_json
 
@@ -34,6 +34,13 @@ def schemas(tool, output_format):
     """Print JSON Schemas for one tool or every tool"""
     payload = schema_for_tool(tool) if tool else all_schemas()
     print_json(envelope(payload, meta={"tool": "agent.schemas"}))
+
+
+@agent.command()
+@click.option("--format", "output_format", type=click.Choice(["json"]), default="json")
+def catalog(output_format):
+    """Print the full PolyTerm CLI command catalog for agents."""
+    print_json(envelope(get_cli_command_catalog(), meta={"tool": "agent.catalog"}))
 
 
 @agent.command()

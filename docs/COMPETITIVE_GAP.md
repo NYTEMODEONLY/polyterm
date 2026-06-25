@@ -13,7 +13,7 @@ Polymarket released their official CLI on Feb 24, 2026. It gained 1,016 GitHub s
 
 **Key numbers:**
 - Polymarket CLI: 70 subcommands, 0 analytics features, 0 visualizations, executes real trades
-- PolyTerm: 84 CLI commands, 73+ TUI screens, 20+ analytics features, ASCII charts, no trade execution
+- PolyTerm: 88 CLI commands, 73+ TUI screens, 20+ analytics features, ASCII charts, no trade execution
 
 ---
 

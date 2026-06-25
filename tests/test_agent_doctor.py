@@ -98,7 +98,7 @@ def test_agent_doctor_cli_returns_stable_json(mock_doctor_cls, tmp_path, monkeyp
 
     assert result.exit_code == 0
     payload = json.loads(result.output)
-    assert payload["schema_version"] == "2026-06-02"
+    assert payload["schema_version"] == "2026-06-25"
     assert payload["success"] is True
     assert payload["data"]["summary"]["status"] == "ok"
     assert payload["meta"]["tool"] == "agent.doctor"

@@ -144,7 +144,7 @@ The envelope shape is:
 
 ```json
 {
-  "schema_version": "2026-06-02",
+  "schema_version": "2026-06-25",
   "success": true,
   "data": {},
   "error": null,

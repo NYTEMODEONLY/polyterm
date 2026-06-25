@@ -26,7 +26,10 @@ from polyterm.cli.lazy_group import LAZY_COMMANDS
 base = [sys.executable, "-m", "polyterm"]
 failures = []
 
-for command in sorted(LAZY_COMMANDS):
+command_names = set(LAZY_COMMANDS)
+command_names.add("update")
+
+for command in sorted(command_names):
     result = subprocess.run(
         base + [command, "--help"],
         text=True,
@@ -42,7 +45,7 @@ if failures:
         print(output)
     raise SystemExit(1)
 
-print(f"[OK] {len(LAZY_COMMANDS)} registered commands expose help")
+print(f"[OK] {len(command_names)} registered commands expose help")
 PY
 
 "$PYTHON" -m polyterm --version

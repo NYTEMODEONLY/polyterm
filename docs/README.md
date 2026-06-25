@@ -17,6 +17,7 @@ polyterm --help       # See all commands
 
 | Report | Scope | Status |
 |--------|-------|--------|
+| [Agent-Native Status - June 25, 2026](AGENT_NATIVE_STATUS_2026-06-25.md) | Current Hermes/OpenClaw/Codex readiness, standard MCP and JSON-lines adapters, live tool coverage, tests, docs drift, and next work | Current |
 | [June 1, 2026 Audit](AUDIT_2026-06-01.md) | Current Polymarket API standards, command health, docs validation, and live endpoint proof | Complete |
 | [Agent Mode](AGENT_MODE.md) | Hermes/OpenClaw/Codex tool manifest, schemas, safety model, FastMCP server, and legacy JSON-lines usage | Current |
 | [Execution Roadmap](EXECUTION_ROADMAP.md) | Next five implementation tracks: agent tooling, wallet intelligence, trade thesis, research archive, and alert automation | Current |
