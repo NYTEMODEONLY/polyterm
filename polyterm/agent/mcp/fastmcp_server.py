@@ -72,6 +72,13 @@ def create_server() -> Any:
     def agent_doctor(skip_network: bool = True) -> Dict[str, Any]:
         return _call_tool("agent.doctor", skip_network=skip_network, check_mcp=False)
 
+    @mcp.tool(
+        name="agent.answer",
+        description="Answer a natural-language PolyTerm query with tool trace, confidence, and caveats.",
+    )
+    def agent_answer(query: str, hours: int = 48, limit: int = 3, min_notional: float = 10000) -> Dict[str, Any]:
+        return _call_tool("agent.answer", query=query, hours=hours, limit=limit, min_notional=min_notional)
+
     @mcp.tool(name="market.search", description="Search active Polymarket markets by query.")
     def market_search(query: str, limit: int = 10) -> Dict[str, Any]:
         return _call_tool("market.search", query=query, limit=limit)
@@ -253,10 +260,10 @@ def create_server() -> Any:
         description="Return top public trade rows by notional value for a recent time window.",
     )
     def wallet_whale_trades(
-        limit: int = 5,
-        hours: int = 24,
-        min_notional: float = 0,
-        sample_size: int = 1000,
+        limit: int = 3,
+        hours: int = 48,
+        min_notional: float = 10000,
+        sample_size: int = 3000,
     ) -> Dict[str, Any]:
         return _call_tool(
             "wallet.whale_trades",

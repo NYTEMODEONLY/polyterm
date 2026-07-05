@@ -58,6 +58,13 @@ TOOLS: List[AgentTool] = [
         schema="docs/schemas/agent.doctor.schema.json",
     ),
     AgentTool(
+        name="agent.answer",
+        description="Answer a natural-language PolyTerm query with tool trace, confidence, and caveats.",
+        command="polyterm agent jsonl-server tool=agent.answer {query}",
+        args={"query": "string", "hours": "integer", "limit": "integer", "min_notional": "number"},
+        schema="docs/schemas/agent.answer.schema.json",
+    ),
+    AgentTool(
         name="market.search",
         description="Search active Polymarket markets by query.",
         command="polyterm search {query} --format json",
@@ -214,7 +221,7 @@ TOOLS: List[AgentTool] = [
         name="wallet.whale_trades",
         description="Return top public trade rows by notional value for a recent time window.",
         command="polyterm agent jsonl-server tool=wallet.whale_trades",
-        args={"limit": "integer", "hours": "integer", "min_notional": "number"},
+        args={"limit": "integer", "hours": "integer", "min_notional": "number", "sample_size": "integer"},
         schema="docs/schemas/wallet.whale_trades.schema.json",
         examples=[
             "Give me the top 5 whale trades in the last 24 hours and the markets they were placed in.",

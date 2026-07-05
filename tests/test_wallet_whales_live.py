@@ -13,6 +13,18 @@ class FakeDataAPI:
         return self.pages.get(offset, [])
 
 
+class FailingPageDataAPI(FakeDataAPI):
+    def __init__(self, pages, failing_offsets):
+        super().__init__(pages)
+        self.failing_offsets = set(failing_offsets)
+
+    def get_recent_trades(self, limit=1000, offset=0, **kwargs):
+        if offset in self.failing_offsets:
+            self.calls.append({"limit": limit, "offset": offset, **kwargs})
+            raise RuntimeError(f"timeout at offset {offset}")
+        return super().get_recent_trades(limit=limit, offset=offset, **kwargs)
+
+
 class FakeDatabase:
     def __init__(self):
         self.trades = []
@@ -204,3 +216,73 @@ def test_smart_money_returns_ranked_local_wallets_with_thresholds():
     assert result["wallets"][0]["wallet_role"] == "smart_money_whale"
     assert result["wallets"][0]["explanation"]
     assert result["quality_flags"] == ["local_db_smart_money", "requires_recent_refresh_for_live_flow"]
+
+
+def test_whale_trades_scans_pages_and_ranks_by_notional_not_recency():
+    now = datetime(2026, 7, 5, 3, 0, 0, tzinfo=timezone.utc)
+    recent_ts = int((now - timedelta(minutes=5)).timestamp())
+    older_ts = int((now - timedelta(hours=12)).timestamp())
+    pages = {
+        0: [
+            {
+                "proxyWallet": "0xsmall",
+                "name": "latest-small",
+                "side": "BUY",
+                "size": 20_000,
+                "price": 0.50,
+                "timestamp": recent_ts,
+                "title": "Latest smaller trade",
+                "slug": "latest-small",
+                "eventSlug": "latest-small-event",
+                "outcome": "Yes",
+                "transactionHash": "0xsmall",
+            }
+        ],
+        1000: [
+            {
+                "proxyWallet": "0xbig",
+                "name": "older-big",
+                "side": "SELL",
+                "size": 2_500_000,
+                "price": 0.53,
+                "timestamp": older_ts,
+                "title": "Older bigger trade",
+                "slug": "older-big",
+                "eventSlug": "older-big-event",
+                "outcome": "No",
+                "transactionHash": "0xbig",
+            }
+        ],
+        2000: [],
+    }
+    api = FakeDataAPI(pages)
+    engine = WalletIntelligence(data_api=api, database=FakeDatabase())
+
+    result = engine.whale_trades(min_notional=10_000, hours=48, limit=2, sample_size=3000, now=now)
+
+    assert [call["offset"] for call in api.calls] == [0, 1000, 2000]
+    assert api.calls[0]["filter_type"] == "CASH"
+    assert api.calls[0]["filter_amount"] == 10_000
+    assert result["trades"][0]["wallet"] == "0xbig"
+    assert result["trades"][0]["notional"] == 1_325_000
+    assert result["trades"][1]["wallet"] == "0xsmall"
+    assert result["rows_scanned"] == 2
+    assert result["sample_size"] == 3000
+    assert "notional_desc_sorted" in result["quality_flags"]
+
+
+def test_whale_trades_reports_api_errors_and_window_limits():
+    now = datetime(2026, 7, 5, 3, 0, 0, tzinfo=timezone.utc)
+    recent_ts = int((now - timedelta(minutes=5)).timestamp())
+    api = FailingPageDataAPI(
+        {0: [{"proxyWallet": "0xaaa", "size": 20_000, "price": 0.50, "timestamp": recent_ts}]},
+        failing_offsets={1000},
+    )
+    engine = WalletIntelligence(data_api=api, database=FakeDatabase())
+
+    result = engine.whale_trades(min_notional=10_000, hours=48, limit=3, sample_size=3000, now=now)
+
+    assert result["count"] == 1
+    assert result["errors"] == [{"offset": 1000, "error": "timeout at offset 1000"}]
+    assert "data_api_page_error" in result["quality_flags"]
+    assert "data_api_recent_tape_window_limited" in result["quality_flags"]

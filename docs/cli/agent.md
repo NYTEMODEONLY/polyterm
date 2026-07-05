@@ -62,6 +62,12 @@ printf '{"tool":"market.search","args":{"query":"bitcoin","limit":3}}\n' | polyt
 
 # Confirm markets whose YES price crossed 50% in the last 72 hours
 printf '{"tool":"market.flips","args":{"hours":72,"limit":3,"min_volume":500}}\n' | polyterm agent jsonl-server
+
+# Deterministic top whale wagers with scan metadata and caveats
+printf '{"tool":"wallet.whale_trades","args":{"hours":48,"limit":3,"min_notional":10000,"sample_size":3000}}\n' | polyterm agent jsonl-server
+
+# Natural-language answer path with confidence, evidence, and tool trace
+printf '{"tool":"agent.answer","args":{"query":"3 biggest whale wagers last 48 hours","hours":48,"limit":3}}\n' | polyterm agent jsonl-server
 ```
 
 ## How It Works

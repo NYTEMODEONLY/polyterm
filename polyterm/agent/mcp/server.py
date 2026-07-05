@@ -11,13 +11,14 @@ from typing import Callable, Dict
 
 from ..contracts import envelope, error_envelope
 from ..registry import get_manifest
-from .tools import alerts, analytics, archive, flips, live, market, meta, scan, wallet, watch
+from .tools import alerts, analytics, answer, archive, flips, live, market, meta, scan, wallet, watch
 
 
 TOOL_HANDLERS: Dict[str, Callable[..., dict]] = {
     "market.search": market.search,
     "agent.schemas": meta.schemas,
     "agent.doctor": meta.doctor,
+    "agent.answer": answer.answer,
     "market.resolve": market.resolve,
     "market.top": live.top_markets,
     "market.orderbook": market.orderbook,
@@ -36,7 +37,7 @@ TOOL_HANDLERS: Dict[str, Callable[..., dict]] = {
     "archive.manifest": archive.manifest,
     "wallet.inspect": wallet.inspect,
     "wallet.whales": wallet.whales,
-    "wallet.whale_trades": live.whale_trades,
+    "wallet.whale_trades": wallet.whale_trades,
     "wallet.smart_money": wallet.smart_money,
     "trader.leaderboard": live.top_traders,
     "alerts.create_price_rule": alerts.create_price_rule,

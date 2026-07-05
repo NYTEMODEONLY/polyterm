@@ -105,6 +105,8 @@ def examples():
         "legacy_jsonl": [
             {"method": "manifest"},
             {"tool": "market.search", "args": {"query": "bitcoin", "limit": 3}},
+            {"tool": "agent.answer", "args": {"query": "3 biggest whale wagers last 48 hours", "hours": 48, "limit": 3}},
+            {"tool": "wallet.whale_trades", "args": {"hours": 48, "limit": 3, "min_notional": 10000, "sample_size": 3000}},
             {"tool": "analytics.thesis", "args": {"market": "bitcoin"}},
             {"tool": "wallet.inspect", "args": {"address": "0x..."}},
         ],

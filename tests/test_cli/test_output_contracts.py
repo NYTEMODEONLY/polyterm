@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 from click.testing import CliRunner
 
 from polyterm.cli.main import cli
+from polyterm.utils.json_output import AGENT_SCHEMA_VERSION
 
 
 @patch("polyterm.cli.commands.whales.AnalyticsEngine")
@@ -108,7 +109,7 @@ def test_compare_json_output_uses_stable_envelope_without_preamble(mock_engine_c
 
     assert result.exit_code == 0
     payload = json.loads(result.output)
-    assert payload["schema_version"] == "2026-06-02"
+    assert payload["schema_version"] == AGENT_SCHEMA_VERSION
     assert payload["success"] is True
     assert payload["data"] == {"query": ["a", "b"], "count": 2, "pairwise": []}
     assert payload["meta"]["tool"] == "market.compare"
@@ -145,7 +146,7 @@ def test_scan_opportunities_json_output_uses_stable_envelope(mock_scanner_cls, t
 
     assert result.exit_code == 0
     payload = json.loads(result.output)
-    assert payload["schema_version"] == "2026-06-02"
+    assert payload["schema_version"] == AGENT_SCHEMA_VERSION
     assert payload["success"] is True
     assert payload["data"] == {"query": "bitcoin", "opportunities": [{"market_id": "m1"}]}
     assert payload["meta"]["tool"] == "scan.opportunities"

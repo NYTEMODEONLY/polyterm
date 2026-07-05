@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "required": ["schema_version", "success", "data", "error", "meta"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "success": {"type": "boolean"},
+    "data": {
+      "type": "object",
+      "properties": {
+        "query": {"type": "string"},
+        "intent": {"type": "string"},
+        "answer": {"type": "string"},
+        "confidence": {"type": "string"},
+        "evidence": {"type": "array"},
+        "validation": {"type": "object"},
+        "tool_trace": {"type": "array", "items": {"type": "string"}},
+        "quality_flags": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "error": {"type": ["string", "null"]},
+    "meta": {"type": "object"}
+  }
+}

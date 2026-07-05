@@ -8,13 +8,13 @@
       "transport": "stdio",
       "optional_extra": "mcp",
       "install": "pip install -e \".[mcp]\"",
-      "tool_count": 26
+      "tool_count": 27
     },
     "json_lines": {
       "command": "polyterm agent jsonl-server",
       "transport": "stdio-json-lines",
       "optional_extra": null,
-      "tool_count": 26
+      "tool_count": 27
     }
   },
   "tools": [
@@ -43,6 +43,26 @@
         "skip_network": "boolean"
       },
       "schema": "docs/schemas/agent.doctor.schema.json",
+      "read_only": true,
+      "mutates_local_state": false,
+      "requires_confirmation": false,
+      "may_prompt": false,
+      "long_running": false,
+      "adapter_available": true,
+      "live_data": true,
+      "examples": []
+    },
+    {
+      "name": "agent.answer",
+      "description": "Answer a natural-language PolyTerm query with tool trace, confidence, and caveats.",
+      "command": "polyterm agent jsonl-server tool=agent.answer {query}",
+      "args": {
+        "query": "string",
+        "hours": "integer",
+        "limit": "integer",
+        "min_notional": "number"
+      },
+      "schema": "docs/schemas/agent.answer.schema.json",
       "read_only": true,
       "mutates_local_state": false,
       "requires_confirmation": false,
@@ -387,7 +407,8 @@
       "args": {
         "limit": "integer",
         "hours": "integer",
-        "min_notional": "number"
+        "min_notional": "number",
+        "sample_size": "integer"
       },
       "schema": "docs/schemas/wallet.whale_trades.schema.json",
       "read_only": true,

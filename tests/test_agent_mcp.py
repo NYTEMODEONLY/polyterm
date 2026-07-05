@@ -34,7 +34,9 @@ async def test_fastmcp_server_lists_agent_tools():
     assert "analytics.thesis" in tool_names
     assert "wallet.inspect" in tool_names
     assert "wallet.whales" in tool_names
+    assert "wallet.whale_trades" in tool_names
     assert "wallet.smart_money" in tool_names
+    assert "agent.answer" in tool_names
     assert "alerts.create_price_rule" in tool_names
     assert "watch.scheduled_scan" in tool_names
 
@@ -204,3 +206,48 @@ def test_legacy_jsonl_handler_still_available():
 
     assert result["success"] is True
     assert result["data"]["name"] == "polyterm"
+
+
+@pytest.mark.asyncio
+async def test_fastmcp_server_calls_wallet_whale_trades_handler(monkeypatch):
+    def fake_whale_trades(limit=3, hours=48, min_notional=10000, sample_size=3000):
+        return envelope(
+            {"count": 1, "sample_size": sample_size, "trades": [{"wallet": "0xbig", "notional": 1325000}]},
+            meta={"tool": "wallet.whale_trades"},
+        )
+
+    monkeypatch.setitem(jsonl_server.TOOL_HANDLERS, "wallet.whale_trades", fake_whale_trades)
+    mcp = create_server()
+    content, structured = await mcp.call_tool(
+        "wallet.whale_trades",
+        {"limit": 3, "hours": 48, "min_notional": 10000, "sample_size": 3000},
+    )
+    result = structured["result"]
+
+    assert content
+    assert result["success"] is True
+    assert result["data"]["trades"][0]["notional"] == 1325000
+    assert result["data"]["sample_size"] == 3000
+    assert result["meta"]["tool"] == "wallet.whale_trades"
+
+
+@pytest.mark.asyncio
+async def test_fastmcp_server_calls_agent_answer_handler(monkeypatch):
+    def fake_answer(query, hours=48, limit=3, min_notional=10000):
+        return envelope(
+            {"query": query, "intent": "whale_wagers", "confidence": "medium", "answer": "Top whale wagers ready."},
+            meta={"tool": "agent.answer"},
+        )
+
+    monkeypatch.setitem(jsonl_server.TOOL_HANDLERS, "agent.answer", fake_answer)
+    mcp = create_server()
+    content, structured = await mcp.call_tool(
+        "agent.answer",
+        {"query": "3 biggest whale wagers last 48 hours", "hours": 48, "limit": 3},
+    )
+    result = structured["result"]
+
+    assert content
+    assert result["success"] is True
+    assert result["data"]["intent"] == "whale_wagers"
+    assert result["meta"]["tool"] == "agent.answer"

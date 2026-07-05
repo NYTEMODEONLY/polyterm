@@ -252,6 +252,124 @@ class WalletIntelligence:
             "quality_flags": ["local_db_smart_money", "requires_recent_refresh_for_live_flow"],
         }
 
+    def whale_trades(
+        self,
+        min_notional: float = 10000,
+        hours: int = 48,
+        limit: int = 3,
+        market: Optional[str] = None,
+        sample_size: int = 3000,
+        now: Optional[datetime] = None,
+        page_size: int = 1000,
+    ) -> Dict[str, Any]:
+        """Return top public trade rows ranked by cash notional.
+
+        This is the deterministic answer path for prompts such as "biggest whale
+        wagers in the last 48 hours". It scans the Data API public trade tape
+        with server-side CASH filtering, filters the requested time window, then
+        sorts client-side by ``size * price`` instead of trusting the API's
+        recency order.
+        """
+        now_dt = now or datetime.now(timezone.utc)
+        if now_dt.tzinfo is None:
+            now_dt = now_dt.replace(tzinfo=timezone.utc)
+        cutoff = now_dt - timedelta(hours=hours)
+        cutoff_ts = int(cutoff.timestamp())
+
+        page_size = max(1, min(int(page_size or 1000), 1000))
+        sample_size = max(page_size, int(sample_size or page_size))
+        max_offset = max(sample_size - page_size, 0)
+
+        trades: List[Dict[str, Any]] = []
+        errors: List[Dict[str, Any]] = []
+        pages_scanned = 0
+        rows_scanned = 0
+        stopped_at_cutoff = False
+
+        for offset in range(0, max_offset + 1, page_size):
+            try:
+                page = self.data_api.get_recent_trades(
+                    limit=page_size,
+                    offset=offset,
+                    filter_type="CASH",
+                    filter_amount=min_notional,
+                )
+            except Exception as exc:
+                errors.append({"offset": offset, "error": str(exc)})
+                break
+
+            pages_scanned += 1
+            if not page:
+                stopped_at_cutoff = True
+                break
+
+            page_timestamps = []
+            rows_scanned += len(page)
+            for raw in page:
+                timestamp = int(_as_float(raw.get("timestamp"), 0))
+                if timestamp:
+                    page_timestamps.append(timestamp)
+                if timestamp and timestamp < cutoff_ts:
+                    continue
+
+                identifiers = {
+                    str(raw.get("conditionId") or ""),
+                    str(raw.get("slug") or ""),
+                    str(raw.get("eventSlug") or ""),
+                    str(raw.get("asset") or ""),
+                }
+                if market and market not in identifiers:
+                    continue
+
+                size = _as_float(raw.get("size"), 0.0)
+                price = _as_float(raw.get("price"), 0.0)
+                notional = size * price
+                if notional < min_notional:
+                    continue
+
+                trades.append({
+                    "wallet": raw.get("proxyWallet") or raw.get("user") or raw.get("wallet"),
+                    "name": raw.get("name"),
+                    "side": raw.get("side"),
+                    "asset": raw.get("asset"),
+                    "condition_id": raw.get("conditionId"),
+                    "size": size,
+                    "price": price,
+                    "notional": notional,
+                    "timestamp": timestamp,
+                    "timestamp_iso": datetime.fromtimestamp(timestamp, timezone.utc).isoformat() if timestamp else None,
+                    "market_title": raw.get("title"),
+                    "market_slug": raw.get("slug"),
+                    "event_slug": raw.get("eventSlug"),
+                    "outcome": raw.get("outcome"),
+                    "outcome_index": raw.get("outcomeIndex"),
+                    "transaction_hash": raw.get("transactionHash"),
+                })
+
+            if page_timestamps and min(page_timestamps) < cutoff_ts:
+                stopped_at_cutoff = True
+                break
+
+        trades.sort(key=lambda row: (row["notional"], row.get("timestamp") or 0), reverse=True)
+        quality_flags = ["live_data_api_trades", "notional=size_times_price", "notional_desc_sorted", "public_trade_rows_only"]
+        if errors:
+            quality_flags.append("data_api_page_error")
+        if not stopped_at_cutoff:
+            quality_flags.append("data_api_recent_tape_window_limited")
+
+        return {
+            "hours": hours,
+            "min_notional": min_notional,
+            "sample_size": sample_size,
+            "cutoff": cutoff.isoformat(),
+            "count": len(trades),
+            "rows_scanned": rows_scanned,
+            "pages_scanned": pages_scanned,
+            "errors": errors,
+            "trades": trades[:limit],
+            "quality_flags": quality_flags,
+        }
+
     def live_whales(
         self,
         min_notional: float = 10000,

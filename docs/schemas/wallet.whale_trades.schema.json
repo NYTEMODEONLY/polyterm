@@ -1,32 +1,27 @@
 {
   "type": "object",
-  "required": [
-    "schema_version",
-    "success",
-    "data",
-    "error",
-    "meta"
-  ],
+  "required": ["schema_version", "success", "data", "error", "meta"],
   "properties": {
-    "schema_version": {
-      "type": "string"
-    },
-    "success": {
-      "type": "boolean"
-    },
+    "schema_version": {"type": "string"},
+    "success": {"type": "boolean"},
     "data": {
       "type": "object",
-      "description": "Tool-specific object payload. See tool docs and quality_flags for field semantics."
+      "description": "Tool-specific object payload. See tool docs and quality_flags for field semantics.",
+      "properties": {
+        "hours": {"type": "integer"},
+        "min_notional": {"type": "number"},
+        "sample_size": {"type": "integer"},
+        "cutoff": {"type": "string"},
+        "count": {"type": "integer"},
+        "rows_scanned": {"type": "integer"},
+        "pages_scanned": {"type": "integer"},
+        "errors": {"type": "array"},
+        "trades": {"type": "array"},
+        "quality_flags": {"type": "array", "items": {"type": "string"}}
+      }
     },
-    "error": {
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "meta": {
-      "type": "object"
-    }
+    "error": {"type": ["string", "null"]},
+    "meta": {"type": "object"}
   },
   "title": "PolyTerm wallet.whale_trades response",
   "description": "Return top public trade rows by notional value for a recent time window."
