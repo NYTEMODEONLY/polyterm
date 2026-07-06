@@ -81,12 +81,13 @@ polyterm agent catalog --format json
 polyterm agent mcp-server
 ```
 
-The standard MCP server exposes the same 26 tool names as the manifest, including `market.top`, `wallet.whale_trades`, `trader.leaderboard`, `market.flips`, and `market.movers`. It uses the optional MCP SDK, so fresh environments should install the `mcp` extra before launching it.
+The standard MCP server exposes the same 27 tool names as the manifest, including `agent.answer`, `market.top`, `wallet.whale_trades`, `trader.leaderboard`, `market.flips`, and `market.movers`. It uses the optional MCP SDK, so fresh environments should install the `mcp` extra before launching it.
 
 JSON-lines fallback:
 
 ```bash
 printf '{"tool":"market.top","args":{"limit":3}}\n' | polyterm agent jsonl-server
+printf '{"tool":"agent.answer","args":{"query":"top 3 whale wagers last 48 hours","hours":48,"limit":3}}\n' | polyterm agent jsonl-server
 printf '{"tool":"wallet.whale_trades","args":{"limit":5,"hours":24}}\n' | polyterm agent jsonl-server
 printf '{"tool":"trader.leaderboard","args":{"limit":3,"hours":72,"min_win_rate":0.8}}\n' | polyterm agent jsonl-server
 printf '{"tool":"market.flips","args":{"limit":3,"hours":72,"min_volume":500,"rank_by":"largest_crossing_move"}}\n' | polyterm agent jsonl-server
@@ -107,7 +108,9 @@ mcp_servers:
     connect_timeout: 60
 ```
 
-After restarting the client, tools are exposed through MCP as `agent.manifest`, `agent.schemas`, `agent.doctor`, `market.search`, `market.resolve`, `market.top`, `market.orderbook`, `market.price_history`, `market.movers`, `market.flips`, `market.research`, `market.explain_move`, `market.compare`, `scan.opportunities`, `archive.search`, `archive.status`, `archive.manifest`, `analytics.arbitrage`, `analytics.risk`, `analytics.thesis`, `wallet.inspect`, `wallet.whales`, `wallet.whale_trades`, `wallet.smart_money`, `trader.leaderboard`, `alerts.create_price_rule`, and `watch.scheduled_scan`.
+After restarting the client, tools are exposed through MCP as `agent.manifest`, `agent.schemas`, `agent.doctor`, `agent.answer`, `market.search`, `market.resolve`, `market.top`, `market.orderbook`, `market.price_history`, `market.movers`, `market.flips`, `market.research`, `market.explain_move`, `market.compare`, `scan.opportunities`, `archive.search`, `archive.status`, `archive.manifest`, `analytics.arbitrage`, `analytics.risk`, `analytics.thesis`, `wallet.inspect`, `wallet.whales`, `wallet.whale_trades`, `wallet.smart_money`, `trader.leaderboard`, `alerts.create_price_rule`, and `watch.scheduled_scan`.
+
+Hermes Agent exposes those MCP names through its own tool prefix, for example `mcp_polyterm_agent_answer`, `mcp_polyterm_market_search`, `mcp_polyterm_market_compare`, `mcp_polyterm_wallet_whales`, and `mcp_polyterm_wallet_whale_trades`.
 
 ```bash
 polyterm agent mcp-server
@@ -115,19 +118,21 @@ polyterm agent mcp-server
 
 Recommended sequence:
 
-1. Use `market.research` for a complete one-call brief.
-2. Use `market.flips` when the user asks which markets flipped, crossed 50%, or moved above/below the YES majority line in a recent window.
-3. Use `market.movers` when the user asks for broader spikes or large available Gamma price changes, not necessarily confirmed 50% crossings.
-4. Use `market.explain_move` when the user asks why a specific YES price moved recently; it uses explicit CLOB `startTs` and `endTs` bounds for the requested window.
-5. Use `market.compare` when the user asks which of several related markets looks divergent or mispriced.
-6. Use `scan.opportunities` to find fresh movers, stale archive coverage, and markets that need research.
-7. Use `wallet.smart_money` for the local high win-rate wallet leaderboard; refresh evidence first when recency matters.
-8. Resolve or search for a market when identifiers are ambiguous.
-9. Generate a lower-level thesis when you need raw thesis internals.
-10. Inspect wallet/whale activity if the thesis depends on smart money.
-11. Check cross-venue spreads.
-12. Collect snapshots if the market needs observation over time.
-13. Create local alert rules only after policy approval.
+1. Use `agent.answer` for broad natural-language Polymarket questions when a concise answer with confidence, caveats, and tool trace is enough.
+2. Use `market.research` for a complete one-call brief.
+3. Use `market.flips` when the user asks which markets flipped, crossed 50%, or moved above/below the YES majority line in a recent window.
+4. Use `market.movers` when the user asks for broader spikes or large available Gamma price changes, not necessarily confirmed 50% crossings.
+5. Use `market.explain_move` when the user asks why a specific YES price moved recently; it uses explicit CLOB `startTs` and `endTs` bounds for the requested window.
+6. Use `market.compare` when the user asks which of several related markets looks divergent or mispriced.
+7. Use `scan.opportunities` to find fresh movers, stale archive coverage, and markets that need research.
+8. Use `wallet.whale_trades` for deterministic top-trade rankings; always report rows/pages scanned and Data API caveats.
+9. Use `wallet.whales` for recent wallet-level whale flow; filter returned trades by the relevant market slugs before drawing conclusions.
+10. Use `wallet.smart_money` for the local high win-rate wallet leaderboard; refresh evidence first when recency matters.
+11. Resolve or search for a market when identifiers are ambiguous.
+12. Generate a lower-level thesis when you need raw thesis internals.
+13. Check cross-venue spreads.
+14. Collect snapshots if the market needs observation over time.
+15. Create local alert rules only after policy approval.
 
 For questions like "What are the top 3 markets that have flipped in the last 72 hours?", call `market.flips` first:
 
@@ -152,6 +157,7 @@ OpenClaw-style tools that need line-delimited JSON without a full MCP client can
 
 ```bash
 printf '{"method":"manifest"}\n' | polyterm agent jsonl-server
+printf '{"tool":"agent.answer","args":{"query":"top 3 whale wagers last 48 hours","hours":48,"limit":3}}\n' | polyterm agent jsonl-server
 printf '{"tool":"market.search","args":{"query":"bitcoin","limit":3}}\n' | polyterm agent jsonl-server
 printf '{"tool":"market.research","args":{"market":"bitcoin"}}\n' | polyterm agent jsonl-server
 printf '{"tool":"market.explain_move","args":{"market":"bitcoin","hours":24}}\n' | polyterm agent jsonl-server
@@ -166,6 +172,20 @@ printf '{"tool":"analytics.thesis","args":{"market":"bitcoin"}}\n' | polyterm ag
 ```
 
 The legacy JSON-lines adapter does not require an MCP Python dependency. The production MCP server is implemented with FastMCP and reuses the same grouped tool functions.
+
+## Agentic Synthesis Protocol
+
+For user questions that ask for a judgment call, educated guess, winner, value side, or whale read, agents should use PolyTerm as evidence and synthesize explicitly:
+
+1. **Resolve/search** the market set first; never guess identifiers.
+2. **Compare all related outcomes** with `market.compare` for multi-outcome markets such as sports moneylines.
+3. **Inspect recent movement** with `market.explain_move` or `market.price_history` when timing matters.
+4. **Pull whale evidence** with `wallet.whales` or `wallet.whale_trades`; report scan coverage and Data API errors.
+5. **Use `analytics.thesis`** for lower-level risk, liquidity, and order-book context when the answer depends on conviction.
+6. **Separate facts from derived judgment**: market probabilities, 24h moves, whale notional, and final opinion should be distinct.
+7. **Caveat outages**: if Data API pages timeout or `whale_flow_unavailable` appears, say so and fall back to the evidence that actually returned.
+
+The full operational playbook is in [Agentic Usage Guide](AGENTIC_USAGE.md).
 
 ## Safety Classes
 
@@ -207,4 +227,5 @@ Run these repo gates after changing agent workflows:
 
 - [Agent config examples](AGENT_CONFIG_EXAMPLES.md)
 - [Agent cookbook](AGENT_COOKBOOK.md)
+- [Agentic usage guide](AGENTIC_USAGE.md)
 - [Full LLM reference](../llms-full.txt)

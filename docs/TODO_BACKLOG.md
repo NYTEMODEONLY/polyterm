@@ -5,7 +5,7 @@ This backlog reflects the June 25, 2026 agent-native buildout. The older June 2 
 ## Completed In The Agent-Native Buildout
 
 - Agent registry, stable envelope helpers, and generated JSON Schemas exist under `polyterm/agent`.
-- `polyterm agent manifest --format json` emits 26 adapter-callable tools plus the 88-command CLI catalog.
+- `polyterm agent manifest --format json` emits 27 adapter-callable tools plus the 88-command CLI catalog.
 - `polyterm agent catalog --format json` exposes the full CLI command inventory for repo-handoff agents.
 - `docs/tool-manifest.json`, `docs/schemas/*.schema.json`, `docs/AGENT_MODE.md`, `docs/cli/agent.md`, and `llms.txt` are checked in for static discovery.
 - `polyterm agent mcp-server` exposes the manifest tools through the optional standard MCP/FastMCP server.

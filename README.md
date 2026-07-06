@@ -8,7 +8,7 @@ A powerful, terminal-based monitoring and analytics tool for PolyMarket predicti
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PyPI version](https://img.shields.io/pypi/v/polyterm.svg)](https://pypi.org/project/polyterm/)
 
-**[Full Documentation](docs/README.md)** — Comprehensive docs for every CLI command, TUI screen, API module, and core engine.
+**[Full Documentation](docs/README.md)** — Comprehensive docs for every CLI command, TUI screen, API module, core engine, and agentic runtime integration.
 
 ![PolyTerm Screenshot](screenshot.png)
 
@@ -45,7 +45,7 @@ polyterm
 PolyTerm is an analytics and intelligence layer for Polymarket — not just an API wrapper.
 
 - **20+ analytics features** no other CLI has: wallet-level whale tracking, insider detection scoring, arbitrage scanning (including cross-platform vs Kalshi), signal-based multi-factor predictions, wash trade detection, UMA dispute risk analysis, and market risk grading (A-F).
-- **Agent-ready tooling**: manifest, JSON Schemas, FastMCP stdio server, legacy JSON-lines adapter, doctor diagnostics, `llms.txt`, `llms-full.txt`, and read-only market/wallet/thesis tools for Hermes Agent, OpenClaw, Codex, and other automations.
+- **Agent-ready tooling**: manifest, JSON Schemas, FastMCP stdio server, legacy JSON-lines adapter, doctor diagnostics, `llms.txt`, `llms-full.txt`, and read-only market/wallet/thesis tools for Hermes Agent, OpenClaw, Codex, and other automations. See [Agentic Usage](docs/AGENTIC_USAGE.md) for the operational playbook.
 - **73+ interactive TUI screens** with menu navigation, contextual help, and an onboarding tutorial. No other Polymarket terminal tool has a TUI.
 - **Terminal-native visualization**: ASCII line charts, sparklines, depth charts, and side-by-side market comparison — all without leaving the terminal.
 - **Stateful local database** (SQLite): bookmarks, price alerts, trade journal, position tracking, recently viewed markets, screener presets. Your research accumulates value over time.
@@ -131,6 +131,7 @@ For a detailed comparison with the official Polymarket CLI, see [docs/COMPETITIV
 |---------|---------|-------------|
 | Agent Manifest | `polyterm agent manifest` | Machine-readable tool registry with safety flags |
 | Agent Schemas | `polyterm agent schemas` | JSON Schemas for agent-facing tools |
+| Agent Answer Tool | `agent.answer` | One-call natural-language answer path with confidence, caveats, and tool trace |
 | Market Research Tool | `market.research` | MCP/agent tool for complete market briefs |
 | Move Explainer Tool | `market.explain_move` | MCP/agent tool for recent price move explanations |
 | Market Compare Tool | `market.compare` | MCP/agent tool for side-by-side divergence analysis |
@@ -143,6 +144,7 @@ For a detailed comparison with the official Polymarket CLI, see [docs/COMPETITIV
 | MCP Server | `polyterm agent mcp-server` | Real FastMCP stdio server for MCP clients |
 | JSONL Adapter | `polyterm agent jsonl-server` | Legacy JSON-lines adapter for simple pipe-based runtimes |
 | Agent Docs | `docs/AGENT_MODE.md` | Hermes/OpenClaw workflow notes and safety model |
+| Agentic Usage | `docs/AGENTIC_USAGE.md` | Agent query protocol, Hermes MCP names, OpenClaw JSON-lines usage, and whale-flow synthesis guidance |
 | Agent Cookbook | `docs/AGENT_COOKBOOK.md` | Reusable agent workflows for research, scan, archive, and wallets |
 | Config Examples | `docs/AGENT_CONFIG_EXAMPLES.md` | Hermes, Claude Desktop, Cursor, and JSON-lines setup examples |
 

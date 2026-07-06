@@ -31,9 +31,12 @@ mcp_servers:
     connect_timeout: 60
 ```
 
-After restarting Hermes, verify that `agent.doctor`, `market.research`,
+After restarting Hermes, verify that `agent.doctor`, `agent.answer`, `market.research`,
 `market.explain_move`, `market.compare`, `scan.opportunities`,
-`wallet.whales`, and `wallet.smart_money` are listed.
+`wallet.whales`, `wallet.whale_trades`, and `wallet.smart_money` are listed.
+Hermes normally exposes them with an `mcp_polyterm_` prefix, for example
+`mcp_polyterm_agent_answer`, `mcp_polyterm_market_compare`, and
+`mcp_polyterm_wallet_whale_trades`.
 
 ## Claude Desktop MCP
 
@@ -89,8 +92,10 @@ Example requests:
 ```bash
 printf '{"method":"manifest"}\n' | polyterm agent jsonl-server
 printf '{"tool":"agent.doctor","args":{"skip_network":true}}\n' | polyterm agent jsonl-server
+printf '{"tool":"agent.answer","args":{"query":"top 3 whale wagers last 48 hours","hours":48,"limit":3}}\n' | polyterm agent jsonl-server
 printf '{"tool":"market.research","args":{"market":"bitcoin","persist":true}}\n' | polyterm agent jsonl-server
 printf '{"tool":"scan.opportunities","args":{"query":"crypto","limit":5}}\n' | polyterm agent jsonl-server
+printf '{"tool":"wallet.whale_trades","args":{"hours":48,"limit":3,"min_notional":10000,"sample_size":3000}}\n' | polyterm agent jsonl-server
 ```
 
 ## OpenAI-Compatible Tool Wrappers

@@ -110,6 +110,18 @@ polyterm whales --wallets --min-amount 100000 --hours 72 --limit 10 --format jso
 
 Use this before drawing conclusions from whale flow. The Data API trade tape is
 public and bounded; read `quality_flags` for pagination and freshness caveats.
+Filter returned trades by the relevant market slugs/outcomes before making a
+claim about who whales favor.
+
+For deterministic top-trade rankings:
+
+```bash
+printf '{"tool":"wallet.whale_trades","args":{"hours":48,"limit":5,"min_notional":10000,"sample_size":3000}}\n' | polyterm agent jsonl-server
+```
+
+Report `rows_scanned`, `pages_scanned`, `errors`, and `quality_flags`. If the
+Data API times out and zero rows are scanned, retry with a smaller `sample_size`
+or lower `min_notional`; if it still fails, say whale tape is unavailable.
 
 For locally identified high win-rate wallets:
 
@@ -194,6 +206,48 @@ For market research tasks, a robust sequence is:
 4. Run `market.explain_move` if price movement is central to the question.
 5. Run `wallet.whales` when whale flow is relevant.
 6. Cite structured `evidence_sources`, `quality_flags`, and `recommended_actions`.
+
+## Educated Guess / Winner Read
+
+When a user asks for a fast opinion, do not overbuild a report. Pull the minimum
+structured evidence needed to make an explicit, caveated call.
+
+MCP sequence for a three-way sports market:
+
+```json
+{"tool":"market.search","args":{"query":"Mexico England game","limit":10}}
+{"tool":"market.compare","args":{"markets":["<mex-slug>","<draw-slug>","<eng-slug>"],"hours":24}}
+{"tool":"wallet.whales","args":{"min_notional":50000,"hours":24,"limit":10}}
+```
+
+Optional deeper checks:
+
+```json
+{"tool":"analytics.thesis","args":{"market":"<top-outcome-slug>"}}
+{"tool":"market.explain_move","args":{"market":"<top-outcome-slug>","hours":24}}
+```
+
+Synthesis template:
+
+1. State the pick first.
+2. Show market-implied probability, recent move, and whale notional separately.
+3. Mention whether whales are buying YES, buying NO, or split across outcomes.
+4. Include one caveat from `quality_flags`, `errors`, or thin archive/history.
+5. Label confidence; for near three-way splits, default to medium-low unless one
+   signal is clearly dominant.
+
+## Natural-Language Answer Path
+
+Use `agent.answer` when the user wants a concise answer and does not need raw
+intermediate data:
+
+```bash
+printf '{"tool":"agent.answer","args":{"query":"3 biggest whale wagers last 48 hours","hours":48,"limit":3,"min_notional":10000}}\n' | polyterm agent jsonl-server
+```
+
+Read the returned confidence, caveats, and tool trace. If the answer path reports
+limited scan coverage or Data API errors, fall back to the underlying tools and
+say exactly what failed.
 
 ## Caveats
 

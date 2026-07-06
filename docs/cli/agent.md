@@ -6,7 +6,7 @@
 
 `polyterm agent` exposes the command and schema surface that external agents use to call PolyTerm safely. The command is intentionally separate from market analysis commands so Hermes Agent, OpenClaw, Codex, and other agent runtimes can discover tools before they call them. It focuses on stable metadata, JSON Schemas, safety flags, a real FastMCP stdio server, and a lightweight legacy JSON-lines adapter.
 
-The command does not execute trades or hold private keys. It exposes no-custody market intelligence, wallet inspection, archive metadata, and local alert-rule workflows with explicit mutation flags.
+The command does not execute trades or hold private keys. It exposes no-custody market intelligence, wallet inspection, archive metadata, natural-language answer synthesis, and local alert-rule workflows with explicit mutation flags.
 
 ## Usage
 
@@ -183,6 +183,7 @@ Run `./test_all_commands.sh` and `.venv/bin/python scripts/validate_docs.py` aft
 ## Related Features
 
 - [Agent Mode](../AGENT_MODE.md)
+- [Agentic Usage Guide](../AGENTIC_USAGE.md)
 - [Trade Thesis](thesis.md)
 - [Wallets](wallets.md)
 - [Whales](whales.md)

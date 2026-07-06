@@ -8,6 +8,7 @@ PolyTerm is a no-custody Polymarket intelligence terminal for traders, researche
 - Full LLM reference: `llms-full.txt`
 - Agent config examples: `docs/AGENT_CONFIG_EXAMPLES.md`
 - Agent cookbook: `docs/AGENT_COOKBOOK.md`
+- Agentic usage guide: `docs/AGENTIC_USAGE.md`
 - Tool manifest: `polyterm agent manifest --format json`
 - Full CLI catalog: `polyterm agent catalog --format json`
 - Schemas: `polyterm agent schemas --format json`
@@ -22,6 +23,7 @@ PolyTerm is a no-custody Polymarket intelligence terminal for traders, researche
 - `polyterm search --format json`
 - `printf '{"tool":"market.top","args":{"limit":3}}\n' | polyterm agent jsonl-server`
 - `printf '{"tool":"wallet.whale_trades","args":{"limit":5,"hours":24}}\n' | polyterm agent jsonl-server`
+- `printf '{"tool":"agent.answer","args":{"query":"top whale wagers last 48 hours","hours":48,"limit":3}}\n' | polyterm agent jsonl-server`
 - `printf '{"tool":"trader.leaderboard","args":{"limit":3,"hours":72,"min_win_rate":0.8}}\n' | polyterm agent jsonl-server`
 - `printf '{"tool":"market.flips","args":{"limit":3,"hours":72,"min_volume":500}}\n' | polyterm agent jsonl-server`
 - `printf '{"tool":"market.movers","args":{"limit":3,"hours":48}}\n' | polyterm agent jsonl-server`
