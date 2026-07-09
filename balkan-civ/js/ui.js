@@ -464,6 +464,20 @@ const UI = (() => {
     $("stat-sci").innerHTML = tech
       ? `🔬 ${tech.name} ${Math.floor(p.scienceStored)}/${tech.cost} (+${sci})`
       : `🔬 <b class="alert">choose research!</b> (+${sci})`;
+    // happiness + golden age
+    const hap = game.happinessOf(0);
+    const lux = game.luxuryTypesOf(0);
+    const nCities = game.cities.filter(c => c.owner === 0).length;
+    const popTotal = game.cities.filter(c => c.owner === 0).reduce((a, c) => a + c.pop, 0);
+    const happyEl = $("stat-happy");
+    if (p.goldenAgeTurns > 0) {
+      happyEl.innerHTML = `✨ <b style="color:#f1c40f">GOLDEN AGE</b> (${p.goldenAgeTurns})`;
+      happyEl.title = "+20% gold and production";
+    } else {
+      happyEl.innerHTML = hap >= 0 ? `😊 +${hap}` : `<b class="${hap < HAPPINESS.strikeAt ? "war" : "alert"}">😞 ${hap}</b>`;
+      happyEl.title = `Happiness: ${HAPPINESS.base} base + ${lux.length * HAPPINESS.perLuxury} luxuries (${lux.map(l => RESOURCE[l].icon).join("") || "none"}) + buildings − ${nCities * HAPPINESS.perCity} cities − ${Math.floor(popTotal * HAPPINESS.perPop)} population` +
+        `\nGolden Age: ${Math.floor(p.gaMeter)}/${GOLDEN_AGE.threshold(p.gaCount)} (surplus happiness fills the meter)`;
+    }
     const relIcon = p.religionId !== null ? game.religions[p.religionId].icon : "☦️";
     $("stat-faith").innerHTML = game.canFoundReligion(0)
       ? `${relIcon} <b class="alert">found a religion!</b>`
@@ -666,7 +680,7 @@ const UI = (() => {
     if (!t || !game.players[0].visible[game.map.idx(c, r)]) { tip.style.display = "none"; return; }
     const y = game.tileYield(t);
     let html = `<b>${TERRAIN[t.terrain].name}</b>${t.feature ? " / " + FEATURE[t.feature].name : ""}`;
-    if (t.resource) html += ` · ${RESOURCE[t.resource].icon} ${RESOURCE[t.resource].name}`;
+    if (t.resource) html += ` · ${RESOURCE[t.resource].icon} ${RESOURCE[t.resource].name}${RESOURCE[t.resource].luxury ? " (luxury)" : ""}`;
     if (t.improvement) html += ` · ${IMPROVEMENT[t.improvement].icon} ${IMPROVEMENT[t.improvement].name}`;
     html += `<br><span class="dim">🍞${y.food} ⚙️${y.prod} 💰${y.gold}</span>`;
     if (t.owner !== -1) html += `<br><span style="color:${CIVS[game.players[t.owner].civId].color}">${CIVS[game.players[t.owner].civId].name} territory</span>`;

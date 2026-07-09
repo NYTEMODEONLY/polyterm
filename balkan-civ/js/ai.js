@@ -158,8 +158,13 @@ const AI = (() => {
       let choice = null;
       const garrison = game.combatUnitAt(city.c, city.r);
       if (!garrison && military.length < myCities.length) choice = bestMilitary();
-      if (!choice && !atWar && myCities.length + settlers.length < wantCities && city.pop >= 3 &&
-          !settlers.length && game.rng() < 0.7) {
+      const happiness = game.happinessOf(p.index);
+      if (!choice && happiness < 0) {
+        // unhappy: happiness buildings before anything else
+        choice = opts.find(o => o.kind === "building" && (o.key === "TAVERN" || o.key === "HAMMAM")) || null;
+      }
+      if (!choice && !atWar && happiness >= 2 && myCities.length + settlers.length < wantCities &&
+          city.pop >= 3 && !settlers.length && game.rng() < 0.7) {
         choice = pick(o => o.key === "SETTLER");
       }
       const workers = myUnits.filter(u => u.type === "WORKER");
@@ -176,8 +181,8 @@ const AI = (() => {
       }
       if (!choice) {
         // building priority order
-        const prio = ["MONUMENT", "SHRINE", "GRANARY", "LIBRARY", "WALLS", "MARKET", "BARRACKS", "TEMPLE",
-          "AQUEDUCT", "FORGE", "UNIVERSITY", "CASTLE", "WORKSHOP", "BANK",
+        const prio = ["MONUMENT", "SHRINE", "GRANARY", "LIBRARY", "TAVERN", "WALLS", "MARKET", "BARRACKS",
+          "TEMPLE", "HAMMAM", "AQUEDUCT", "FORGE", "UNIVERSITY", "CASTLE", "WORKSHOP", "BANK",
           "HAGIA_SOPHIA", "STUDENICA", "RILA", "KALEMEGDAN"];
         for (const key of prio) {
           const o = opts.find(x => x.kind === "building" && x.key === key);

@@ -57,9 +57,15 @@ Game* on the title screen to pick up where you left off.
   Win them over with gold gifts — friends and allies pay gold, food or
   culture, and militaristic allies gift you units — or conquer them, if
   you can breach their walls
+- **Happiness & Golden Ages**: your empire's mood (top bar) rises with
+  luxuries (wine, silver, olives, salt) and Taverns/Hammams, and falls as
+  cities and population grow. Unhappy empires grow at half speed; below −10
+  growth stops and units fight at −15%. Surplus happiness fills a meter
+  that triggers **Golden Ages**: 10 turns of +20% gold and production
 - Workers and tile improvements: farms, mines, and roads (roads cut movement
   cost to 1 on any terrain)
-- Strategic resources (horses, iron) gating unit types
+- Strategic resources (horses, iron) gating unit types; luxury resources
+  feeding happiness
 - 3–8 AI opponents that scout, settle (across the sea, too), improve their
   land, build navies, research, declare war, sue for peace, and march
   armies on your cities
@@ -101,4 +107,4 @@ js/ui.js          panels, modals, input handling
 
 ## Ideas for future expansion
 
-Happiness, espionage, more wonders, sound.
+Espionage, more wonders, sound.

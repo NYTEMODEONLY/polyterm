@@ -22,9 +22,25 @@ const RESOURCE = {
   SHEEP:  { name: "Sheep",  icon: "🐑", food: 1, prod: 1, gold: 0, terrains: ["HILLS", "GRASSLAND"] },
   HORSES: { name: "Horses", icon: "🐎", food: 0, prod: 1, gold: 1, terrains: ["GRASSLAND", "PLAINS"] },
   IRON:   { name: "Iron",   icon: "⚒️", food: 0, prod: 2, gold: 0, terrains: ["HILLS", "PLAINS"] },
-  WINE:   { name: "Wine",   icon: "🍇", food: 1, prod: 0, gold: 2, terrains: ["GRASSLAND", "PLAINS", "HILLS"] },
-  SILVER: { name: "Silver", icon: "🪙", food: 0, prod: 1, gold: 2, terrains: ["HILLS"] },
+  WINE:   { name: "Wine",   icon: "🍇", food: 1, prod: 0, gold: 2, terrains: ["GRASSLAND", "PLAINS", "HILLS"], luxury: true },
+  SILVER: { name: "Silver", icon: "🪙", food: 0, prod: 1, gold: 2, terrains: ["HILLS"], luxury: true },
+  OLIVES: { name: "Olives", icon: "🫒", food: 1, prod: 0, gold: 2, terrains: ["GRASSLAND", "PLAINS"], luxury: true },
+  SALT:   { name: "Salt",   icon: "🧂", food: 0, prod: 1, gold: 2, terrains: ["PLAINS", "HILLS"], luxury: true },
   FISH:   { name: "Fish",   icon: "🐟", food: 2, prod: 0, gold: 1, terrains: ["COAST"] },
+};
+
+// Empire happiness tuning
+const HAPPINESS = {
+  base: 12,            // baseline contentment
+  perLuxury: 4,        // each distinct luxury type you control
+  perCity: 2,          // unhappiness per city
+  perPop: 0.4,         // unhappiness per citizen
+  strikeAt: -10,       // below this: -15% combat strength, growth stops
+};
+const GOLDEN_AGE = {
+  threshold: (n) => 400 + 250 * n,  // meter cost of the (n+1)th golden age
+  duration: 10,
+  bonus: 0.2,          // +20% gold and production
 };
 
 // ------------------------------------------------------------
@@ -127,6 +143,8 @@ const BUILDINGS = {
   LIBRARY:   { name: "Library",    icon: "📜", cost: 80,  sci: 3, tech: "WRITING" },
   WALLS:     { name: "Walls",      icon: "🧱", cost: 80,  cityHp: 50, cityStr: 4, tech: "MASONRY" },
   MARKET:    { name: "Market",     icon: "💰", cost: 100, gold: 3, tech: "CURRENCY" },
+  TAVERN:    { name: "Tavern",     icon: "🍺", cost: 100, happy: 3, tech: "CURRENCY" },
+  HAMMAM:    { name: "Hammam",     icon: "🛁", cost: 140, happy: 3, tech: "THEOLOGY" },
   TEMPLE:    { name: "Temple",     icon: "⛪", cost: 90,  culture: 3, faith: 2, tech: "PHILOSOPHY" },
   AQUEDUCT:  { name: "Aqueduct",   icon: "⛲", cost: 110, food: 3, tech: "CONSTRUCTION" },
   FORGE:     { name: "Forge",      icon: "🔥", cost: 120, prod: 3, tech: "IRON_WORKING" },

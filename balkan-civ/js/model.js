@@ -96,6 +96,9 @@ class Player {
     this.faith = 0;
     this.religionId = null;      // id of the religion this player founded
     this.influence = {};         // minor player index -> influence points
+    this.gaMeter = 0;            // golden age progress
+    this.goldenAgeTurns = 0;     // turns of golden age remaining
+    this.gaCount = 0;            // golden ages enjoyed so far
   }
   get civ() { return CIVS[this.civId]; }
   get isMinor() { return !!this.civ.minor; }
@@ -441,6 +444,8 @@ class Game {
         mod += 0.15;
       }
     }
+    // a miserable empire fights poorly
+    if (!p.isMinor && this.happinessOf(p.index) < HAPPINESS.strikeAt) mod -= 0.15;
     return str * mod;
   }
 
@@ -566,6 +571,7 @@ class Game {
     if (!unit.def.naval) { unit.c = city.c; unit.r = city.r; } // ships stay offshore
     unit.moves = 0;
     this.updateVisibility(this.players[newOwner]);
+    this.dirtyHappiness();
     this.notify(`${CIVS[this.players[newOwner].civId].name} captured ${city.name}!`, -1);
     this.checkElimination(oldOwner);
     this.checkVictory();
@@ -621,6 +627,7 @@ class Game {
     }
     this.removeUnit(settler);
     this.updateVisibility(p);
+    this.dirtyHappiness();
     return city;
   }
 
@@ -746,6 +753,7 @@ class Game {
       this.addUnit(item.key, city.owner, spot[0], spot[1]);
     } else {
       city.buildings.push(item.key);
+      this.dirtyHappiness();
       if (BUILDINGS[item.key].cityHp) city.hp += BUILDINGS[item.key].cityHp;
       if (BUILDINGS[item.key].wonder) {
         this.notify(`${BUILDINGS[item.key].name} has been completed in ${city.name}!`, -1);
@@ -901,6 +909,40 @@ class Game {
     return this.cities.filter(c => c.religion === rid).length;
   }
 
+  // ---------- happiness & golden ages ----------
+  happinessOf(idx) {
+    const p = this.players[idx];
+    if (p.isMinor || !p.alive) return 0;
+    if (!this._hap) this._hap = {};
+    if (this._hap[idx] !== undefined) return this._hap[idx];
+    let hap = HAPPINESS.base;
+    const lux = new Set();
+    for (const t of this.map.tiles) {
+      if (t.owner === idx && t.resource && RESOURCE[t.resource].luxury) lux.add(t.resource);
+    }
+    hap += lux.size * HAPPINESS.perLuxury;
+    let nCities = 0, pop = 0;
+    for (const c of this.cities) {
+      if (c.owner !== idx) continue;
+      nCities++; pop += c.pop;
+      for (const b of c.buildings) hap += BUILDINGS[b].happy || 0;
+    }
+    hap -= nCities * HAPPINESS.perCity + Math.floor(pop * HAPPINESS.perPop);
+    hap = Math.floor(hap);
+    this._hap[idx] = hap;
+    return hap;
+  }
+
+  luxuryTypesOf(idx) {
+    const lux = new Set();
+    for (const t of this.map.tiles) {
+      if (t.owner === idx && t.resource && RESOURCE[t.resource].luxury) lux.add(t.resource);
+    }
+    return [...lux];
+  }
+
+  dirtyHappiness() { this._hap = {}; }
+
   // ---------- city-states ----------
   minorStatus(majorIdx, minorIdx) {
     if (this.players[majorIdx].atWarWith.has(minorIdx)) return "war";
@@ -1003,8 +1045,14 @@ class Game {
     const p = this.players[city.owner];
     const y = this.cityYields(city);
 
-    // growth
-    city.food += y.food - city.pop * 2;
+    // growth (unhappy empires grow slowly; miserable ones not at all)
+    let surplus = y.food - city.pop * 2;
+    if (!p.isMinor && surplus > 0) {
+      const hap = this.happinessOf(p.index);
+      if (hap < HAPPINESS.strikeAt) surplus = 0;
+      else if (hap < 0) surplus = Math.floor(surplus / 2);
+    }
+    city.food += surplus;
     if (city.food >= city.foodNeeded()) { city.food -= city.foodNeeded(); city.pop++; if (city.owner === 0) this.notify(`${city.name} grew to ${city.pop}.`); }
     else if (city.food < 0) { city.food = 0; if (city.pop > 1) { city.pop--; if (city.owner === 0) this.notify(`${city.name} is starving!`); } }
 
@@ -1013,6 +1061,7 @@ class Game {
       let prod = y.prod;
       const item = city.producing;
       if (item.kind === "building" && p.civ.buildingProdBonus) prod = Math.floor(prod * (1 + p.civ.buildingProdBonus));
+      if (p.goldenAgeTurns > 0) prod = Math.floor(prod * (1 + GOLDEN_AGE.bonus));
       city.prodStored += prod;
       const cost = item.kind === "unit" ? UNITS[item.key].cost : BUILDINGS[item.key].cost;
       if (city.prodStored >= cost) {
@@ -1065,15 +1114,41 @@ class Game {
 
   processPlayerEconomy(p) {
     if (!p.alive) return;
+    this.dirtyHappiness(); // borders/pop may have changed since last compute
     let gold = 0, sci = 0, faith = 0;
     for (const city of this.cities) {
       if (city.owner !== p.index) continue;
       const y = this.processCityTurn(city);
       gold += y.gold; sci += y.sci; faith += y.faith;
     }
+    if (p.goldenAgeTurns > 0 && gold > 0) gold = Math.floor(gold * (1 + GOLDEN_AGE.bonus));
     // unit maintenance: first 4 free
     const nUnits = this.units.filter(u => u.owner === p.index).length;
     gold -= Math.max(0, nUnits - 4);
+    if (!p.isMinor) {
+      // golden age bookkeeping: surplus happiness fills the meter
+      const hap = this.happinessOf(p.index);
+      if (p.goldenAgeTurns > 0) {
+        p.goldenAgeTurns--;
+        if (p.goldenAgeTurns === 0 && p.index === 0) this.notify("The Golden Age has ended.");
+      } else {
+        p.gaMeter += Math.max(0, hap);
+        if (p.gaMeter >= GOLDEN_AGE.threshold(p.gaCount)) {
+          p.gaMeter = 0;
+          p.gaCount++;
+          p.goldenAgeTurns = GOLDEN_AGE.duration;
+          this.notify(`✨ ${p.civ.name} enters a GOLDEN AGE! (+20% gold and production for ${GOLDEN_AGE.duration} turns)`,
+            p.index === 0 ? 0 : -1);
+        }
+      }
+      if (p.index === 0 && hap < 0 && (p._lastHap ?? 0) >= 0) {
+        this.notify(`😞 Your empire is unhappy (${hap}) — growth is slowed. Build Taverns and secure luxuries!`);
+      }
+      if (p.index === 0 && hap < HAPPINESS.strikeAt && (p._lastHap ?? 0) >= HAPPINESS.strikeAt) {
+        this.notify(`🔥 Unrest! Happiness ${hap}: growth has stopped and your units fight at -15% strength.`);
+      }
+      p._lastHap = hap;
+    }
     if (!p.isMinor) {
       gold += this.minorBonuses(p.index).gold;
       // Tithe: gold from every follower city in the world
@@ -1210,7 +1285,8 @@ class Game {
         techs: [...p.techs], atWarWith: [...p.atWarWith], met: [...p.met],
         warWeariness: p.warWeariness, cityNameCursor: p.cityNameCursor,
         visible: Array.from(p.visible), originalCapitalId: p.originalCapitalId,
-        faith: p.faith, religionId: p.religionId, influence: p.influence })),
+        faith: p.faith, religionId: p.religionId, influence: p.influence,
+        gaMeter: p.gaMeter, goldenAgeTurns: p.goldenAgeTurns, gaCount: p.gaCount })),
       cities: this.cities.map(c => ({ ...c })),
       units: this.units.map(u => ({ id: u.id, type: u.type, owner: u.owner, c: u.c, r: u.r,
         hp: u.hp, moves: u.moves, fortified: u.fortified, attacked: u.attacked, path: u.path,
@@ -1251,6 +1327,8 @@ class Game {
       p.visible = Uint8Array.from(pd.visible); p.originalCapitalId = pd.originalCapitalId;
       p.faith = pd.faith || 0; p.religionId = pd.religionId ?? null;
       p.influence = pd.influence || {};
+      p.gaMeter = pd.gaMeter || 0; p.goldenAgeTurns = pd.goldenAgeTurns || 0;
+      p.gaCount = pd.gaCount || 0;
       return p;
     });
     return g;
