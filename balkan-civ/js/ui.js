@@ -48,7 +48,7 @@ const UI = (() => {
       const size = $("sel-mapsize").value;
       const dims = { small: [36, 28], standard: [44, 34], large: [54, 42] }[size];
       game = new Game({ playerCiv: chosen, numOpponents: numOpp, mapW: dims[0], mapH: dims[1],
-        mapType: $("sel-maptype").value });
+        mapType: $("sel-maptype").value, difficulty: $("sel-difficulty").value });
       startPlaying();
     };
     $("start-screen").style.display = "flex";
@@ -70,6 +70,7 @@ const UI = (() => {
   // ---------------- selection ----------------
   function selectUnit(u) {
     if (u && u !== rend.selected) SFX.play("select");
+    rend.previewPath = null;
     rend.selected = u;
     rend.selectedCity = null;
     if (u) {
@@ -170,6 +171,13 @@ const UI = (() => {
         }
       }
     }
+    if (u.type === "SCOUT") {
+      btn(u.autoExplore ? "🛑 Stop Exploring" : "🗺️ Auto-Explore", () => {
+        u.autoExplore = !u.autoExplore;
+        if (u.autoExplore) { AI.autoExplore(game, u); cycleNextUnit(); }
+        refreshAll();
+      });
+    }
     if (!u.isCivilian) {
       btn(u.fortified ? "⛺ Wake" : "🛡️ Fortify", () => {
         u.fortified = !u.fortified;
@@ -183,7 +191,7 @@ const UI = (() => {
 
   function cycleNextUnit() {
     const candidates = game.units.filter(u => u.owner === 0 && u.moves > 0 && !u.fortified &&
-      !u.building && !(u.path && u.path.length));
+      !u.building && !u.autoExplore && !(u.path && u.path.length));
     if (!candidates.length) { selectUnit(null); return; }
     const cur = rend.selected ? candidates.indexOf(rend.selected) : -1;
     const next = candidates[(cur + 1) % candidates.length];
@@ -587,7 +595,7 @@ const UI = (() => {
     const p = game.players[0];
     if (!p.researching && p.availableTechs().length) { showTechScreen(); return; }
     const idle = game.units.find(u => u.owner === 0 && u.moves > 0 && !u.fortified && !u.attacked &&
-      !u.building && !(u.path && u.path.length));
+      !u.building && !u.autoExplore && !(u.path && u.path.length));
     const cityIdle = game.cities.find(c => c.owner === 0 && !c.producing);
     if (cityIdle) { selectCity(cityIdle); rend.centerOn(game, cityIdle.c, cityIdle.r); return; }
     if (idle && !endTurn.skipIdle) {
@@ -692,6 +700,7 @@ const UI = (() => {
         lastX = e.clientX; lastY = e.clientY;
       } else {
         updateTooltip(e);
+        updateHover(e);
       }
     });
     window.addEventListener("mouseup", (e) => {
@@ -743,6 +752,7 @@ const UI = (() => {
 
     $("btn-endturn").onclick = endTurn;
     $("btn-tech").onclick = showTechScreen;
+    $("stat-sci").onclick = showTechScreen;
     $("btn-diplo").onclick = showDiploScreen;
     $("btn-religion").onclick = showReligionScreen;
     $("stat-faith").onclick = showReligionScreen;
@@ -754,6 +764,29 @@ const UI = (() => {
     document.querySelectorAll(".modal").forEach(m => {
       m.addEventListener("mousedown", (e) => { if (e.target === m) m.style.display = "none"; });
     });
+  }
+
+  function updateHover(e) {
+    if (!game || $("start-screen").style.display !== "none") return;
+    const cv = rend.canvas;
+    const rect = cv.getBoundingClientRect();
+    if (e.clientX < rect.left || e.clientY < rect.top || e.clientY > rect.bottom) {
+      if (rend.hoverTile) { rend.hoverTile = null; rend.previewPath = null; rend.dirty = true; }
+      return;
+    }
+    const [c, r] = rend.screenToHex(e.clientX - rect.left, e.clientY - rect.top);
+    const prev = rend.hoverTile;
+    if (prev && prev[0] === c && prev[1] === r) return;
+    rend.hoverTile = game.tile(c, r) ? [c, r] : null;
+    rend.previewPath = null;
+    const sel = rend.selected;
+    if (sel && sel.owner === 0 && rend.hoverTile && !(sel.c === c && sel.r === r)) {
+      const t = game.tile(c, r);
+      if (game.players[0].visible[game.map.idx(c, r)] && game.unitPassable(sel, t)) {
+        rend.previewPath = game.findPath(sel, c, r);
+      }
+    }
+    rend.dirty = true;
   }
 
   function updateTooltip(e) {
@@ -798,7 +831,10 @@ const UI = (() => {
     bindInput();
     showStartScreen();
     (function loop() {
-      if (game && rend.dirty && $("start-screen").style.display === "none") rend.draw(game);
+      if (game && $("start-screen").style.display === "none" &&
+          (rend.dirty || game.effects.length)) {
+        rend.draw(game);
+      }
       requestAnimationFrame(loop);
     })();
   }

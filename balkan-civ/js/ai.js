@@ -326,7 +326,12 @@ const AI = (() => {
   }
 
   function runScout(game, p, u) {
-    // walk toward the nearest unexplored tile (a scout with Sailing will embark)
+    autoExplore(game, u);
+  }
+
+  // walk toward the nearest unexplored tile (with Sailing the unit will embark)
+  function autoExplore(game, u) {
+    const p = game.players[u.owner];
     let best = null, bestD = Infinity;
     for (let i = 0; i < game.map.tiles.length; i++) {
       if (p.visible[i]) continue;
@@ -335,7 +340,8 @@ const AI = (() => {
       const d = HEX.distance(u.c, u.r, t.c, t.r);
       if (d < bestD) { bestD = d; best = t; }
     }
-    if (best && !game.moveUnitTo(u, best.c, best.r)) {
+    if (!best) { u.autoExplore = false; u.moves = 0; return; } // map fully explored
+    if (!game.moveUnitTo(u, best.c, best.r)) {
       u.moves = 0; // unreachable this era — wait rather than rescan
     }
   }
@@ -524,5 +530,5 @@ const AI = (() => {
     return best;
   }
 
-  return { takeTurn };
+  return { takeTurn, autoExplore };
 })();

@@ -46,7 +46,8 @@ Game* on the title screen to pick up where you left off.
   Stari Most, Bran Castle, and more — each buildable once per world)
 - 26-technology research tree across four eras (Ancient → Renaissance)
 - Civ V-style combat: hit points, ranged vs melee, terrain defense bonuses,
-  fortification, sieges, city bombardment and capture
+  fortification, floating damage numbers, and sieges — cities bombard one
+  besieger every turn, so bring catapults
 - Unit promotions: combat earns XP; veterans gain up to three ⭐ levels,
   each worth +10% strength (and a morale heal on promotion)
 - **Religion**: Shrines, Temples and monasteries generate faith. Found one
@@ -77,6 +78,9 @@ Game* on the title screen to pick up where you left off.
   land, build navies, research, declare war, sue for peace, and march
   armies on your cities
 - Diplomacy screen: declare war, propose peace, compare scores
+- Three difficulty levels (Prince / King / Emperor) scaling AI output
+- Hover any hex for a movement path preview with turn count; scouts can
+  **auto-explore**
 - Victory by **Domination** (control every capital) or **Score** at turn 300
 - Autosave + continue
 

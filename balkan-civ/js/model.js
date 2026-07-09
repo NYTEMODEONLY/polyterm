@@ -141,6 +141,8 @@ class Game {
     this.cities = [];
     this.players = [];
     this.notifications = [];
+    this.effects = [];           // transient combat popups (not saved)
+    this.difficulty = opts.difficulty || "normal";
     this.over = false;
     this.winner = null;
     this.victoryType = null;
@@ -251,6 +253,11 @@ class Game {
 
   notify(msg, playerIdx = 0) {
     if (playerIdx === 0 || playerIdx === -1) this.notifications.push({ turn: this.turn, msg });
+  }
+
+  addEffect(c, r, text, color = "#ff5544") {
+    this.effects.push({ c, r, text, color, ts: Date.now() });
+    if (this.effects.length > 40) this.effects.shift();
   }
 
   // ---------- units ----------
@@ -506,9 +513,11 @@ class Game {
       const defStr = this.cityStrength(targetCity);
       const dmg = this.damageRoll(attStr, defStr);
       targetCity.hp -= dmg;
+      this.addEffect(c, r, "-" + dmg);
       if (!ranged) {
         const back = this.damageRoll(defStr, attStr);
         unit.hp -= back;
+        this.addEffect(unit.c, unit.r, "-" + back, "#ffaa33");
         if (unit.hp <= 0) {
           this.removeUnit(unit);
           if (targetCity.hp <= 0) targetCity.hp = 1; // no one left to capture it
@@ -523,9 +532,11 @@ class Game {
       const defStr = this.strengthOf(targetUnit, { attacking: false });
       const dmg = this.damageRoll(attStr, defStr);
       targetUnit.hp -= dmg;
+      this.addEffect(c, r, "-" + dmg);
       if (!ranged) {
         const back = this.damageRoll(defStr, attStr);
         unit.hp -= back;
+        this.addEffect(unit.c, unit.r, "-" + back, "#ffaa33");
       }
       if (targetUnit.hp > 0) targetUnit.gainXp(4);
       if (unit.hp > 0) unit.gainXp((ranged ? 3 : 5) + (targetUnit.hp <= 0 ? 5 : 0));
@@ -693,6 +704,11 @@ class Game {
     if (civ.coastalGold && city.coastal) gold += civ.coastalGold;
     if (civ.coastalFood && city.coastal) food += civ.coastalFood;
     if (civ.cultureBonus) culture *= (1 + civ.cultureBonus);
+    if (!p.isHuman && !p.isMinor) {
+      const mult = { easy: 0.75, normal: 1, hard: 1.3 }[this.difficulty] || 1;
+      prod = Math.floor(prod * mult); gold = Math.floor(gold * mult);
+      sci = sci * mult;
+    }
     return { food, prod, gold, sci: Math.floor(sci), culture, faith };
   }
 
@@ -1256,6 +1272,28 @@ class Game {
     }
   }
 
+  // Cities bombard one hostile unit within range 2 every turn
+  cityStrikes(p) {
+    for (const city of this.cities) {
+      if (city.owner !== p.index) continue;
+      let target = null, bestScore = -Infinity;
+      for (const [c, r] of HEX.ring(city.c, city.r, 2)) {
+        const u = this.combatUnitAt(c, r);
+        if (!u || !p.atWarWith.has(u.owner)) continue;
+        const score = 100 - u.hp + (this.isEmbarked(u) ? 50 : 0);
+        if (score > bestScore) { bestScore = score; target = u; }
+      }
+      if (!target) continue;
+      const dmg = this.damageRoll(this.cityStrength(city) * 0.5, this.strengthOf(target, {}));
+      target.hp -= dmg;
+      this.addEffect(target.c, target.r, "-" + dmg, "#66ccff");
+      if (target.hp <= 0) {
+        this.removeUnit(target);
+        if (target.owner === 0) this.notify(`Your ${target.def.name} fell to ${city.name}'s defenses!`);
+      }
+    }
+  }
+
   healUnits(p) {
     for (const u of this.units) {
       if (u.owner !== p.index || u.hp >= 100) continue;
@@ -1275,6 +1313,7 @@ class Game {
   endTurn() {
     if (this.over) return;
     const human = this.players[0];
+    this.cityStrikes(human);
     this.healUnits(human);
     this.progressWorkers(human);
     this.processPlayerEconomy(human);
@@ -1283,6 +1322,7 @@ class Game {
       const p = this.players[i];
       if (!p.alive) continue;
       AI.takeTurn(this, p);
+      this.cityStrikes(p);
       this.healUnits(p);
       this.progressWorkers(p);
       this.processPlayerEconomy(p);
@@ -1303,9 +1343,12 @@ class Game {
 
     this.turn++;
     for (const u of this.units) u.resetTurn();
-    // continue queued paths for the human player
+    // continue queued paths and auto-exploration for the human player
     for (const u of this.units) {
       if (u.owner === 0 && u.path && u.path.length) this.stepAlongPath(u);
+    }
+    for (const u of this.units) {
+      if (u.owner === 0 && u.autoExplore && u.moves > 0) AI.autoExplore(this, u);
     }
     this.updateVisibility(human);
     this.checkVictory();
@@ -1343,7 +1386,8 @@ class Game {
   // ---------- save / load ----------
   serialize() {
     return JSON.stringify({
-      v: 1, turn: this.turn, seed: this.seed, mapType: this.mapType, over: this.over,
+      v: 1, turn: this.turn, seed: this.seed, mapType: this.mapType,
+      difficulty: this.difficulty, over: this.over,
       winner: this.winner, victoryType: this.victoryType, nextId: NEXT_ID,
       religions: this.religions,
       map: { w: this.map.w, h: this.map.h, tiles: this.map.tiles.map(t => ({
@@ -1361,7 +1405,8 @@ class Game {
       cities: this.cities.map(c => ({ ...c })),
       units: this.units.map(u => ({ id: u.id, type: u.type, owner: u.owner, c: u.c, r: u.r,
         hp: u.hp, moves: u.moves, fortified: u.fortified, attacked: u.attacked, path: u.path,
-        xp: u.xp, level: u.level, building: u.building, charges: u.charges })),
+        xp: u.xp, level: u.level, building: u.building, charges: u.charges,
+        autoExplore: u.autoExplore || false })),
       notifications: this.notifications.slice(-30),
     });
   }
@@ -1370,6 +1415,8 @@ class Game {
     const d = JSON.parse(json);
     const g = Object.create(Game.prototype);
     g.turn = d.turn; g.seed = d.seed; g.mapType = d.mapType || "peninsula"; g.over = d.over;
+    g.difficulty = d.difficulty || "normal";
+    g.effects = [];
     g.winner = d.winner; g.victoryType = d.victoryType;
     g.maxTurns = GAME_DEFAULTS.maxTurns;
     g.rng = mulberry32((d.seed + d.turn * 7919) >>> 0);

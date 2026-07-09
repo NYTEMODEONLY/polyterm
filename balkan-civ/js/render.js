@@ -3,6 +3,27 @@
 // ============================================================
 "use strict";
 
+// deterministic per-tile brightness variation
+function tileJitter(c, r) {
+  let h = (c * 73856093) ^ (r * 19349663);
+  h = (h ^ (h >> 13)) >>> 0;
+  return ((h % 100) / 100 - 0.5) * 0.14; // -7%..+7%
+}
+
+const _shadeCache = {};
+function shade(color, f) {
+  const key = color + "|" + f.toFixed(2);
+  if (_shadeCache[key]) return _shadeCache[key];
+  const n = parseInt(color.slice(1), 16);
+  let R = (n >> 16) & 255, G = (n >> 8) & 255, B = n & 255;
+  R = Math.max(0, Math.min(255, Math.round(R * (1 + f))));
+  G = Math.max(0, Math.min(255, Math.round(G * (1 + f))));
+  B = Math.max(0, Math.min(255, Math.round(B * (1 + f))));
+  const out = "#" + ((R << 16) | (G << 8) | B).toString(16).padStart(6, "0");
+  _shadeCache[key] = out;
+  return out;
+}
+
 class Renderer {
   constructor(canvas, minimap) {
     this.canvas = canvas;
@@ -15,7 +36,8 @@ class Renderer {
     this.selectedCity = null;
     this.reachable = [];         // [[c,r],...] move highlights
     this.attackable = [];        // [[c,r],...] attack highlights
-    this.hoverTile = null;
+    this.hoverTile = null;   // [c, r] under the cursor
+    this.previewPath = null; // path preview for the selected unit
     this.dirty = true;
   }
 
@@ -110,6 +132,67 @@ class Renderer {
       this.drawUnit(ctx, game, u, sx, sy, s);
     }
 
+    // hover highlight + path preview
+    if (this.hoverTile) {
+      const [hc, hr] = this.hoverTile;
+      if (game.tile(hc, hr) && game.players[0].visible[game.map.idx(hc, hr)]) {
+        const [sx, sy] = this.worldToScreen(hc, hr);
+        this.hexPath(ctx, sx, sy, s * 0.96);
+        ctx.strokeStyle = "rgba(255,255,255,0.55)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    }
+    if (this.previewPath && this.previewPath.length && this.selected) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(255,255,255,0.65)";
+      ctx.lineWidth = Math.max(2, s * 0.09);
+      ctx.setLineDash([s * 0.25, s * 0.2]);
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      let [px, py] = this.worldToScreen(this.selected.c, this.selected.r);
+      ctx.moveTo(px, py);
+      for (const [pc, pr] of this.previewPath) {
+        [px, py] = this.worldToScreen(pc, pr);
+        ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // destination dot + rough turn estimate
+      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      ctx.beginPath();
+      ctx.arc(px, py, Math.max(3, s * 0.12), 0, Math.PI * 2);
+      ctx.fill();
+      const turns = Math.max(1, Math.ceil(this.previewPath.length / Math.max(1, this.selected.def.moves)));
+      if (turns > 1) {
+        ctx.fillStyle = "#fff";
+        ctx.font = `bold ${Math.max(11, Math.floor(s * 0.35))}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.fillText(String(turns), px, py - s * 0.35);
+      }
+      ctx.restore();
+    }
+
+    // floating combat numbers
+    const now = Date.now();
+    game.effects = game.effects.filter(e => now - e.ts < 1300);
+    for (const e of game.effects) {
+      const age = (now - e.ts) / 1300;
+      const [ex, ey] = this.worldToScreen(e.c, e.r);
+      ctx.save();
+      ctx.globalAlpha = 1 - age;
+      ctx.fillStyle = e.color;
+      ctx.strokeStyle = "rgba(0,0,0,0.8)";
+      ctx.lineWidth = 3;
+      ctx.font = `bold ${Math.max(13, Math.floor(s * 0.5))}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const yy = ey - s * 0.3 - age * s * 0.9;
+      ctx.strokeText(e.text, ex, yy);
+      ctx.fillText(e.text, ex, yy);
+      ctx.restore();
+    }
+
     // selection ring
     if (this.selected && game.units.includes(this.selected)) {
       const [sx, sy] = this.worldToScreen(this.selected.c, this.selected.r);
@@ -143,11 +226,36 @@ class Renderer {
 
   drawTile(ctx, game, t, sx, sy, s, v) {
     this.hexPath(ctx, sx, sy, s + 0.5);
-    ctx.fillStyle = TERRAIN[t.terrain].color;
+    const water = t.terrain === "OCEAN" || t.terrain === "COAST";
+    ctx.fillStyle = shade(TERRAIN[t.terrain].color, water ? tileJitter(t.c, t.r) * 0.5 : tileJitter(t.c, t.r));
     ctx.fill();
-    ctx.strokeStyle = "rgba(0,0,0,0.25)";
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = water ? "rgba(0,0,0,0.08)" : "rgba(0,0,0,0.15)";
+    ctx.lineWidth = 0.7;
     ctx.stroke();
+    // gentle waves on some water tiles
+    if (water && s > 12) {
+      const h = ((t.c * 7 + t.r * 13) % 7);
+      if (h < 2) {
+        ctx.strokeStyle = "rgba(255,255,255,0.10)";
+        ctx.lineWidth = Math.max(1, s * 0.05);
+        for (const [dx, dy] of h === 0 ? [[-0.25, -0.1], [0.1, 0.2]] : [[0.05, -0.2]]) {
+          ctx.beginPath();
+          ctx.arc(sx + dx * s, sy + dy * s + s * 0.15, s * 0.22, Math.PI * 1.15, Math.PI * 1.85);
+          ctx.stroke();
+        }
+      }
+    }
+    // sunlit edge on land for a hint of relief
+    if (!water) {
+      const pts = HEX.corners(sx, sy, s * 0.98);
+      ctx.strokeStyle = "rgba(255,255,240,0.07)";
+      ctx.lineWidth = Math.max(1, s * 0.08);
+      ctx.beginPath();
+      ctx.moveTo(pts[3][0], pts[3][1]);
+      ctx.lineTo(pts[4][0], pts[4][1]);
+      ctx.lineTo(pts[5][0], pts[5][1]);
+      ctx.stroke();
+    }
 
     // feature / terrain decorations
     if (t.terrain === "MOUNTAIN") {
@@ -316,6 +424,8 @@ class Renderer {
   drawUnit(ctx, game, u, sx, sy, s) {
     const civ = CIVS[game.players[u.owner].civId];
     const rad = s * 0.42;
+    const spent = u.owner === 0 && u.moves <= 0;
+    if (spent) ctx.globalAlpha = 0.6;
     // shadow + disc
     ctx.beginPath();
     ctx.arc(sx, sy + 2, rad, 0, Math.PI * 2);
@@ -360,6 +470,7 @@ class Renderer {
         ctx.fill();
       }
     }
+    if (spent) ctx.globalAlpha = 1;
   }
 
   drawMinimap(game) {
