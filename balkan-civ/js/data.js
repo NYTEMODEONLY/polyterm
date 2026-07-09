@@ -153,6 +153,18 @@ const BUILDINGS = {
   WORKSHOP:  { name: "Workshop",   icon: "🛠️", cost: 150, prod: 4, tech: "MACHINERY" },
   BANK:      { name: "Bank",       icon: "🏦", cost: 200, gold: 5, tech: "BANKING" },
   // ---- Wonders (one per world) ----
+  DIOCLETIAN:   { name: "Diocletian's Palace",  icon: "🏛️", cost: 170, wonder: true, gold: 3, culture: 3, tech: "MASONRY",
+                  blurb: "The emperor's retirement estate at Split. +3 gold, +3 culture." },
+  HIPPODROME:   { name: "Hippodrome",           icon: "🏇", cost: 190, wonder: true, happy: 4, culture: 2, tech: "HORSEBACK_RIDING",
+                  blurb: "Constantinople's arena of factions. +4 happiness, +2 culture." },
+  OHRID_SCHOOL: { name: "Ohrid Literary School", icon: "📖", cost: 200, wonder: true, sci: 4, culture: 2, tech: "PHILOSOPHY",
+                  blurb: "Cradle of Slavic letters. +4 science, +2 culture." },
+  STARI_MOST:   { name: "Stari Most",           icon: "🌉", cost: 210, wonder: true, gold: 4, happy: 2, tech: "CONSTRUCTION",
+                  blurb: "The old bridge at Mostar. +4 gold, +2 happiness." },
+  MOUNT_ATHOS:  { name: "Mount Athos",          icon: "⛰️", cost: 240, wonder: true, faith: 5, culture: 3, tech: "THEOLOGY",
+                  blurb: "The Holy Mountain of monasteries. +5 faith, +3 culture." },
+  BRAN_CASTLE:  { name: "Bran Castle",          icon: "🦇", cost: 230, wonder: true, cityHp: 75, cityStr: 6, culture: 2, tech: "CHIVALRY",
+                  blurb: "The Carpathian eyrie. +75 city HP, +6 city strength, +2 culture." },
   HAGIA_SOPHIA: { name: "Hagia Sophia",         icon: "🕌", cost: 260, wonder: true, culture: 6, sci: 3, faith: 4, tech: "THEOLOGY",
                   blurb: "The great church of Constantinople. +6 culture, +3 science." },
   STUDENICA:    { name: "Studenica Monastery",  icon: "⛪", cost: 210, wonder: true, culture: 5, food: 2, faith: 3, tech: "PHILOSOPHY",
@@ -292,6 +304,21 @@ for (const [id, m] of Object.entries(MINORS)) {
 
 const INFLUENCE_FRIEND = 30;
 const INFLUENCE_ALLY = 60;
+
+// ------------------------------------------------------------
+// Espionage — spies unlock with Civil Service, Education, Gunpowder
+// ------------------------------------------------------------
+const SPY_TECHS = ["CIVIL_SERVICE", "EDUCATION", "GUNPOWDER"];
+const SPY_NAMES = ["Miloš", "Jelena", "Petar", "Teodora", "Marko", "Ana", "Stefan", "Mara",
+  "Dimitar", "Zora", "Luka", "Irina", "Vuk", "Elena", "Niko", "Ružica"];
+const SPY = {
+  stealRate: 12,        // progress per turn toward a steal (100 completes)
+  stealThreshold: 100,
+  catchBase: 0.2,       // chance to be caught on completion
+  catchDefended: 0.5,   // ...when a counterspy guards the city
+  deadTurns: 15,        // turns to train a replacement
+  rigPerTurn: 2,        // influence per turn when rigging a city-state
+};
 
 // Barbarian-free game; players fight each other.
 const GAME_DEFAULTS = { mapW: 44, mapH: 34, maxTurns: 300 };

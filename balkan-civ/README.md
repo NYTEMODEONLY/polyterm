@@ -41,8 +41,9 @@ Game* on the title screen to pick up where you left off.
   embarked units are nearly defenseless — escort them
 - Fog of war with explored/visible states
 - Cities: population growth, worked tiles, culture-driven border expansion,
-  production queues, gold purchasing, 14 buildings and 4 world wonders
-  (Hagia Sophia, Studenica, Rila, Kalemegdan)
+  production queues, gold purchasing, 16 buildings and 10 world wonders
+  (Hagia Sophia, Mount Athos, the Hippodrome, Diocletian's Palace,
+  Stari Most, Bran Castle, and more — each buildable once per world)
 - 26-technology research tree across four eras (Ancient → Renaissance)
 - Civ V-style combat: hit points, ranged vs melee, terrain defense bonuses,
   fortification, sieges, city bombardment and capture
@@ -62,6 +63,12 @@ Game* on the title screen to pick up where you left off.
   cities and population grow. Unhappy empires grow at half speed; below −10
   growth stops and units fight at −15%. Surplus happiness fills a meter
   that triggers **Golden Ages**: 10 turns of +20% gold and production
+- **Espionage**: spies unlock with Civil Service, Education and Gunpowder.
+  Station them in rival cities to steal technology (and risk execution),
+  in your own cities as counter-intelligence, or in city-states to rig
+  elections for influence
+- **Sound**: procedurally synthesized effects (WebAudio, no files) for
+  combat, research, golden ages, spies and more — mute with the 🔊 button
 - Workers and tile improvements: farms, mines, and roads (roads cut movement
   cost to 1 on any terrain)
 - Strategic resources (horses, iron) gating unit types; luxury resources
@@ -86,6 +93,7 @@ Game* on the title screen to pick up where you left off.
 | `F` | Fortify selected unit |
 | `T` | Technology tree |
 | `R` | Religion overview |
+| `E` | Espionage |
 | `D` | Diplomacy |
 | `Esc` | Close panels |
 
@@ -97,6 +105,7 @@ Plain HTML/CSS/JavaScript — no frameworks, no build step.
 index.html        page shell
 css/style.css     all styling
 js/data.js        civs, units, buildings, techs, terrain tables
+js/sound.js       procedural WebAudio sound effects
 js/hex.js         hex-grid math (odd-r offset, cube distance, pixel transforms)
 js/mapgen.js      seeded value-noise map generation + start placement
 js/model.js       game engine: cities, units, combat, research, turns, save/load
@@ -107,4 +116,4 @@ js/ui.js          panels, modals, input handling
 
 ## Ideas for future expansion
 
-Espionage, more wonders, sound.
+Hotseat multiplayer, a map editor, unit animations, music.

@@ -58,6 +58,8 @@ const UI = (() => {
   function startPlaying() {
     $("start-screen").style.display = "none";
     $("game-ui").style.display = "block";
+    notifSeen = game.notifications.length; // don't replay loaded history
+    $("btn-mute").textContent = SFX.muted ? "🔇" : "🔊";
     resize();
     const firstUnit = game.units.find(u => u.owner === 0);
     if (firstUnit) rend.centerOn(game, firstUnit.c, firstUnit.r);
@@ -67,6 +69,7 @@ const UI = (() => {
 
   // ---------------- selection ----------------
   function selectUnit(u) {
+    if (u && u !== rend.selected) SFX.play("select");
     rend.selected = u;
     rend.selectedCity = null;
     if (u) {
@@ -141,7 +144,7 @@ const UI = (() => {
         });
       btn("🏛️ Found City", () => {
         const city = game.foundCity(u);
-        if (city) { selectCity(city); refreshAll(); }
+        if (city) { SFX.play("build"); selectCity(city); refreshAll(); }
       }, canFound && u.moves > 0);
     }
     if (u.def.missionary) {
@@ -241,6 +244,7 @@ const UI = (() => {
     const city = game.cities.find(c => c.id === cityId);
     if (!city) return;
     city.producing = { kind, key };
+    SFX.play("click");
     showCityPanel(city);
     refreshAll();
   }
@@ -250,6 +254,7 @@ const UI = (() => {
     if (!city) return;
     const cost = kind === "unit" ? UNITS[key].cost : BUILDINGS[key].cost;
     if (game.purchase(city, { kind, key, cost })) {
+      SFX.play("coin");
       showCityPanel(city);
       refreshAll();
     }
@@ -294,6 +299,7 @@ const UI = (() => {
   }
 
   function pickTech(key) {
+    SFX.play("click");
     game.players[0].researching = key;
     $("tech-modal").style.display = "none";
     refreshAll();
@@ -365,7 +371,62 @@ const UI = (() => {
 
   function buyMissionary(cityId) {
     const city = game.cities.find(c => c.id === cityId);
-    if (city && game.buyMissionary(city)) { showCityPanel(city); refreshAll(); }
+    if (city && game.buyMissionary(city)) { SFX.play("coin"); showCityPanel(city); refreshAll(); }
+  }
+
+  // ---------------- espionage ----------------
+  function showSpyScreen() {
+    const p = game.players[0];
+    $("spy-modal").style.display = "flex";
+    const body = $("spy-body");
+    if (!p.spies.length) {
+      const next = SPY_TECHS.find(t => !p.techs.has(t));
+      body.innerHTML = `<div class="diplo-row dim">You have no spies yet. Agents are recruited with
+        ${SPY_TECHS.map(t => TECHS[t].name).join(", ")}${next ? ` — research <b>${TECHS[next].name}</b> next` : ""}.</div>`;
+      return;
+    }
+    let html = `<div class="diplo-row dim">Assign spies to your cities (counter-intelligence), rival cities
+      (steal technology, ~${Math.ceil(SPY.stealThreshold / SPY.stealRate)} turns per attempt), or city-states
+      (+${SPY.rigPerTurn} influence per turn).</div>`;
+    for (const spy of p.spies) {
+      html += `<div class="diplo-row"><b>🕵️ ${spy.name}</b> — `;
+      if (spy.deadUntil > game.turn) {
+        html += `<span class="war">training replacement (${spy.deadUntil - game.turn} turns)</span></div>`;
+        continue;
+      }
+      const city = spy.cityId !== null ? game.cities.find(c => c.id === spy.cityId) : null;
+      if (!city) {
+        html += `<span class="alert">idle</span>`;
+      } else if (city.owner === 0) {
+        html += `guarding <b>${city.name}</b>`;
+      } else if (game.players[city.owner].isMinor) {
+        html += `rigging elections in <b>${city.name}</b>`;
+      } else {
+        html += `stealing in <b>${city.name}</b> (${CIVS[game.players[city.owner].civId].name}) — ${spy.progress}%`;
+      }
+      // assignment dropdown
+      let opts = `<option value="">— reassign —</option>`;
+      const mine = game.cities.filter(c => c.owner === 0);
+      if (mine.length) opts += `<optgroup label="Defend">` +
+        mine.map(c => `<option value="${c.id}">${c.name}</option>`).join("") + `</optgroup>`;
+      for (const o of game.players) {
+        if (o.index === 0 || !o.alive || !p.met.has(o.index)) continue;
+        const theirs = game.cities.filter(c => c.owner === o.index);
+        if (!theirs.length) continue;
+        const label = o.isMinor ? `Rig — ${o.civ.name}` : `Steal — ${o.civ.name}`;
+        opts += `<optgroup label="${label}">` +
+          theirs.map(c => `<option value="${c.id}">${c.name}</option>`).join("") + `</optgroup>`;
+      }
+      html += ` <select onchange="UI.assignSpy(${spy.id}, this.value)">${opts}</select></div>`;
+    }
+    body.innerHTML = html;
+  }
+
+  function assignSpy(spyId, cityIdStr) {
+    if (cityIdStr === "") return;
+    game.assignSpy(0, spyId, parseInt(cityIdStr, 10));
+    SFX.play("spy");
+    showSpyScreen();
   }
 
   // ---------------- diplomacy screen ----------------
@@ -423,6 +484,7 @@ const UI = (() => {
 
   function gift(minorIdx, amount) {
     if (game.giftInfluence(0, minorIdx, amount)) {
+      SFX.play("coin");
       showDiploScreen();
       refreshAll();
     }
@@ -485,9 +547,24 @@ const UI = (() => {
     $("stat-score").textContent = `🏆 ${game.score(0)}`;
   }
 
+  let notifSeen = 0;
+  const NOTIF_SOUNDS = [
+    [/WAR!/, "war"], [/Peace between|refuses to make peace/, "peace"],
+    [/GOLDEN AGE/, "golden"], [/Research complete/, "research"],
+    [/has been completed/, "wonder"], [/founded|now follows/, "bell"],
+    [/captured/, "capture"], [/🕵️/, "spy"], [/destroyed/, "defeat"],
+    [/gifts you/, "coin"], [/grew to/, "grow"], [/finished/, "build"],
+  ];
+
   function refreshNotifications() {
     const list = $("notif-list");
-    const recent = game.notifications.slice(-6);
+    const all = game.notifications;
+    for (let i = notifSeen; i < all.length; i++) {
+      const hit = NOTIF_SOUNDS.find(([re]) => re.test(all[i].msg));
+      if (hit) { SFX.play(hit[1]); break; } // at most one sound per refresh
+    }
+    notifSeen = all.length;
+    const recent = all.slice(-6);
     list.innerHTML = recent.map(n => `<div class="notif"><span class="dim">T${n.turn}</span> ${n.msg}</div>`).join("");
     list.scrollTop = list.scrollHeight;
   }
@@ -522,6 +599,7 @@ const UI = (() => {
     }
     endTurn.skipIdle = false;
     $("btn-endturn").textContent = "End Turn ⏵";
+    SFX.play("turn");
     game.endTurn();
     try { localStorage.setItem("balkan-civ-save", game.serialize()); } catch (e) { /* storage full */ }
     if (rend.selected && !game.units.includes(rend.selected)) rend.selected = null;
@@ -537,6 +615,7 @@ const UI = (() => {
     const modal = $("victory-modal");
     modal.style.display = "flex";
     const won = game.winner === 0;
+    SFX.play(won ? "golden" : "defeat");
     const civ = CIVS[game.players[game.winner].civId];
     $("victory-body").innerHTML = `
       <h2>${won ? "🏆 VICTORY!" : "☠️ DEFEAT"}</h2>
@@ -563,6 +642,7 @@ const UI = (() => {
     const sel = rend.selected;
     // attack?
     if (sel && !rightClick && rend.attackable.some(([ac, ar]) => ac === c && ar === r)) {
+      SFX.play(t.city ? "cityhit" : "attack");
       game.attack(sel, c, r);
       if (game.units.includes(sel)) selectUnit(sel); else selectUnit(null);
       refreshAll();
@@ -573,6 +653,7 @@ const UI = (() => {
         (!game.combatUnitAt(c, r) && !t.city && !game.unitsAt(c, r).length))) {
       const isOwnTile = sel.c === c && sel.r === r;
       if (!isOwnTile && game.unitPassable(sel, t)) {
+        SFX.play("move");
         game.moveUnitTo(sel, c, r);
         selectUnit(game.units.includes(sel) ? sel : null);
         refreshAll();
@@ -651,11 +732,13 @@ const UI = (() => {
         $("diplo-modal").style.display = "none";
         $("religion-modal").style.display = "none";
         $("founding-modal").style.display = "none";
+        $("spy-modal").style.display = "none";
         closeCity();
         selectUnit(null);
       } else if (e.key === "t") showTechScreen();
       else if (e.key === "d") showDiploScreen();
       else if (e.key === "r") showReligionScreen();
+      else if (e.key === "e") showSpyScreen();
     });
 
     $("btn-endturn").onclick = endTurn;
@@ -663,6 +746,10 @@ const UI = (() => {
     $("btn-diplo").onclick = showDiploScreen;
     $("btn-religion").onclick = showReligionScreen;
     $("stat-faith").onclick = showReligionScreen;
+    $("btn-spies").onclick = showSpyScreen;
+    $("btn-mute").onclick = () => {
+      $("btn-mute").textContent = SFX.toggleMute() ? "🔇" : "🔊";
+    };
     $("btn-menu").onclick = () => { if (confirm("Return to the main menu? (progress is auto-saved)")) showStartScreen(); };
     document.querySelectorAll(".modal").forEach(m => {
       m.addEventListener("mousedown", (e) => { if (e.target === m) m.style.display = "none"; });
@@ -717,6 +804,6 @@ const UI = (() => {
   }
 
   return { init, setProduction, buyItem, closeCity, pickTech, diploAction, newGame,
-    showFoundingModal, confirmFounding, buyMissionary, gift,
+    showFoundingModal, confirmFounding, buyMissionary, gift, assignSpy,
     get game() { return game; }, get renderer() { return rend; } };
 })();

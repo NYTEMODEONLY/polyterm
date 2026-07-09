@@ -99,6 +99,7 @@ class Player {
     this.gaMeter = 0;            // golden age progress
     this.goldenAgeTurns = 0;     // turns of golden age remaining
     this.gaCount = 0;            // golden ages enjoyed so far
+    this.spies = [];             // {id, name, cityId, progress, deadUntil}
   }
   get civ() { return CIVS[this.civId]; }
   get isMinor() { return !!this.civ.minor; }
@@ -943,6 +944,73 @@ class Game {
 
   dirtyHappiness() { this._hap = {}; }
 
+  // ---------- espionage ----------
+  spySlots(p) {
+    return SPY_TECHS.reduce((a, t) => a + (p.hasTech(t) ? 1 : 0), 0);
+  }
+
+  assignSpy(playerIdx, spyId, cityId) {
+    const p = this.players[playerIdx];
+    const spy = p.spies.find(s => s.id === spyId);
+    if (!spy || spy.deadUntil > this.turn) return false;
+    if (cityId !== null && !this.cities.find(c => c.id === cityId)) return false;
+    spy.cityId = cityId;
+    spy.progress = 0;
+    return true;
+  }
+
+  processEspionage() {
+    if (!this.stats) this.stats = { steals: 0, catches: 0 };
+    for (const p of this.players) {
+      if (p.isMinor || !p.alive) continue;
+      // recruit up to the entitled number of spies
+      while (p.spies.length < this.spySlots(p)) {
+        p.spies.push({ id: uid(), name: SPY_NAMES[(p.index * 5 + p.spies.length * 3) % SPY_NAMES.length],
+          cityId: null, progress: 0, deadUntil: 0 });
+        if (p.index === 0) this.notify(`🕵️ A new spy is ready — assign them in the Espionage panel (E).`);
+      }
+      for (const spy of p.spies) {
+        if (spy.deadUntil > this.turn || spy.cityId === null) continue;
+        const city = this.cities.find(c => c.id === spy.cityId);
+        if (!city) { spy.cityId = null; spy.progress = 0; continue; } // city razed/gone
+        const owner = this.players[city.owner];
+        if (city.owner === p.index) continue; // counter-intelligence is passive
+        if (owner.isMinor) {
+          // rig elections
+          if (!p.atWarWith.has(city.owner)) {
+            p.influence[city.owner] = (p.influence[city.owner] || 0) + SPY.rigPerTurn;
+          }
+          continue;
+        }
+        // steal technology
+        spy.progress += SPY.stealRate;
+        if (spy.progress < SPY.stealThreshold) continue;
+        spy.progress = 0;
+        const defended = owner.spies.some(s => s.cityId === city.id && s.deadUntil <= this.turn);
+        if (this.rng() < (defended ? SPY.catchDefended : SPY.catchBase)) {
+          spy.cityId = null;
+          spy.deadUntil = this.turn + SPY.deadTurns;
+          this.stats.catches++;
+          if (p.index === 0) this.notify(`🕵️ ${spy.name} was caught in ${city.name} and executed! A replacement trains for ${SPY.deadTurns} turns.`);
+          if (city.owner === 0) this.notify(`🕵️ Your agents caught a ${p.civ.adj} spy in ${city.name}!`);
+        } else {
+          const stealable = [...owner.techs].filter(t =>
+            !p.techs.has(t) && TECHS[t].req.every(r => p.techs.has(r)));
+          if (stealable.length) {
+            const t = stealable[Math.floor(this.rng() * stealable.length)];
+            p.techs.add(t);
+            this.stats.steals++;
+            if (p.researching && p.techs.has(p.researching)) p.researching = null;
+            if (p.index === 0) this.notify(`🕵️ ${spy.name} stole ${TECHS[t].name} from ${owner.civ.name}!`);
+            if (city.owner === 0) this.notify(`🕵️ Technology was stolen from ${city.name}! Station a spy there to catch thieves.`);
+          } else if (p.index === 0) {
+            this.notify(`🕵️ ${spy.name} reports nothing left to steal in ${city.name}.`);
+          }
+        }
+      }
+    }
+  }
+
   // ---------- city-states ----------
   minorStatus(majorIdx, minorIdx) {
     if (this.players[majorIdx].atWarWith.has(minorIdx)) return "war";
@@ -1169,6 +1237,7 @@ class Game {
     }
 
     // research
+    if (p.researching && p.techs.has(p.researching)) p.researching = null; // e.g. stolen by spies
     if (!p.researching) {
       const av = p.availableTechs();
       if (av.length && !p.isHuman) p.researching = av.sort((x, y2) => TECHS[x].cost - TECHS[y2].cost)[0];
@@ -1230,6 +1299,7 @@ class Game {
     this.spreadReligionPressure();
     this.processMinorGifts();
     this.decayInfluence();
+    this.processEspionage();
 
     this.turn++;
     for (const u of this.units) u.resetTurn();
@@ -1286,7 +1356,8 @@ class Game {
         warWeariness: p.warWeariness, cityNameCursor: p.cityNameCursor,
         visible: Array.from(p.visible), originalCapitalId: p.originalCapitalId,
         faith: p.faith, religionId: p.religionId, influence: p.influence,
-        gaMeter: p.gaMeter, goldenAgeTurns: p.goldenAgeTurns, gaCount: p.gaCount })),
+        gaMeter: p.gaMeter, goldenAgeTurns: p.goldenAgeTurns, gaCount: p.gaCount,
+        spies: p.spies })),
       cities: this.cities.map(c => ({ ...c })),
       units: this.units.map(u => ({ id: u.id, type: u.type, owner: u.owner, c: u.c, r: u.r,
         hp: u.hp, moves: u.moves, fortified: u.fortified, attacked: u.attacked, path: u.path,
@@ -1328,7 +1399,7 @@ class Game {
       p.faith = pd.faith || 0; p.religionId = pd.religionId ?? null;
       p.influence = pd.influence || {};
       p.gaMeter = pd.gaMeter || 0; p.goldenAgeTurns = pd.goldenAgeTurns || 0;
-      p.gaCount = pd.gaCount || 0;
+      p.gaCount = pd.gaCount || 0; p.spies = pd.spies || [];
       return p;
     });
     return g;

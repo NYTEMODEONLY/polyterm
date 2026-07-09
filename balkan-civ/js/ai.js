@@ -14,9 +14,40 @@ const AI = (() => {
     }
     diplomacy(game, p);
     religion(game, p);
+    espionage(game, p);
     chooseResearch(game, p);
     runCities(game, p);
     runUnits(game, p);
+  }
+
+  // ---------- espionage ----------
+  function espionage(game, p) {
+    for (const spy of p.spies) {
+      if (spy.deadUntil > game.turn || spy.cityId !== null) continue;
+      // 1) keep one counterspy in the capital
+      const cap = game.cities.find(c => c.owner === p.index && c.isCapital) ||
+                  game.cities.find(c => c.owner === p.index);
+      const defending = p.spies.some(s => s !== spy && s.deadUntil <= game.turn && s.cityId &&
+        game.cities.some(c => c.id === s.cityId && c.owner === p.index));
+      if (cap && !defending) { game.assignSpy(p.index, spy.id, cap.id); continue; }
+      // 2) steal from the biggest tech rival
+      const rivals = [...p.met].map(i => game.players[i])
+        .filter(o => o.alive && !o.isMinor && o.techs.size > p.techs.size)
+        .sort((a, b) => b.techs.size - a.techs.size);
+      const target = rivals[0];
+      if (target) {
+        const tc = game.cities.find(c => c.owner === target.index && c.isCapital) ||
+                   game.cities.find(c => c.owner === target.index);
+        if (tc) { game.assignSpy(p.index, spy.id, tc.id); continue; }
+      }
+      // 3) otherwise rig a city-state
+      const minor = [...p.met].map(i => game.players[i])
+        .find(o => o.isMinor && o.alive && !p.atWarWith.has(o.index));
+      if (minor) {
+        const mc = game.cities.find(c => c.owner === minor.index);
+        if (mc) game.assignSpy(p.index, spy.id, mc.id);
+      }
+    }
   }
 
   // ---------- religion ----------
@@ -183,6 +214,7 @@ const AI = (() => {
         // building priority order
         const prio = ["MONUMENT", "SHRINE", "GRANARY", "LIBRARY", "TAVERN", "WALLS", "MARKET", "BARRACKS",
           "TEMPLE", "HAMMAM", "AQUEDUCT", "FORGE", "UNIVERSITY", "CASTLE", "WORKSHOP", "BANK",
+          "DIOCLETIAN", "HIPPODROME", "OHRID_SCHOOL", "STARI_MOST", "MOUNT_ATHOS", "BRAN_CASTLE",
           "HAGIA_SOPHIA", "STUDENICA", "RILA", "KALEMEGDAN"];
         for (const key of prio) {
           const o = opts.find(x => x.kind === "building" && x.key === key);
