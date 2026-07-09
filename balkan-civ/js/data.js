@@ -35,6 +35,7 @@ const ERAS = ["Ancient", "Classical", "Medieval", "Renaissance"];
 const TECHS = {
   AGRICULTURE:      { name: "Agriculture",      era: 0, cost: 20,  req: [] },
   POTTERY:          { name: "Pottery",          era: 0, cost: 35,  req: ["AGRICULTURE"] },
+  SAILING:          { name: "Sailing",          era: 0, cost: 35,  req: ["AGRICULTURE"] },
   ANIMAL_HUSBANDRY: { name: "Animal Husbandry", era: 0, cost: 35,  req: ["AGRICULTURE"] },
   ARCHERY:          { name: "Archery",          era: 0, cost: 35,  req: ["AGRICULTURE"] },
   MINING:           { name: "Mining",           era: 0, cost: 35,  req: ["AGRICULTURE"] },
@@ -47,6 +48,7 @@ const TECHS = {
   CURRENCY:         { name: "Currency",         era: 1, cost: 110,  req: ["THE_WHEEL", "BRONZE_WORKING"] },
   IRON_WORKING:     { name: "Iron Working",     era: 1, cost: 110,  req: ["BRONZE_WORKING"] },
   MATHEMATICS:      { name: "Mathematics",      era: 1, cost: 150, req: ["WRITING", "THE_WHEEL"] },
+  COMPASS:          { name: "Compass",          era: 1, cost: 150, req: ["SAILING", "MATHEMATICS"] },
   CONSTRUCTION:     { name: "Construction",     era: 1, cost: 150, req: ["MASONRY", "MATHEMATICS"] },
   THEOLOGY:         { name: "Theology",         era: 2, cost: 260, req: ["PHILOSOPHY"] },
   CIVIL_SERVICE:    { name: "Civil Service",    era: 2, cost: 260, req: ["PHILOSOPHY", "CURRENCY"] },
@@ -79,6 +81,9 @@ const UNITS = {
   LONGSWORD:  { name: "Longswordsman", icon: "⚔️", cost: 130, cs: 21, moves: 2, tech: "STEEL", needs: "IRON" },
   TREBUCHET:  { name: "Trebuchet",     icon: "🏰", cost: 130, cs: 6,  rs: 20, range: 2, moves: 2, tech: "PHYSICS", siege: true },
   MUSKETMAN:  { name: "Musketman",     icon: "🔫", cost: 160, cs: 24, moves: 2, tech: "GUNPOWDER" },
+  // ---- Naval units (built in coastal cities only) ----
+  GALLEY:     { name: "Galley",        icon: "⛵", cost: 60,  cs: 10, moves: 4, tech: "SAILING", naval: true, coastOnly: true },
+  GALLEASS:   { name: "War Galleass",  icon: "🚢", cost: 110, cs: 12, rs: 17, range: 2, moves: 5, tech: "COMPASS", naval: true },
   // ---- Unique units ----
   GUSAR:      { name: "Gusar",         icon: "🐎", cost: 110, cs: 19, moves: 5, tech: "CHIVALRY", uu: "SERBIA", replaces: "KNIGHT",
                 blurb: "Serbian light cavalry. Faster than the Knight and needs no horses." },

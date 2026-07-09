@@ -46,7 +46,8 @@ const AI = (() => {
     if (!av.length) return;
     const atWar = p.atWarWith.size > 0;
     const milTechs = ["ARCHERY", "BRONZE_WORKING", "IRON_WORKING", "HORSEBACK_RIDING",
-      "CHIVALRY", "STEEL", "MACHINERY", "GUNPOWDER", "MASONRY", "CONSTRUCTION", "PHYSICS", "MATHEMATICS"];
+      "CHIVALRY", "STEEL", "MACHINERY", "GUNPOWDER", "MASONRY", "CONSTRUCTION", "PHYSICS", "MATHEMATICS",
+      "SAILING", "COMPASS"];
     const ranked = av.sort((a, b) => {
       let sa = TECHS[a].cost, sb = TECHS[b].cost;
       if (atWar) { if (milTechs.includes(a)) sa *= 0.5; if (milTechs.includes(b)) sb *= 0.5; }
@@ -75,10 +76,17 @@ const AI = (() => {
         return c.length ? c[Math.floor(game.rng() * c.length)] : null;
       };
       const bestMilitary = () => {
-        const mil = opts.filter(o => o.kind === "unit" && !UNITS[o.key].civilian && o.key !== "SCOUT");
+        const mil = opts.filter(o => o.kind === "unit" && !UNITS[o.key].civilian &&
+          !UNITS[o.key].naval && o.key !== "SCOUT");
         if (!mil.length) return null;
         mil.sort((a, b) => Math.max(UNITS[b.key].cs, UNITS[b.key].rs || 0) - Math.max(UNITS[a.key].cs, UNITS[a.key].rs || 0));
         return mil[Math.floor(game.rng() * Math.min(2, mil.length))];
+      };
+      const bestShip = () => {
+        const ships = opts.filter(o => o.kind === "unit" && UNITS[o.key].naval);
+        if (!ships.length) return null;
+        ships.sort((a, b) => Math.max(UNITS[b.key].cs, UNITS[b.key].rs || 0) - Math.max(UNITS[a.key].cs, UNITS[a.key].rs || 0));
+        return ships[0];
       };
 
       let choice = null;
@@ -91,6 +99,11 @@ const AI = (() => {
       const workers = myUnits.filter(u => u.type === "WORKER");
       if (!choice && workers.length < Math.min(myCities.length, 3) && game.rng() < 0.4) {
         choice = pick(o => o.key === "WORKER");
+      }
+      const navy = myUnits.filter(u => u.def.naval);
+      if (!choice && city.coastal && navy.length < Math.max(1, Math.floor(myCities.length / 2)) &&
+          game.rng() < (atWar ? 0.3 : 0.12)) {
+        choice = bestShip();
       }
       if (!choice && military.length < wantMilitary && game.rng() < (atWar ? 0.85 : 0.35)) {
         choice = bestMilitary();
@@ -118,6 +131,7 @@ const AI = (() => {
       if (u.type === "SETTLER") runSettler(game, p, u);
       else if (u.type === "WORKER") runWorker(game, p, u);
       else if (u.type === "SCOUT") runScout(game, p, u);
+      else if (u.def.naval) runShip(game, p, u);
       else if (!u.isCivilian) runMilitary(game, p, u);
     }
   }
@@ -133,7 +147,7 @@ const AI = (() => {
     }
     // search for a target site
     let best = null, bestS = isFirst ? 10 : 26;
-    for (const [c, r] of HEX.ring(u.c, u.r, 8)) {
+    for (const [c, r] of HEX.ring(u.c, u.r, 10)) {
       const t = game.tile(c, r);
       if (!t || t.owner !== -1 && t.owner !== p.index) continue;
       if (!myCities.every(mc => HEX.distance(mc.c, mc.r, c, r) >= 4)) continue;
@@ -183,7 +197,7 @@ const AI = (() => {
   }
 
   function runScout(game, p, u) {
-    // walk toward the nearest unexplored tile
+    // walk toward the nearest unexplored tile (a scout with Sailing will embark)
     let best = null, bestD = Infinity;
     for (let i = 0; i < game.map.tiles.length; i++) {
       if (p.visible[i]) continue;
@@ -192,11 +206,59 @@ const AI = (() => {
       const d = HEX.distance(u.c, u.r, t.c, t.r);
       if (d < bestD) { bestD = d; best = t; }
     }
-    if (best) game.moveUnitTo(u, best.c, best.r);
+    if (best && !game.moveUnitTo(u, best.c, best.r)) {
+      u.moves = 0; // unreachable this era — wait rather than rescan
+    }
+  }
+
+  function runShip(game, p, u) {
+    const enemies = [...p.atWarWith].filter(e => game.players[e].alive);
+    if (tryAttack(game, p, u)) return;
+    if (enemies.length) {
+      // hunt enemy ships and embarked units, then coastal cities
+      let target = null, bestD = Infinity;
+      for (const e of game.units) {
+        if (!enemies.includes(e.owner)) continue;
+        const t = game.tile(e.c, e.r);
+        if (!game.isWater(t)) continue;
+        const d = HEX.distance(u.c, u.r, e.c, e.r);
+        if (d < bestD) { bestD = d; target = e; }
+      }
+      for (const c of game.cities) {
+        if (!enemies.includes(c.owner) || !c.coastal) continue;
+        const d = HEX.distance(u.c, u.r, c.c, c.r) + 3; // prefer ships
+        if (d < bestD) { bestD = d; target = c; }
+      }
+      if (target) {
+        if (u.hp < 40 && bestD > 2) { u.fortified = true; return; }
+        if (u.isRanged && bestD <= u.def.range) { tryAttack(game, p, u); return; }
+        const dest = nearestApproach(game, u, target.c, target.r);
+        if (dest) game.moveUnitTo(u, dest[0], dest[1]);
+        tryAttack(game, p, u);
+      }
+      return;
+    }
+    // peacetime: loiter in home waters near a coastal city
+    const home = game.cities.filter(c => c.owner === p.index && c.coastal)
+      .sort((a, b) => HEX.distance(u.c, u.r, a.c, a.r) - HEX.distance(u.c, u.r, b.c, b.r))[0];
+    if (home && HEX.distance(u.c, u.r, home.c, home.r) > 3) {
+      const dest = nearestApproach(game, u, home.c, home.r);
+      if (dest) game.moveUnitTo(u, dest[0], dest[1]);
+    } else {
+      u.fortified = true;
+    }
   }
 
   function runMilitary(game, p, u) {
     const enemies = [...p.atWarWith].filter(e => game.players[e].alive);
+
+    // stranded at sea with nothing to do: head for the nearest friendly city
+    if (game.isEmbarked(u) && !enemies.length) {
+      const home = game.cities.filter(c => c.owner === p.index)
+        .sort((a, b) => HEX.distance(u.c, u.r, a.c, a.r) - HEX.distance(u.c, u.r, b.c, b.r))[0];
+      if (home) game.moveUnitTo(u, home.c, home.r);
+      return;
+    }
 
     // 1. attack anything in reach
     if (tryAttack(game, p, u)) return;
@@ -254,12 +316,15 @@ const AI = (() => {
   }
 
   function tryAttack(game, p, u) {
-    if (u.attacked || u.moves <= 0) return false;
+    if (u.attacked || u.moves <= 0 || game.isEmbarked(u)) return false;
     const range = u.isRanged ? u.def.range : 1;
     let best = null, bestValue = -Infinity;
     for (const [c, r] of HEX.ring(u.c, u.r, range)) {
       const t = game.tile(c, r);
       if (!t) continue;
+      // melee reach restrictions across the shoreline
+      if (!u.isRanged && !u.def.naval && game.isWater(t)) continue;
+      if (!u.isRanged && u.def.naval && !game.isWater(t) && !t.city) continue;
       const enemyUnit = game.combatUnitAt(c, r);
       const enemyCity = t.city && p.atWarWith.has(t.city.owner) ? t.city : null;
       const enemyCiv = game.civilianAt(c, r);
@@ -289,14 +354,14 @@ const AI = (() => {
     return false;
   }
 
-  // find a passable tile adjacent to (tc,tr) to path to
+  // find a tile this unit can stand on, adjacent to (tc,tr), to path to
   function nearestApproach(game, u, tc, tr) {
     const t = game.tile(tc, tr);
-    if (t && TERRAIN[t.terrain].passable && !game.combatUnitAt(tc, tr) && !t.city) return [tc, tr];
+    if (game.unitPassable(u, t) && !game.combatUnitAt(tc, tr) && !t.city) return [tc, tr];
     let best = null, bestD = Infinity;
     for (const [c, r] of HEX.neighbors(tc, tr)) {
       const n = game.tile(c, r);
-      if (!n || !TERRAIN[n.terrain].passable) continue;
+      if (!game.unitPassable(u, n)) continue;
       if (game.combatUnitAt(c, r)) continue;
       const d = HEX.distance(u.c, u.r, c, r);
       if (d < bestD) { bestD = d; best = [c, r]; }

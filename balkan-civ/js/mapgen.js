@@ -31,10 +31,12 @@ function makeNoise(rng, w, h, cell) {
   };
 }
 
-function generateMap(w, h, seed) {
+function generateMap(w, h, seed, mapType = "peninsula") {
   const rng = mulberry32(seed);
-  const elevN1 = makeNoise(rng, w, h, 9);
-  const elevN2 = makeNoise(rng, w, h, 4);
+  const arch = mapType === "archipelago";
+  // archipelago: finer noise -> many scattered landmasses
+  const elevN1 = makeNoise(rng, w, h, arch ? 4 : 9);
+  const elevN2 = makeNoise(rng, w, h, arch ? 3 : 4);
   const elevN3 = makeNoise(rng, w, h, 2);
   const moistN = makeNoise(rng, w, h, 6);
 
@@ -47,15 +49,16 @@ function generateMap(w, h, seed) {
       const nx = (c / (w - 1)) * 2 - 1;
       const ny = (r / (h - 1)) * 2 - 1;
       const edge = Math.max(Math.abs(nx), Math.abs(ny));
-      const falloff = Math.pow(edge, 2.6) * 0.85;
+      const falloff = arch ? Math.pow(edge, 3.2) * 0.45 : Math.pow(edge, 2.6) * 0.85;
       let e = elevN1(c, r) * 0.55 + elevN2(c, r) * 0.3 + elevN3(c, r) * 0.15;
-      e = e - falloff + 0.12;
+      e = e - falloff + (arch ? 0.02 : 0.12);
 
       const m = moistN(c, r);
+      const sea = arch ? 0.47 : 0.32;
       let terrain, feature = null;
-      if (e < 0.32) terrain = "OCEAN";
-      else if (e > 0.78) terrain = "MOUNTAIN";
-      else if (e > 0.62) terrain = "HILLS";
+      if (e < sea) terrain = "OCEAN";
+      else if (e > sea + 0.46) terrain = "MOUNTAIN";
+      else if (e > sea + 0.30) terrain = "HILLS";
       else terrain = m > 0.5 ? "GRASSLAND" : "PLAINS";
 
       if ((terrain === "GRASSLAND" || terrain === "PLAINS" || terrain === "HILLS") &&
@@ -87,8 +90,10 @@ function generateMap(w, h, seed) {
     }
   }
 
-  // Keep only the largest landmass playable: flood fill, sink tiny islands
+  // Flood-fill landmasses. Peninsula keeps only the largest; archipelago
+  // keeps every island of a playable size and sinks the specks.
   const landId = new Int32Array(w * h).fill(-1);
+  const blobSizes = [];
   let bestBlob = -1, bestSize = 0, blob = 0;
   for (let i = 0; i < w * h; i++) {
     const t = tiles[i];
@@ -109,13 +114,16 @@ function generateMap(w, h, seed) {
         if (isLand && landId[k] === -1) { landId[k] = blob; stack.push(k); }
       }
     }
+    blobSizes[blob] = size;
     if (size > bestSize) { bestSize = size; bestBlob = blob; }
     blob++;
   }
   for (let i = 0; i < w * h; i++) {
     const t = tiles[i];
     const isLand = TERRAIN[t.terrain].passable || t.terrain === "MOUNTAIN";
-    if (isLand && landId[i] !== bestBlob) t.terrain = "COAST";
+    if (!isLand) continue;
+    const drown = arch ? blobSizes[landId[i]] < 5 : landId[i] !== bestBlob;
+    if (drown) t.terrain = "COAST";
   }
 
   // Resources
@@ -153,12 +161,16 @@ function siteScore(map, c, r) {
 
 // Pick spread-out starting positions
 function pickStartPositions(map, count, rng) {
-  const candidates = [];
-  for (let r = 2; r < map.h - 2; r++) {
-    for (let c = 2; c < map.w - 2; c++) {
-      const s = siteScore(map, c, r);
-      if (s > 20) candidates.push({ c, r, s });
+  let candidates = [];
+  for (const minScore of [20, 8, 1]) {
+    candidates = [];
+    for (let r = 2; r < map.h - 2; r++) {
+      for (let c = 2; c < map.w - 2; c++) {
+        const s = siteScore(map, c, r);
+        if (s > minScore) candidates.push({ c, r, s });
+      }
     }
+    if (candidates.length >= count * 3) break; // enough good land
   }
   candidates.sort((a, b) => b.s - a.s);
   const picked = [];

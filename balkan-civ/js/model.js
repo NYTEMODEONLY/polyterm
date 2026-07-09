@@ -124,7 +124,8 @@ class Game {
     this.maxTurns = GAME_DEFAULTS.maxTurns;
     this.seed = opts.seed ?? Math.floor(Math.random() * 1e9);
     this.rng = mulberry32(this.seed);
-    this.map = generateMap(opts.mapW || GAME_DEFAULTS.mapW, opts.mapH || GAME_DEFAULTS.mapH, this.seed);
+    this.mapType = opts.mapType || "peninsula";
+    this.map = generateMap(opts.mapW || GAME_DEFAULTS.mapW, opts.mapH || GAME_DEFAULTS.mapH, this.seed, this.mapType);
     this.units = [];
     this.cities = [];
     this.players = [];
@@ -169,12 +170,34 @@ class Game {
   cityAt(c, r) { const t = this.tile(c, r); return t ? t.city : null; }
   player(i) { return this.players[i]; }
 
-  freeAdjacent(c, r) {
+  freeAdjacent(c, r, naval = false) {
     for (const [nc, nr] of HEX.neighbors(c, r)) {
       const t = this.tile(nc, nr);
-      if (t && TERRAIN[t.terrain].passable && !this.combatUnitAt(nc, nr)) return [nc, nr];
+      if (!t || this.combatUnitAt(nc, nr)) continue;
+      if (naval ? this.isWater(t) : TERRAIN[t.terrain].passable) return [nc, nr];
     }
     return null;
+  }
+
+  // ---------- water / embarkation ----------
+  isWater(t) { return t.terrain === "OCEAN" || t.terrain === "COAST"; }
+
+  isEmbarked(unit) {
+    const t = this.tile(unit.c, unit.r);
+    return !unit.def.naval && t && this.isWater(t);
+  }
+
+  // Can this unit's type ever stand on tile t (given its owner's techs)?
+  unitPassable(unit, t) {
+    if (!t) return false;
+    if (unit.def.naval) {
+      if (!this.isWater(t)) return false;
+      return !unit.def.coastOnly || t.terrain === "COAST";
+    }
+    if (!this.isWater(t)) return TERRAIN[t.terrain].passable;
+    const p = this.players[unit.owner];
+    if (t.terrain === "COAST") return p.hasTech("SAILING");
+    return p.hasTech("COMPASS");
   }
 
   notify(msg, playerIdx = 0) {
@@ -195,7 +218,9 @@ class Game {
 
   moveCost(unit, c, r) {
     const t = this.tile(c, r);
-    if (!t || !TERRAIN[t.terrain].passable) return Infinity;
+    if (!this.unitPassable(unit, t)) return Infinity;
+    if (this.isWater(t)) return 1;
+    if (unit.def.naval) return Infinity;
     if (t.improvement === "ROAD" || t.city) return 1;
     let cost = TERRAIN[t.terrain].moveCost;
     if (t.feature) cost = Math.max(cost, FEATURE[t.feature].moveCost);
@@ -241,7 +266,7 @@ class Game {
   // Can `unit` end its move / pass through (c,r)?
   canEnter(unit, c, r) {
     const t = this.tile(c, r);
-    if (!t || !TERRAIN[t.terrain].passable) return false;
+    if (!this.unitPassable(unit, t)) return false;
     const cu = this.combatUnitAt(c, r);
     if (cu && !(unit.isCivilian && cu.owner === unit.owner)) {
       if (cu.owner !== unit.owner) return false; // must attack instead
@@ -274,7 +299,7 @@ class Game {
       const cc = cur % w, cr = Math.floor(cur / w);
       for (const [nc, nr] of HEX.neighbors(cc, cr)) {
         const t = this.tile(nc, nr);
-        if (!t || !TERRAIN[t.terrain].passable) continue;
+        if (!this.unitPassable(unit, t)) continue;
         const nk = key(nc, nr);
         // block tiles occupied by other units except at the goal
         if (nk !== goal && this.combatUnitAt(nc, nr) && !unit.isCivilian) continue;
@@ -343,6 +368,7 @@ class Game {
   strengthOf(unit, { attacking, targetTile, ranged } = {}) {
     const p = this.players[unit.owner];
     let str = ranged ? (unit.def.rs || 0) : unit.def.cs;
+    if (this.isEmbarked(unit)) str = 2; // helpless at sea
     let mod = 1;
     const here = this.tile(unit.c, unit.r);
     // wounded units fight at 50–100%
@@ -386,12 +412,16 @@ class Game {
   // unit attacks tile (c,r): enemy unit or city
   attack(unit, c, r) {
     if (unit.attacked || unit.moves <= 0 || unit.isCivilian) return false;
+    if (this.isEmbarked(unit)) return false; // no fighting from transports
     const t = this.tile(c, r);
     if (!t) return false;
     const dist = HEX.distance(unit.c, unit.r, c, r);
     const ranged = unit.isRanged;
     const range = ranged ? unit.def.range : 1;
     if (dist > range) return false;
+    // land melee can't strike out to sea; naval melee can't strike inland (cities excepted)
+    if (!ranged && !unit.def.naval && this.isWater(t)) return false;
+    if (!ranged && unit.def.naval && !this.isWater(t) && !t.city) return false;
 
     const targetCity = t.city && this.players[unit.owner].atWarWith.has(t.city.owner) ? t.city : null;
     const targetUnit = (() => {
@@ -443,7 +473,8 @@ class Game {
       if (targetUnit.hp <= 0) {
         this.removeUnit(targetUnit);
         if (unit.def.healOnKill) unit.hp = Math.min(100, unit.hp + unit.def.healOnKill);
-        if (!ranged && unit.hp > 0 && !this.combatUnitAt(c, r) && !(t.city && t.city.owner !== unit.owner)) {
+        if (!ranged && unit.hp > 0 && !this.combatUnitAt(c, r) &&
+            !(t.city && t.city.owner !== unit.owner) && this.unitPassable(unit, t)) {
           unit.c = c; unit.r = r; // advance into the tile
           this.updateVisibility(this.players[unit.owner]);
         }
@@ -479,7 +510,7 @@ class Game {
       }
     }
     t.owner = newOwner;
-    unit.c = city.c; unit.r = city.r;
+    if (!unit.def.naval) { unit.c = city.c; unit.r = city.r; } // ships stay offshore
     unit.moves = 0;
     this.updateVisibility(this.players[newOwner]);
     this.notify(`${CIVS[this.players[newOwner].civId].name} captured ${city.name}!`, -1);
@@ -602,7 +633,8 @@ class Game {
       if (replacedBy) continue;
       if (u.tech && !p.hasTech(u.tech)) continue;
       if (u.needs && !this.playerHasResource(p.index, u.needs)) continue;
-      opts.push({ kind: "unit", key, cost: u.cost, name: u.name, icon: u.icon });
+      if (u.naval && !city.coastal) continue; // shipyards need the sea
+      opts.push({ kind: "unit", key, cost: u.cost, name: u.name, icon: u.icon, naval: u.naval });
     }
     for (const [key, b] of Object.entries(BUILDINGS)) {
       if (city.buildings.includes(key)) continue;
@@ -635,8 +667,13 @@ class Game {
 
   completeProduction(city, item) {
     if (item.kind === "unit") {
-      const spot = this.combatUnitAt(city.c, city.r) && !UNITS[item.key].civilian
-        ? this.freeAdjacent(city.c, city.r) : [city.c, city.r];
+      let spot;
+      if (UNITS[item.key].naval) {
+        spot = this.freeAdjacent(city.c, city.r, true); // launch onto water
+      } else {
+        spot = this.combatUnitAt(city.c, city.r) && !UNITS[item.key].civilian
+          ? this.freeAdjacent(city.c, city.r) : [city.c, city.r];
+      }
       if (!spot) { city.prodStored = UNITS[item.key].cost; return; } // wait for space
       this.addUnit(item.key, city.owner, spot[0], spot[1]);
     } else {
@@ -833,7 +870,8 @@ class Game {
       const moved = u.moves < u.def.moves || u.attacked;
       if (moved) continue;
       let heal = 5;
-      if (t.owner === p.index) heal = 10;
+      if (this.isWater(t)) heal = u.def.naval && t.owner === p.index ? 10 : 0; // ships mend in home waters
+      else if (t.owner === p.index) heal = 10;
       if (t.city && t.city.owner === p.index) heal = 20;
       if (t.owner !== -1 && this.players[p.index].atWarWith.has(t.owner)) heal = 0;
       u.hp = Math.min(100, u.hp + heal);
@@ -906,7 +944,7 @@ class Game {
   // ---------- save / load ----------
   serialize() {
     return JSON.stringify({
-      v: 1, turn: this.turn, seed: this.seed, over: this.over,
+      v: 1, turn: this.turn, seed: this.seed, mapType: this.mapType, over: this.over,
       winner: this.winner, victoryType: this.victoryType, nextId: NEXT_ID,
       map: { w: this.map.w, h: this.map.h, tiles: this.map.tiles.map(t => ({
         c: t.c, r: t.r, terrain: t.terrain, feature: t.feature, resource: t.resource,
@@ -928,7 +966,7 @@ class Game {
   static deserialize(json) {
     const d = JSON.parse(json);
     const g = Object.create(Game.prototype);
-    g.turn = d.turn; g.seed = d.seed; g.over = d.over;
+    g.turn = d.turn; g.seed = d.seed; g.mapType = d.mapType || "peninsula"; g.over = d.over;
     g.winner = d.winner; g.victoryType = d.victoryType;
     g.maxTurns = GAME_DEFAULTS.maxTurns;
     g.rng = mulberry32((d.seed + d.turn * 7919) >>> 0);

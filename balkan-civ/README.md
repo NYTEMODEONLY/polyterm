@@ -33,13 +33,17 @@ Game* on the title screen to pick up where you left off.
 
 ## Features
 
-- Procedurally generated hex maps — a rugged peninsula of grassland, plains,
-  hills, mountain spines, forests and coastline, different every game
+- Procedurally generated hex maps, different every game — choose a rugged
+  **Peninsula** or an island-dotted **Archipelago**
+- Naval warfare: research Sailing to embark land units onto the coast and
+  build Galleys; Compass opens the deep sea and the ranged War Galleass.
+  Ships hunt transports, bombard shores, and can capture coastal cities;
+  embarked units are nearly defenseless — escort them
 - Fog of war with explored/visible states
 - Cities: population growth, worked tiles, culture-driven border expansion,
   production queues, gold purchasing, 14 buildings and 4 world wonders
   (Hagia Sophia, Studenica, Rila, Kalemegdan)
-- 24-technology research tree across four eras (Ancient → Renaissance)
+- 26-technology research tree across four eras (Ancient → Renaissance)
 - Civ V-style combat: hit points, ranged vs melee, terrain defense bonuses,
   fortification, sieges, city bombardment and capture
 - Unit promotions: combat earns XP; veterans gain up to three ⭐ levels,
@@ -47,8 +51,9 @@ Game* on the title screen to pick up where you left off.
 - Workers and tile improvements: farms, mines, and roads (roads cut movement
   cost to 1 on any terrain)
 - Strategic resources (horses, iron) gating unit types
-- 3–8 AI opponents that scout, settle, improve their land, build, research,
-  declare war, sue for peace, and march armies on your cities
+- 3–8 AI opponents that scout, settle (across the sea, too), improve their
+  land, build navies, research, declare war, sue for peace, and march
+  armies on your cities
 - Diplomacy screen: declare war, propose peace, compare scores
 - Victory by **Domination** (control every capital) or **Score** at turn 300
 - Autosave + continue
@@ -86,5 +91,4 @@ js/ui.js          panels, modals, input handling
 
 ## Ideas for future expansion
 
-Naval units and embarkation (with island maps), happiness, religion,
-city-states, more wonders, sound.
+Happiness, religion, city-states, more wonders, sound.

@@ -47,7 +47,8 @@ const UI = (() => {
       const numOpp = parseInt($("sel-opponents").value, 10);
       const size = $("sel-mapsize").value;
       const dims = { small: [36, 28], standard: [44, 34], large: [54, 42] }[size];
-      game = new Game({ playerCiv: chosen, numOpponents: numOpp, mapW: dims[0], mapH: dims[1] });
+      game = new Game({ playerCiv: chosen, numOpponents: numOpp, mapW: dims[0], mapH: dims[1],
+        mapType: $("sel-maptype").value });
       startPlaying();
     };
     $("start-screen").style.display = "flex";
@@ -80,13 +81,15 @@ const UI = (() => {
   }
 
   function computeAttackable(u) {
-    if (u.isCivilian || u.attacked || u.moves <= 0) return [];
+    if (u.isCivilian || u.attacked || u.moves <= 0 || game.isEmbarked(u)) return [];
     const p = game.players[0];
     const range = u.isRanged ? u.def.range : 1;
     const out = [];
     for (const [c, r] of HEX.ring(u.c, u.r, range)) {
       const t = game.tile(c, r);
       if (!t || !p.visible[game.map.idx(c, r)]) continue;
+      if (!u.isRanged && !u.def.naval && game.isWater(t)) continue;      // no melee out to sea
+      if (!u.isRanged && u.def.naval && !game.isWater(t) && !t.city) continue; // ships raid coasts only
       const cu = game.combatUnitAt(c, r);
       const civ = game.civilianAt(c, r);
       if ((cu && p.atWarWith.has(cu.owner)) ||
@@ -116,7 +119,7 @@ const UI = (() => {
     const def = u.def;
     $("unit-info").innerHTML = `
       <span class="unit-icon">${def.icon}</span>
-      <div><b>${def.name}</b>${u.level ? " " + "⭐".repeat(u.level) : ""}<br>
+      <div><b>${def.name}</b>${u.level ? " " + "⭐".repeat(u.level) : ""}${game.isEmbarked(u) ? " <span class='alert'>⛵ embarked</span>" : ""}<br>
       <span class="dim">HP ${u.hp}/100 · Moves ${u.moves}/${def.moves}
       ${def.cs ? " · Str " + def.cs : ""}${def.rs ? " · Ranged " + def.rs + " (r" + def.range + ")" : ""}
       ${!u.isCivilian ? " · XP " + u.xp : ""}</span>
@@ -132,9 +135,10 @@ const UI = (() => {
     };
     if (u.type === "SETTLER") {
       const t = game.tile(u.c, u.r);
-      const canFound = t && !t.city && ![...HEX.ring(u.c, u.r, 2)].some(([c, r]) => {
-        const n = game.tile(c, r); return n && n.city;
-      });
+      const canFound = t && TERRAIN[t.terrain].passable && !t.city &&
+        ![...HEX.ring(u.c, u.r, 2)].some(([c, r]) => {
+          const n = game.tile(c, r); return n && n.city;
+        });
       btn("🏛️ Found City", () => {
         const city = game.foundCity(u);
         if (city) { selectCity(city); refreshAll(); }
@@ -424,7 +428,7 @@ const UI = (() => {
     if (sel && sel.owner === 0 && (rightClick || rend.reachable.some(([mc, mr]) => mc === c && mr === r) ||
         (!game.combatUnitAt(c, r) && !t.city && !game.unitsAt(c, r).length))) {
       const isOwnTile = sel.c === c && sel.r === r;
-      if (!isOwnTile && TERRAIN[t.terrain].passable) {
+      if (!isOwnTile && game.unitPassable(sel, t)) {
         game.moveUnitTo(sel, c, r);
         selectUnit(game.units.includes(sel) ? sel : null);
         refreshAll();

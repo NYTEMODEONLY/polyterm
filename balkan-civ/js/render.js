@@ -345,6 +345,11 @@ class Renderer {
       ctx.font = `${Math.floor(rad * 0.8)}px serif`;
       ctx.fillText("🛡", sx + rad * 0.9, sy - rad * 0.9);
     }
+    // embarked land unit rides a little boat
+    if (game.isEmbarked(u)) {
+      ctx.font = `${Math.floor(rad * 0.9)}px serif`;
+      ctx.fillText("⛵", sx - rad * 0.9, sy - rad * 0.9);
+    }
     // veteran pips
     if (u.level > 0) {
       ctx.fillStyle = "#f1c40f";
