@@ -64,6 +64,7 @@ const TECHS = {
 // ------------------------------------------------------------
 const UNITS = {
   SETTLER:    { name: "Settler",       icon: "⛺", cost: 90,  cs: 0,  moves: 2, civilian: true },
+  WORKER:     { name: "Worker",        icon: "🔨", cost: 60,  cs: 0,  moves: 2, civilian: true, worker: true },
   SCOUT:      { name: "Scout",         icon: "👁️", cost: 30,  cs: 5,  moves: 3, sight: 3 },
   WARRIOR:    { name: "Warrior",       icon: "🪓", cost: 40,  cs: 8,  moves: 2 },
   ARCHER:     { name: "Archer",        icon: "🏹", cost: 45,  cs: 5,  rs: 8,  range: 2, moves: 2, tech: "ARCHERY" },
@@ -95,6 +96,17 @@ const UNITS = {
                 blurb: "Wallachian border cavalry. Heals 30 HP on a kill." },
   KRSTJANI:   { name: "Krstjani Guard", icon: "🛡️", cost: 85, cs: 18, moves: 2, tech: "CIVIL_SERVICE", uu: "BOSNIA", replaces: "PIKEMAN",
                 blurb: "Bosnian church militia. Stronger than the Pikeman." },
+  SAMUIL_GUARD: { name: "Samuil's Guard", icon: "🔱", cost: 55, cs: 13, moves: 2, tech: "BRONZE_WORKING", uu: "MACEDONIA", replaces: "SPEARMAN", defendBonus: 0.25,
+                blurb: "Tsar Samuil's fortress infantry. Stronger than the Spearman and +25% when defending." },
+};
+
+// ------------------------------------------------------------
+// Tile improvements (built by Workers)
+// ------------------------------------------------------------
+const IMPROVEMENT = {
+  FARM: { name: "Farm", icon: "🌱", turns: 4, tech: "AGRICULTURE", terrains: ["GRASSLAND", "PLAINS"], food: 1 },
+  MINE: { name: "Mine", icon: "⛏️", turns: 4, tech: "MINING",      terrains: ["HILLS"],               prod: 1 },
+  ROAD: { name: "Road", icon: "🛤️", turns: 3, tech: "THE_WHEEL",   terrains: ["GRASSLAND", "PLAINS", "HILLS"], road: true },
 };
 
 // ------------------------------------------------------------
@@ -134,7 +146,7 @@ const CIVS = {
     color: "#c0392b", color2: "#f5e6c8",
     trait: "Tsar of Serbs and Greeks", traitDesc: "+25% production toward buildings in every city.",
     buildingProdBonus: 0.25, uu: "GUSAR",
-    cities: ["Beograd", "Skopje", "Prizren", "Niš", "Novo Brdo", "Kruševac", "Smederevo", "Peć", "Ras", "Priština"],
+    cities: ["Beograd", "Prizren", "Niš", "Novo Brdo", "Kruševac", "Smederevo", "Peć", "Ras", "Priština", "Golubac"],
   },
   BULGARIA: {
     name: "Bulgaria", leader: "Simeon I the Great", adj: "Bulgarian",
@@ -177,6 +189,13 @@ const CIVS = {
     trait: "Forest of the Impaled", traitDesc: "+25% combat strength inside your own territory.",
     homeBonus: 0.25, uu: "CALARASI",
     cities: ["Târgoviște", "București", "Curtea de Argeș", "Craiova", "Pitești", "Brăila", "Giurgiu", "Ploiești", "Câmpulung", "Snagov"],
+  },
+  MACEDONIA: {
+    name: "Macedonia", leader: "Tsar Samuil", adj: "Macedonian",
+    color: "#d35400", color2: "#f1c40f",
+    trait: "Ohrid Archbishopric", traitDesc: "+2 culture and +1 science in every city.",
+    cityCulture: 2, cityScience: 1, uu: "SAMUIL_GUARD",
+    cities: ["Ohrid", "Skopje", "Bitola", "Prilep", "Struga", "Štip", "Strumica", "Tetovo", "Veles", "Kratovo"],
   },
   BOSNIA: {
     name: "Bosnia", leader: "Tvrtko I", adj: "Bosnian",

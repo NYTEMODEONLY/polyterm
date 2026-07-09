@@ -116,9 +116,11 @@ const UI = (() => {
     const def = u.def;
     $("unit-info").innerHTML = `
       <span class="unit-icon">${def.icon}</span>
-      <div><b>${def.name}</b><br>
+      <div><b>${def.name}</b>${u.level ? " " + "⭐".repeat(u.level) : ""}<br>
       <span class="dim">HP ${u.hp}/100 · Moves ${u.moves}/${def.moves}
-      ${def.cs ? " · Str " + def.cs : ""}${def.rs ? " · Ranged " + def.rs + " (r" + def.range + ")" : ""}</span></div>`;
+      ${def.cs ? " · Str " + def.cs : ""}${def.rs ? " · Ranged " + def.rs + " (r" + def.range + ")" : ""}
+      ${!u.isCivilian ? " · XP " + u.xp : ""}</span>
+      ${u.building ? `<br><span class="alert">Building ${IMPROVEMENT[u.building.type].name} — ${u.building.turnsLeft} turn${u.building.turnsLeft > 1 ? "s" : ""} left</span>` : ""}</div>`;
     const actions = $("unit-actions");
     actions.innerHTML = "";
     const btn = (label, fn, enabled = true) => {
@@ -138,6 +140,20 @@ const UI = (() => {
         if (city) { selectCity(city); refreshAll(); }
       }, canFound && u.moves > 0);
     }
+    if (u.def.worker) {
+      if (u.building) {
+        btn("🚫 Cancel Job", () => { u.building = null; u.moves = u.def.moves; selectUnit(u); refreshAll(); });
+      } else {
+        for (const key of Object.keys(IMPROVEMENT)) {
+          if (game.canBuildImprovement(u, key)) {
+            btn(`${IMPROVEMENT[key].icon} Build ${IMPROVEMENT[key].name} (${IMPROVEMENT[key].turns}t)`, () => {
+              game.startImprovement(u, key);
+              cycleNextUnit(); refreshAll();
+            }, u.moves > 0);
+          }
+        }
+      }
+    }
     if (!u.isCivilian) {
       btn(u.fortified ? "⛺ Wake" : "🛡️ Fortify", () => {
         u.fortified = !u.fortified;
@@ -150,7 +166,8 @@ const UI = (() => {
   }
 
   function cycleNextUnit() {
-    const candidates = game.units.filter(u => u.owner === 0 && u.moves > 0 && !u.fortified && !(u.path && u.path.length));
+    const candidates = game.units.filter(u => u.owner === 0 && u.moves > 0 && !u.fortified &&
+      !u.building && !(u.path && u.path.length));
     if (!candidates.length) { selectUnit(null); return; }
     const cur = rend.selected ? candidates.indexOf(rend.selected) : -1;
     const next = candidates[(cur + 1) % candidates.length];
@@ -348,7 +365,8 @@ const UI = (() => {
   function endTurn() {
     const p = game.players[0];
     if (!p.researching && p.availableTechs().length) { showTechScreen(); return; }
-    const idle = game.units.find(u => u.owner === 0 && u.moves > 0 && !u.fortified && !u.attacked && !(u.path && u.path.length));
+    const idle = game.units.find(u => u.owner === 0 && u.moves > 0 && !u.fortified && !u.attacked &&
+      !u.building && !(u.path && u.path.length));
     const cityIdle = game.cities.find(c => c.owner === 0 && !c.producing);
     if (cityIdle) { selectCity(cityIdle); rend.centerOn(game, cityIdle.c, cityIdle.r); return; }
     if (idle && !endTurn.skipIdle) {
@@ -510,12 +528,13 @@ const UI = (() => {
     const y = game.tileYield(t);
     let html = `<b>${TERRAIN[t.terrain].name}</b>${t.feature ? " / " + FEATURE[t.feature].name : ""}`;
     if (t.resource) html += ` · ${RESOURCE[t.resource].icon} ${RESOURCE[t.resource].name}`;
+    if (t.improvement) html += ` · ${IMPROVEMENT[t.improvement].icon} ${IMPROVEMENT[t.improvement].name}`;
     html += `<br><span class="dim">🍞${y.food} ⚙️${y.prod} 💰${y.gold}</span>`;
     if (t.owner !== -1) html += `<br><span style="color:${CIVS[game.players[t.owner].civId].color}">${CIVS[game.players[t.owner].civId].name} territory</span>`;
     const visLevel = game.players[0].visible[game.map.idx(c, r)];
     if (visLevel === 2) {
       for (const u of game.unitsAt(c, r)) {
-        html += `<br>${u.def.icon} ${u.def.name} (${CIVS[game.players[u.owner].civId].name}) HP ${u.hp}`;
+        html += `<br>${u.def.icon} ${u.def.name}${u.level ? " " + "⭐".repeat(u.level) : ""} (${CIVS[game.players[u.owner].civId].name}) HP ${u.hp}`;
       }
     }
     tip.innerHTML = html;

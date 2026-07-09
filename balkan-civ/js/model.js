@@ -20,11 +20,24 @@ class Unit {
     this.fortified = false;
     this.attacked = false;
     this.path = null;            // queued multi-turn path [[c,r],...]
+    this.xp = 0;
+    this.level = 0;              // each level: +10% combat strength
+    this.building = null;        // worker job: {type, turnsLeft}
   }
   get def() { return UNITS[this.type]; }
   get isCivilian() { return !!this.def.civilian; }
   get isRanged() { return !!this.def.rs; }
-  resetTurn() { this.moves = this.def.moves; this.attacked = false; }
+  resetTurn() { this.moves = this.building ? 0 : this.def.moves; this.attacked = false; }
+
+  gainXp(amount) {
+    if (this.isCivilian) return;
+    this.xp += amount;
+    const thresholds = [15, 45, 90];
+    while (this.level < 3 && this.xp >= thresholds[this.level]) {
+      this.level++;
+      this.hp = Math.min(100, this.hp + 20); // veterans rally on promotion
+    }
+  }
 }
 
 // ------------------------------------------------------------
@@ -183,9 +196,46 @@ class Game {
   moveCost(unit, c, r) {
     const t = this.tile(c, r);
     if (!t || !TERRAIN[t.terrain].passable) return Infinity;
+    if (t.improvement === "ROAD" || t.city) return 1;
     let cost = TERRAIN[t.terrain].moveCost;
     if (t.feature) cost = Math.max(cost, FEATURE[t.feature].moveCost);
     return cost;
+  }
+
+  // ---------- workers ----------
+  canBuildImprovement(unit, type) {
+    if (!unit.def.worker) return false;
+    const imp = IMPROVEMENT[type];
+    const t = this.tile(unit.c, unit.r);
+    const p = this.players[unit.owner];
+    if (!imp || !t || !p.hasTech(imp.tech)) return false;
+    if (t.owner !== unit.owner || t.city) return false;
+    if (!imp.terrains.includes(t.terrain)) return false;
+    if (t.feature && !imp.road) return false;      // farms/mines need clear ground
+    if (imp.road ? t.improvement === "ROAD" : t.improvement === type) return false;
+    return true;
+  }
+
+  startImprovement(unit, type) {
+    if (!this.canBuildImprovement(unit, type)) return false;
+    unit.building = { type, turnsLeft: IMPROVEMENT[type].turns };
+    unit.path = null;
+    unit.moves = 0;
+    return true;
+  }
+
+  progressWorkers(p) {
+    for (const u of this.units) {
+      if (u.owner !== p.index || !u.building) continue;
+      const t = this.tile(u.c, u.r);
+      if (!t || t.owner !== p.index) { u.building = null; continue; } // lost the tile
+      u.building.turnsLeft--;
+      if (u.building.turnsLeft <= 0) {
+        t.improvement = u.building.type;
+        if (p.index === 0) this.notify(`${IMPROVEMENT[u.building.type].name} completed.`);
+        u.building = null;
+      }
+    }
   }
 
   // Can `unit` end its move / pass through (c,r)?
@@ -251,6 +301,7 @@ class Game {
       unit.c = nc; unit.r = nr;
       unit.moves = Math.max(0, unit.moves - cost);
       unit.fortified = false;
+      unit.building = null; // moving abandons any construction job
       this.updateVisibility(this.players[unit.owner]);
       // capture undefended enemy civilians
       const civ = this.civilianAt(nc, nr);
@@ -296,12 +347,14 @@ class Game {
     const here = this.tile(unit.c, unit.r);
     // wounded units fight at 50–100%
     mod *= 0.5 + 0.5 * (unit.hp / 100);
+    mod += unit.level * 0.1; // veteran promotions
     if (!attacking) {
       if (here) {
         mod += TERRAIN[here.terrain].defense || 0;
         if (here.feature) mod += FEATURE[here.feature].defense || 0;
       }
       if (unit.fortified) mod += 0.25;
+      if (unit.def.defendBonus) mod += unit.def.defendBonus;
     }
     // civ traits
     const civ = p.civ;
@@ -372,6 +425,7 @@ class Game {
           if (targetCity.hp <= 0) targetCity.hp = 1; // no one left to capture it
         }
       }
+      if (this.units.includes(unit)) unit.gainXp(ranged ? 3 : 5);
       if (targetCity.hp <= 0 && this.units.includes(unit)) {
         if (ranged) targetCity.hp = 1; // ranged can't capture
         else this.captureCity(targetCity, unit);
@@ -384,6 +438,8 @@ class Game {
         const back = this.damageRoll(defStr, attStr);
         unit.hp -= back;
       }
+      if (targetUnit.hp > 0) targetUnit.gainXp(4);
+      if (unit.hp > 0) unit.gainXp((ranged ? 3 : 5) + (targetUnit.hp <= 0 ? 5 : 0));
       if (targetUnit.hp <= 0) {
         this.removeUnit(targetUnit);
         if (unit.def.healOnKill) unit.hp = Math.min(100, unit.hp + unit.def.healOnKill);
@@ -497,6 +553,10 @@ class Game {
     let food = terr.food, prod = terr.prod, gold = terr.gold;
     if (t.feature) { const f = FEATURE[t.feature]; food += f.food; prod += f.prod; gold += f.gold; }
     if (t.resource) { const rs = RESOURCE[t.resource]; food += rs.food; prod += rs.prod; gold += rs.gold; }
+    if (t.improvement) {
+      const imp = IMPROVEMENT[t.improvement];
+      food += imp.food || 0; prod += imp.prod || 0; gold += imp.gold || 0;
+    }
     return { food, prod, gold };
   }
 
@@ -522,6 +582,7 @@ class Game {
     }
     // civ traits
     if (civ.cityScience) sci += civ.cityScience;
+    if (civ.cityCulture) culture += civ.cityCulture;
     if (civ.cityGold) gold += civ.cityGold;
     if (civ.capitalGold && city.isCapital) gold += civ.capitalGold;
     if (civ.coastalGold && city.coastal) gold += civ.coastalGold;
@@ -784,6 +845,7 @@ class Game {
     if (this.over) return;
     const human = this.players[0];
     this.healUnits(human);
+    this.progressWorkers(human);
     this.processPlayerEconomy(human);
 
     for (let i = 1; i < this.players.length; i++) {
@@ -791,6 +853,7 @@ class Game {
       if (!p.alive) continue;
       AI.takeTurn(this, p);
       this.healUnits(p);
+      this.progressWorkers(p);
       this.processPlayerEconomy(p);
       this.updateVisibility(p);
     }
@@ -847,7 +910,7 @@ class Game {
       winner: this.winner, victoryType: this.victoryType, nextId: NEXT_ID,
       map: { w: this.map.w, h: this.map.h, tiles: this.map.tiles.map(t => ({
         c: t.c, r: t.r, terrain: t.terrain, feature: t.feature, resource: t.resource,
-        owner: t.owner, cityId: t.city ? t.city.id : null })) },
+        improvement: t.improvement, owner: t.owner, cityId: t.city ? t.city.id : null })) },
       players: this.players.map(p => ({
         index: p.index, civId: p.civId, isHuman: p.isHuman, alive: p.alive,
         gold: p.gold, scienceStored: p.scienceStored, researching: p.researching,
@@ -856,7 +919,8 @@ class Game {
         visible: Array.from(p.visible), originalCapitalId: p.originalCapitalId })),
       cities: this.cities.map(c => ({ ...c })),
       units: this.units.map(u => ({ id: u.id, type: u.type, owner: u.owner, c: u.c, r: u.r,
-        hp: u.hp, moves: u.moves, fortified: u.fortified, attacked: u.attacked, path: u.path })),
+        hp: u.hp, moves: u.moves, fortified: u.fortified, attacked: u.attacked, path: u.path,
+        xp: u.xp, level: u.level, building: u.building })),
       notifications: this.notifications.slice(-30),
     });
   }
@@ -874,7 +938,8 @@ class Game {
     g.map = { w: d.map.w, h: d.map.h, tiles: [], idx: (c, r) => r * d.map.w + c, seed: d.seed };
     for (const td of d.map.tiles) {
       g.map.tiles.push({ c: td.c, r: td.r, terrain: td.terrain, feature: td.feature,
-        resource: td.resource, owner: td.owner, city: null, workedBy: null, _cityId: td.cityId });
+        resource: td.resource, improvement: td.improvement ?? null,
+        owner: td.owner, city: null, workedBy: null, _cityId: td.cityId });
     }
     g.cities = d.cities.map(cd => Object.assign(new City(cd.name, cd.owner, cd.c, cd.r), cd));
     for (const t of g.map.tiles) {

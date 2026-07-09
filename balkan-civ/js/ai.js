@@ -88,6 +88,10 @@ const AI = (() => {
           !settlers.length && game.rng() < 0.7) {
         choice = pick(o => o.key === "SETTLER");
       }
+      const workers = myUnits.filter(u => u.type === "WORKER");
+      if (!choice && workers.length < Math.min(myCities.length, 3) && game.rng() < 0.4) {
+        choice = pick(o => o.key === "WORKER");
+      }
       if (!choice && military.length < wantMilitary && game.rng() < (atWar ? 0.85 : 0.35)) {
         choice = bestMilitary();
       }
@@ -112,6 +116,7 @@ const AI = (() => {
     for (const u of myUnits) {
       if (!game.units.includes(u)) continue; // died mid-loop
       if (u.type === "SETTLER") runSettler(game, p, u);
+      else if (u.type === "WORKER") runWorker(game, p, u);
       else if (u.type === "SCOUT") runScout(game, p, u);
       else if (!u.isCivilian) runMilitary(game, p, u);
     }
@@ -140,6 +145,40 @@ const AI = (() => {
       if (u.c === best[0] && u.r === best[1]) game.foundCity(u);
     } else if (isFirst && hereScore > 0) {
       game.foundCity(u); // desperate: settle in place
+    }
+  }
+
+  function runWorker(game, p, u) {
+    if (u.building) return; // keep working
+    const wanted = (t) => {
+      if (t.owner !== p.index || t.city || t.feature) return null;
+      if (t.terrain === "HILLS" && t.improvement !== "MINE" && p.hasTech("MINING")) return "MINE";
+      if ((t.terrain === "GRASSLAND" || t.terrain === "PLAINS") && t.improvement !== "FARM") return "FARM";
+      return null;
+    };
+    // build here if useful
+    const here = game.tile(u.c, u.r);
+    const job = wanted(here);
+    if (job && game.startImprovement(u, job)) return;
+    // otherwise walk to the nearest tile that needs work (avoid tiles other workers target)
+    const busy = new Set(game.units.filter(w => w.type === "WORKER" && w.owner === p.index && w !== u)
+      .map(w => w.c + "," + w.r));
+    let best = null, bestD = Infinity;
+    for (const t of game.map.tiles) {
+      if (!wanted(t) || busy.has(t.c + "," + t.r)) continue;
+      const d = HEX.distance(u.c, u.r, t.c, t.r);
+      if (d < bestD) { bestD = d; best = t; }
+    }
+    if (best) {
+      game.moveUnitTo(u, best.c, best.r);
+      const now = game.tile(u.c, u.r);
+      const j = wanted(now);
+      if (j) game.startImprovement(u, j);
+    } else {
+      // nothing to do: shelter in the nearest city
+      const home = game.cities.filter(c => c.owner === p.index)
+        .sort((a, b) => HEX.distance(u.c, u.r, a.c, a.r) - HEX.distance(u.c, u.r, b.c, b.r))[0];
+      if (home && !(u.c === home.c && u.r === home.r)) game.moveUnitTo(u, home.c, home.r);
     }
   }
 

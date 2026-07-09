@@ -17,10 +17,11 @@ Just open `index.html` in any modern browser (Chrome, Firefox, Edge, Safari):
 Your game **auto-saves every turn** (browser localStorage) — use *Continue Saved
 Game* on the title screen to pick up where you left off.
 
-## The eight civilizations
+## The nine civilizations
 
 | Civilization | Leader | Trait | Unique unit |
 |---|---|---|---|
+| **Macedonia** | Tsar Samuil | +2 culture, +1 science in every city | **Samuil's Guard** — +25% on defense |
 | **Serbia** | Stefan Dušan | +25% production toward buildings | **Gusar** — 5-move light cavalry |
 | **Bulgaria** | Simeon I the Great | +2 science in every city | **Konnik** — heavy horseman |
 | **Byzantium** | Basil II | +4 gold in capital, +1 elsewhere | **Cataphract** — armoured cavalry |
@@ -41,9 +42,13 @@ Game* on the title screen to pick up where you left off.
 - 24-technology research tree across four eras (Ancient → Renaissance)
 - Civ V-style combat: hit points, ranged vs melee, terrain defense bonuses,
   fortification, sieges, city bombardment and capture
+- Unit promotions: combat earns XP; veterans gain up to three ⭐ levels,
+  each worth +10% strength (and a morale heal on promotion)
+- Workers and tile improvements: farms, mines, and roads (roads cut movement
+  cost to 1 on any terrain)
 - Strategic resources (horses, iron) gating unit types
-- 3–7 AI opponents that scout, settle, build, research, declare war, sue for
-  peace, and march armies on your cities
+- 3–8 AI opponents that scout, settle, improve their land, build, research,
+  declare war, sue for peace, and march armies on your cities
 - Diplomacy screen: declare war, propose peace, compare scores
 - Victory by **Domination** (control every capital) or **Score** at turn 300
 - Autosave + continue
@@ -81,5 +86,5 @@ js/ui.js          panels, modals, input handling
 
 ## Ideas for future expansion
 
-Naval units and embarkation, workers & tile improvements, unit promotions,
-happiness, religion, city-states, more wonders, sound.
+Naval units and embarkation (with island maps), happiness, religion,
+city-states, more wonders, sound.

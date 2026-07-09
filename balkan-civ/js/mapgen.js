@@ -67,6 +67,7 @@ function generateMap(w, h, seed) {
 
       tiles[idx(c, r)] = {
         c, r, terrain, feature, resource: null,
+        improvement: null,           // FARM / MINE / ROAD
         owner: -1, city: null,       // city object occupying this tile
         workedBy: null,              // city id working this tile
       };

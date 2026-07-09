@@ -188,6 +188,42 @@ class Renderer {
         ctx.closePath(); ctx.fill();
       }
     }
+    if (t.improvement === "ROAD") {
+      // connect toward neighbouring roads/cities
+      ctx.strokeStyle = "rgba(90,60,30,0.85)";
+      ctx.lineWidth = Math.max(2, s * 0.12);
+      ctx.lineCap = "round";
+      let drewAny = false;
+      for (const [nc, nr] of HEX.neighbors(t.c, t.r)) {
+        const n = game.tile(nc, nr);
+        if (!n || (n.improvement !== "ROAD" && !n.city)) continue;
+        const [nx, ny] = this.worldToScreen(nc, nr);
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo((sx + nx) / 2, (sy + ny) / 2);
+        ctx.stroke();
+        drewAny = true;
+      }
+      if (!drewAny) {
+        ctx.beginPath();
+        ctx.arc(sx, sy, s * 0.14, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    } else if (t.improvement === "FARM") {
+      ctx.strokeStyle = "rgba(240,220,120,0.75)";
+      ctx.lineWidth = Math.max(1, s * 0.05);
+      for (const dy of [-0.18, 0, 0.18]) {
+        ctx.beginPath();
+        ctx.moveTo(sx - s * 0.34, sy + dy * s + s * 0.28);
+        ctx.lineTo(sx + s * 0.34, sy + dy * s + s * 0.28);
+        ctx.stroke();
+      }
+    } else if (t.improvement === "MINE" && s > 14) {
+      ctx.font = `${Math.floor(s * 0.45)}px serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("⛏️", sx + s * 0.45, sy + s * 0.4);
+    }
     if (t.resource && s > 14) {
       ctx.font = `${Math.floor(s * 0.55)}px serif`;
       ctx.textAlign = "left";
@@ -308,6 +344,15 @@ class Renderer {
     if (u.fortified) {
       ctx.font = `${Math.floor(rad * 0.8)}px serif`;
       ctx.fillText("🛡", sx + rad * 0.9, sy - rad * 0.9);
+    }
+    // veteran pips
+    if (u.level > 0) {
+      ctx.fillStyle = "#f1c40f";
+      for (let i = 0; i < u.level; i++) {
+        ctx.beginPath();
+        ctx.arc(sx - rad * 0.5 + i * rad * 0.5, sy + rad + 5, Math.max(1.6, rad * 0.12), 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
   }
 
