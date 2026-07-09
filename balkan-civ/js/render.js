@@ -1,0 +1,345 @@
+// ============================================================
+// Canvas renderer: map, fog of war, borders, units, cities
+// ============================================================
+"use strict";
+
+class Renderer {
+  constructor(canvas, minimap) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext("2d");
+    this.mini = minimap;
+    this.mctx = minimap.getContext("2d");
+    this.cam = { x: 0, y: 0, zoom: 1 };
+    this.hexSize = 34;
+    this.selected = null;        // selected unit
+    this.selectedCity = null;
+    this.reachable = [];         // [[c,r],...] move highlights
+    this.attackable = [];        // [[c,r],...] attack highlights
+    this.hoverTile = null;
+    this.dirty = true;
+  }
+
+  get size() { return this.hexSize * this.cam.zoom; }
+
+  worldToScreen(c, r) {
+    const [x, y] = HEX.toPixel(c, r, this.size);
+    return [x - this.cam.x + 30, y - this.cam.y + 30];
+  }
+
+  screenToHex(sx, sy) {
+    return HEX.fromPixel(sx + this.cam.x - 30, sy + this.cam.y - 30, this.size);
+  }
+
+  centerOn(game, c, r) {
+    const [x, y] = HEX.toPixel(c, r, this.size);
+    this.cam.x = x - this.canvas.width / 2;
+    this.cam.y = y - this.canvas.height / 2;
+    this.dirty = true;
+  }
+
+  draw(game) {
+    const ctx = this.ctx;
+    const W = this.canvas.width, H = this.canvas.height;
+    ctx.fillStyle = "#0d1b2a";
+    ctx.fillRect(0, 0, W, H);
+    const vis = game.players[0].visible;
+    const s = this.size;
+
+    // visible tile range
+    for (let r = 0; r < game.map.h; r++) {
+      for (let c = 0; c < game.map.w; c++) {
+        const [sx, sy] = this.worldToScreen(c, r);
+        if (sx < -2 * s || sy < -2 * s || sx > W + 2 * s || sy > H + 2 * s) continue;
+        const v = vis[game.map.idx(c, r)];
+        if (v === 0) continue; // unseen
+        const t = game.map.tiles[game.map.idx(c, r)];
+        this.drawTile(ctx, game, t, sx, sy, s, v);
+      }
+    }
+
+    // borders (drawn over tiles)
+    for (let r = 0; r < game.map.h; r++) {
+      for (let c = 0; c < game.map.w; c++) {
+        const i = game.map.idx(c, r);
+        if (vis[i] === 0) continue;
+        const t = game.map.tiles[i];
+        if (t.owner === -1) continue;
+        const [sx, sy] = this.worldToScreen(c, r);
+        if (sx < -2 * s || sy < -2 * s || sx > W + 2 * s || sy > H + 2 * s) continue;
+        this.drawBorder(ctx, game, t, sx, sy, s);
+      }
+    }
+
+    // movement / attack highlights
+    if (this.selected) {
+      ctx.save();
+      for (const [c, r] of this.reachable) {
+        const [sx, sy] = this.worldToScreen(c, r);
+        this.hexPath(ctx, sx, sy, s * 0.92);
+        ctx.fillStyle = "rgba(255,255,255,0.16)";
+        ctx.fill();
+      }
+      for (const [c, r] of this.attackable) {
+        const [sx, sy] = this.worldToScreen(c, r);
+        this.hexPath(ctx, sx, sy, s * 0.92);
+        ctx.fillStyle = "rgba(231,76,60,0.35)";
+        ctx.fill();
+        ctx.strokeStyle = "rgba(231,76,60,0.9)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // cities
+    for (const city of game.cities) {
+      const i = game.map.idx(city.c, city.r);
+      if (vis[i] === 0) continue;
+      const [sx, sy] = this.worldToScreen(city.c, city.r);
+      if (sx < -2 * s || sy < -2 * s || sx > W + 2 * s || sy > H + 2 * s) continue;
+      this.drawCity(ctx, game, city, sx, sy, s);
+    }
+
+    // units (only on currently-visible tiles)
+    for (const u of game.units) {
+      const i = game.map.idx(u.c, u.r);
+      if (u.owner !== 0 && vis[i] !== 2) continue;
+      if (u.owner === 0 && vis[i] === 0) continue;
+      const [sx, sy] = this.worldToScreen(u.c, u.r);
+      if (sx < -2 * s || sy < -2 * s || sx > W + 2 * s || sy > H + 2 * s) continue;
+      this.drawUnit(ctx, game, u, sx, sy, s);
+    }
+
+    // selection ring
+    if (this.selected && game.units.includes(this.selected)) {
+      const [sx, sy] = this.worldToScreen(this.selected.c, this.selected.r);
+      ctx.beginPath();
+      ctx.arc(sx, sy, s * 0.62, 0, Math.PI * 2);
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 3;
+      ctx.setLineDash([6, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    if (this.selectedCity) {
+      const [sx, sy] = this.worldToScreen(this.selectedCity.c, this.selectedCity.r);
+      this.hexPath(ctx, sx, sy, s * 0.95);
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+
+    this.drawMinimap(game);
+    this.dirty = false;
+  }
+
+  hexPath(ctx, cx, cy, size) {
+    const pts = HEX.corners(cx, cy, size);
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < 6; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.closePath();
+  }
+
+  drawTile(ctx, game, t, sx, sy, s, v) {
+    this.hexPath(ctx, sx, sy, s + 0.5);
+    ctx.fillStyle = TERRAIN[t.terrain].color;
+    ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,0.25)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // feature / terrain decorations
+    if (t.terrain === "MOUNTAIN") {
+      ctx.fillStyle = "#8d8d93";
+      ctx.beginPath();
+      ctx.moveTo(sx - s * 0.5, sy + s * 0.4);
+      ctx.lineTo(sx - s * 0.1, sy - s * 0.45);
+      ctx.lineTo(sx + s * 0.25, sy + s * 0.4);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#b9b9c0";
+      ctx.beginPath();
+      ctx.moveTo(sx - s * 0.02, sy + s * 0.4);
+      ctx.lineTo(sx + s * 0.3, sy - s * 0.3);
+      ctx.lineTo(sx + s * 0.58, sy + s * 0.4);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#f0f0f5";
+      ctx.beginPath();
+      ctx.moveTo(sx - s * 0.18, sy - s * 0.25);
+      ctx.lineTo(sx - s * 0.1, sy - s * 0.45);
+      ctx.lineTo(sx - s * 0.02, sy - s * 0.25);
+      ctx.closePath(); ctx.fill();
+    } else if (t.terrain === "HILLS") {
+      ctx.strokeStyle = "rgba(60,50,30,0.5)";
+      ctx.lineWidth = Math.max(1.5, s * 0.06);
+      for (const dx of [-0.3, 0.15]) {
+        ctx.beginPath();
+        ctx.arc(sx + dx * s, sy + s * 0.15, s * 0.28, Math.PI, 0);
+        ctx.stroke();
+      }
+    }
+    if (t.feature === "FOREST") {
+      ctx.fillStyle = FEATURE.FOREST.color;
+      for (const [dx, dy] of [[-0.3, 0.1], [0.1, -0.15], [0.35, 0.2]]) {
+        ctx.beginPath();
+        ctx.moveTo(sx + dx * s - s * 0.2, sy + dy * s + s * 0.25);
+        ctx.lineTo(sx + dx * s, sy + dy * s - s * 0.3);
+        ctx.lineTo(sx + dx * s + s * 0.2, sy + dy * s + s * 0.25);
+        ctx.closePath(); ctx.fill();
+      }
+    }
+    if (t.resource && s > 14) {
+      ctx.font = `${Math.floor(s * 0.55)}px serif`;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText(RESOURCE[t.resource].icon, sx - s * 0.75, sy - s * 0.45);
+    }
+
+    // fog: explored but not visible
+    if (v === 1) {
+      this.hexPath(ctx, sx, sy, s + 0.5);
+      ctx.fillStyle = "rgba(10,15,30,0.55)";
+      ctx.fill();
+    }
+  }
+
+  drawBorder(ctx, game, t, sx, sy, s) {
+    const color = CIVS[game.players[t.owner].civId].color;
+    const pts = HEX.corners(sx, sy, s * 0.96);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = Math.max(2, s * 0.09);
+    ctx.lineCap = "round";
+    // draw only edges facing tiles NOT owned by same player
+    HEX.neighbors(t.c, t.r).forEach(([nc, nr], dir) => {
+      const n = game.tile ? game.tile(nc, nr) : null;
+      if (n && n.owner === t.owner) return;
+      // edge between corner dir and dir+1 (aligned with DIRS ordering below)
+      const EDGE = [[5, 0], [4, 5], [3, 4], [2, 3], [1, 2], [0, 1]][dir];
+      ctx.beginPath();
+      ctx.moveTo(pts[EDGE[0]][0], pts[EDGE[0]][1]);
+      ctx.lineTo(pts[EDGE[1]][0], pts[EDGE[1]][1]);
+      ctx.stroke();
+    });
+    // faint fill
+    this.hexPath(ctx, sx, sy, s);
+    ctx.fillStyle = color + "18";
+    ctx.fill();
+  }
+
+  drawCity(ctx, game, city, sx, sy, s) {
+    const civ = CIVS[game.players[city.owner].civId];
+    // city hex base
+    this.hexPath(ctx, sx, sy, s * 0.8);
+    ctx.fillStyle = "#3a3530";
+    ctx.fill();
+    // buildings silhouette
+    ctx.fillStyle = "#d8cbb0";
+    const bw = s * 0.22;
+    for (const [dx, hMul] of [[-1.3, 0.5], [-0.4, 0.85], [0.5, 0.6]]) {
+      ctx.fillRect(sx + dx * bw, sy - s * 0.35 * hMul, bw * 0.8, s * 0.35 * hMul + s * 0.25);
+    }
+    ctx.fillStyle = "#8a2f20";
+    for (const [dx, hMul] of [[-1.3, 0.5], [-0.4, 0.85], [0.5, 0.6]]) {
+      ctx.beginPath();
+      ctx.moveTo(sx + dx * bw - bw * 0.15, sy - s * 0.35 * hMul);
+      ctx.lineTo(sx + dx * bw + bw * 0.4, sy - s * 0.35 * hMul - s * 0.18);
+      ctx.lineTo(sx + dx * bw + bw * 0.95, sy - s * 0.35 * hMul);
+      ctx.closePath(); ctx.fill();
+    }
+
+    // banner
+    const label = `${city.pop}  ${city.name}${city.isCapital ? " ★" : ""}`;
+    ctx.font = `bold ${Math.max(11, Math.floor(s * 0.34))}px 'Segoe UI', sans-serif`;
+    const tw = ctx.measureText(label).width;
+    const bx = sx - tw / 2 - 8, by = sy - s * 1.05, bh = Math.max(16, s * 0.46);
+    ctx.fillStyle = "rgba(15,15,20,0.82)";
+    ctx.beginPath();
+    ctx.roundRect(bx, by - bh / 2, tw + 16, bh, 4);
+    ctx.fill();
+    ctx.strokeStyle = civ.color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = civ.color;
+    ctx.fillRect(bx + 3, by - bh / 2 + 3, 5, bh - 6);
+    ctx.fillStyle = "#fff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, sx + 2, by + 1);
+
+    // HP bar when damaged
+    if (city.hp < city.maxHp) {
+      const w = s * 1.4;
+      ctx.fillStyle = "#222";
+      ctx.fillRect(sx - w / 2, by + bh / 2 + 2, w, 4);
+      ctx.fillStyle = "#e74c3c";
+      ctx.fillRect(sx - w / 2, by + bh / 2 + 2, w * (city.hp / city.maxHp), 4);
+    }
+  }
+
+  drawUnit(ctx, game, u, sx, sy, s) {
+    const civ = CIVS[game.players[u.owner].civId];
+    const rad = s * 0.42;
+    // shadow + disc
+    ctx.beginPath();
+    ctx.arc(sx, sy + 2, rad, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(sx, sy, rad, 0, Math.PI * 2);
+    ctx.fillStyle = civ.color;
+    ctx.fill();
+    ctx.strokeStyle = u.owner === 0 ? "#fff" : civ.color2;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    // icon
+    ctx.font = `${Math.floor(rad * 1.1)}px serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(u.def.icon, sx, sy + 1);
+    // HP bar
+    if (u.hp < 100) {
+      const w = rad * 2;
+      ctx.fillStyle = "#222";
+      ctx.fillRect(sx - rad, sy - rad - 7, w, 4);
+      ctx.fillStyle = u.hp > 60 ? "#2ecc71" : u.hp > 30 ? "#f39c12" : "#e74c3c";
+      ctx.fillRect(sx - rad, sy - rad - 7, w * (u.hp / 100), 4);
+    }
+    // fortified marker
+    if (u.fortified) {
+      ctx.font = `${Math.floor(rad * 0.8)}px serif`;
+      ctx.fillText("🛡", sx + rad * 0.9, sy - rad * 0.9);
+    }
+  }
+
+  drawMinimap(game) {
+    const m = this.mctx;
+    const W = this.mini.width, H = this.mini.height;
+    m.fillStyle = "#0d1b2a";
+    m.fillRect(0, 0, W, H);
+    const sx = W / game.map.w, sy = H / game.map.h;
+    const vis = game.players[0].visible;
+    for (const t of game.map.tiles) {
+      const v = vis[game.map.idx(t.c, t.r)];
+      if (!v) continue;
+      let color = TERRAIN[t.terrain].color;
+      if (t.owner !== -1) color = CIVS[game.players[t.owner].civId].color;
+      m.fillStyle = color;
+      m.globalAlpha = v === 1 ? 0.5 : 1;
+      m.fillRect(t.c * sx, t.r * sy, Math.ceil(sx), Math.ceil(sy));
+    }
+    m.globalAlpha = 1;
+    for (const c of game.cities) {
+      if (!vis[game.map.idx(c.c, c.r)]) continue;
+      m.fillStyle = "#fff";
+      m.fillRect(c.c * sx - 1, c.r * sy - 1, 3, 3);
+    }
+    // camera viewport box
+    const s = this.size;
+    const hexW = s * Math.sqrt(3), hexH = s * 1.5;
+    m.strokeStyle = "rgba(255,255,255,0.8)";
+    m.lineWidth = 1;
+    m.strokeRect(
+      (this.cam.x / hexW) * sx, (this.cam.y / hexH) * sy,
+      (this.canvas.width / hexW) * sx, (this.canvas.height / hexH) * sy);
+  }
+}

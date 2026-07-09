@@ -1,0 +1,193 @@
+// ============================================================
+// Balkan Civilizations — static game data
+// ============================================================
+"use strict";
+
+const TERRAIN = {
+  OCEAN:     { name: "Sea",       food: 1, prod: 0, gold: 1, moveCost: 99, passable: false, color: "#1b4965", defense: 0 },
+  COAST:     { name: "Coast",     food: 2, prod: 0, gold: 1, moveCost: 99, passable: false, color: "#2d6a8f", defense: 0 },
+  GRASSLAND: { name: "Grassland", food: 2, prod: 0, gold: 0, moveCost: 1,  passable: true,  color: "#5a8f3c", defense: 0 },
+  PLAINS:    { name: "Plains",    food: 1, prod: 1, gold: 0, moveCost: 1,  passable: true,  color: "#a09045", defense: 0 },
+  HILLS:     { name: "Hills",     food: 0, prod: 2, gold: 0, moveCost: 2,  passable: true,  color: "#8a7a52", defense: 0.25 },
+  MOUNTAIN:  { name: "Mountains", food: 0, prod: 0, gold: 0, moveCost: 99, passable: false, color: "#6e6e72", defense: 0 },
+};
+
+// Features sit on top of terrain
+const FEATURE = {
+  FOREST: { name: "Forest", food: 0, prod: 1, gold: 0, moveCost: 2, defense: 0.25, color: "#2e5b2e" },
+};
+
+const RESOURCE = {
+  WHEAT:  { name: "Wheat",  icon: "🌾", food: 2, prod: 0, gold: 0, terrains: ["GRASSLAND", "PLAINS"] },
+  SHEEP:  { name: "Sheep",  icon: "🐑", food: 1, prod: 1, gold: 0, terrains: ["HILLS", "GRASSLAND"] },
+  HORSES: { name: "Horses", icon: "🐎", food: 0, prod: 1, gold: 1, terrains: ["GRASSLAND", "PLAINS"] },
+  IRON:   { name: "Iron",   icon: "⚒️", food: 0, prod: 2, gold: 0, terrains: ["HILLS", "PLAINS"] },
+  WINE:   { name: "Wine",   icon: "🍇", food: 1, prod: 0, gold: 2, terrains: ["GRASSLAND", "PLAINS", "HILLS"] },
+  SILVER: { name: "Silver", icon: "🪙", food: 0, prod: 1, gold: 2, terrains: ["HILLS"] },
+  FISH:   { name: "Fish",   icon: "🐟", food: 2, prod: 0, gold: 1, terrains: ["COAST"] },
+};
+
+// ------------------------------------------------------------
+// Technology tree
+// ------------------------------------------------------------
+const ERAS = ["Ancient", "Classical", "Medieval", "Renaissance"];
+
+const TECHS = {
+  AGRICULTURE:      { name: "Agriculture",      era: 0, cost: 20,  req: [] },
+  POTTERY:          { name: "Pottery",          era: 0, cost: 35,  req: ["AGRICULTURE"] },
+  ANIMAL_HUSBANDRY: { name: "Animal Husbandry", era: 0, cost: 35,  req: ["AGRICULTURE"] },
+  ARCHERY:          { name: "Archery",          era: 0, cost: 35,  req: ["AGRICULTURE"] },
+  MINING:           { name: "Mining",           era: 0, cost: 35,  req: ["AGRICULTURE"] },
+  WRITING:          { name: "Writing",          era: 0, cost: 55,  req: ["POTTERY"] },
+  THE_WHEEL:        { name: "The Wheel",        era: 0, cost: 55,  req: ["ANIMAL_HUSBANDRY"] },
+  BRONZE_WORKING:   { name: "Bronze Working",   era: 0, cost: 55,  req: ["MINING"] },
+  MASONRY:          { name: "Masonry",          era: 0, cost: 55,  req: ["MINING"] },
+  PHILOSOPHY:       { name: "Philosophy",       era: 1, cost: 110,  req: ["WRITING"] },
+  HORSEBACK_RIDING: { name: "Horseback Riding", era: 1, cost: 110,  req: ["THE_WHEEL"] },
+  CURRENCY:         { name: "Currency",         era: 1, cost: 110,  req: ["THE_WHEEL", "BRONZE_WORKING"] },
+  IRON_WORKING:     { name: "Iron Working",     era: 1, cost: 110,  req: ["BRONZE_WORKING"] },
+  MATHEMATICS:      { name: "Mathematics",      era: 1, cost: 150, req: ["WRITING", "THE_WHEEL"] },
+  CONSTRUCTION:     { name: "Construction",     era: 1, cost: 150, req: ["MASONRY", "MATHEMATICS"] },
+  THEOLOGY:         { name: "Theology",         era: 2, cost: 260, req: ["PHILOSOPHY"] },
+  CIVIL_SERVICE:    { name: "Civil Service",    era: 2, cost: 260, req: ["PHILOSOPHY", "CURRENCY"] },
+  CHIVALRY:         { name: "Chivalry",         era: 2, cost: 330, req: ["HORSEBACK_RIDING", "CIVIL_SERVICE"] },
+  MACHINERY:        { name: "Machinery",        era: 2, cost: 330, req: ["CONSTRUCTION", "IRON_WORKING"] },
+  STEEL:            { name: "Steel",            era: 2, cost: 330, req: ["IRON_WORKING", "CONSTRUCTION"] },
+  EDUCATION:        { name: "Education",        era: 2, cost: 400, req: ["THEOLOGY", "CIVIL_SERVICE"] },
+  PHYSICS:          { name: "Physics",          era: 2, cost: 400, req: ["MACHINERY", "STEEL"] },
+  BANKING:          { name: "Banking",          era: 3, cost: 540, req: ["EDUCATION", "CHIVALRY"] },
+  GUNPOWDER:        { name: "Gunpowder",        era: 3, cost: 650, req: ["PHYSICS", "EDUCATION"] },
+};
+
+// ------------------------------------------------------------
+// Units.  cs = melee combat strength, rs = ranged strength
+// ------------------------------------------------------------
+const UNITS = {
+  SETTLER:    { name: "Settler",       icon: "⛺", cost: 90,  cs: 0,  moves: 2, civilian: true },
+  SCOUT:      { name: "Scout",         icon: "👁️", cost: 30,  cs: 5,  moves: 3, sight: 3 },
+  WARRIOR:    { name: "Warrior",       icon: "🪓", cost: 40,  cs: 8,  moves: 2 },
+  ARCHER:     { name: "Archer",        icon: "🏹", cost: 45,  cs: 5,  rs: 8,  range: 2, moves: 2, tech: "ARCHERY" },
+  SPEARMAN:   { name: "Spearman",      icon: "🔱", cost: 55,  cs: 11, moves: 2, tech: "BRONZE_WORKING" },
+  HORSEMAN:   { name: "Horseman",      icon: "🐎", cost: 70,  cs: 12, moves: 4, tech: "HORSEBACK_RIDING", needs: "HORSES" },
+  SWORDSMAN:  { name: "Swordsman",     icon: "🗡️", cost: 75,  cs: 14, moves: 2, tech: "IRON_WORKING", needs: "IRON" },
+  CATAPULT:   { name: "Catapult",      icon: "🪨", cost: 75,  cs: 4,  rs: 14, range: 2, moves: 2, tech: "MATHEMATICS", siege: true },
+  COMPOSITE:  { name: "Composite Bowman", icon: "🏹", cost: 80, cs: 7, rs: 11, range: 2, moves: 2, tech: "CONSTRUCTION" },
+  PIKEMAN:    { name: "Pikeman",       icon: "🛡️", cost: 90,  cs: 16, moves: 2, tech: "CIVIL_SERVICE" },
+  KNIGHT:     { name: "Knight",        icon: "🐴", cost: 120, cs: 20, moves: 4, tech: "CHIVALRY", needs: "HORSES" },
+  CROSSBOW:   { name: "Crossbowman",   icon: "🎯", cost: 120, cs: 13, rs: 18, range: 2, moves: 2, tech: "MACHINERY" },
+  LONGSWORD:  { name: "Longswordsman", icon: "⚔️", cost: 130, cs: 21, moves: 2, tech: "STEEL", needs: "IRON" },
+  TREBUCHET:  { name: "Trebuchet",     icon: "🏰", cost: 130, cs: 6,  rs: 20, range: 2, moves: 2, tech: "PHYSICS", siege: true },
+  MUSKETMAN:  { name: "Musketman",     icon: "🔫", cost: 160, cs: 24, moves: 2, tech: "GUNPOWDER" },
+  // ---- Unique units ----
+  GUSAR:      { name: "Gusar",         icon: "🐎", cost: 110, cs: 19, moves: 5, tech: "CHIVALRY", uu: "SERBIA", replaces: "KNIGHT",
+                blurb: "Serbian light cavalry. Faster than the Knight and needs no horses." },
+  KONNIK:     { name: "Konnik",        icon: "🐎", cost: 70,  cs: 14, moves: 4, tech: "HORSEBACK_RIDING", uu: "BULGARIA", replaces: "HORSEMAN", needs: "HORSES",
+                blurb: "Bulgar heavy horseman. Stronger than the Horseman." },
+  CATAPHRACT: { name: "Cataphract",    icon: "🐴", cost: 120, cs: 23, moves: 3, tech: "CHIVALRY", uu: "BYZANTIUM", replaces: "KNIGHT", needs: "HORSES",
+                blurb: "Byzantine armoured cavalry. Much stronger than the Knight." },
+  JANISSARY:  { name: "Janissary",     icon: "🔫", cost: 160, cs: 26, moves: 2, tech: "GUNPOWDER", uu: "OTTOMAN", replaces: "MUSKETMAN", healOnKill: 50,
+                blurb: "Elite Ottoman infantry. Stronger than the Musketman and heals 50 HP on a kill." },
+  STRADIOT:   { name: "Stradiot",      icon: "🐎", cost: 70,  cs: 12, moves: 4, tech: "HORSEBACK_RIDING", uu: "ALBANIA", replaces: "HORSEMAN", terrainBonus: 0.25,
+                blurb: "Albanian light horseman. Fights +25% in hills and forest, needs no horses." },
+  USKOK:      { name: "Uskok",         icon: "🗡️", cost: 75,  cs: 14, moves: 3, tech: "IRON_WORKING", uu: "CROATIA", replaces: "SWORDSMAN",
+                blurb: "Croatian raider. A faster Swordsman that needs no iron." },
+  CALARASI:   { name: "Călărași",      icon: "🐎", cost: 115, cs: 20, moves: 4, tech: "CHIVALRY", uu: "WALLACHIA", replaces: "KNIGHT", healOnKill: 30,
+                blurb: "Wallachian border cavalry. Heals 30 HP on a kill." },
+  KRSTJANI:   { name: "Krstjani Guard", icon: "🛡️", cost: 85, cs: 18, moves: 2, tech: "CIVIL_SERVICE", uu: "BOSNIA", replaces: "PIKEMAN",
+                blurb: "Bosnian church militia. Stronger than the Pikeman." },
+};
+
+// ------------------------------------------------------------
+// Buildings & wonders
+// ------------------------------------------------------------
+const BUILDINGS = {
+  MONUMENT:  { name: "Monument",   icon: "🗿", cost: 45,  culture: 2 },
+  GRANARY:   { name: "Granary",    icon: "🌾", cost: 65,  food: 2, tech: "POTTERY" },
+  BARRACKS:  { name: "Barracks",   icon: "⚔️", cost: 70,  prod: 2, tech: "BRONZE_WORKING" },
+  LIBRARY:   { name: "Library",    icon: "📜", cost: 80,  sci: 3, tech: "WRITING" },
+  WALLS:     { name: "Walls",      icon: "🧱", cost: 80,  cityHp: 50, cityStr: 4, tech: "MASONRY" },
+  MARKET:    { name: "Market",     icon: "💰", cost: 100, gold: 3, tech: "CURRENCY" },
+  TEMPLE:    { name: "Temple",     icon: "⛪", cost: 90,  culture: 3, tech: "PHILOSOPHY" },
+  AQUEDUCT:  { name: "Aqueduct",   icon: "⛲", cost: 110, food: 3, tech: "CONSTRUCTION" },
+  FORGE:     { name: "Forge",      icon: "🔥", cost: 120, prod: 3, tech: "IRON_WORKING" },
+  UNIVERSITY:{ name: "University", icon: "🎓", cost: 160, sci: 6, tech: "EDUCATION" },
+  CASTLE:    { name: "Castle",     icon: "🏯", cost: 160, cityHp: 75, cityStr: 6, tech: "CHIVALRY", requires: "WALLS" },
+  WORKSHOP:  { name: "Workshop",   icon: "🛠️", cost: 150, prod: 4, tech: "MACHINERY" },
+  BANK:      { name: "Bank",       icon: "🏦", cost: 200, gold: 5, tech: "BANKING" },
+  // ---- Wonders (one per world) ----
+  HAGIA_SOPHIA: { name: "Hagia Sophia",         icon: "🕌", cost: 260, wonder: true, culture: 6, sci: 3, tech: "THEOLOGY",
+                  blurb: "The great church of Constantinople. +6 culture, +3 science." },
+  STUDENICA:    { name: "Studenica Monastery",  icon: "⛪", cost: 210, wonder: true, culture: 5, food: 2, tech: "PHILOSOPHY",
+                  blurb: "Jewel of Serbian Orthodoxy. +5 culture, +2 food." },
+  RILA:         { name: "Rila Monastery",       icon: "🏔️", cost: 230, wonder: true, sci: 5, culture: 2, tech: "THEOLOGY",
+                  blurb: "Bulgaria's mountain sanctuary. +5 science, +2 culture." },
+  KALEMEGDAN:   { name: "Kalemegdan Fortress",  icon: "🏰", cost: 240, wonder: true, cityHp: 100, cityStr: 8, tech: "CHIVALRY",
+                  blurb: "The white fortress over the Danube. +100 city HP, +8 city strength." },
+};
+
+// ------------------------------------------------------------
+// Civilizations
+// ------------------------------------------------------------
+const CIVS = {
+  SERBIA: {
+    name: "Serbia", leader: "Stefan Dušan", adj: "Serbian",
+    color: "#c0392b", color2: "#f5e6c8",
+    trait: "Tsar of Serbs and Greeks", traitDesc: "+25% production toward buildings in every city.",
+    buildingProdBonus: 0.25, uu: "GUSAR",
+    cities: ["Beograd", "Skopje", "Prizren", "Niš", "Novo Brdo", "Kruševac", "Smederevo", "Peć", "Ras", "Priština"],
+  },
+  BULGARIA: {
+    name: "Bulgaria", leader: "Simeon I the Great", adj: "Bulgarian",
+    color: "#2e8b57", color2: "#ffffff",
+    trait: "Golden Age of Simeon", traitDesc: "+2 science in every city.",
+    cityScience: 2, uu: "KONNIK",
+    cities: ["Preslav", "Tarnovo", "Sofia", "Plovdiv", "Pliska", "Varna", "Ohrid", "Vidin", "Silistra", "Burgas"],
+  },
+  BYZANTIUM: {
+    name: "Byzantium", leader: "Basil II", adj: "Byzantine",
+    color: "#6a0dad", color2: "#ffd700",
+    trait: "The Purple Bureaucracy", traitDesc: "+4 gold in the capital, +1 gold in every other city.",
+    capitalGold: 4, cityGold: 1, uu: "CATAPHRACT",
+    cities: ["Constantinople", "Thessalonica", "Adrianople", "Nicaea", "Dyrrachium", "Corinth", "Athens", "Smyrna", "Trebizond", "Mystras"],
+  },
+  OTTOMAN: {
+    name: "Ottomans", leader: "Mehmed II", adj: "Ottoman",
+    color: "#b03a2e", color2: "#27ae60",
+    trait: "Ghazi Warriors", traitDesc: "+20% combat strength when attacking cities.",
+    vsCityBonus: 0.2, uu: "JANISSARY",
+    cities: ["Edirne", "Bursa", "Üsküdar", "Gallipoli", "Iznik", "Manisa", "Ankara", "Konya", "Amasya", "Sivas"],
+  },
+  ALBANIA: {
+    name: "Albania", leader: "Skanderbeg", adj: "Albanian",
+    color: "#8b0000", color2: "#111111",
+    trait: "Lord of the Mountains", traitDesc: "+30% combat strength when fighting in hills or forest.",
+    roughBonus: 0.3, uu: "STRADIOT",
+    cities: ["Krujë", "Shkodër", "Durrës", "Berat", "Vlorë", "Lezhë", "Gjirokastër", "Elbasan", "Korçë", "Tiranë"],
+  },
+  CROATIA: {
+    name: "Croatia", leader: "Tomislav", adj: "Croatian",
+    color: "#1f618d", color2: "#e74c3c",
+    trait: "Adriatic Kingdom", traitDesc: "+2 gold and +1 food in cities founded next to the sea.",
+    coastalGold: 2, coastalFood: 1, uu: "USKOK",
+    cities: ["Zagreb", "Split", "Dubrovnik", "Zadar", "Nin", "Šibenik", "Knin", "Osijek", "Rijeka", "Trogir"],
+  },
+  WALLACHIA: {
+    name: "Wallachia", leader: "Vlad III Drăculea", adj: "Wallachian",
+    color: "#4a235a", color2: "#c0392b",
+    trait: "Forest of the Impaled", traitDesc: "+25% combat strength inside your own territory.",
+    homeBonus: 0.25, uu: "CALARASI",
+    cities: ["Târgoviște", "București", "Curtea de Argeș", "Craiova", "Pitești", "Brăila", "Giurgiu", "Ploiești", "Câmpulung", "Snagov"],
+  },
+  BOSNIA: {
+    name: "Bosnia", leader: "Tvrtko I", adj: "Bosnian",
+    color: "#b7950b", color2: "#154360",
+    trait: "Crown of Three Lands", traitDesc: "+50% culture in every city (faster border growth).",
+    cultureBonus: 0.5, uu: "KRSTJANI",
+    cities: ["Visoko", "Jajce", "Sarajevo", "Srebrenica", "Travnik", "Bobovac", "Mostar", "Banja Luka", "Tuzla", "Zenica"],
+  },
+};
+
+const CIV_IDS = Object.keys(CIVS);
+
+// Barbarian-free game; players fight each other.
+const GAME_DEFAULTS = { mapW: 44, mapH: 34, maxTurns: 300 };

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Balkan Civilizations</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>⚔️</text></svg>">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ============ start screen ============ -->
+<div id="start-screen">
+  <h1>⚔ Balkan Civilizations ⚔</h1>
+  <div class="subtitle">Forge an empire from the Adriatic to the Black Sea — a turn-based 4X strategy game</div>
+  <div id="civ-cards"></div>
+  <div id="start-options">
+    <label>Opponents:
+      <select id="sel-opponents">
+        <option value="3">3</option>
+        <option value="4" selected>4</option>
+        <option value="5">5</option>
+        <option value="7">7</option>
+      </select>
+    </label>
+    <label>Map:
+      <select id="sel-mapsize">
+        <option value="small">Small</option>
+        <option value="standard" selected>Standard</option>
+        <option value="large">Large</option>
+      </select>
+    </label>
+    <button id="btn-start">⚔ Begin Campaign</button>
+    <button id="btn-continue">📜 Continue Saved Game</button>
+  </div>
+  <div class="dim" style="margin-top:14px">
+    Controls: click to select · click a highlighted hex to move/attack · drag to pan · wheel to zoom ·
+    Enter = end turn · T = tech · D = diplomacy · F = fortify · N = next unit
+  </div>
+</div>
+
+<!-- ============ in-game UI ============ -->
+<div id="game-ui">
+  <div id="topbar">
+    <span id="stat-turn"></span>
+    <span id="stat-era"></span>
+    <span id="stat-gold"></span>
+    <span id="stat-sci" style="cursor:pointer" title="Open tech tree"></span>
+    <span id="stat-score"></span>
+    <span class="spacer"></span>
+    <button id="btn-tech">🔬 Tech (T)</button>
+    <button id="btn-diplo">🤝 Diplomacy (D)</button>
+    <button id="btn-menu">☰ Menu</button>
+    <button id="btn-endturn">End Turn ⏵</button>
+  </div>
+  <canvas id="map"></canvas>
+  <div id="minimap-wrap"><canvas id="minimap" width="200" height="150"></canvas></div>
+  <div id="unit-panel">
+    <div id="unit-info"></div>
+    <div id="unit-actions"></div>
+  </div>
+  <div id="city-panel"></div>
+  <div id="notif-list"></div>
+</div>
+
+<div id="tooltip"></div>
+
+<!-- ============ modals ============ -->
+<div id="tech-modal" class="modal">
+  <div class="modal-box"><h2>🔬 Technology</h2><div id="tech-body"></div></div>
+</div>
+<div id="diplo-modal" class="modal">
+  <div class="modal-box"><h2>🤝 Diplomacy</h2><div id="diplo-body"></div></div>
+</div>
+<div id="victory-modal" class="modal">
+  <div class="modal-box" id="victory-body"></div>
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/hex.js"></script>
+<script src="js/mapgen.js"></script>
+<script src="js/model.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/render.js"></script>
+<script src="js/ui.js"></script>
+<script>
+  window.addEventListener("DOMContentLoaded", () => UI.init());
+</script>
+</body>
+</html>
