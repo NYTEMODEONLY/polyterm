@@ -84,6 +84,8 @@ const UNITS = {
   // ---- Naval units (built in coastal cities only) ----
   GALLEY:     { name: "Galley",        icon: "⛵", cost: 60,  cs: 10, moves: 4, tech: "SAILING", naval: true, coastOnly: true },
   GALLEASS:   { name: "War Galleass",  icon: "🚢", cost: 110, cs: 12, rs: 17, range: 2, moves: 5, tech: "COMPASS", naval: true },
+  // ---- Religious units (purchased with faith, not production) ----
+  MISSIONARY: { name: "Missionary",    icon: "🙏", cost: 0, faithCost: 120, cs: 0, moves: 4, civilian: true, missionary: true, charges: 2 },
   // ---- Unique units ----
   GUSAR:      { name: "Gusar",         icon: "🐎", cost: 110, cs: 19, moves: 5, tech: "CHIVALRY", uu: "SERBIA", replaces: "KNIGHT",
                 blurb: "Serbian light cavalry. Faster than the Knight and needs no horses." },
@@ -119,12 +121,13 @@ const IMPROVEMENT = {
 // ------------------------------------------------------------
 const BUILDINGS = {
   MONUMENT:  { name: "Monument",   icon: "🗿", cost: 45,  culture: 2 },
+  SHRINE:    { name: "Shrine",     icon: "🕯️", cost: 45,  faith: 2, tech: "POTTERY" },
   GRANARY:   { name: "Granary",    icon: "🌾", cost: 65,  food: 2, tech: "POTTERY" },
   BARRACKS:  { name: "Barracks",   icon: "⚔️", cost: 70,  prod: 2, tech: "BRONZE_WORKING" },
   LIBRARY:   { name: "Library",    icon: "📜", cost: 80,  sci: 3, tech: "WRITING" },
   WALLS:     { name: "Walls",      icon: "🧱", cost: 80,  cityHp: 50, cityStr: 4, tech: "MASONRY" },
   MARKET:    { name: "Market",     icon: "💰", cost: 100, gold: 3, tech: "CURRENCY" },
-  TEMPLE:    { name: "Temple",     icon: "⛪", cost: 90,  culture: 3, tech: "PHILOSOPHY" },
+  TEMPLE:    { name: "Temple",     icon: "⛪", cost: 90,  culture: 3, faith: 2, tech: "PHILOSOPHY" },
   AQUEDUCT:  { name: "Aqueduct",   icon: "⛲", cost: 110, food: 3, tech: "CONSTRUCTION" },
   FORGE:     { name: "Forge",      icon: "🔥", cost: 120, prod: 3, tech: "IRON_WORKING" },
   UNIVERSITY:{ name: "University", icon: "🎓", cost: 160, sci: 6, tech: "EDUCATION" },
@@ -132,11 +135,11 @@ const BUILDINGS = {
   WORKSHOP:  { name: "Workshop",   icon: "🛠️", cost: 150, prod: 4, tech: "MACHINERY" },
   BANK:      { name: "Bank",       icon: "🏦", cost: 200, gold: 5, tech: "BANKING" },
   // ---- Wonders (one per world) ----
-  HAGIA_SOPHIA: { name: "Hagia Sophia",         icon: "🕌", cost: 260, wonder: true, culture: 6, sci: 3, tech: "THEOLOGY",
+  HAGIA_SOPHIA: { name: "Hagia Sophia",         icon: "🕌", cost: 260, wonder: true, culture: 6, sci: 3, faith: 4, tech: "THEOLOGY",
                   blurb: "The great church of Constantinople. +6 culture, +3 science." },
-  STUDENICA:    { name: "Studenica Monastery",  icon: "⛪", cost: 210, wonder: true, culture: 5, food: 2, tech: "PHILOSOPHY",
+  STUDENICA:    { name: "Studenica Monastery",  icon: "⛪", cost: 210, wonder: true, culture: 5, food: 2, faith: 3, tech: "PHILOSOPHY",
                   blurb: "Jewel of Serbian Orthodoxy. +5 culture, +2 food." },
-  RILA:         { name: "Rila Monastery",       icon: "🏔️", cost: 230, wonder: true, sci: 5, culture: 2, tech: "THEOLOGY",
+  RILA:         { name: "Rila Monastery",       icon: "🏔️", cost: 230, wonder: true, sci: 5, culture: 2, faith: 3, tech: "THEOLOGY",
                   blurb: "Bulgaria's mountain sanctuary. +5 science, +2 culture." },
   KALEMEGDAN:   { name: "Kalemegdan Fortress",  icon: "🏰", cost: 240, wonder: true, cityHp: 100, cityStr: 8, tech: "CHIVALRY",
                   blurb: "The white fortress over the Danube. +100 city HP, +8 city strength." },
@@ -212,6 +215,65 @@ const CIVS = {
 };
 
 const CIV_IDS = Object.keys(CIVS);
+
+// ------------------------------------------------------------
+// Religion
+// ------------------------------------------------------------
+const RELIGION_NAMES = [
+  { name: "Orthodoxy",   icon: "☦️" },
+  { name: "Catholicism", icon: "✝️" },
+  { name: "Islam",       icon: "☪️" },
+  { name: "Bogomilism",  icon: "🔥" },
+  { name: "Tengrism",    icon: "🌞" },
+  { name: "Hellenism",   icon: "⚡" },
+];
+
+// Which faith each civ founds by preference (AI; default offering for you)
+const CIV_RELIGION = {
+  SERBIA: "Orthodoxy", BULGARIA: "Orthodoxy", BYZANTIUM: "Orthodoxy",
+  MACEDONIA: "Orthodoxy", WALLACHIA: "Orthodoxy",
+  CROATIA: "Catholicism", ALBANIA: "Catholicism",
+  OTTOMAN: "Islam", BOSNIA: "Bogomilism",
+};
+
+const BELIEFS = {
+  HEARTH:  { name: "Sacred Hearths", desc: "+2 food in your cities that follow the religion" },
+  SCHOLAR: { name: "Divine Wisdom",  desc: "+2 science in your cities that follow the religion" },
+  TITHE:   { name: "Tithe",          desc: "+1 gold each turn for every city in the world following your religion" },
+  ZEAL:    { name: "Holy Warriors",  desc: "+15% combat strength within 2 tiles of a city following your religion" },
+};
+
+const RELIGION_FOUND_COST = (nFounded) => 120 + 140 * nFounded;
+const MAX_RELIGIONS = 4;
+const MISSIONARY_PRESSURE = 150;
+
+// ------------------------------------------------------------
+// City-states (independent one-city minors)
+// ------------------------------------------------------------
+const MINOR_TYPES = {
+  mercantile:   { name: "Mercantile",   icon: "💰", desc: "Ally: +4 gold per turn (friend: +2)" },
+  maritime:     { name: "Maritime",     icon: "🌾", desc: "Ally: +3 food in your capital (friend: +1)" },
+  cultured:     { name: "Cultured",     icon: "🎭", desc: "Ally: +4 culture in your capital (friend: +2)" },
+  militaristic: { name: "Militaristic", icon: "⚔️", desc: "Ally: gifts you a unit every 15 turns" },
+};
+
+const MINORS = {
+  RAGUSA:     { name: "Ragusa",     type: "mercantile",   color: "#7f8c8d", color2: "#ecf0f1", cities: ["Ragusa"] },
+  KOTOR:      { name: "Kotor",      type: "maritime",     color: "#5d6d7e", color2: "#aeb6bf", cities: ["Kotor"] },
+  IOANNINA:   { name: "Ioannina",   type: "cultured",     color: "#6c7a89", color2: "#d0d3d4", cities: ["Ioannina"] },
+  MONEMVASIA: { name: "Monemvasia", type: "maritime",     color: "#616a6b", color2: "#f4f6f6", cities: ["Monemvasia"] },
+  BRASOV:     { name: "Brașov",     type: "militaristic", color: "#707b7c", color2: "#e5e8e8", cities: ["Brașov"] },
+  RHODES:     { name: "Rhodes",     type: "militaristic", color: "#839192", color2: "#fdfefe", cities: ["Rhodes"] },
+};
+// City-states are looked up through CIVS as well
+for (const [id, m] of Object.entries(MINORS)) {
+  CIVS[id] = { name: m.name, leader: m.name, adj: m.name, color: m.color, color2: m.color2,
+    trait: MINOR_TYPES[m.type].name + " City-State", traitDesc: MINOR_TYPES[m.type].desc,
+    cities: m.cities, minor: true, minorType: m.type };
+}
+
+const INFLUENCE_FRIEND = 30;
+const INFLUENCE_ALLY = 60;
 
 // Barbarian-free game; players fight each other.
 const GAME_DEFAULTS = { mapW: 44, mapH: 34, maxTurns: 300 };

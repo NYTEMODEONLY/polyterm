@@ -144,6 +144,15 @@ const UI = (() => {
         if (city) { selectCity(city); refreshAll(); }
       }, canFound && u.moves > 0);
     }
+    if (u.def.missionary) {
+      const target = game.missionaryTarget(u);
+      btn(`🕊️ Spread Religion (${u.charges} left)`, () => {
+        if (game.spreadFromMissionary(u)) {
+          selectUnit(game.units.includes(u) ? u : null);
+          refreshAll();
+        }
+      }, !!target && u.moves > 0 && game.players[0].religionId !== null);
+    }
     if (u.def.worker) {
       if (u.building) {
         btn("🚫 Cancel Job", () => { u.building = null; u.moves = u.def.moves; selectUnit(u); refreshAll(); });
@@ -191,13 +200,20 @@ const UI = (() => {
         <button class="close" onclick="UI.closeCity()">✕</button>
       </div>
       <div class="city-stats">
-        Pop ${city.pop} · 🍞${y.food} ⚙️${y.prod} 💰${y.gold} 🔬${y.sci} 🎭${Math.floor(y.culture)}<br>
+        Pop ${city.pop} · 🍞${y.food} ⚙️${y.prod} 💰${y.gold} 🔬${y.sci} 🎭${Math.floor(y.culture)}${y.faith ? " ☦️" + y.faith : ""}<br>
         <span class="dim">Growth ${city.food}/${city.foodNeeded()} · HP ${city.hp}/${city.maxHp}</span>
+        ${city.religion !== null ? `<br><span class="dim">Faith: ${game.religions[city.religion].icon} ${game.religions[city.religion].name}</span>` : ""}
       </div>`;
     if (city.buildings.length) {
       html += `<div class="city-buildings">${city.buildings.map(b => BUILDINGS[b].icon + " " + BUILDINGS[b].name).join(" · ")}</div>`;
     }
     if (isMine) {
+      const p0 = game.players[0];
+      if (p0.religionId !== null) {
+        const cost = UNITS.MISSIONARY.faithCost;
+        html += `<div class="prod-current"><button ${p0.faith >= cost ? "" : "disabled"}
+          onclick="UI.buyMissionary(${city.id})">🙏 Missionary (${cost} ☦️)</button></div>`;
+      }
       const opts = game.productionOptions(city);
       const cur = city.producing;
       html += `<div class="prod-current">Producing: <b>${cur
@@ -283,6 +299,75 @@ const UI = (() => {
     refreshAll();
   }
 
+  // ---------------- religion ----------------
+  let foundingPromptTurn = -1;
+
+  function showReligionScreen() {
+    const p = game.players[0];
+    $("religion-modal").style.display = "flex";
+    const body = $("religion-body");
+    let html = `<div class="diplo-row">Your faith: <b>☦️ ${Math.floor(p.faith)}</b>`;
+    if (p.religionId === null) {
+      if (game.religions.length >= MAX_RELIGIONS) {
+        html += ` <span class="dim">— all ${MAX_RELIGIONS} religions have been founded.</span>`;
+      } else {
+        html += ` <span class="dim">— found a religion at ${RELIGION_FOUND_COST(game.religions.length)} faith.</span>`;
+        if (game.canFoundReligion(0)) html += ` <button onclick="UI.showFoundingModal()">🕊️ Found Religion</button>`;
+      }
+    } else {
+      const r = game.religions[p.religionId];
+      html += ` <span class="dim">— buy a Missionary for ${UNITS.MISSIONARY.faithCost} faith from any city panel.</span>`;
+    }
+    html += `</div>`;
+    if (!game.religions.length) {
+      html += `<div class="diplo-row dim">No religion has been founded yet. Build Shrines and Temples to generate faith.</div>`;
+    }
+    for (const r of game.religions) {
+      const founder = game.players[r.founder];
+      const holy = game.cities.find(c => c.id === r.holyCityId);
+      html += `<div class="diplo-row" style="border-left:6px solid ${founder.civ.color}">
+        <b>${r.icon} ${r.name}</b> <span class="dim">founded by ${founder.civ.name}${holy ? " · holy city " + holy.name : ""}</span><br>
+        <span class="dim">${BELIEFS[r.belief].name}: ${BELIEFS[r.belief].desc} · ${game.religionFollowers(r.id)} following cities</span>
+      </div>`;
+    }
+    body.innerHTML = html;
+  }
+
+  function showFoundingModal() {
+    const p = game.players[0];
+    if (!game.canFoundReligion(0)) return;
+    $("religion-modal").style.display = "none";
+    $("founding-modal").style.display = "flex";
+    const names = game.availableReligionNames();
+    const pref = names.find(n => n.name === CIV_RELIGION[p.civId]) || names[0];
+    let html = `<p>Your prophets await (${RELIGION_FOUND_COST(game.religions.length)} faith). Choose a faith and a founder belief:</p>
+      <div class="diplo-row">Religion:
+      <select id="sel-religion-name">${names.map(n =>
+        `<option value="${n.name}" ${n.name === pref.name ? "selected" : ""}>${n.icon} ${n.name}</option>`).join("")}
+      </select></div>`;
+    html += Object.entries(BELIEFS).map(([key, b], i) =>
+      `<div class="diplo-row"><label><input type="radio" name="belief" value="${key}" ${i === 0 ? "checked" : ""}>
+       <b>${b.name}</b> — <span class="dim">${b.desc}</span></label></div>`).join("");
+    html += `<div style="margin-top:10px"><button onclick="UI.confirmFounding()">🕊️ Found Religion</button>
+      <button onclick="document.getElementById('founding-modal').style.display='none'">Later</button></div>`;
+    $("founding-body").innerHTML = html;
+  }
+
+  function confirmFounding() {
+    const name = $("sel-religion-name").value;
+    const entry = RELIGION_NAMES.find(r => r.name === name);
+    const belief = document.querySelector("input[name=belief]:checked").value;
+    if (game.foundReligion(0, entry.name, entry.icon, belief)) {
+      $("founding-modal").style.display = "none";
+      refreshAll();
+    }
+  }
+
+  function buyMissionary(cityId) {
+    const city = game.cities.find(c => c.id === cityId);
+    if (city && game.buyMissionary(city)) { showCityPanel(city); refreshAll(); }
+  }
+
   // ---------------- diplomacy screen ----------------
   function showDiploScreen() {
     const p = game.players[0];
@@ -291,7 +376,7 @@ const UI = (() => {
     const body = $("diplo-body");
     let html = "";
     for (const p2 of game.players) {
-      if (p2.index === 0) continue;
+      if (p2.index === 0 || p2.isMinor) continue;
       const met = p.met.has(p2.index);
       const civ = p2.civ;
       html += `<div class="diplo-row" style="border-left:6px solid ${met ? civ.color : "#555"}">
@@ -306,8 +391,41 @@ const UI = (() => {
       }
       html += `</div>`;
     }
+    const minors = game.players.filter(p2 => p2.isMinor && p.met.has(p2.index));
+    if (minors.length) {
+      html += `<h3>City-States</h3>`;
+      for (const m of minors) {
+        const type = MINOR_TYPES[m.civ.minorType];
+        if (!m.alive) {
+          html += `<div class="diplo-row" style="border-left:6px solid #555"><b>${m.civ.name}</b>
+            <span class='dead'>☠️ destroyed</span></div>`;
+          continue;
+        }
+        const status = game.minorStatus(0, m.index);
+        const inf = Math.floor(p.influence[m.index] || 0);
+        const statusTxt = { war: "<b class='war'>AT WAR</b>", ally: "<b style='color:#2ecc71'>ALLY</b>",
+          friend: "<b style='color:#f1c40f'>Friend</b>", neutral: "neutral" }[status];
+        html += `<div class="diplo-row" style="border-left:6px solid ${m.civ.color}">
+          <div><b>${m.civ.name}</b> <span class="dim">${type.icon} ${type.name}</span> · ${statusTxt}</div>
+          <div class="dim">${type.desc}</div>
+          <div class="dim">Influence: ${inf} (friend ${INFLUENCE_FRIEND} · ally ${INFLUENCE_ALLY})</div>`;
+        if (status !== "war") {
+          html += `<button ${p.gold >= 100 ? "" : "disabled"} onclick="UI.gift(${m.index},100)">🎁 100💰 (+25)</button>
+            <button ${p.gold >= 250 ? "" : "disabled"} onclick="UI.gift(${m.index},250)">🎁 250💰 (+70)</button>`;
+        }
+        html += `<button onclick="UI.diploAction(${m.index})">${status === "war" ? "☮️ Propose Peace" : "⚔️ Declare War"}</button>
+        </div>`;
+      }
+    }
     html += `<div class="diplo-row"><b>Your score:</b> ${game.score(0)} · Military ${Math.floor(game.militaryPower(0))}</div>`;
     body.innerHTML = html;
+  }
+
+  function gift(minorIdx, amount) {
+    if (game.giftInfluence(0, minorIdx, amount)) {
+      showDiploScreen();
+      refreshAll();
+    }
   }
 
   function diploAction(idx) {
@@ -328,13 +446,17 @@ const UI = (() => {
   // ---------------- top bar / notifications ----------------
   function refreshTopBar() {
     const p = game.players[0];
-    let gold = 0, sci = 0;
+    let gold = 0, sci = 0, faith = 0;
     for (const c of game.cities) {
       if (c.owner !== 0) continue;
       const y = game.cityYields(c);
-      gold += y.gold; sci += y.sci;
+      gold += y.gold; sci += y.sci; faith += y.faith;
     }
     gold -= Math.max(0, game.units.filter(u => u.owner === 0).length - 4);
+    gold += game.minorBonuses(0).gold;
+    if (p.religionId !== null && game.religions[p.religionId].belief === "TITHE") {
+      gold += game.religionFollowers(p.religionId);
+    }
     const tech = p.researching ? TECHS[p.researching] : null;
     $("stat-turn").textContent = `Turn ${game.turn}/${game.maxTurns}`;
     $("stat-era").textContent = ERAS[p.era()] + " Era";
@@ -342,6 +464,10 @@ const UI = (() => {
     $("stat-sci").innerHTML = tech
       ? `🔬 ${tech.name} ${Math.floor(p.scienceStored)}/${tech.cost} (+${sci})`
       : `🔬 <b class="alert">choose research!</b> (+${sci})`;
+    const relIcon = p.religionId !== null ? game.religions[p.religionId].icon : "☦️";
+    $("stat-faith").innerHTML = game.canFoundReligion(0)
+      ? `${relIcon} <b class="alert">found a religion!</b>`
+      : `${relIcon} ${Math.floor(p.faith)} (+${faith})`;
     $("stat-score").textContent = `🏆 ${game.score(0)}`;
   }
 
@@ -387,6 +513,10 @@ const UI = (() => {
     if (rend.selected && !game.units.includes(rend.selected)) rend.selected = null;
     refreshAll();
     if (!game.over) cycleNextUnit();
+    if (game.canFoundReligion(0) && foundingPromptTurn !== game.turn) {
+      foundingPromptTurn = game.turn;
+      showFoundingModal();
+    }
   }
 
   function showVictory() {
@@ -398,7 +528,7 @@ const UI = (() => {
       <h2>${won ? "🏆 VICTORY!" : "☠️ DEFEAT"}</h2>
       <p>${civ.name} ${won ? "— your empire —" : ""} has won a <b>${game.victoryType}</b> victory
       on turn ${game.turn}.</p>
-      <p class="dim">Final score: ${game.players.map(p => `${p.civ.name} ${game.score(p.index)}`).join(" · ")}</p>
+      <p class="dim">Final score: ${game.players.filter(p => !p.isMinor).map(p => `${p.civ.name} ${game.score(p.index)}`).join(" · ")}</p>
       <button onclick="UI.newGame()">New Game</button>`;
   }
 
@@ -505,15 +635,20 @@ const UI = (() => {
       else if (e.key === "Escape") {
         $("tech-modal").style.display = "none";
         $("diplo-modal").style.display = "none";
+        $("religion-modal").style.display = "none";
+        $("founding-modal").style.display = "none";
         closeCity();
         selectUnit(null);
       } else if (e.key === "t") showTechScreen();
       else if (e.key === "d") showDiploScreen();
+      else if (e.key === "r") showReligionScreen();
     });
 
     $("btn-endturn").onclick = endTurn;
     $("btn-tech").onclick = showTechScreen;
     $("btn-diplo").onclick = showDiploScreen;
+    $("btn-religion").onclick = showReligionScreen;
+    $("stat-faith").onclick = showReligionScreen;
     $("btn-menu").onclick = () => { if (confirm("Return to the main menu? (progress is auto-saved)")) showStartScreen(); };
     document.querySelectorAll(".modal").forEach(m => {
       m.addEventListener("mousedown", (e) => { if (e.target === m) m.style.display = "none"; });
@@ -568,5 +703,6 @@ const UI = (() => {
   }
 
   return { init, setProduction, buyItem, closeCity, pickTech, diploAction, newGame,
+    showFoundingModal, confirmFounding, buyMissionary, gift,
     get game() { return game; }, get renderer() { return rend; } };
 })();

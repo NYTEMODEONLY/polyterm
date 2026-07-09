@@ -23,6 +23,7 @@ class Unit {
     this.xp = 0;
     this.level = 0;              // each level: +10% combat strength
     this.building = null;        // worker job: {type, turnsLeft}
+    this.charges = UNITS[type].charges || 0; // missionary spreads
   }
   get def() { return UNITS[this.type]; }
   get isCivilian() { return !!this.def.civilian; }
@@ -59,6 +60,8 @@ class City {
     this.expansions = 0;
     this.isCapital = false;
     this.coastal = false;
+    this.religion = null;        // majority religion id
+    this.pressure = {};          // religionId -> accumulated pressure
   }
 
   get maxHp() {
@@ -90,8 +93,12 @@ class Player {
     this.cityNameCursor = 0;
     this.visible = null;         // Uint8Array: 0 unseen 1 explored 2 visible
     this.originalCapitalId = null;
+    this.faith = 0;
+    this.religionId = null;      // id of the religion this player founded
+    this.influence = {};         // minor player index -> influence points
   }
   get civ() { return CIVS[this.civId]; }
+  get isMinor() { return !!this.civ.minor; }
   hasTech(t) { return this.techs.has(t); }
 
   era() {
@@ -141,20 +148,58 @@ class Game {
       const j = Math.floor(this.rng() * (i + 1));
       [civPool[i], civPool[j]] = [civPool[j], civPool[i]];
     }
+    this.religions = [];
+
     const civs = [opts.playerCiv, ...civPool.slice(0, opts.numOpponents)];
     civs.forEach((cid, i) => {
       const p = new Player(i, cid, i === 0);
       p.visible = new Uint8Array(this.map.w * this.map.h);
       this.players.push(p);
     });
+    const nMajors = this.players.length;
+
+    // city-states, scaled to map area
+    const minorPool = Object.keys(MINORS);
+    for (let i = minorPool.length - 1; i > 0; i--) {
+      const j = Math.floor(this.rng() * (i + 1));
+      [minorPool[i], minorPool[j]] = [minorPool[j], minorPool[i]];
+    }
+    const nMinors = opts.noMinors ? 0 :
+      Math.min(minorPool.length, Math.max(2, Math.round((this.map.w * this.map.h) / 400)));
+    for (let m = 0; m < nMinors; m++) {
+      const p = new Player(nMajors + m, minorPool[m], false);
+      p.visible = new Uint8Array(this.map.w * this.map.h);
+      this.players.push(p);
+    }
 
     const starts = pickStartPositions(this.map, this.players.length, this.rng);
     this.players.forEach((p, i) => {
       const s = starts[i];
       if (!s) { p.alive = false; return; }
-      this.addUnit("SETTLER", i, s.c, s.r);
-      const wPos = this.freeAdjacent(s.c, s.r) || [s.c, s.r];
-      this.addUnit("WARRIOR", i, wPos[0], wPos[1]);
+      if (p.isMinor) {
+        // city-states begin as a fortified standing city
+        const city = new City(p.civ.cities[0], i, s.c, s.r);
+        city.isCapital = true;
+        city.pop = 2;
+        city.buildings.push("WALLS");
+        city.hp = city.maxHp;
+        p.originalCapitalId = city.id;
+        const t = this.tile(s.c, s.r);
+        t.city = city; t.owner = i;
+        for (const [nc, nr] of HEX.neighbors(s.c, s.r)) {
+          const nt = this.tile(nc, nr);
+          if (nt) {
+            if (nt.owner === -1) nt.owner = i;
+            if (this.isWater(nt)) city.coastal = true;
+          }
+        }
+        this.cities.push(city);
+        this.addUnit("WARRIOR", i, s.c, s.r);
+      } else {
+        this.addUnit("SETTLER", i, s.c, s.r);
+        const wPos = this.freeAdjacent(s.c, s.r) || [s.c, s.r];
+        this.addUnit("WARRIOR", i, wPos[0], wPos[1]);
+      }
       this.updateVisibility(p);
     });
   }
@@ -389,6 +434,13 @@ class Game {
     if (civ.vsCityBonus && attacking && targetTile && targetTile.city) mod += civ.vsCityBonus;
     if (unit.def.terrainBonus && here && (here.terrain === "HILLS" || here.feature === "FOREST")) mod += unit.def.terrainBonus;
     if (unit.def.siege && attacking && targetTile && targetTile.city) mod += 1.0; // siege vs cities
+    // Holy Warriors: faith-fuelled fighting near follower cities
+    if (!p.isMinor && p.religionId !== null && this.religions[p.religionId].belief === "ZEAL") {
+      const rid = p.religionId;
+      if (this.cities.some(c => c.religion === rid && HEX.distance(c.c, c.r, unit.c, unit.r) <= 2)) {
+        mod += 0.15;
+      }
+    }
     return str * mod;
   }
 
@@ -399,6 +451,7 @@ class Game {
     if (garrison) str += this.strengthOf(garrison, {}) * 0.25;
     const era = this.players[city.owner].era();
     str += era * 3;
+    if (this.players[city.owner].isMinor) str += 6; // city-states dig in
     return str;
   }
 
@@ -526,7 +579,8 @@ class Game {
     if (!hasCities && !hasSettlers) {
       p.alive = false;
       this.units = this.units.filter(u => u.owner !== playerIdx);
-      this.notify(`${p.civ.name} has been destroyed!`, -1);
+      this.notify(p.isMinor ? `The city-state of ${p.civ.name} has been destroyed!`
+                            : `${p.civ.name} has been destroyed!`, -1);
       this.checkVictory();
     }
   }
@@ -606,10 +660,22 @@ class Game {
     }
     let sci = 2 + city.pop * 0.5;
     let culture = 1;
+    let faith = 0;
     for (const b of city.buildings) {
       const bd = BUILDINGS[b];
       food += bd.food || 0; prod += bd.prod || 0; gold += bd.gold || 0;
-      sci += bd.sci || 0; culture += bd.culture || 0;
+      sci += bd.sci || 0; culture += bd.culture || 0; faith += bd.faith || 0;
+    }
+    // founder beliefs reward your own following cities
+    if (!p.isMinor && p.religionId !== null && city.religion === p.religionId) {
+      const belief = this.religions[p.religionId].belief;
+      if (belief === "HEARTH") food += 2;
+      if (belief === "SCHOLAR") sci += 2;
+    }
+    // city-state friendships boost the capital
+    if (city.isCapital && !p.isMinor) {
+      const mb = this.minorBonuses(city.owner);
+      food += mb.food; culture += mb.culture;
     }
     // civ traits
     if (civ.cityScience) sci += civ.cityScience;
@@ -619,13 +685,14 @@ class Game {
     if (civ.coastalGold && city.coastal) gold += civ.coastalGold;
     if (civ.coastalFood && city.coastal) food += civ.coastalFood;
     if (civ.cultureBonus) culture *= (1 + civ.cultureBonus);
-    return { food, prod, gold, sci: Math.floor(sci), culture };
+    return { food, prod, gold, sci: Math.floor(sci), culture, faith };
   }
 
   productionOptions(city) {
     const p = this.players[city.owner];
     const opts = [];
     for (const [key, u] of Object.entries(UNITS)) {
+      if (u.faithCost) continue; // missionaries are bought with faith
       if (u.uu && u.uu !== p.civId) continue;
       if (u.replaces && p.civId !== u.uu) continue;
       // if civ has a UU replacing this unit, hide the base unit
@@ -641,6 +708,7 @@ class Game {
       if (b.tech && !p.hasTech(b.tech)) continue;
       if (b.requires && !city.buildings.includes(b.requires)) continue;
       if (b.wonder) {
+        if (p.isMinor) continue; // city-states don't race for wonders
         const builtAnywhere = this.cities.some(c => c.buildings.includes(key)) ||
           this.cities.some(c => c !== city && c.producing && c.producing.key === key && c.owner === city.owner);
         if (builtAnywhere) continue;
@@ -714,7 +782,9 @@ class Game {
       pa.met.add(b); pb.met.add(a);
       if (a === 0 || b === 0) {
         const other = a === 0 ? pb : pa;
-        this.notify(`You have met ${other.civ.name} (${other.civ.leader}).`);
+        this.notify(other.isMinor
+          ? `You have met the city-state of ${other.civ.name} (${MINOR_TYPES[other.civ.minorType].name}).`
+          : `You have met ${other.civ.name} (${other.civ.leader}).`);
       }
     }
   }
@@ -735,6 +805,177 @@ class Game {
     pa.atWarWith.delete(b); pb.atWarWith.delete(a);
     delete pa.warWeariness[b]; delete pb.warWeariness[a];
     this.notify(`☮️ Peace between ${pa.civ.name} and ${pb.civ.name}.`);
+  }
+
+  // ---------- religion ----------
+  availableReligionNames() {
+    const used = new Set(this.religions.map(r => r.name));
+    return RELIGION_NAMES.filter(r => !used.has(r.name));
+  }
+
+  canFoundReligion(playerIdx) {
+    const p = this.players[playerIdx];
+    return !p.isMinor && p.religionId === null && this.religions.length < MAX_RELIGIONS &&
+      p.faith >= RELIGION_FOUND_COST(this.religions.length) &&
+      this.cities.some(c => c.owner === playerIdx);
+  }
+
+  foundReligion(playerIdx, name, icon, beliefKey) {
+    if (!this.canFoundReligion(playerIdx)) return false;
+    const p = this.players[playerIdx];
+    const holy = this.cities.find(c => c.id === p.originalCapitalId && c.owner === playerIdx) ||
+                 this.cities.find(c => c.owner === playerIdx);
+    p.faith -= RELIGION_FOUND_COST(this.religions.length);
+    const id = this.religions.length;
+    this.religions.push({ id, name, icon, founder: playerIdx, holyCityId: holy.id, belief: beliefKey });
+    p.religionId = id;
+    holy.pressure[id] = 250;
+    this.updateCityReligion(holy);
+    this.notify(`${p.civ.name} founded ${icon} ${name} in ${holy.name}! (${BELIEFS[beliefKey].name})`, -1);
+    return true;
+  }
+
+  updateCityReligion(city) {
+    let best = null, bestP = 0;
+    for (const [rid, pr] of Object.entries(city.pressure)) {
+      if (pr > bestP) { bestP = pr; best = +rid; }
+    }
+    if (best !== null && bestP >= 60 && city.religion !== best) {
+      city.religion = best;
+      const r = this.religions[best];
+      if (city.owner === 0) this.notify(`${city.name} now follows ${r.icon} ${r.name}.`);
+    }
+  }
+
+  spreadReligionPressure() {
+    if (!this.religions.length) return;
+    const adds = [];
+    for (const src of this.cities) {
+      if (src.religion === null) continue;
+      const holy = this.religions[src.religion].holyCityId === src.id;
+      for (const dst of this.cities) {
+        if (dst === src) continue;
+        if (HEX.distance(src.c, src.r, dst.c, dst.r) > 7) continue;
+        adds.push([dst, src.religion, holy ? 6 : 3]);
+      }
+    }
+    for (const [dst, rid, amt] of adds) dst.pressure[rid] = (dst.pressure[rid] || 0) + amt;
+    for (const c of this.cities) this.updateCityReligion(c);
+  }
+
+  buyMissionary(city) {
+    const p = this.players[city.owner];
+    if (p.religionId === null || p.faith < UNITS.MISSIONARY.faithCost) return false;
+    const spot = this.civilianAt(city.c, city.r) ? this.freeAdjacent(city.c, city.r) : [city.c, city.r];
+    if (!spot) return false;
+    p.faith -= UNITS.MISSIONARY.faithCost;
+    this.addUnit("MISSIONARY", city.owner, spot[0], spot[1]);
+    return true;
+  }
+
+  // City (if any) that a missionary standing at (c,r) could preach to
+  missionaryTarget(unit) {
+    const here = this.cityAt(unit.c, unit.r);
+    if (here) return here;
+    for (const [nc, nr] of HEX.neighbors(unit.c, unit.r)) {
+      const city = this.cityAt(nc, nr);
+      if (city) return city;
+    }
+    return null;
+  }
+
+  spreadFromMissionary(unit) {
+    const p = this.players[unit.owner];
+    if (p.religionId === null || unit.charges <= 0) return false;
+    const city = this.missionaryTarget(unit);
+    if (!city) return false;
+    city.pressure[p.religionId] = (city.pressure[p.religionId] || 0) + MISSIONARY_PRESSURE;
+    this.updateCityReligion(city);
+    unit.charges--;
+    unit.moves = 0;
+    if (unit.charges <= 0) this.removeUnit(unit);
+    return true;
+  }
+
+  religionFollowers(rid) {
+    return this.cities.filter(c => c.religion === rid).length;
+  }
+
+  // ---------- city-states ----------
+  minorStatus(majorIdx, minorIdx) {
+    if (this.players[majorIdx].atWarWith.has(minorIdx)) return "war";
+    const inf = this.players[majorIdx].influence[minorIdx] || 0;
+    if (inf < INFLUENCE_FRIEND) return "neutral";
+    if (inf < INFLUENCE_ALLY) return "friend";
+    for (const o of this.players) {
+      if (o.index === majorIdx || o.isMinor || !o.alive) continue;
+      if ((o.influence[minorIdx] || 0) >= inf) return "friend"; // ally must be sole highest
+    }
+    return "ally";
+  }
+
+  minorBonuses(majorIdx) {
+    const out = { gold: 0, food: 0, culture: 0 };
+    for (const m of this.players) {
+      if (!m.isMinor || !m.alive) continue;
+      const s = this.minorStatus(majorIdx, m.index);
+      if (s === "neutral" || s === "war") continue;
+      const ally = s === "ally";
+      const type = m.civ.minorType;
+      if (type === "mercantile") out.gold += ally ? 4 : 2;
+      if (type === "maritime") out.food += ally ? 3 : 1;
+      if (type === "cultured") out.culture += ally ? 4 : 2;
+    }
+    return out;
+  }
+
+  giftInfluence(majorIdx, minorIdx, gold) {
+    const p = this.players[majorIdx];
+    if (p.gold < gold || p.atWarWith.has(minorIdx)) return false;
+    p.gold -= gold;
+    const gain = gold >= 250 ? 70 : gold >= 100 ? 25 : 10;
+    p.influence[minorIdx] = (p.influence[minorIdx] || 0) + gain;
+    return true;
+  }
+
+  // strongest basic land unit `p` could field (for militaristic gifts)
+  bestGiftUnit(p) {
+    let best = "WARRIOR", bestStr = 0;
+    for (const [key, u] of Object.entries(UNITS)) {
+      if (u.civilian || u.naval || u.siege || u.uu || u.faithCost) continue;
+      if (u.tech && !p.hasTech(u.tech)) continue;
+      const str = Math.max(u.cs, u.rs || 0);
+      if (str > bestStr) { bestStr = str; best = key; }
+    }
+    return best;
+  }
+
+  processMinorGifts() {
+    if (this.turn % 15 !== 0) return;
+    for (const m of this.players) {
+      if (!m.isMinor || !m.alive || m.civ.minorType !== "militaristic") continue;
+      for (const p of this.players) {
+        if (p.isMinor || !p.alive) continue;
+        if (this.minorStatus(p.index, m.index) !== "ally") continue;
+        const cap = this.cities.find(c => c.id === p.originalCapitalId && c.owner === p.index) ||
+                    this.cities.find(c => c.owner === p.index);
+        if (!cap) continue;
+        const spot = this.freeAdjacent(cap.c, cap.r);
+        if (!spot) continue;
+        const type = this.bestGiftUnit(p);
+        this.addUnit(type, p.index, spot[0], spot[1]);
+        if (p.index === 0) this.notify(`${m.civ.name} gifts you a ${UNITS[type].name}!`);
+      }
+    }
+  }
+
+  decayInfluence() {
+    for (const p of this.players) {
+      if (p.isMinor) continue;
+      for (const k of Object.keys(p.influence)) {
+        p.influence[k] = Math.max(0, p.influence[k] - 0.5);
+      }
+    }
   }
 
   militaryPower(playerIdx) {
@@ -824,15 +1065,23 @@ class Game {
 
   processPlayerEconomy(p) {
     if (!p.alive) return;
-    let gold = 0, sci = 0;
+    let gold = 0, sci = 0, faith = 0;
     for (const city of this.cities) {
       if (city.owner !== p.index) continue;
       const y = this.processCityTurn(city);
-      gold += y.gold; sci += y.sci;
+      gold += y.gold; sci += y.sci; faith += y.faith;
     }
     // unit maintenance: first 4 free
     const nUnits = this.units.filter(u => u.owner === p.index).length;
     gold -= Math.max(0, nUnits - 4);
+    if (!p.isMinor) {
+      gold += this.minorBonuses(p.index).gold;
+      // Tithe: gold from every follower city in the world
+      if (p.religionId !== null && this.religions[p.religionId].belief === "TITHE") {
+        gold += this.religionFollowers(p.religionId);
+      }
+      p.faith += faith;
+    }
     p.gold += gold;
     if (p.gold < 0) {
       p.gold = 0;
@@ -903,6 +1152,10 @@ class Game {
       }
     }
 
+    this.spreadReligionPressure();
+    this.processMinorGifts();
+    this.decayInfluence();
+
     this.turn++;
     for (const u of this.units) u.resetTurn();
     // continue queued paths for the human player
@@ -915,17 +1168,18 @@ class Game {
 
   checkVictory() {
     if (this.over) return;
-    const alive = this.players.filter(p => p.alive);
+    const majors = this.players.filter(p => !p.isMinor);
+    const alive = majors.filter(p => p.alive);
     if (alive.length === 1) {
       this.over = true; this.winner = alive[0].index; this.victoryType = "Domination";
       return;
     }
-    // domination: hold every original capital
+    // domination: hold every major civ's original capital
     if (this.cities.length) {
-      const capitals = this.cities.filter(c => this.players.some(p => p.originalCapitalId === c.id));
+      const capitals = this.cities.filter(c => majors.some(p => p.originalCapitalId === c.id));
       if (capitals.length >= 2) {
         const owners = new Set(capitals.map(c => c.owner));
-        if (owners.size === 1) {
+        if (owners.size === 1 && !this.players[[...owners][0]].isMinor) {
           this.over = true; this.winner = [...owners][0]; this.victoryType = "Domination";
           return;
         }
@@ -933,7 +1187,7 @@ class Game {
     }
     if (this.turn > this.maxTurns) {
       let best = -1, bestScore = -1;
-      for (const p of this.players) {
+      for (const p of majors) {
         const s = this.score(p.index);
         if (p.alive && s > bestScore) { bestScore = s; best = p.index; }
       }
@@ -946,6 +1200,7 @@ class Game {
     return JSON.stringify({
       v: 1, turn: this.turn, seed: this.seed, mapType: this.mapType, over: this.over,
       winner: this.winner, victoryType: this.victoryType, nextId: NEXT_ID,
+      religions: this.religions,
       map: { w: this.map.w, h: this.map.h, tiles: this.map.tiles.map(t => ({
         c: t.c, r: t.r, terrain: t.terrain, feature: t.feature, resource: t.resource,
         improvement: t.improvement, owner: t.owner, cityId: t.city ? t.city.id : null })) },
@@ -954,11 +1209,12 @@ class Game {
         gold: p.gold, scienceStored: p.scienceStored, researching: p.researching,
         techs: [...p.techs], atWarWith: [...p.atWarWith], met: [...p.met],
         warWeariness: p.warWeariness, cityNameCursor: p.cityNameCursor,
-        visible: Array.from(p.visible), originalCapitalId: p.originalCapitalId })),
+        visible: Array.from(p.visible), originalCapitalId: p.originalCapitalId,
+        faith: p.faith, religionId: p.religionId, influence: p.influence })),
       cities: this.cities.map(c => ({ ...c })),
       units: this.units.map(u => ({ id: u.id, type: u.type, owner: u.owner, c: u.c, r: u.r,
         hp: u.hp, moves: u.moves, fortified: u.fortified, attacked: u.attacked, path: u.path,
-        xp: u.xp, level: u.level, building: u.building })),
+        xp: u.xp, level: u.level, building: u.building, charges: u.charges })),
       notifications: this.notifications.slice(-30),
     });
   }
@@ -971,6 +1227,7 @@ class Game {
     g.maxTurns = GAME_DEFAULTS.maxTurns;
     g.rng = mulberry32((d.seed + d.turn * 7919) >>> 0);
     g.notifications = d.notifications || [];
+    g.religions = d.religions || [];
     NEXT_ID = d.nextId;
 
     g.map = { w: d.map.w, h: d.map.h, tiles: [], idx: (c, r) => r * d.map.w + c, seed: d.seed };
@@ -992,6 +1249,8 @@ class Game {
       p.atWarWith = new Set(pd.atWarWith); p.met = new Set(pd.met);
       p.warWeariness = pd.warWeariness || {}; p.cityNameCursor = pd.cityNameCursor;
       p.visible = Uint8Array.from(pd.visible); p.originalCapitalId = pd.originalCapitalId;
+      p.faith = pd.faith || 0; p.religionId = pd.religionId ?? null;
+      p.influence = pd.influence || {};
       return p;
     });
     return g;

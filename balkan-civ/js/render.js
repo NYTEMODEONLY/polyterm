@@ -284,7 +284,8 @@ class Renderer {
     }
 
     // banner
-    const label = `${city.pop}  ${city.name}${city.isCapital ? " ★" : ""}`;
+    const rel = city.religion !== null && game.religions[city.religion];
+    const label = `${city.pop}  ${rel ? rel.icon + " " : ""}${city.name}${city.isCapital ? " ★" : ""}`;
     ctx.font = `bold ${Math.max(11, Math.floor(s * 0.34))}px 'Segoe UI', sans-serif`;
     const tw = ctx.measureText(label).width;
     const bx = sx - tw / 2 - 8, by = sy - s * 1.05, bh = Math.max(16, s * 0.46);

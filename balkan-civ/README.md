@@ -48,6 +48,15 @@ Game* on the title screen to pick up where you left off.
   fortification, sieges, city bombardment and capture
 - Unit promotions: combat earns XP; veterans gain up to three ⭐ levels,
   each worth +10% strength (and a morale heal on promotion)
+- **Religion**: Shrines, Temples and monasteries generate faith. Found one
+  of six historical faiths — Orthodoxy, Catholicism, Islam, Bogomilism,
+  Tengrism, Hellenism — pick a founder belief (food, science, gold tithe,
+  or holy-warrior combat bonus), and spread it: religion flows between
+  nearby cities and Missionaries (bought with faith) convert them directly
+- **City-states**: independent minors like Ragusa, Kotor and Rhodes.
+  Win them over with gold gifts — friends and allies pay gold, food or
+  culture, and militaristic allies gift you units — or conquer them, if
+  you can breach their walls
 - Workers and tile improvements: farms, mines, and roads (roads cut movement
   cost to 1 on any terrain)
 - Strategic resources (horses, iron) gating unit types
@@ -70,6 +79,7 @@ Game* on the title screen to pick up where you left off.
 | `N` / `.` | Next idle unit |
 | `F` | Fortify selected unit |
 | `T` | Technology tree |
+| `R` | Religion overview |
 | `D` | Diplomacy |
 | `Esc` | Close panels |
 
@@ -91,4 +101,4 @@ js/ui.js          panels, modals, input handling
 
 ## Ideas for future expansion
 
-Happiness, religion, city-states, more wonders, sound.
+Happiness, espionage, more wonders, sound.

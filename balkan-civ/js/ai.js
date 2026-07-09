@@ -6,17 +6,83 @@
 const AI = (() => {
 
   function takeTurn(game, p) {
+    if (p.isMinor) {
+      chooseResearch(game, p);
+      runMinorCities(game, p);
+      runUnits(game, p);
+      return;
+    }
     diplomacy(game, p);
+    religion(game, p);
     chooseResearch(game, p);
     runCities(game, p);
     runUnits(game, p);
   }
 
+  // ---------- religion ----------
+  function religion(game, p) {
+    if (game.canFoundReligion(p.index)) {
+      const names = game.availableReligionNames();
+      if (names.length) {
+        const pref = names.find(n => n.name === CIV_RELIGION[p.civId]) ||
+          names[Math.floor(game.rng() * names.length)];
+        const beliefs = Object.keys(BELIEFS);
+        game.foundReligion(p.index, pref.name, pref.icon, beliefs[Math.floor(game.rng() * beliefs.length)]);
+      }
+    }
+    // buy a missionary when faith allows (keep a small buffer)
+    if (p.religionId !== null && p.faith >= UNITS.MISSIONARY.faithCost + 40) {
+      const nMissionaries = game.units.filter(u => u.owner === p.index && u.type === "MISSIONARY").length;
+      if (nMissionaries < 2) {
+        const home = game.cities.find(c => c.owner === p.index);
+        if (home) game.buyMissionary(home);
+      }
+    }
+  }
+
+  function runMinorCities(game, p) {
+    const myCities = game.cities.filter(c => c.owner === p.index);
+    const military = game.units.filter(u => u.owner === p.index && !u.isCivilian);
+    for (const city of myCities) {
+      if (city.producing) continue;
+      const opts = game.productionOptions(city);
+      if (!opts.length) continue;
+      const wantMilitary = 2 + p.era() + (p.atWarWith.size ? 2 : 0);
+      let choice = null;
+      if (military.length < wantMilitary) {
+        const mil = opts.filter(o => o.kind === "unit" && !UNITS[o.key].civilian &&
+          !UNITS[o.key].naval && o.key !== "SCOUT" && o.key !== "SETTLER");
+        mil.sort((a, b) => Math.max(UNITS[b.key].cs, UNITS[b.key].rs || 0) - Math.max(UNITS[a.key].cs, UNITS[a.key].rs || 0));
+        choice = mil[0] || null;
+      }
+      if (!choice) {
+        const prio = ["WALLS", "GRANARY", "BARRACKS", "SHRINE", "LIBRARY", "MARKET", "CASTLE",
+          "TEMPLE", "AQUEDUCT", "FORGE", "UNIVERSITY", "WORKSHOP", "BANK"];
+        for (const key of prio) {
+          const o = opts.find(x => x.kind === "building" && x.key === key);
+          if (o) { choice = o; break; }
+        }
+      }
+      if (choice) city.producing = { kind: choice.kind, key: choice.key };
+    }
+  }
+
   // ---------- diplomacy ----------
   function diplomacy(game, p) {
+    // court city-states when rich
+    if (p.gold > 350 && game.rng() < 0.15) {
+      const minors = [...p.met].filter(i => game.players[i].isMinor && game.players[i].alive &&
+        !p.atWarWith.has(i));
+      if (minors.length) {
+        const pick = minors[Math.floor(game.rng() * minors.length)];
+        game.giftInfluence(p.index, pick, 250);
+      }
+    }
     for (const other of p.met) {
       const o = game.players[other];
       if (!o.alive) continue;
+      // conquering city-states happens, but rarely
+      if (o.isMinor && !p.atWarWith.has(other) && game.rng() > 0.08) continue;
       if (p.atWarWith.has(other)) {
         // sue for peace if clearly losing or war has dragged on
         const weary = (p.warWeariness[other] || 0) > 25;
@@ -110,7 +176,7 @@ const AI = (() => {
       }
       if (!choice) {
         // building priority order
-        const prio = ["MONUMENT", "GRANARY", "LIBRARY", "WALLS", "MARKET", "BARRACKS", "TEMPLE",
+        const prio = ["MONUMENT", "SHRINE", "GRANARY", "LIBRARY", "WALLS", "MARKET", "BARRACKS", "TEMPLE",
           "AQUEDUCT", "FORGE", "UNIVERSITY", "CASTLE", "WORKSHOP", "BANK",
           "HAGIA_SOPHIA", "STUDENICA", "RILA", "KALEMEGDAN"];
         for (const key of prio) {
@@ -130,6 +196,7 @@ const AI = (() => {
       if (!game.units.includes(u)) continue; // died mid-loop
       if (u.type === "SETTLER") runSettler(game, p, u);
       else if (u.type === "WORKER") runWorker(game, p, u);
+      else if (u.type === "MISSIONARY") runMissionary(game, p, u);
       else if (u.type === "SCOUT") runScout(game, p, u);
       else if (u.def.naval) runShip(game, p, u);
       else if (!u.isCivilian) runMilitary(game, p, u);
@@ -196,6 +263,31 @@ const AI = (() => {
     }
   }
 
+  function runMissionary(game, p, u) {
+    if (p.religionId === null) { u.moves = 0; return; }
+    // preach if standing by a city that doesn't follow us yet
+    const target = game.missionaryTarget(u);
+    if (target && target.religion !== p.religionId) {
+      if (game.spreadFromMissionary(u)) return;
+    }
+    // walk to the nearest convertible city: own first, then anyone's (not at war)
+    let best = null, bestD = Infinity;
+    for (const c of game.cities) {
+      if (c.religion === p.religionId) continue;
+      if (p.atWarWith.has(c.owner)) continue;
+      let d = HEX.distance(u.c, u.r, c.c, c.r);
+      if (c.owner !== p.index) d += 5; // prefer converting home cities
+      if (d < bestD) { bestD = d; best = c; }
+    }
+    if (best) {
+      game.moveUnitTo(u, best.c, best.r);
+      const t2 = game.missionaryTarget(u);
+      if (t2 && t2.religion !== p.religionId) game.spreadFromMissionary(u);
+    } else {
+      u.moves = 0; // everyone within reach already converted
+    }
+  }
+
   function runScout(game, p, u) {
     // walk toward the nearest unexplored tile (a scout with Sailing will embark)
     let best = null, bestD = Infinity;
@@ -251,6 +343,32 @@ const AI = (() => {
 
   function runMilitary(game, p, u) {
     const enemies = [...p.atWarWith].filter(e => game.players[e].alive);
+
+    // city-state troops never leave home
+    if (p.isMinor) {
+      const home = game.cities.find(c => c.owner === p.index);
+      if (!home) return;
+      if (tryAttack(game, p, u)) return;
+      if (HEX.distance(u.c, u.r, home.c, home.r) > 2) {
+        game.moveUnitTo(u, home.c, home.r);
+      } else if (enemies.length) {
+        // charge intruders inside the home zone
+        let target = null, bestD = Infinity;
+        for (const e of game.units) {
+          if (!enemies.includes(e.owner) || e.isCivilian) continue;
+          const d = HEX.distance(e.c, e.r, home.c, home.r);
+          if (d <= 3 && d < bestD) { bestD = d; target = e; }
+        }
+        if (target) {
+          const dest = nearestApproach(game, u, target.c, target.r);
+          if (dest) game.moveUnitTo(u, dest[0], dest[1]);
+          tryAttack(game, p, u);
+        } else u.fortified = true;
+      } else {
+        u.fortified = true;
+      }
+      return;
+    }
 
     // stranded at sea with nothing to do: head for the nearest friendly city
     if (game.isEmbarked(u) && !enemies.length) {
