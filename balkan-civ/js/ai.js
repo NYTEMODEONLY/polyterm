@@ -247,6 +247,12 @@ const AI = (() => {
       if (!choice && workers.length < Math.min(myCities.length, 3) && game.rng() < 0.4) {
         choice = pick(o => o.key === "WORKER");
       }
+      const caravans = myUnits.filter(u => u.def.caravan).length;
+      const myRoutes = game.routes.filter(r => r.owner === p.index).length;
+      if (!choice && p.hasTech("CURRENCY") && myCities.length >= 2 &&
+          caravans + myRoutes < Math.min(TRADE.maxRoutes, myCities.length) && game.rng() < 0.35) {
+        choice = pick(o => o.key === "CARAVAN");
+      }
       const navy = myUnits.filter(u => u.def.naval);
       if (!choice && city.coastal && navy.length < Math.max(1, Math.floor(myCities.length / 2)) &&
           game.rng() < (atWar ? 0.3 : 0.12)) {
@@ -278,6 +284,8 @@ const AI = (() => {
       if (!game.units.includes(u)) continue; // died mid-loop
       if (u.type === "SETTLER") runSettler(game, p, u);
       else if (u.type === "WORKER") runWorker(game, p, u);
+      else if (u.def.caravan) runCaravan(game, p, u);
+      else if (u.def.great) runGreatPerson(game, p, u);
       else if (u.type === "MISSIONARY") runMissionary(game, p, u);
       else if (u.type === "SCOUT") runScout(game, p, u);
       else if (u.def.naval) runShip(game, p, u);
@@ -378,6 +386,44 @@ const AI = (() => {
     } else {
       u.moves = 0; // everyone within reach already converted
     }
+  }
+
+  function runCaravan(game, p, u) {
+    const dests = game.tradeDestinations(u);
+    if (dests.length) {
+      const from = game.cityAt(u.c, u.r);
+      game.establishRoute(u, dests.sort((a, b) =>
+        game.routeIncome(from, b) - game.routeIncome(from, a))[0].id);
+      return;
+    }
+    // walk to the nearest own city and try from there
+    const home = game.cities.filter(c => c.owner === p.index)
+      .sort((a, b) => HEX.distance(u.c, u.r, a.c, a.r) - HEX.distance(u.c, u.r, b.c, b.r))[0];
+    if (home && !(u.c === home.c && u.r === home.r)) game.moveUnitTo(u, home.c, home.r);
+    else u.moves = 0;
+  }
+
+  function runGreatPerson(game, p, u) {
+    if (u.def.great === "sci") { game.useGreatPerson(u); return; }
+    if (u.def.great === "eng") {
+      const city = game.cityAt(u.c, u.r);
+      if (city && city.owner === p.index) { game.useGreatPerson(u); return; }
+      const home = game.cities.filter(c => c.owner === p.index)
+        .sort((a, b) => HEX.distance(u.c, u.r, a.c, a.r) - HEX.distance(u.c, u.r, b.c, b.r))[0];
+      if (home) game.moveUnitTo(u, home.c, home.r);
+      return;
+    }
+    // generals ride with the largest nearby force when at war, else hold the capital
+    if (realWars(game, p).length) {
+      const troop = game.units.filter(v => v.owner === p.index && !v.isCivilian)
+        .sort((a, b) => HEX.distance(u.c, u.r, a.c, a.r) - HEX.distance(u.c, u.r, b.c, b.r))[0];
+      if (troop && HEX.distance(u.c, u.r, troop.c, troop.r) > 1) {
+        const dest = nearestApproach(game, u, troop.c, troop.r);
+        if (dest) game.moveUnitTo(u, dest[0], dest[1]);
+        return;
+      }
+    }
+    u.fortified = true;
   }
 
   function runScout(game, p, u) {
@@ -521,6 +567,12 @@ const AI = (() => {
         if (u.hp < 40 && bestD > 2) { u.fortified = true; return; }
         // ranged units keep their distance
         if (u.isRanged && bestD <= u.def.range) { tryAttack(game, p, u); return; }
+        // melee waits at the walls while bombardment softens a healthy city
+        const targetCity = target.name !== undefined ? target : null;
+        if (targetCity && !u.isRanged && !u.def.siege && targetCity.hp > 120 && bestD <= 2) {
+          if (!tryAttack(game, p, u, true)) u.fortified = true; // hit units, spare the walls
+          return;
+        }
         // step toward target (stop next to it, attack handled next turn/iteration)
         const dest = nearestApproach(game, u, target.c, target.r);
         if (dest) game.moveUnitTo(u, dest[0], dest[1]);
@@ -529,7 +581,18 @@ const AI = (() => {
       return;
     }
 
-    // 3. peace: burn nearby barbarian camps for the bounty
+    // 3. peace: escort exposed settlers first
+    if (!p.isMinor) {
+      const settler = game.units.find(v => v.owner === p.index && v.type === "SETTLER" &&
+        HEX.distance(v.c, v.r, u.c, u.r) <= 4 &&
+        !game.units.some(m => m !== u && m.owner === p.index && !m.isCivilian &&
+          HEX.distance(m.c, m.r, v.c, v.r) <= 1));
+      if (settler && HEX.distance(u.c, u.r, settler.c, settler.r) > 1) {
+        const dest = nearestApproach(game, u, settler.c, settler.r);
+        if (dest) { game.moveUnitTo(u, dest[0], dest[1]); return; }
+      }
+    }
+    // then burn nearby barbarian camps for the bounty
     if (game.camps.length && !p.isMinor) {
       let camp = null, campD = 7;
       for (const cp of game.camps) {
@@ -566,7 +629,7 @@ const AI = (() => {
     }
   }
 
-  function tryAttack(game, p, u) {
+  function tryAttack(game, p, u, excludeCity = false) {
     if (u.attacked || u.moves <= 0 || game.isEmbarked(u)) return false;
     const range = u.isRanged ? u.def.range : 1;
     let best = null, bestValue = -Infinity;
@@ -577,7 +640,7 @@ const AI = (() => {
       if (!u.isRanged && !u.def.naval && game.isWater(t)) continue;
       if (!u.isRanged && u.def.naval && !game.isWater(t) && !t.city) continue;
       const enemyUnit = game.combatUnitAt(c, r);
-      const enemyCity = t.city && p.atWarWith.has(t.city.owner) ? t.city : null;
+      const enemyCity = !excludeCity && t.city && p.atWarWith.has(t.city.owner) ? t.city : null;
       const enemyCiv = game.civilianAt(c, r);
       let value = -Infinity;
       if (enemyUnit && p.atWarWith.has(enemyUnit.owner)) {

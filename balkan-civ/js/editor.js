@@ -122,6 +122,46 @@ const EDITOR = (() => {
       }
     });
     window.addEventListener("mouseup", () => { painting = false; panning = false; });
+    // touch: paint with one finger, pan/zoom with two
+    let tMode = null, tlx = 0, tly = 0, tD = 0;
+    const tpt = (t) => { const r = cv.getBoundingClientRect(); return [t.clientX - r.left, t.clientY - r.top]; };
+    cv.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      if (e.touches.length === 1) {
+        tMode = "paint";
+        const [x, y] = tpt(e.touches[0]);
+        const [c, r] = erend.screenToHex(x, y);
+        paint(c, r);
+      } else if (e.touches.length === 2) {
+        tMode = "nav";
+        const [x1, y1] = tpt(e.touches[0]), [x2, y2] = tpt(e.touches[1]);
+        tD = Math.hypot(x2 - x1, y2 - y1);
+        tlx = (x1 + x2) / 2; tly = (y1 + y2) / 2;
+      }
+    }, { passive: false });
+    cv.addEventListener("touchmove", (e) => {
+      e.preventDefault();
+      if (tMode === "paint" && e.touches.length === 1) {
+        const [x, y] = tpt(e.touches[0]);
+        const [c, r] = erend.screenToHex(x, y);
+        paint(c, r);
+      } else if (tMode === "nav" && e.touches.length === 2) {
+        const [x1, y1] = tpt(e.touches[0]), [x2, y2] = tpt(e.touches[1]);
+        const d = Math.hypot(x2 - x1, y2 - y1);
+        const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+        if (tD > 0) {
+          const oldSize = erend.size;
+          erend.cam.zoom = Math.min(2.2, Math.max(0.45, erend.cam.zoom * (d / tD)));
+          const sc = erend.size / oldSize;
+          erend.cam.x = (erend.cam.x + mx) * sc - mx;
+          erend.cam.y = (erend.cam.y + my) * sc - my;
+        }
+        erend.cam.x -= mx - tlx; erend.cam.y -= my - tly;
+        tD = d; tlx = mx; tly = my;
+        draw();
+      }
+    }, { passive: false });
+    cv.addEventListener("touchend", (e) => { e.preventDefault(); if (!e.touches.length) tMode = null; }, { passive: false });
     cv.addEventListener("contextmenu", (e) => e.preventDefault());
     cv.addEventListener("wheel", (e) => {
       e.preventDefault();

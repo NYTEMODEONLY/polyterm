@@ -67,7 +67,7 @@ const UI = (() => {
       }
       game = new Game({ playerCiv: chosenCiv, numOpponents: numOpp, mapW: dims[0], mapH: dims[1],
         mapType, customMap, numHumans, difficulty: $("sel-difficulty").value,
-        noBarbs: !$("chk-barbs").checked });
+        noBarbs: !$("chk-barbs").checked, speed: $("sel-speed").value });
       startPlaying();
     };
     $("start-screen").style.display = "flex";
@@ -188,7 +188,7 @@ const UI = (() => {
       numOpponents: ready.length + Math.min(aiCount, rest.length),
       numHumans: 1 + ready.length,
       mapW: dims[0], mapH: dims[1], mapType, difficulty: $("sel-difficulty").value,
-      noBarbs: !$("chk-barbs").checked });
+      noBarbs: !$("chk-barbs").checked, speed: $("sel-speed").value });
     game._viewer = 0;
     NET.hostStart(game);
     $("net-modal").style.display = "none";
@@ -289,7 +289,7 @@ const UI = (() => {
     const def = u.def;
     $("unit-info").innerHTML = `
       <span class="unit-icon">${def.icon}</span>
-      <div><b>${def.name}</b>${u.level ? " " + "⭐".repeat(u.level) : ""}${game.isEmbarked(u) ? " <span class='alert'>⛵ embarked</span>" : ""}<br>
+      <div><b>${u.gpName ? u.gpName + " — " : ""}${def.name}</b>${u.level ? " " + "⭐".repeat(u.level) : ""}${game.isEmbarked(u) ? " <span class='alert'>⛵ embarked</span>" : ""}<br>
       <span class="dim">HP ${u.hp}/100 · Moves ${u.moves}/${def.moves}
       ${def.cs ? " · Str " + def.cs : ""}${def.rs ? " · Ranged " + def.rs + " (r" + def.range + ")" : ""}
       ${!u.isCivilian ? " · XP " + u.xp : ""}</span>
@@ -313,6 +313,37 @@ const UI = (() => {
         const city = game.foundCity(u);
         if (city) { SFX.play("build"); selectCity(city); refreshAll(); }
       }, canFound && u.moves > 0);
+    }
+    if (u.def.caravan) {
+      const dests = game.tradeDestinations(u);
+      const from = game.cityAt(u.c, u.r);
+      if (from && from.owner === game.viewer) {
+        for (const d of dests.slice(0, 4)) {
+          btn(`🐫 → ${d.name} (+${game.routeIncome(from, d)}💰/t)`, () => {
+            if (game.establishRoute(u, d.id)) { SFX.play("coin"); selectUnit(null); refreshAll(); }
+          }, myTurn());
+        }
+        if (!dests.length) {
+          const cap = game.routes.filter(r => r.owner === game.viewer).length >= TRADE.maxRoutes;
+          btn(cap ? `🐫 All ${TRADE.maxRoutes} routes busy` : "🐫 No destinations in range", () => {}, false);
+        }
+      } else {
+        btn("🐫 Move to one of your cities to trade", () => {}, false);
+      }
+    }
+    if (u.def.great) {
+      if (u.def.great === "sci") {
+        btn("🔭 Discover Technology", () => {
+          if (game.useGreatPerson(u)) { SFX.play("research"); selectUnit(null); refreshAll(); }
+        }, myTurn());
+      } else if (u.def.great === "eng") {
+        const inCity = game.cityAt(u.c, u.r) && game.cityAt(u.c, u.r).owner === game.viewer;
+        btn(`🏗️ Rush Production (+${GP.engineerRush}⚙️)`, () => {
+          if (game.useGreatPerson(u)) { SFX.play("build"); selectUnit(null); refreshAll(); }
+        }, inCity && myTurn());
+      } else {
+        btn("🎖️ +15% combat within 2 tiles", () => {}, false);
+      }
     }
     if (u.def.missionary) {
       const target = game.missionaryTarget(u);
@@ -367,8 +398,42 @@ const UI = (() => {
         });
       }
     }
+    if (undoInfo && undoInfo.id === u.id && undoInfo.turn === game.turn) {
+      btn("↩️ Undo Move", () => undoMove(), myTurn());
+    }
     btn("⏭️ Skip", () => { u.moves = 0; cycleNextUnit(); refreshAll(); });
     btn("❌ Disband", () => { game.removeUnit(u); selectUnit(null); refreshAll(); });
+  }
+
+  // ---------------- undo (simple moves only) ----------------
+  let undoInfo = null;
+
+  function snapshotUndo(u) {
+    undoInfo = {
+      id: u.id, c: u.c, r: u.r, moves: u.moves, turn: game.turn,
+      visible: Uint8Array.from(game.players[game.viewer].visible),
+      marker: game.notifications.length + "|" + JSON.stringify(game.stats || {}) + "|" +
+        Math.floor(game.players[game.viewer].gold),
+    };
+  }
+
+  // moves that triggered events (ruins, camps, captures...) can't be undone
+  function validateUndo(u) {
+    if (!undoInfo) return;
+    const marker = game.notifications.length + "|" + JSON.stringify(game.stats || {}) + "|" +
+      Math.floor(game.players[game.viewer].gold);
+    if (marker !== undoInfo.marker || u.id !== undoInfo.id) undoInfo = null;
+  }
+
+  function undoMove() {
+    const u = rend.selected;
+    if (!undoInfo || !u || u.id !== undoInfo.id || undoInfo.turn !== game.turn) return;
+    u.c = undoInfo.c; u.r = undoInfo.r; u.moves = undoInfo.moves; u.path = null;
+    game.players[game.viewer].visible = undoInfo.visible;
+    undoInfo = null;
+    game.anims = game.anims.filter(a => a.id !== u.id);
+    selectUnit(u);
+    refreshAll();
   }
 
   function cycleNextUnit() {
@@ -498,7 +563,7 @@ const UI = (() => {
         for (const [bk, b] of Object.entries(BUILDINGS)) if (b.tech === key) unlocks.push(b.icon + " " + b.name);
         html += `<div class="tech ${has ? "done" : avail ? "avail" : "locked"} ${researching ? "active" : ""}"
           ${avail ? `onclick="UI.pickTech('${key}')"` : ""}>
-          <b>${t.name}</b> <span class="dim">${t.cost}🔬</span>
+          <b>${t.name}</b> <span class="dim">${game.techCost(key)}🔬</span>
           ${researching ? `<div class="dim">researching (${Math.floor(p.scienceStored)}/${t.cost})</div>` : ""}
           ${unlocks.length ? `<div class="unlocks">${unlocks.join(", ")}</div>` : ""}
           ${t.req.length ? `<div class="req dim">needs: ${t.req.map(r => TECHS[r].name).join(", ")}</div>` : ""}
@@ -740,7 +805,7 @@ const UI = (() => {
     $("stat-era").textContent = ERAS[p.era()] + " Era";
     $("stat-gold").textContent = `💰 ${Math.floor(p.gold)} (${gold >= 0 ? "+" : ""}${gold})`;
     $("stat-sci").innerHTML = tech
-      ? `🔬 ${tech.name} ${Math.floor(p.scienceStored)}/${tech.cost} (+${sci})`
+      ? `🔬 ${tech.name} ${Math.floor(p.scienceStored)}/${game.techCost(p.researching)} (+${sci})`
       : `🔬 <b class="alert">choose research!</b> (+${sci})`;
     // happiness + golden age
     const hap = game.happinessOf(game.viewer);
@@ -771,6 +836,80 @@ const UI = (() => {
     [/captured/, "capture"], [/🕵️/, "spy"], [/destroyed/, "defeat"],
     [/gifts you/, "coin"], [/grew to/, "grow"], [/finished/, "build"],
   ];
+
+  // ---------------- menu: save slots, export/import ----------------
+  function slotMeta(i) {
+    try {
+      const raw = localStorage.getItem("balkan-civ-slot" + i);
+      if (!raw) return null;
+      const d = JSON.parse(raw);
+      return d.ts ? d : null;
+    } catch (e) { return null; }
+  }
+
+  function showMenuModal() {
+    $("menu-modal").style.display = "flex";
+    let html = `<h2>☰ Menu</h2><div class="prod-list">`;
+    for (let i = 1; i <= 3; i++) {
+      const meta = slotMeta(i);
+      html += `<div class="prod-item">
+        <span>💾 Slot ${i}${meta ? ` <span class="dim">— ${meta.label}</span>` : ` <span class="dim">— empty</span>`}</span>
+        <button onclick="UI.saveSlot(${i})">Save</button>
+        <button ${meta ? "" : "disabled"} onclick="UI.loadSlot(${i})">Load</button>
+        <span></span>
+      </div>`;
+    }
+    html += `</div>
+      <div style="margin-top:12px">
+        <button onclick="UI.exportSave()">📤 Export save file</button>
+        <button onclick="document.getElementById('file-import').click()">📥 Import save file</button>
+        <button onclick="document.getElementById('menu-modal').style.display='none'">▶ Resume</button>
+        <button onclick="UI.toMainMenu()">🚪 Main Menu</button>
+      </div>
+      <p class="dim" style="margin-top:8px">The game also auto-saves every turn. Exported files can be
+      shared to continue a game on another machine.</p>`;
+    $("menu-body").innerHTML = html;
+  }
+
+  function saveSlot(i) {
+    const p = game.players[game.viewer];
+    try {
+      localStorage.setItem("balkan-civ-slot" + i, JSON.stringify({
+        ts: Date.now(),
+        label: `${p.civ.name}, turn ${game.turn}`,
+        state: game.serialize(),
+      }));
+      SFX.play("click");
+      showMenuModal();
+    } catch (e) { alert("Could not save (storage full?)."); }
+  }
+
+  function loadSlot(i) {
+    const meta = slotMeta(i);
+    if (!meta) return;
+    try {
+      game = Game.deserialize(meta.state);
+      NET.reset();
+      $("menu-modal").style.display = "none";
+      startPlaying();
+    } catch (e) { alert("That slot could not be loaded."); }
+  }
+
+  function exportSave() {
+    const blob = new Blob([game.serialize()], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    const p = game.players[game.viewer];
+    a.download = `balkan-civ-${p.civ.name.toLowerCase()}-turn${game.turn}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function toMainMenu() {
+    $("menu-modal").style.display = "none";
+    NET.reset();
+    showStartScreen();
+  }
 
   function showLogModal() {
     const p = game.players[game.viewer];
@@ -828,6 +967,7 @@ const UI = (() => {
     }
     endTurn.skipIdle = false;
     $("btn-endturn").textContent = "End Turn ⏵";
+    undoInfo = null;
     SFX.play("turn");
     const before = game.viewer;
     game.endTurn();
@@ -905,8 +1045,40 @@ const UI = (() => {
       <h2>${won ? "🏆 VICTORY!" : "☠️ DEFEAT"}</h2>
       <p>${civ.name} ${won ? "— your empire —" : ""} has won a <b>${game.victoryType}</b> victory
       on turn ${game.turn}.</p>
-      <p class="dim">Final score: ${game.players.filter(p => !p.isMinor).map(p => `${p.civ.name} ${game.score(p.index)}`).join(" · ")}</p>
+      <p class="dim">Final score: ${game.players.filter(p => !p.isMinor && !p.isBarb).map(p => `${p.civ.name} ${game.score(p.index)}`).join(" · ")}</p>
+      <canvas id="vic-graph" width="560" height="220" style="max-width:100%"></canvas>
+      <div class="dim" id="vic-legend"></div>
       <button onclick="UI.newGame()">New Game</button>`;
+    drawHistoryGraph();
+  }
+
+  function drawHistoryGraph() {
+    const cv = $("vic-graph");
+    if (!cv || game.history.length < 2) { if (cv) cv.style.display = "none"; return; }
+    const ctx = cv.getContext("2d");
+    const majors = game.players.filter(p => !p.isMinor && !p.isBarb);
+    const W = cv.width, H = cv.height, pad = 24;
+    ctx.fillStyle = "#0d1421";
+    ctx.fillRect(0, 0, W, H);
+    const maxScore = Math.max(1, ...game.history.map(h => Math.max(...h.s)));
+    const n = game.history.length;
+    majors.forEach((p, pi) => {
+      ctx.strokeStyle = p.civ.color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      game.history.forEach((h, i) => {
+        const x = pad + (W - 2 * pad) * (i / (n - 1));
+        const y = H - pad - (H - 2 * pad) * ((h.s[pi] || 0) / maxScore);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    });
+    ctx.fillStyle = "#9a927e";
+    ctx.font = "11px sans-serif";
+    ctx.fillText("score", 4, 14);
+    ctx.fillText("turn " + game.history[n - 1].t, W - 60, H - 6);
+    $("vic-legend").innerHTML = majors.map(p =>
+      `<span style="color:${p.civ.color}">■</span> ${p.civ.name}`).join(" &nbsp; ");
   }
 
   function newGame() {
@@ -940,7 +1112,9 @@ const UI = (() => {
       const isOwnTile = sel.c === c && sel.r === r;
       if (!isOwnTile && game.unitPassable(sel, t)) {
         SFX.play("move");
+        snapshotUndo(sel);
         game.moveUnitTo(sel, c, r);
+        validateUndo(sel);
         selectUnit(game.units.includes(sel) ? sel : null);
         refreshAll();
         return;
@@ -959,8 +1133,77 @@ const UI = (() => {
     selectUnit(null);
   }
 
+  // Generic touch: tap, long-press, one-finger pan, two-finger pinch
+  function bindTouch(cv, h) {
+    let mode = null, sx = 0, sy = 0, lx = 0, ly = 0, t0 = 0, longTimer = null;
+    let pinchD = 0, pinchMX = 0, pinchMY = 0;
+    const pt = (t) => {
+      const r = cv.getBoundingClientRect();
+      return [t.clientX - r.left, t.clientY - r.top];
+    };
+    cv.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      if (e.touches.length === 1) {
+        [sx, sy] = pt(e.touches[0]);
+        [lx, ly] = [sx, sy];
+        t0 = Date.now();
+        mode = "tap";
+        longTimer = setTimeout(() => {
+          if (mode === "tap") { mode = "long"; h.longpress(sx, sy); }
+        }, 550);
+      } else if (e.touches.length === 2) {
+        clearTimeout(longTimer);
+        mode = "pinch";
+        const [x1, y1] = pt(e.touches[0]), [x2, y2] = pt(e.touches[1]);
+        pinchD = Math.hypot(x2 - x1, y2 - y1);
+        pinchMX = (x1 + x2) / 2; pinchMY = (y1 + y2) / 2;
+      }
+    }, { passive: false });
+    cv.addEventListener("touchmove", (e) => {
+      e.preventDefault();
+      if (e.touches.length === 1 && (mode === "tap" || mode === "pan")) {
+        const [x, y] = pt(e.touches[0]);
+        if (mode === "tap" && Math.hypot(x - sx, y - sy) > 9) {
+          mode = "pan";
+          clearTimeout(longTimer);
+        }
+        if (mode === "pan") {
+          h.pan(x - lx, y - ly, x, y);
+          [lx, ly] = [x, y];
+        }
+      } else if (e.touches.length === 2 && mode === "pinch") {
+        const [x1, y1] = pt(e.touches[0]), [x2, y2] = pt(e.touches[1]);
+        const d = Math.hypot(x2 - x1, y2 - y1);
+        const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+        if (pinchD > 0) h.pinch(d / pinchD, mx, my, mx - pinchMX, my - pinchMY);
+        pinchD = d; pinchMX = mx; pinchMY = my;
+      }
+    }, { passive: false });
+    cv.addEventListener("touchend", (e) => {
+      e.preventDefault();
+      clearTimeout(longTimer);
+      if (mode === "tap" && Date.now() - t0 < 500) h.tap(sx, sy);
+      if (e.touches.length === 0) mode = null;
+    }, { passive: false });
+  }
+
+  function zoomAt(factor, mx, my) {
+    const oldSize = rend.size;
+    rend.cam.zoom = Math.min(2.2, Math.max(0.45, rend.cam.zoom * factor));
+    const scale = rend.size / oldSize;
+    rend.cam.x = (rend.cam.x + mx) * scale - mx;
+    rend.cam.y = (rend.cam.y + my) * scale - my;
+    rend.dirty = true;
+  }
+
   function bindInput() {
     const cv = rend.canvas;
+    bindTouch(cv, {
+      tap: (x, y) => onMapClick(x, y, false),
+      longpress: (x, y) => onMapClick(x, y, true),
+      pan: (dx, dy) => { rend.cam.x -= dx; rend.cam.y -= dy; rend.dirty = true; },
+      pinch: (f, mx, my, dx, dy) => { zoomAt(f, mx, my); rend.cam.x -= dx; rend.cam.y -= dy; },
+    });
     let dragging = false, dragMoved = false, lastX = 0, lastY = 0;
 
     cv.addEventListener("mousedown", (e) => {
@@ -990,15 +1233,8 @@ const UI = (() => {
     cv.addEventListener("contextmenu", (e) => e.preventDefault());
     cv.addEventListener("wheel", (e) => {
       e.preventDefault();
-      const oldSize = rend.size;
-      rend.cam.zoom = Math.min(2.2, Math.max(0.45, rend.cam.zoom * (e.deltaY < 0 ? 1.12 : 0.89)));
-      const scale = rend.size / oldSize;
-      // zoom toward cursor
       const rect = cv.getBoundingClientRect();
-      const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-      rend.cam.x = (rend.cam.x + mx) * scale - mx;
-      rend.cam.y = (rend.cam.y + my) * scale - my;
-      rend.dirty = true;
+      zoomAt(e.deltaY < 0 ? 1.12 : 0.89, e.clientX - rect.left, e.clientY - rect.top);
     }, { passive: false });
 
     // minimap click
@@ -1021,6 +1257,7 @@ const UI = (() => {
         $("founding-modal").style.display = "none";
         $("spy-modal").style.display = "none";
         $("log-modal").style.display = "none";
+        $("menu-modal").style.display = "none";
         closeCity();
         selectUnit(null);
       } else if (e.key === "t") showTechScreen();
@@ -1043,7 +1280,24 @@ const UI = (() => {
     $("btn-music").onclick = () => {
       $("btn-music").textContent = SFX.toggleMusic() ? "🎵" : "♪";
     };
-    $("btn-menu").onclick = () => { if (confirm("Return to the main menu? (progress is auto-saved)")) showStartScreen(); };
+    $("btn-menu").onclick = showMenuModal;
+    $("file-import").addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          game = Game.deserialize(reader.result);
+          NET.reset();
+          $("menu-modal").style.display = "none";
+          startPlaying();
+        } catch (err) {
+          alert("That file is not a valid Balkan Civilizations save.");
+        }
+        e.target.value = "";
+      };
+      reader.readAsText(file);
+    });
     document.querySelectorAll(".modal").forEach(m => {
       m.addEventListener("mousedown", (e) => { if (e.target === m) m.style.display = "none"; });
     });
@@ -1159,5 +1413,6 @@ const UI = (() => {
   return { init, setProduction, buyItem, closeCity, pickTech, diploAction, newGame,
     showFoundingModal, confirmFounding, buyMissionary, gift, assignSpy, beginHotseatTurn,
     hostAddSlot, hostConnect, hostStartOnline, joinCreateReply, unqueue,
+    saveSlot, loadSlot, exportSave, toMainMenu,
     get game() { return game; }, get renderer() { return rend; } };
 })();

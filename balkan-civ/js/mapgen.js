@@ -141,6 +141,33 @@ function generateMap(w, h, seed, mapType = "peninsula") {
     if (TERRAIN[t.terrain].passable && !t.resource && rng() < 0.015) t.ruin = true;
   }
 
+  // Mirror worlds: the right half reflects the left, for fair multiplayer
+  if (mapType === "mirror") {
+    for (let r = 0; r < h; r++) {
+      for (let c = Math.ceil(w / 2); c < w; c++) {
+        const s = tiles[idx(w - 1 - c, r)];
+        const t = tiles[idx(c, r)];
+        t.terrain = s.terrain === "COAST" ? "OCEAN" : s.terrain;
+        t.feature = s.feature;
+        t.resource = s.resource;
+        t.ruin = s.ruin;
+      }
+    }
+    // recompute coast across the seam
+    for (const t of tiles) if (t.terrain === "COAST") t.terrain = "OCEAN";
+    for (let r = 0; r < h; r++) {
+      for (let c = 0; c < w; c++) {
+        const t = tiles[idx(c, r)];
+        if (t.terrain !== "OCEAN") continue;
+        for (const [nc, nr] of HEX.neighbors(c, r)) {
+          if (nc < 0 || nr < 0 || nc >= w || nr >= h) continue;
+          const n = tiles[idx(nc, nr)];
+          if (n.terrain !== "OCEAN" && n.terrain !== "COAST") { t.terrain = "COAST"; break; }
+        }
+      }
+    }
+  }
+
   return { w, h, tiles, idx, seed };
 }
 

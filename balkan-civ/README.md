@@ -16,6 +16,14 @@ Just open `index.html` in any modern browser (Chrome, Firefox, Edge, Safari):
 - serve the folder locally: `python3 -m http.server 8000` then visit
   <http://localhost:8000>.
 
+**Play it from a URL**: the repository ships a GitHub Actions workflow
+(`.github/workflows/deploy-game.yml`) that publishes this folder to GitHub
+Pages on every push to `main`. Enable it once under *Settings → Pages →
+Source: GitHub Actions*, and the game gets a permanent link you can send
+to friends. **Touch is fully supported** — tap to select, tap a highlighted
+hex to move, long-press for move orders, drag to pan, pinch to zoom — so
+they can join from phones and tablets.
+
 Your game **auto-saves every turn** (browser localStorage) — use *Continue Saved
 Game* on the title screen to pick up where you left off.
 
@@ -114,8 +122,26 @@ Game* on the title screen to pick up where you left off.
 - 3–8 AI opponents that scout, settle (across the sea, too), improve their
   land, build navies, research, declare war, sue for peace, and march
   armies on your cities
+- **Trade routes**: Caravans (Currency) establish gold routes between
+  cities — up to 3, richer over distance and to foreign partners — drawn
+  on the map and **plunderable** by any hostile army that steps on the road
+- **Great People**: libraries and workshops accumulate Scientist and
+  Engineer points, battlefield kills earn General points. Great Scientists
+  finish a technology, Great Engineers rush 300 production, Great Generals
+  radiate +15% combat strength within 2 tiles — all with historical
+  Balkan names (yes, Tesla is in there)
+- **Game speed** (Quick / Standard / Epic) scales research pace and game
+  length; **Mirror** world type gives fair symmetric maps for multiplayer
+- **Smarter AI warfare**: settlers get escorts, melee waits for siege
+  engines to breach walls before assaulting, armies chase off raiders,
+  and gold is spent modernizing veterans
 - Cities support a **production queue** (queue up to 6 items) and a full
   clickable **message log**; wounded units can fortify until healed
+- **Undo** a simple move (before anything eventful happens); **3 manual
+  save slots** plus **export/import of save files** — email a save to a
+  friend to continue an online match later
+- An **end-game replay graph** charts every civilization's score across
+  the whole game
 - Diplomacy screen: declare war, propose peace, compare scores
 - Three difficulty levels (Prince / King / Emperor) scaling AI output
 - Hover any hex for a movement path preview with turn count; scouts can

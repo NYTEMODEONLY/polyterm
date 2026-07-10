@@ -42,11 +42,19 @@
       <select id="sel-maptype">
         <option value="peninsula" selected>Peninsula</option>
         <option value="archipelago">Archipelago</option>
+        <option value="mirror">Mirror (fair multiplayer)</option>
         <option value="custom" id="opt-custom">Custom (from editor)</option>
       </select>
     </label>
     <label title="Barbarian camps spawn raiders in the wilds">
       <input type="checkbox" id="chk-barbs" checked> 🏕️ Barbarians
+    </label>
+    <label>Speed:
+      <select id="sel-speed">
+        <option value="quick">Quick</option>
+        <option value="standard" selected>Standard</option>
+        <option value="epic">Epic</option>
+      </select>
     </label>
     <label>Difficulty:
       <select id="sel-difficulty">
@@ -123,6 +131,10 @@
 <div id="log-modal" class="modal">
   <div class="modal-box"><h2>📜 Message Log</h2><div id="log-body"></div></div>
 </div>
+<div id="menu-modal" class="modal">
+  <div class="modal-box" id="menu-body"></div>
+</div>
+<input type="file" id="file-import" accept=".json,application/json" style="display:none">
 <div id="handoff-modal" class="modal" style="background:#0d1b2a">
   <div class="modal-box" id="handoff-body" style="text-align:center"></div>
 </div>

@@ -44,7 +44,7 @@ button:disabled { opacity: 0.4; cursor: default; }
   background: linear-gradient(#2a2318, #1c1810); border-bottom: 2px solid #8a7648;
   display: flex; align-items: center; gap: 18px; padding: 0 14px; font-size: 14px; }
 #topbar .spacer { flex: 1; }
-#map { position: fixed; top: 44px; left: 0; cursor: grab; }
+#map { position: fixed; top: 44px; left: 0; cursor: grab; touch-action: none; }
 #map:active { cursor: grabbing; }
 
 #minimap-wrap { position: fixed; right: 10px; bottom: 10px; z-index: 10;
@@ -110,7 +110,7 @@ button:disabled { opacity: 0.4; cursor: default; }
 #editor-palette { display: flex; gap: 4px; flex-wrap: wrap; }
 .pal-btn { padding: 3px 8px; font-size: 12px; }
 .pal-btn.sel { background: #86682a; border-color: #f0d890; }
-#editor-canvas { flex: 1; cursor: crosshair; }
+#editor-canvas { flex: 1; cursor: crosshair; touch-action: none; }
 #editor-minimap-wrap { position: fixed; right: 10px; bottom: 40px; z-index: 46;
   border: 2px solid #8a7648; border-radius: 4px; background: #0d1b2a; line-height: 0; }
 #editor-hint { position: fixed; left: 10px; bottom: 10px; z-index: 46; }

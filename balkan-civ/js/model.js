@@ -102,6 +102,8 @@ class Player {
     this.goldenAgeTurns = 0;     // turns of golden age remaining
     this.gaCount = 0;            // golden ages enjoyed so far
     this.spies = [];             // {id, name, cityId, progress, deadUntil}
+    this.gpPoints = { sci: 0, eng: 0, gen: 0 };
+    this.gpBorn = { sci: 0, eng: 0, gen: 0 };
   }
   get civ() { return CIVS[this.civId]; }
   get isMinor() { return !!this.civ.minor; }
@@ -135,7 +137,7 @@ class Game {
   constructor(opts) {
     // opts: {playerCiv, numOpponents, seed, mapW, mapH}
     this.turn = 1;
-    this.maxTurns = GAME_DEFAULTS.maxTurns;
+    this.maxTurns = SPEEDS[SPEEDS[opts.speed] ? opts.speed : "standard"].turns;
     this.seed = opts.seed ?? Math.floor(Math.random() * 1e9);
     this.rng = mulberry32(this.seed);
     this.mapType = opts.mapType || "peninsula";
@@ -147,6 +149,9 @@ class Game {
     this.noBarbs = !!opts.noBarbs || !!opts.scenario; // scenarios stay historical
     this.camps = [];             // barbarian camps [{c, r, nextSpawn}]
     this.barbIndex = -1;
+    this.speed = SPEEDS[opts.speed] ? opts.speed : "standard";
+    this.routes = [];            // trade routes [{owner, fromId, toId, path, ends}]
+    this.history = [];           // score history for the replay graph
     this.anims = [];             // transient movement animations (not saved)
     if (this.mapType === "custom" && opts.customMap) {
       const cm = opts.customMap;
@@ -342,6 +347,152 @@ class Game {
         this.notify("🏺 Ancient ruins: an old map reveals the surrounding lands.", unit.owner);
       }
     }
+  }
+
+  techCost(key) {
+    return Math.round(TECHS[key].cost * SPEEDS[this.speed].tech);
+  }
+
+  // ---------- trade routes ----------
+  routeIncome(fromCity, toCity) {
+    const dist = HEX.distance(fromCity.c, fromCity.r, toCity.c, toCity.r);
+    return 2 + Math.floor(dist / 2) + (fromCity.owner === toCity.owner ? 0 : 2);
+  }
+
+  // Cities a caravan standing in one of its own cities could trade with
+  tradeDestinations(caravan) {
+    const from = this.cityAt(caravan.c, caravan.r);
+    const p = this.players[caravan.owner];
+    if (!from || from.owner !== caravan.owner) return [];
+    if (this.routes.filter(r => r.owner === caravan.owner).length >= TRADE.maxRoutes) return [];
+    return this.cities.filter(c => {
+      if (c === from) return false;
+      if (HEX.distance(from.c, from.r, c.c, c.r) > TRADE.maxDist) return false;
+      const o = this.players[c.owner];
+      if (o.isBarb || p.atWarWith.has(c.owner)) return false;
+      if (c.owner !== caravan.owner && !p.met.has(c.owner)) return false;
+      if (this.routes.some(r => r.owner === caravan.owner && r.fromId === from.id && r.toId === c.id)) return false;
+      return true;
+    }).sort((a, b) => this.routeIncome(from, b) - this.routeIncome(from, a)).slice(0, 6);
+  }
+
+  establishRoute(caravan, destCityId) {
+    const from = this.cityAt(caravan.c, caravan.r);
+    const dest = this.cities.find(c => c.id === destCityId);
+    if (!from || !dest || !this.tradeDestinations(caravan).includes(dest)) return false;
+    const path = this.findPath(caravan, dest.c, dest.r);
+    if (!path) return false;
+    this.routes.push({ owner: caravan.owner, fromId: from.id, toId: dest.id,
+      path: [[caravan.c, caravan.r], ...path], ends: this.turn + TRADE.duration });
+    this.removeUnit(caravan);
+    if (!this.stats) this.stats = { steals: 0, catches: 0 };
+    this.stats.routes = (this.stats.routes || 0) + 1;
+    this.notify(`🐫 Trade route: ${from.name} → ${dest.name} (+${this.routeIncome(from, dest)} gold per turn).`, caravan.owner);
+    return true;
+  }
+
+  tradeIncome(playerIdx) {
+    let gold = 0;
+    for (const r of this.routes) {
+      const from = this.cities.find(c => c.id === r.fromId);
+      const to = this.cities.find(c => c.id === r.toId);
+      if (!from || !to) continue;
+      if (r.owner === playerIdx) gold += this.routeIncome(from, to);
+      else if (to.owner === playerIdx) gold += 1; // destination's cut
+    }
+    return gold;
+  }
+
+  processTradeRoutes() {
+    for (let i = this.routes.length - 1; i >= 0; i--) {
+      const r = this.routes[i];
+      const from = this.cities.find(c => c.id === r.fromId);
+      const to = this.cities.find(c => c.id === r.toId);
+      const owner = this.players[r.owner];
+      let dead = !from || !to || this.turn >= r.ends ||
+        from.owner !== r.owner || owner.atWarWith.has(to.owner) || !owner.alive;
+      let plunderer = -1;
+      if (!dead) {
+        // hostile boots on the caravan road plunder it
+        for (const [c, rr] of r.path) {
+          const u = this.combatUnitAt(c, rr);
+          if (u && (owner.atWarWith.has(u.owner))) { dead = true; plunderer = u.owner; break; }
+        }
+      }
+      if (dead) {
+        this.routes.splice(i, 1);
+        if (plunderer >= 0) {
+          this.players[plunderer].gold += TRADE.plunderGold;
+          this.notify(`🐫 Your trade route was plundered!`, r.owner);
+          this.notify(`🐫 Trade caravan plundered — +${TRADE.plunderGold} gold!`, plunderer);
+        } else if (this.turn >= r.ends && from && to) {
+          this.notify(`🐫 The ${from.name} → ${to.name} trade route has run its course.`, r.owner);
+        }
+      }
+    }
+  }
+
+  // ---------- great people ----------
+  accrueGreatPeople(p) {
+    if (p.isMinor || p.isBarb || !p.alive) return;
+    let sci = 0, eng = 0;
+    for (const c of this.cities) {
+      if (c.owner !== p.index) continue;
+      for (const b of c.buildings) {
+        if (b === "LIBRARY") sci += 1;
+        if (b === "UNIVERSITY" || b === "OHRID_SCHOOL") sci += 2;
+        if (b === "FORGE") eng += 1;
+        if (b === "WORKSHOP") eng += 2;
+        if (BUILDINGS[b].wonder) eng += 1;
+      }
+    }
+    p.gpPoints.sci += sci;
+    p.gpPoints.eng += eng;
+    for (const type of ["sci", "eng", "gen"]) {
+      if (p.gpPoints[type] < GP.threshold(p.gpBorn[type])) continue;
+      const cap = this.cities.find(c => c.id === p.originalCapitalId && c.owner === p.index) ||
+                  this.cities.find(c => c.owner === p.index);
+      if (!cap) break;
+      const spot = this.civilianAt(cap.c, cap.r) ? this.freeAdjacent(cap.c, cap.r) : [cap.c, cap.r];
+      if (!spot) break;
+      p.gpPoints[type] -= GP.threshold(p.gpBorn[type]);
+      p.gpBorn[type]++;
+      const key = { sci: "GREAT_SCIENTIST", eng: "GREAT_ENGINEER", gen: "GREAT_GENERAL" }[type];
+      const u = this.addUnit(key, p.index, spot[0], spot[1]);
+      u.gpName = GP_NAMES[type][(p.gpBorn[type] - 1) % GP_NAMES[type].length];
+      if (!this.stats) this.stats = { steals: 0, catches: 0 };
+      this.stats.greats = (this.stats.greats || 0) + 1;
+      this.notify(`${UNITS[key].icon} A great soul is born in ${cap.name}: ${u.gpName} the ${UNITS[key].name.replace("Great ", "")}!`, p.index);
+    }
+  }
+
+  useGreatPerson(unit) {
+    const p = this.players[unit.owner];
+    const kind = unit.def.great;
+    if (kind === "sci") {
+      if (p.researching) {
+        p.techs.add(p.researching);
+        this.notify(`🔭 ${unit.gpName || "The scientist"} completes ${TECHS[p.researching].name}!`, p.index);
+        p.researching = null;
+      } else {
+        const av = p.availableTechs();
+        if (!av.length) return false;
+        const t = av.sort((a, b) => TECHS[a].cost - TECHS[b].cost)[0];
+        p.techs.add(t);
+        this.notify(`🔭 ${unit.gpName || "The scientist"} discovers ${TECHS[t].name}!`, p.index);
+      }
+      this.removeUnit(unit);
+      return true;
+    }
+    if (kind === "eng") {
+      const city = this.cityAt(unit.c, unit.r);
+      if (!city || city.owner !== unit.owner) return false;
+      city.prodStored += GP.engineerRush;
+      this.notify(`🏗️ ${unit.gpName || "The engineer"} hurries the works of ${city.name} (+${GP.engineerRush} production).`, p.index);
+      this.removeUnit(unit);
+      return true;
+    }
+    return false; // generals are a passive aura
   }
 
   // ---------- unit upgrades ----------
@@ -745,6 +896,11 @@ class Game {
     }
     // a miserable empire fights poorly
     if (!p.isMinor && this.happinessOf(p.index) < HAPPINESS.strikeAt) mod -= 0.15;
+    // Great General aura
+    if (!unit.def.great && this.units.some(g => g.owner === unit.owner && g.def.great === "gen" &&
+        HEX.distance(g.c, g.r, unit.c, unit.r) <= 2)) {
+      mod += GP.generalAura;
+    }
     return str * mod;
   }
 
@@ -834,6 +990,8 @@ class Game {
       if (targetUnit.hp <= 0) {
         this.removeUnit(targetUnit);
         this.trackScenarioKill(unit.owner, targetUnit.owner);
+        const kp = this.players[unit.owner];
+        if (!kp.isBarb && !kp.isMinor) kp.gpPoints.gen += GP.killPts;
         if (unit.def.healOnKill) unit.hp = Math.min(100, unit.hp + unit.def.healOnKill);
         if (!ranged && unit.hp > 0 && !this.combatUnitAt(c, r) &&
             !(t.city && t.city.owner !== unit.owner) && this.unitPassable(unit, t)) {
@@ -1020,7 +1178,7 @@ class Game {
     const p = this.players[city.owner];
     const opts = [];
     for (const [key, u] of Object.entries(UNITS)) {
-      if (u.faithCost) continue; // missionaries are bought with faith
+      if (u.faithCost || u.great) continue; // faith-bought or earned, never built
       if (u.uu && u.uu !== p.civId) continue;
       if (u.replaces && p.civId !== u.uu) continue;
       // if civ has a UU replacing this unit, hide the base unit
@@ -1541,6 +1699,8 @@ class Game {
       p._lastHap = hap;
     }
     if (!p.isMinor) {
+      gold += this.tradeIncome(p.index);
+      this.accrueGreatPeople(p);
       gold += this.minorBonuses(p.index).gold;
       // Tithe: gold from every follower city in the world
       if (p.religionId !== null && this.religions[p.religionId].belief === "TITHE") {
@@ -1568,8 +1728,8 @@ class Game {
     if (p.researching) {
       p.scienceStored += sci;
       const t = TECHS[p.researching];
-      if (p.scienceStored >= t.cost) {
-        p.scienceStored -= t.cost;
+      if (p.scienceStored >= this.techCost(p.researching)) {
+        p.scienceStored -= this.techCost(p.researching);
         p.techs.add(p.researching);
         this.notify(`🔬 Research complete: ${t.name}!`, p.index);
         p.researching = null;
@@ -1662,6 +1822,12 @@ class Game {
     this.decayInfluence();
     this.processEspionage();
     this.processBarbarians();
+    this.processTradeRoutes();
+    if (this.turn % 5 === 0) {
+      this.history.push({ t: this.turn,
+        s: this.players.filter(p => !p.isMinor && !p.isBarb).map(p => this.score(p.index)) });
+      if (this.history.length > 130) this.history.shift();
+    }
 
     this.turn++;
     for (const u of this.units) {
@@ -1782,7 +1948,8 @@ class Game {
       difficulty: this.difficulty, humans: this.humans, activeHuman: this.activeHuman,
       scenario: this.scenario, scenarioKills: this.scenarioKills,
       noBarbs: this.noBarbs, barbIndex: this.barbIndex, maxCamps: this.maxCamps || 0,
-      camps: this.camps, over: this.over,
+      camps: this.camps, speed: this.speed, routes: this.routes, history: this.history,
+      over: this.over,
       winner: this.winner, victoryType: this.victoryType, nextId: NEXT_ID,
       religions: this.religions,
       map: { w: this.map.w, h: this.map.h, tiles: this.map.tiles.map(t => ({
@@ -1797,12 +1964,13 @@ class Game {
         visible: Array.from(p.visible), originalCapitalId: p.originalCapitalId,
         faith: p.faith, religionId: p.religionId, influence: p.influence,
         gaMeter: p.gaMeter, goldenAgeTurns: p.goldenAgeTurns, gaCount: p.gaCount,
-        spies: p.spies })),
+        spies: p.spies, gpPoints: p.gpPoints, gpBorn: p.gpBorn })),
       cities: this.cities.map(c => ({ ...c })),
       units: this.units.map(u => ({ id: u.id, type: u.type, owner: u.owner, c: u.c, r: u.r,
         hp: u.hp, moves: u.moves, fortified: u.fortified, attacked: u.attacked, path: u.path,
         xp: u.xp, level: u.level, building: u.building, charges: u.charges,
-        autoExplore: u.autoExplore || false, healFortify: u.healFortify || false })),
+        autoExplore: u.autoExplore || false, healFortify: u.healFortify || false,
+        gpName: u.gpName || null })),
       notifications: this.notifications.slice(-30),
     });
   }
@@ -1821,11 +1989,14 @@ class Game {
     g.barbIndex = d.barbIndex ?? -1;
     g.maxCamps = d.maxCamps || 0;
     g.camps = d.camps || [];
+    g.speed = SPEEDS[d.speed] ? d.speed : "standard";
+    g.routes = d.routes || [];
+    g.history = d.history || [];
     if (g.scenario && SCENARIOS[g.scenario]) g.maxTurns = SCENARIOS[g.scenario].victory.turns;
     g.effects = [];
     g.anims = [];
     g.winner = d.winner; g.victoryType = d.victoryType;
-    if (!g.scenario) g.maxTurns = GAME_DEFAULTS.maxTurns;
+    if (!g.scenario) g.maxTurns = SPEEDS[g.speed].turns;
     g.rng = mulberry32((d.seed + d.turn * 7919) >>> 0);
     g.notifications = d.notifications || [];
     g.religions = d.religions || [];
@@ -1854,6 +2025,8 @@ class Game {
       p.influence = pd.influence || {};
       p.gaMeter = pd.gaMeter || 0; p.goldenAgeTurns = pd.goldenAgeTurns || 0;
       p.gaCount = pd.gaCount || 0; p.spies = pd.spies || [];
+      p.gpPoints = pd.gpPoints || { sci: 0, eng: 0, gen: 0 };
+      p.gpBorn = pd.gpBorn || { sci: 0, eng: 0, gen: 0 };
       return p;
     });
     return g;

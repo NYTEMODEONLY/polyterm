@@ -100,8 +100,14 @@ const UNITS = {
   // ---- Naval units (built in coastal cities only) ----
   GALLEY:     { name: "Galley",        icon: "⛵", cost: 60,  cs: 10, moves: 4, tech: "SAILING", naval: true, coastOnly: true, upgrade: "GALLEASS", },
   GALLEASS:   { name: "War Galleass",  icon: "🚢", cost: 110, cs: 12, rs: 17, range: 2, moves: 5, tech: "COMPASS", naval: true },
+  // ---- Trade ----
+  CARAVAN:    { name: "Caravan",       icon: "🐫", cost: 70, cs: 0, moves: 2, civilian: true, caravan: true, tech: "CURRENCY" },
   // ---- Religious units (purchased with faith, not production) ----
   MISSIONARY: { name: "Missionary",    icon: "🙏", cost: 0, faithCost: 120, cs: 0, moves: 4, civilian: true, missionary: true, charges: 2 },
+  // ---- Great People (earned, never built) ----
+  GREAT_SCIENTIST: { name: "Great Scientist", icon: "🔭", cost: 0, cs: 0, moves: 3, civilian: true, great: "sci" },
+  GREAT_ENGINEER:  { name: "Great Engineer",  icon: "🏗️", cost: 0, cs: 0, moves: 3, civilian: true, great: "eng" },
+  GREAT_GENERAL:   { name: "Great General",   icon: "🎖️", cost: 0, cs: 0, moves: 4, civilian: true, great: "gen" },
   // ---- Unique units ----
   GUSAR:      { name: "Gusar",         icon: "🐎", cost: 110, cs: 19, moves: 5, tech: "CHIVALRY", uu: "SERBIA", replaces: "KNIGHT",
                 blurb: "Serbian light cavalry. Faster than the Knight and needs no horses." },
@@ -317,6 +323,40 @@ const BARB = {
 
 const RUIN_REWARDS = ["gold", "faith", "science", "xp", "map"];
 
+// ------------------------------------------------------------
+// Trade routes
+// ------------------------------------------------------------
+const TRADE = {
+  maxRoutes: 3,        // active routes per player
+  duration: 40,        // turns before a route expires
+  maxDist: 14,         // hex distance limit
+  plunderGold: 30,     // reward for plundering a route
+};
+
+// ------------------------------------------------------------
+// Great People
+// ------------------------------------------------------------
+const GP = {
+  threshold: (n) => 100 + 120 * n,  // points for the (n+1)th great person of a type
+  generalAura: 0.15,                // combat bonus near a Great General
+  engineerRush: 300,                // production from a Great Engineer
+  killPts: 8,                       // general points per kill
+};
+const GP_NAMES = {
+  sci: ["Ruđer Bošković", "Milutin Milanković", "Nikola Tesla", "Mihailo Petrović", "Marin Getaldić", "John Vladislav the Scholar"],
+  eng: ["Mimar Hajrudin", "Mihajlo Pupin", "Apollodorus of Damascus", "Petar Bojović", "Master Rade of Studenica"],
+  gen: ["Miloš Obilić", "Marko Kraljević", "Ivac the Voivode", "Krum's Champion", "Đurađ Kastriot"],
+};
+
+// ------------------------------------------------------------
+// Game speeds (tech pace + game length; production is untouched)
+// ------------------------------------------------------------
+const SPEEDS = {
+  quick:    { label: "Quick",    tech: 0.66, turns: 200 },
+  standard: { label: "Standard", tech: 1,    turns: 300 },
+  epic:     { label: "Epic",     tech: 1.5,  turns: 450 },
+};
+
 const INFLUENCE_FRIEND = 30;
 const INFLUENCE_ALLY = 60;
 
@@ -465,7 +505,7 @@ const SCENARIOS = {
     seed: 1443001, mapType: "peninsula", difficulty: "hard",
     techEra: 2, gold: 400,
     armies: {
-      ALBANIA: ["STRADIOT", "STRADIOT", "PIKEMAN", "CROSSBOW", "WORKER"],
+      ALBANIA: ["STRADIOT", "STRADIOT", "PIKEMAN", "CROSSBOW", "CROSSBOW", "WORKER"],
       OTTOMAN: ["PIKEMAN", "PIKEMAN", "KNIGHT", "CATAPULT", "SETTLER", "SETTLER"],
     },
     warsAtStart: [["ALBANIA", "OTTOMAN"]],

@@ -150,6 +150,22 @@ class Renderer {
       this.drawUnit(ctx, game, u, sx, sy, s);
     }
 
+    // trade routes of the viewing player (dashed gold roads)
+    for (const route of game.routes || []) {
+      if (route.owner !== game.viewer) continue;
+      ctx.save();
+      ctx.strokeStyle = "rgba(241,196,15,0.5)";
+      ctx.lineWidth = Math.max(1.5, s * 0.07);
+      ctx.setLineDash([s * 0.2, s * 0.25]);
+      ctx.beginPath();
+      route.path.forEach(([pc, pr], i) => {
+        const [px, py] = this.worldToScreen(pc, pr);
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      });
+      ctx.stroke();
+      ctx.restore();
+    }
+
     // hover highlight + path preview
     if (this.hoverTile) {
       const [hc, hr] = this.hoverTile;
