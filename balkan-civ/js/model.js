@@ -24,6 +24,7 @@ class Unit {
     this.level = 0;              // each level: +10% combat strength
     this.building = null;        // worker job: {type, turnsLeft}
     this.charges = UNITS[type].charges || 0; // missionary spreads
+    this.healFortify = false;    // fortified until fully healed
   }
   get def() { return UNITS[this.type]; }
   get isCivilian() { return !!this.def.civilian; }
@@ -62,6 +63,7 @@ class City {
     this.coastal = false;
     this.religion = null;        // majority religion id
     this.pressure = {};          // religionId -> accumulated pressure
+    this.queue = [];             // production queue after the current item
   }
 
   get maxHp() {
@@ -103,6 +105,7 @@ class Player {
   }
   get civ() { return CIVS[this.civId]; }
   get isMinor() { return !!this.civ.minor; }
+  get isBarb() { return !!this.civ.barb; }
   hasTech(t) { return this.techs.has(t); }
 
   era() {
@@ -141,6 +144,9 @@ class Game {
     this._viewer = null;         // network client override (not saved)
     this.scenario = opts.scenario || null;
     this.scenarioKills = 0;      // for "kills"-type scenario objectives
+    this.noBarbs = !!opts.noBarbs || !!opts.scenario; // scenarios stay historical
+    this.camps = [];             // barbarian camps [{c, r, nextSpawn}]
+    this.barbIndex = -1;
     this.anims = [];             // transient movement animations (not saved)
     if (this.mapType === "custom" && opts.customMap) {
       const cm = opts.customMap;
@@ -227,6 +233,178 @@ class Game {
     });
 
     if (this.scenario) this.applyScenario();
+
+    // the barbarian horde: a hidden player at war with everyone
+    if (!this.noBarbs) {
+      const bp = new Player(this.players.length, "BARBARIANS", false);
+      bp.visible = new Uint8Array(this.map.w * this.map.h);
+      this.barbIndex = bp.index;
+      for (const p of this.players) {
+        p.atWarWith.add(bp.index);
+        bp.atWarWith.add(p.index);
+        p.met.add(bp.index);
+        bp.met.add(p.index);
+      }
+      this.players.push(bp);
+      // seed camps on wild land, away from every start
+      const landTiles = this.map.tiles.filter(t => TERRAIN[t.terrain].passable);
+      const want = Math.max(2, Math.round(landTiles.length / BARB.campEvery));
+      let guard = 0;
+      while (this.camps.length < want && guard++ < 400) {
+        const t = landTiles[Math.floor(this.rng() * landTiles.length)];
+        if (t.owner !== -1 || t.city || t.ruin) continue;
+        const farFromAll = this.units.every(u => HEX.distance(u.c, u.r, t.c, t.r) >= 5) &&
+          this.camps.every(cp => HEX.distance(cp.c, cp.r, t.c, t.r) >= 5);
+        if (farFromAll) this.camps.push({ c: t.c, r: t.r, nextSpawn: 12 + Math.floor(this.rng() * 8) });
+      }
+      this.maxCamps = this.camps.length;
+    }
+  }
+
+  campAt(c, r) { return this.camps.find(cp => cp.c === c && cp.r === r); }
+
+  // Camp spawning + occasional new camps (world phase, each turn)
+  processBarbarians() {
+    if (this.barbIndex < 0) return;
+    const bp = this.players[this.barbIndex];
+    const barbUnits = this.units.filter(u => u.owner === this.barbIndex);
+    const cap = this.camps.length + 2;
+    // spawn era-appropriate raiders
+    const avgEra = Math.round(this.players.filter(p => !p.isMinor && !p.isBarb && p.alive)
+      .reduce((a, p) => a + p.era(), 0) /
+      Math.max(1, this.players.filter(p => !p.isMinor && !p.isBarb && p.alive).length));
+    const pool = [["WARRIOR", "ARCHER"], ["SPEARMAN", "HORSEMAN"],
+      ["PIKEMAN", "CROSSBOW"], ["MUSKETMAN", "CROSSBOW"]][Math.min(3, avgEra)];
+    for (const camp of this.camps) {
+      if (this.turn < camp.nextSpawn || barbUnits.length >= cap) continue;
+      const spot = !this.combatUnitAt(camp.c, camp.r) ? [camp.c, camp.r]
+        : this.freeAdjacent(camp.c, camp.r);
+      if (!spot) continue;
+      const type = pool[Math.floor(this.rng() * pool.length)];
+      this.addUnit(type, this.barbIndex, spot[0], spot[1]);
+      barbUnits.push(null); // count it against the cap
+      camp.nextSpawn = this.turn + BARB.spawnEvery + Math.floor(this.rng() * 5);
+    }
+    // wilderness breeds new camps, but only while it is truly wild
+    if (this.turn % BARB.newCampEvery === 0 && this.camps.length < Math.ceil(this.maxCamps / 2)) {
+      const landTiles = this.map.tiles.filter(t => TERRAIN[t.terrain].passable &&
+        t.owner === -1 && !t.city && !this.campAt(t.c, t.r));
+      for (let tries = 0; tries < 40; tries++) {
+        const t = landTiles[Math.floor(this.rng() * landTiles.length)];
+        if (!t) break;
+        if (this.cities.every(c => HEX.distance(c.c, c.r, t.c, t.r) >= 5)) {
+          this.camps.push({ c: t.c, r: t.r, nextSpawn: this.turn + 3 });
+          break;
+        }
+      }
+    }
+  }
+
+  // Camp burning + ruin plundering when a unit arrives on a tile
+  checkTileDiscoveries(unit) {
+    const p = this.players[unit.owner];
+    if (p.isBarb) return;
+    const t = this.tile(unit.c, unit.r);
+    if (!t) return;
+    const camp = this.campAt(unit.c, unit.r);
+    if (camp && !unit.isCivilian) {
+      this.camps.splice(this.camps.indexOf(camp), 1);
+      p.gold += BARB.clearReward;
+      if (!this.stats) this.stats = { steals: 0, catches: 0 };
+      this.stats.campsCleared = (this.stats.campsCleared || 0) + 1;
+      this.addEffect(unit.c, unit.r, "+" + BARB.clearReward + "💰", "#f1c40f");
+      this.notify(`🏕️ Barbarian camp burned — +${BARB.clearReward} gold!`, unit.owner);
+    }
+    if (t.ruin) {
+      t.ruin = false;
+      if (!this.stats) this.stats = { steals: 0, catches: 0 };
+      this.stats.ruins = (this.stats.ruins || 0) + 1;
+      const reward = RUIN_REWARDS[Math.floor(this.rng() * RUIN_REWARDS.length)];
+      if (reward === "gold") {
+        p.gold += 45;
+        this.addEffect(unit.c, unit.r, "+45💰", "#f1c40f");
+        this.notify("🏺 Ancient ruins: a cache of gold (+45)!", unit.owner);
+      } else if (reward === "faith") {
+        p.faith += 25;
+        this.notify("🏺 Ancient ruins: a forgotten shrine (+25 faith).", unit.owner);
+      } else if (reward === "science") {
+        p.scienceStored += 40;
+        this.notify("🏺 Ancient ruins: lost writings (+40 science).", unit.owner);
+      } else if (reward === "xp") {
+        unit.gainXp(20);
+        unit.hp = 100;
+        this.notify("🏺 Ancient ruins: survivors join your ranks (+20 XP, healed).", unit.owner);
+      } else {
+        for (const [rc, rr] of HEX.ring(unit.c, unit.r, 4)) {
+          const rt = this.tile(rc, rr);
+          if (rt && p.visible[this.map.idx(rc, rr)] === 0) p.visible[this.map.idx(rc, rr)] = 1;
+        }
+        this.notify("🏺 Ancient ruins: an old map reveals the surrounding lands.", unit.owner);
+      }
+    }
+  }
+
+  // ---------- unit upgrades ----------
+  // Resolve base unit key to this civ's unique replacement, if any
+  resolveUnitFor(p, key) {
+    const uu = Object.entries(UNITS).find(([, v]) => v.uu === p.civId && v.replaces === key);
+    return uu ? uu[0] : key;
+  }
+
+  canUpgrade(unit) {
+    const p = this.players[unit.owner];
+    const target = unit.def.upgrade ? this.resolveUnitFor(p, unit.def.upgrade) : null;
+    if (!target) return null;
+    const def = UNITS[target];
+    if (def.tech && !p.hasTech(def.tech)) return null;
+    if (def.needs && !this.playerHasResource(p.index, def.needs)) return null;
+    const t = this.tile(unit.c, unit.r);
+    if (!t || t.owner !== unit.owner) return null; // home territory only
+    if (unit.moves <= 0 || unit.attacked) return null;
+    const cost = 10 + Math.max(0, Math.round((def.cost - unit.def.cost) * 1.5));
+    if (p.gold < cost) return null;
+    return { to: target, cost };
+  }
+
+  upgradeUnit(unit) {
+    const up = this.canUpgrade(unit);
+    if (!up) return false;
+    this.players[unit.owner].gold -= up.cost;
+    unit.type = up.to;
+    unit.moves = 0;
+    unit.charges = UNITS[up.to].charges || 0;
+    if (!this.stats) this.stats = { steals: 0, catches: 0 };
+    this.stats.upgrades = (this.stats.upgrades || 0) + 1;
+    return true;
+  }
+
+  // ---------- combat forecast (mirrors damageRoll's 0.85..1.15 spread) ----------
+  predictAttack(unit, c, r) {
+    if (!unit || unit.isCivilian || this.isEmbarked(unit)) return null;
+    const t = this.tile(c, r);
+    if (!t) return null;
+    const ranged = unit.isRanged;
+    const attStr = this.strengthOf(unit, { attacking: true, targetTile: t, ranged });
+    const span = (att, def) => {
+      const base = 30 * Math.pow(att / Math.max(def, 0.5), 1.25);
+      return [Math.max(1, Math.round(base * 0.85)), Math.max(1, Math.round(base * 1.15))];
+    };
+    const enemyCity = t.city && this.players[unit.owner].atWarWith.has(t.city.owner) ? t.city : null;
+    const enemyUnit = (() => {
+      const cu = this.combatUnitAt(c, r);
+      return cu && this.players[unit.owner].atWarWith.has(cu.owner) ? cu : null;
+    })();
+    if (enemyCity && (!enemyUnit || !ranged)) {
+      const defStr = this.cityStrength(enemyCity);
+      return { target: enemyCity.name, targetHp: enemyCity.hp, city: true,
+        out: span(attStr, defStr), back: ranged ? null : span(defStr, attStr) };
+    }
+    if (enemyUnit) {
+      const defStr = this.strengthOf(enemyUnit, { attacking: false });
+      return { target: enemyUnit.def.name, targetHp: enemyUnit.hp, city: false,
+        out: span(attStr, defStr), back: ranged ? null : span(defStr, attStr) };
+    }
+    return null;
   }
 
   // Scenario setup: shared tech era, gold, starting armies, opening wars
@@ -504,6 +682,7 @@ class Game {
     }
     if (unit.path && !unit.path.length) unit.path = null;
     this.addMoveAnim(unit, hops);
+    if (hops.length > 1) this.checkTileDiscoveries(unit);
   }
 
   // Tiles reachable this turn (Dijkstra within unit.moves)
@@ -660,6 +839,7 @@ class Game {
             !(t.city && t.city.owner !== unit.owner) && this.unitPassable(unit, t)) {
           unit.c = c; unit.r = r; // advance into the tile
           this.updateVisibility(this.players[unit.owner]);
+          this.checkTileDiscoveries(unit);
         }
       }
       if (unit.hp <= 0) this.removeUnit(unit);
@@ -704,7 +884,7 @@ class Game {
 
   checkElimination(playerIdx) {
     const p = this.players[playerIdx];
-    if (!p.alive) return;
+    if (!p.alive || p.isBarb) return;
     const hasCities = this.cities.some(c => c.owner === playerIdx);
     const hasSettlers = this.units.some(u => u.owner === playerIdx && u.type === "SETTLER");
     if (!hasCities && !hasSettlers) {
@@ -825,6 +1005,17 @@ class Game {
     return { food, prod, gold, sci: Math.floor(sci), culture, faith };
   }
 
+  // Drop queue entries that became invalid (e.g. building completed elsewhere)
+  validQueueItem(city, item) {
+    if (!item) return false;
+    if (item.kind === "building") {
+      if (city.buildings.includes(item.key)) return false;
+      const b = BUILDINGS[item.key];
+      if (b.wonder && this.cities.some(c => c.buildings.includes(item.key))) return false;
+    }
+    return true;
+  }
+
   productionOptions(city) {
     const p = this.players[city.owner];
     const opts = [];
@@ -918,6 +1109,7 @@ class Game {
     const pa = this.players[a], pb = this.players[b];
     if (!pa.met.has(b)) {
       pa.met.add(b); pb.met.add(a);
+      if (pa.isBarb || pb.isBarb) return; // no first-contact fanfare for raiders
       for (const [me, other] of [[pa, pb], [pb, pa]]) {
         if (!me.isHuman) continue;
         this.notify(other.isMinor
@@ -938,6 +1130,7 @@ class Game {
 
   makePeace(a, b) {
     const pa = this.players[a], pb = this.players[b];
+    if (pa.isBarb || pb.isBarb) return; // no peace with the horde
     if (!pa.atWarWith.has(b)) return;
     pa.atWarWith.delete(b); pb.atWarWith.delete(a);
     delete pa.warWeariness[b]; delete pb.warWeariness[a];
@@ -1041,7 +1234,7 @@ class Game {
   // ---------- happiness & golden ages ----------
   happinessOf(idx) {
     const p = this.players[idx];
-    if (p.isMinor || !p.alive) return 0;
+    if (p.isMinor || p.isBarb || !p.alive) return 0;
     if (!this._hap) this._hap = {};
     if (this._hap[idx] !== undefined) return this._hap[idx];
     let hap = HAPPINESS.base;
@@ -1090,8 +1283,9 @@ class Game {
   processEspionage() {
     if (!this.stats) this.stats = { steals: 0, catches: 0 };
     for (const p of this.players) {
-      if (p.isMinor || !p.alive) continue;
+      if (p.isMinor || p.isBarb || !p.alive) continue;
       // recruit up to the entitled number of spies
+      if (p.isBarb) continue;
       while (p.spies.length < this.spySlots(p)) {
         p.spies.push({ id: uid(), name: SPY_NAMES[(p.index * 5 + p.spies.length * 3) % SPY_NAMES.length],
           cityId: null, progress: 0, deadUntil: 0 });
@@ -1227,7 +1421,7 @@ class Game {
 
   score(playerIdx) {
     const p = this.players[playerIdx];
-    if (!p.alive) return 0;
+    if (!p.alive || p.isBarb) return 0;
     let s = 0;
     for (const c of this.cities) if (c.owner === playerIdx) s += 25 + c.pop * 6 +
       c.buildings.reduce((a, b) => a + (BUILDINGS[b].wonder ? 25 : 5), 0);
@@ -1271,7 +1465,9 @@ class Game {
           this.completeProduction(city, item);
           this.notify(`${city.name} finished ${item.kind === "unit" ? UNITS[item.key].name : BUILDINGS[item.key].name}.`, city.owner);
         }
-        city.producing = null;
+        do {
+          city.producing = city.queue.length ? city.queue.shift() : null;
+        } while (city.producing && !this.validQueueItem(city, city.producing));
       }
     }
 
@@ -1309,7 +1505,7 @@ class Game {
   }
 
   processPlayerEconomy(p) {
-    if (!p.alive) return;
+    if (!p.alive || p.isBarb) return;
     this.dirtyHappiness(); // borders/pop may have changed since last compute
     let gold = 0, sci = 0, faith = 0;
     for (const city of this.cities) {
@@ -1465,9 +1661,13 @@ class Game {
     this.processMinorGifts();
     this.decayInfluence();
     this.processEspionage();
+    this.processBarbarians();
 
     this.turn++;
-    for (const u of this.units) u.resetTurn();
+    for (const u of this.units) {
+      u.resetTurn();
+      if (u.healFortify && u.hp >= 100) { u.healFortify = false; u.fortified = false; }
+    }
     let first = 0;
     while (first < this.humans - 1 && !this.players[first].alive) first++;
     this.activeHuman = first;
@@ -1548,7 +1748,7 @@ class Game {
       }
       return; // scenario games skip the standard victory rules
     }
-    const majors = this.players.filter(p => !p.isMinor);
+    const majors = this.players.filter(p => !p.isMinor && !p.isBarb);
     const alive = majors.filter(p => p.alive);
     if (alive.length === 1) {
       this.over = true; this.winner = alive[0].index; this.victoryType = "Domination";
@@ -1580,12 +1780,15 @@ class Game {
     return JSON.stringify({
       v: 1, turn: this.turn, seed: this.seed, mapType: this.mapType,
       difficulty: this.difficulty, humans: this.humans, activeHuman: this.activeHuman,
-      scenario: this.scenario, scenarioKills: this.scenarioKills, over: this.over,
+      scenario: this.scenario, scenarioKills: this.scenarioKills,
+      noBarbs: this.noBarbs, barbIndex: this.barbIndex, maxCamps: this.maxCamps || 0,
+      camps: this.camps, over: this.over,
       winner: this.winner, victoryType: this.victoryType, nextId: NEXT_ID,
       religions: this.religions,
       map: { w: this.map.w, h: this.map.h, tiles: this.map.tiles.map(t => ({
         c: t.c, r: t.r, terrain: t.terrain, feature: t.feature, resource: t.resource,
-        improvement: t.improvement, owner: t.owner, cityId: t.city ? t.city.id : null })) },
+        improvement: t.improvement, ruin: t.ruin || false,
+        owner: t.owner, cityId: t.city ? t.city.id : null })) },
       players: this.players.map(p => ({
         index: p.index, civId: p.civId, isHuman: p.isHuman, alive: p.alive,
         gold: p.gold, scienceStored: p.scienceStored, researching: p.researching,
@@ -1599,7 +1802,7 @@ class Game {
       units: this.units.map(u => ({ id: u.id, type: u.type, owner: u.owner, c: u.c, r: u.r,
         hp: u.hp, moves: u.moves, fortified: u.fortified, attacked: u.attacked, path: u.path,
         xp: u.xp, level: u.level, building: u.building, charges: u.charges,
-        autoExplore: u.autoExplore || false })),
+        autoExplore: u.autoExplore || false, healFortify: u.healFortify || false })),
       notifications: this.notifications.slice(-30),
     });
   }
@@ -1614,6 +1817,10 @@ class Game {
     g._viewer = null;
     g.scenario = d.scenario || null;
     g.scenarioKills = d.scenarioKills || 0;
+    g.noBarbs = d.noBarbs || false;
+    g.barbIndex = d.barbIndex ?? -1;
+    g.maxCamps = d.maxCamps || 0;
+    g.camps = d.camps || [];
     if (g.scenario && SCENARIOS[g.scenario]) g.maxTurns = SCENARIOS[g.scenario].victory.turns;
     g.effects = [];
     g.anims = [];
@@ -1627,7 +1834,7 @@ class Game {
     g.map = { w: d.map.w, h: d.map.h, tiles: [], idx: (c, r) => r * d.map.w + c, seed: d.seed };
     for (const td of d.map.tiles) {
       g.map.tiles.push({ c: td.c, r: td.r, terrain: td.terrain, feature: td.feature,
-        resource: td.resource, improvement: td.improvement ?? null,
+        resource: td.resource, improvement: td.improvement ?? null, ruin: td.ruin || false,
         owner: td.owner, city: null, workedBy: null, _cityId: td.cityId });
     }
     g.cities = d.cities.map(cd => Object.assign(new City(cd.name, cd.owner, cd.c, cd.r), cd));

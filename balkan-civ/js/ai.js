@@ -5,7 +5,16 @@
 
 const AI = (() => {
 
+  // wars against real rivals — the eternal barbarian feud doesn't count
+  function realWars(game, p) {
+    return [...p.atWarWith].filter(e => e !== game.barbIndex && game.players[e].alive);
+  }
+
   function takeTurn(game, p) {
+    if (p.isBarb) {
+      runBarbarians(game, p);
+      return;
+    }
     if (p.isMinor) {
       chooseResearch(game, p);
       runMinorCities(game, p);
@@ -98,6 +107,42 @@ const AI = (() => {
     }
   }
 
+  // ---------- barbarians ----------
+  function runBarbarians(game, p) {
+    for (const u of game.units) {
+      if (u.owner !== p.index) continue;
+      if (u.isCivilian) continue; // captured workers just sit in camp
+      if (tryAttack(game, p, u)) continue;
+      // raid nearby soldiers and settlements; snatch civilians only point-blank
+      let target = null, bestD = 5;
+      for (const v of game.units) {
+        if (v.owner === p.index) continue;
+        const d = HEX.distance(u.c, u.r, v.c, v.r);
+        if (v.isCivilian && d > 1) continue;
+        if (d <= bestD) { bestD = d; target = v; }
+      }
+      if (!target) {
+        for (const c of game.cities) {
+          const d = HEX.distance(u.c, u.r, c.c, c.r);
+          if (d <= bestD) { bestD = d; target = c; }
+        }
+      }
+      if (target) {
+        const dest = nearestApproach(game, u, target.c, target.r);
+        if (dest) game.moveUnitTo(u, dest[0], dest[1]);
+        tryAttack(game, p, u);
+      } else {
+        const camp = game.camps[0] ? game.camps.sort((a, b) =>
+          HEX.distance(u.c, u.r, a.c, a.r) - HEX.distance(u.c, u.r, b.c, b.r))[0] : null;
+        if (camp && HEX.distance(u.c, u.r, camp.c, camp.r) > 3) {
+          game.moveUnitTo(u, camp.c, camp.r);
+        } else {
+          u.fortified = true;
+        }
+      }
+    }
+  }
+
   // ---------- diplomacy ----------
   function diplomacy(game, p) {
     // court city-states when rich
@@ -141,7 +186,7 @@ const AI = (() => {
     if (p.researching) return;
     const av = p.availableTechs();
     if (!av.length) return;
-    const atWar = p.atWarWith.size > 0;
+    const atWar = realWars(game, p).length > 0;
     const milTechs = ["ARCHERY", "BRONZE_WORKING", "IRON_WORKING", "HORSEBACK_RIDING",
       "CHIVALRY", "STEEL", "MACHINERY", "GUNPOWDER", "MASONRY", "CONSTRUCTION", "PHYSICS", "MATHEMATICS",
       "SAILING", "COMPASS"];
@@ -159,7 +204,7 @@ const AI = (() => {
     const myUnits = game.units.filter(u => u.owner === p.index);
     const military = myUnits.filter(u => !u.isCivilian);
     const settlers = myUnits.filter(u => u.type === "SETTLER");
-    const atWar = p.atWarWith.size > 0;
+    const atWar = realWars(game, p).length > 0;
     const wantCities = 4 + Math.floor(game.map.w / 15);
     const wantMilitary = myCities.length * 2 + (atWar ? 4 : 1);
 
@@ -241,6 +286,16 @@ const AI = (() => {
   }
 
   function runSettler(game, p, u) {
+    // raiders nearby? run for the nearest city
+    if (game.barbIndex >= 0) {
+      const danger = game.units.some(v => v.owner === game.barbIndex && !v.isCivilian &&
+        HEX.distance(v.c, v.r, u.c, u.r) <= 3);
+      if (danger) {
+        const home = game.cities.filter(c => c.owner === p.index)
+          .sort((a, b) => HEX.distance(u.c, u.r, a.c, a.r) - HEX.distance(u.c, u.r, b.c, b.r))[0];
+        if (home) { game.moveUnitTo(u, home.c, home.r); return; }
+      }
+    }
     // found here if it's a decent spot, else walk toward the best nearby site
     const hereScore = siteScore(game.map, u.c, u.r);
     const myCities = game.cities.filter(c => c.owner === p.index);
@@ -347,7 +402,7 @@ const AI = (() => {
   }
 
   function runShip(game, p, u) {
-    const enemies = [...p.atWarWith].filter(e => game.players[e].alive);
+    const enemies = realWars(game, p);
     if (tryAttack(game, p, u)) return;
     if (enemies.length) {
       // hunt enemy ships and embarked units, then coastal cities
@@ -385,7 +440,29 @@ const AI = (() => {
   }
 
   function runMilitary(game, p, u) {
-    const enemies = [...p.atWarWith].filter(e => game.players[e].alive);
+    const enemies = realWars(game, p);
+    // chase off raiders prowling nearby
+    if (!enemies.length && game.barbIndex >= 0) {
+      let raider = null, rd = 4;
+      for (const v of game.units) {
+        if (v.owner !== game.barbIndex || v.isCivilian) continue;
+        const d = HEX.distance(u.c, u.r, v.c, v.r);
+        if (d <= rd) { rd = d; raider = v; }
+      }
+      if (raider) {
+        if (tryAttack(game, p, u)) return;
+        const dest = nearestApproach(game, u, raider.c, raider.r);
+        if (dest) game.moveUnitTo(u, dest[0], dest[1]);
+        tryAttack(game, p, u);
+        return;
+      }
+    }
+
+    // modernize old troops when the treasury allows
+    if (!p.isMinor) {
+      const up = game.canUpgrade(u);
+      if (up && p.gold > up.cost + 200) game.upgradeUnit(u);
+    }
 
     // city-state troops never leave home
     if (p.isMinor) {
@@ -452,7 +529,20 @@ const AI = (() => {
       return;
     }
 
-    // 3. peace: garrison cities, otherwise fortify near home
+    // 3. peace: burn nearby barbarian camps for the bounty
+    if (game.camps.length && !p.isMinor) {
+      let camp = null, campD = 7;
+      for (const cp of game.camps) {
+        const d = HEX.distance(u.c, u.r, cp.c, cp.r);
+        if (d <= campD) { campD = d; camp = cp; }
+      }
+      if (camp) {
+        game.moveUnitTo(u, camp.c, camp.r);
+        tryAttack(game, p, u);
+        return;
+      }
+    }
+    // garrison cities, otherwise fortify near home
     const myCities = game.cities.filter(c => c.owner === p.index);
     const emptyCity = myCities.find(c => {
       const g = game.combatUnitAt(c.c, c.r);

@@ -74,7 +74,15 @@ Game* on the title screen to pick up where you left off.
 - 26-technology research tree across four eras (Ancient → Renaissance)
 - Civ V-style combat: hit points, ranged vs melee, terrain defense bonuses,
   fortification, floating damage numbers, and sieges — cities bombard one
-  besieger every turn, so bring catapults
+  besieger every turn, so bring catapults. Hover a target for a **combat
+  forecast** (damage dealt and taken) before you commit
+- **Barbarians** (optional toggle): camps seed the wilds and spawn raiders
+  that scale with the era; burn a camp for a 40-gold bounty. **Ancient
+  ruins** reward explorers with gold, faith, science, veteran experience,
+  or maps of the surrounding land
+- **Unit upgrades**: pay gold in home territory to modernize veterans along
+  their line (Warrior → Swordsman → Longswordsman → Musketman, and so on),
+  keeping their promotions — unique units included
 - Unit promotions: combat earns XP; veterans gain up to three ⭐ levels,
   each worth +10% strength (and a morale heal on promotion)
 - **Religion**: Shrines, Temples and monasteries generate faith. Found one
@@ -106,6 +114,8 @@ Game* on the title screen to pick up where you left off.
 - 3–8 AI opponents that scout, settle (across the sea, too), improve their
   land, build navies, research, declare war, sue for peace, and march
   armies on your cities
+- Cities support a **production queue** (queue up to 6 items) and a full
+  clickable **message log**; wounded units can fortify until healed
 - Diplomacy screen: declare war, propose peace, compare scores
 - Three difficulty levels (Prince / King / Emperor) scaling AI output
 - Hover any hex for a movement path preview with turn count; scouts can

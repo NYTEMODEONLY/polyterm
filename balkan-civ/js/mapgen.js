@@ -69,7 +69,7 @@ function generateMap(w, h, seed, mapType = "peninsula") {
       }
 
       tiles[idx(c, r)] = {
-        c, r, terrain, feature, resource: null,
+        c, r, terrain, feature, resource: null, ruin: false,
         improvement: null,           // FARM / MINE / ROAD
         owner: -1, city: null,       // city object occupying this tile
         workedBy: null,              // city id working this tile
@@ -133,6 +133,12 @@ function generateMap(w, h, seed, mapType = "peninsula") {
     if (rng() > 0.12) continue;
     const candidates = resKeys.filter(k => RESOURCE[k].terrains.includes(t.terrain));
     if (candidates.length) t.resource = candidates[Math.floor(rng() * candidates.length)];
+  }
+
+  // Ancient ruins for explorers to plunder
+  for (let i = 0; i < w * h; i++) {
+    const t = tiles[i];
+    if (TERRAIN[t.terrain].passable && !t.resource && rng() < 0.015) t.ruin = true;
   }
 
   return { w, h, tiles, idx, seed };

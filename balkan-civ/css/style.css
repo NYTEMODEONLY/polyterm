@@ -75,7 +75,7 @@ button:disabled { opacity: 0.4; cursor: default; }
 .prod-item button { padding: 2px 8px; font-size: 12px; }
 
 #notif-list { position: fixed; right: 10px; top: 54px; z-index: 9; width: 320px; max-height: 180px;
-  overflow-y: auto; pointer-events: none; }
+  overflow-y: auto; cursor: pointer; }
 .notif { background: rgba(15,18,26,0.85); border-left: 3px solid #8a7648; padding: 4px 8px;
   margin-bottom: 3px; font-size: 12.5px; border-radius: 0 4px 4px 0; }
 

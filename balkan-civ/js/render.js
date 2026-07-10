@@ -392,6 +392,18 @@ class Renderer {
       ctx.textBaseline = "middle";
       ctx.fillText("⛏️", sx + s * 0.45, sy + s * 0.4);
     }
+    if (t.ruin && s > 12) {
+      ctx.font = `${Math.floor(s * 0.6)}px serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("🏺", sx, sy + s * 0.05);
+    }
+    if (game.campAt && game.campAt(t.c, t.r) && s > 12) {
+      ctx.font = `${Math.floor(s * 0.7)}px serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("🏕️", sx, sy + s * 0.05);
+    }
     if (t.resource && s > 14) {
       ctx.font = `${Math.floor(s * 0.55)}px serif`;
       ctx.textAlign = "left";

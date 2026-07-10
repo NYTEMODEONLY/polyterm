@@ -66,7 +66,8 @@ const UI = (() => {
         if (!customMap) { alert("No custom map saved — open the Map Editor first."); return; }
       }
       game = new Game({ playerCiv: chosenCiv, numOpponents: numOpp, mapW: dims[0], mapH: dims[1],
-        mapType, customMap, numHumans, difficulty: $("sel-difficulty").value });
+        mapType, customMap, numHumans, difficulty: $("sel-difficulty").value,
+        noBarbs: !$("chk-barbs").checked });
       startPlaying();
     };
     $("start-screen").style.display = "flex";
@@ -186,7 +187,8 @@ const UI = (() => {
       fixedOpponents: [...ready.map(p => p.assignedCiv), ...rest.slice(0, aiCount)],
       numOpponents: ready.length + Math.min(aiCount, rest.length),
       numHumans: 1 + ready.length,
-      mapW: dims[0], mapH: dims[1], mapType, difficulty: $("sel-difficulty").value });
+      mapW: dims[0], mapH: dims[1], mapType, difficulty: $("sel-difficulty").value,
+      noBarbs: !$("chk-barbs").checked });
     game._viewer = 0;
     NET.hostStart(game);
     $("net-modal").style.display = "none";
@@ -343,11 +345,27 @@ const UI = (() => {
       });
     }
     if (!u.isCivilian) {
+      const up = game.canUpgrade(u);
+      if (u.def.upgrade) {
+        const target = game.resolveUnitFor(game.players[game.viewer], u.def.upgrade);
+        btn(`⬆️ ${UNITS[target].name} (${up ? up.cost : "—"}💰)`, () => {
+          if (game.upgradeUnit(u)) { SFX.play("coin"); selectUnit(u); refreshAll(); }
+        }, !!up && myTurn());
+      }
       btn(u.fortified ? "⛺ Wake" : "🛡️ Fortify", () => {
         u.fortified = !u.fortified;
+        u.healFortify = false;
         if (u.fortified) u.moves = 0;
         selectUnit(u); refreshAll();
       });
+      if (u.hp < 100 && !u.healFortify) {
+        btn("➕ Heal Up", () => {
+          u.fortified = true;
+          u.healFortify = true;
+          u.moves = 0;
+          cycleNextUnit(); refreshAll();
+        });
+      }
     }
     btn("⏭️ Skip", () => { u.moves = 0; cycleNextUnit(); refreshAll(); });
     btn("❌ Disband", () => { game.removeUnit(u); selectUnit(null); refreshAll(); });
@@ -395,6 +413,11 @@ const UI = (() => {
         ? (cur.kind === "unit" ? UNITS[cur.key].icon + " " + UNITS[cur.key].name : BUILDINGS[cur.key].icon + " " + BUILDINGS[cur.key].name) +
           ` (${city.prodStored}/${cur.kind === "unit" ? UNITS[cur.key].cost : BUILDINGS[cur.key].cost})`
         : "—"}</b></div>`;
+      if (city.queue.length) {
+        html += `<div class="prod-current">Queue: ${city.queue.map((q, i) =>
+          `${q.kind === "unit" ? UNITS[q.key].icon : BUILDINGS[q.key].icon}
+           <a href="#" onclick="UI.unqueue(${city.id},${i});return false" title="remove">✕</a>`).join(" → ")}</div>`;
+      }
       html += `<div class="prod-list">`;
       for (const o of opts) {
         const turns = Math.max(1, Math.ceil((o.cost - (cur && cur.key === o.key ? city.prodStored : 0)) / Math.max(1, y.prod)));
@@ -403,7 +426,7 @@ const UI = (() => {
         html += `<div class="prod-item ${o.wonder ? "wonder" : ""}">
           <span>${o.icon} ${o.name}</span>
           <span class="dim">${o.cost}⚙️ ~${turns}t</span>
-          <button onclick="UI.setProduction(${city.id},'${o.kind}','${o.key}')">Build</button>
+          <button onclick="UI.setProduction(${city.id},'${o.kind}','${o.key}')">${cur ? "Queue" : "Build"}</button>
           <button ${afford ? "" : "disabled"} onclick="UI.buyItem(${city.id},'${o.kind}','${o.key}')">💰${price}</button>
         </div>`;
       }
@@ -416,10 +439,24 @@ const UI = (() => {
     if (!myTurn()) return;
     const city = game.cities.find(c => c.id === cityId);
     if (!city) return;
-    city.producing = { kind, key };
+    if (city.producing && city.producing.key !== key) {
+      if (city.queue.length < 6 && !city.queue.some(q => q.key === key)) {
+        city.queue.push({ kind, key });
+      }
+    } else {
+      city.producing = { kind, key };
+    }
     SFX.play("click");
     showCityPanel(city);
     refreshAll();
+  }
+
+  function unqueue(cityId, i) {
+    if (!myTurn()) return;
+    const city = game.cities.find(c => c.id === cityId);
+    if (!city) return;
+    city.queue.splice(i, 1);
+    showCityPanel(city);
   }
 
   function buyItem(cityId, kind, key) {
@@ -735,6 +772,16 @@ const UI = (() => {
     [/gifts you/, "coin"], [/grew to/, "grow"], [/finished/, "build"],
   ];
 
+  function showLogModal() {
+    const p = game.players[game.viewer];
+    $("log-modal").style.display = "flex";
+    const forMe = (n) => n.p === undefined || n.p === -1 || n.p === game.viewer;
+    const mine = game.notifications.filter(forMe).slice(-100).reverse();
+    $("log-body").innerHTML = mine.map(n =>
+      `<div class="notif" style="pointer-events:auto"><span class="dim">T${n.turn}</span> ${n.msg}</div>`).join("") ||
+      `<div class="dim">Nothing has happened yet.</div>`;
+  }
+
   function refreshNotifications() {
     const list = $("notif-list");
     const all = game.notifications;
@@ -973,6 +1020,7 @@ const UI = (() => {
         $("religion-modal").style.display = "none";
         $("founding-modal").style.display = "none";
         $("spy-modal").style.display = "none";
+        $("log-modal").style.display = "none";
         closeCity();
         selectUnit(null);
       } else if (e.key === "t") showTechScreen();
@@ -988,6 +1036,7 @@ const UI = (() => {
     $("btn-religion").onclick = showReligionScreen;
     $("stat-faith").onclick = showReligionScreen;
     $("btn-spies").onclick = showSpyScreen;
+    $("notif-list").onclick = showLogModal;
     $("btn-mute").onclick = () => {
       $("btn-mute").textContent = SFX.toggleMute() ? "🔇" : "🔊";
     };
@@ -1034,6 +1083,19 @@ const UI = (() => {
     if (!t || !game.players[game.viewer].visible[game.map.idx(c, r)]) { tip.style.display = "none"; return; }
     const y = game.tileYield(t);
     let html = `<b>${TERRAIN[t.terrain].name}</b>${t.feature ? " / " + FEATURE[t.feature].name : ""}`;
+    if (t.ruin) html += ` · 🏺 Ancient Ruins`;
+    if (game.campAt && game.campAt(c, r)) html += ` · 🏕️ Barbarian Camp`;
+    // combat forecast when hovering a legal target of the selected unit
+    const sel0 = rend.selected;
+    if (sel0 && sel0.owner === game.viewer && rend.attackable.some(([ac, ar]) => ac === c && ar === r)) {
+      const f = game.predictAttack(sel0, c, r);
+      if (f) {
+        const kills = f.out[0] >= f.targetHp;
+        html += `<br><b class="war">⚔ vs ${f.target}</b> (${f.targetHp} HP)<br>` +
+          `You deal <b>${f.out[0]}–${f.out[1]}</b>${kills ? " — <b class='alert'>lethal!</b>" : ""}` +
+          (f.back ? `<br>You take <b>${f.back[0]}–${f.back[1]}</b>` : "<br><span class='dim'>no counterattack</span>");
+      }
+    }
     if (t.resource) html += ` · ${RESOURCE[t.resource].icon} ${RESOURCE[t.resource].name}${RESOURCE[t.resource].luxury ? " (luxury)" : ""}`;
     if (t.improvement) html += ` · ${IMPROVEMENT[t.improvement].icon} ${IMPROVEMENT[t.improvement].name}`;
     html += `<br><span class="dim">🍞${y.food} ⚙️${y.prod} 💰${y.gold}</span>`;
@@ -1096,6 +1158,6 @@ const UI = (() => {
 
   return { init, setProduction, buyItem, closeCity, pickTech, diploAction, newGame,
     showFoundingModal, confirmFounding, buyMissionary, gift, assignSpy, beginHotseatTurn,
-    hostAddSlot, hostConnect, hostStartOnline, joinCreateReply,
+    hostAddSlot, hostConnect, hostStartOnline, joinCreateReply, unqueue,
     get game() { return game; }, get renderer() { return rend; } };
 })();

@@ -84,21 +84,21 @@ const UNITS = {
   SETTLER:    { name: "Settler",       icon: "⛺", cost: 90,  cs: 0,  moves: 2, civilian: true },
   WORKER:     { name: "Worker",        icon: "🔨", cost: 60,  cs: 0,  moves: 2, civilian: true, worker: true },
   SCOUT:      { name: "Scout",         icon: "👁️", cost: 30,  cs: 5,  moves: 3, sight: 3 },
-  WARRIOR:    { name: "Warrior",       icon: "🪓", cost: 40,  cs: 8,  moves: 2 },
-  ARCHER:     { name: "Archer",        icon: "🏹", cost: 45,  cs: 5,  rs: 8,  range: 2, moves: 2, tech: "ARCHERY" },
-  SPEARMAN:   { name: "Spearman",      icon: "🔱", cost: 55,  cs: 11, moves: 2, tech: "BRONZE_WORKING" },
-  HORSEMAN:   { name: "Horseman",      icon: "🐎", cost: 70,  cs: 12, moves: 4, tech: "HORSEBACK_RIDING", needs: "HORSES" },
-  SWORDSMAN:  { name: "Swordsman",     icon: "🗡️", cost: 75,  cs: 14, moves: 2, tech: "IRON_WORKING", needs: "IRON" },
-  CATAPULT:   { name: "Catapult",      icon: "🪨", cost: 75,  cs: 4,  rs: 14, range: 2, moves: 2, tech: "MATHEMATICS", siege: true },
-  COMPOSITE:  { name: "Composite Bowman", icon: "🏹", cost: 80, cs: 7, rs: 11, range: 2, moves: 2, tech: "CONSTRUCTION" },
+  WARRIOR:    { name: "Warrior",       icon: "🪓", cost: 40,  cs: 8,  moves: 2, upgrade: "SWORDSMAN", },
+  ARCHER:     { name: "Archer",        icon: "🏹", cost: 45,  cs: 5,  rs: 8,  range: 2, moves: 2, tech: "ARCHERY", upgrade: "COMPOSITE", },
+  SPEARMAN:   { name: "Spearman",      icon: "🔱", cost: 55,  cs: 11, moves: 2, tech: "BRONZE_WORKING", upgrade: "PIKEMAN", },
+  HORSEMAN:   { name: "Horseman",      icon: "🐎", cost: 70,  cs: 12, moves: 4, tech: "HORSEBACK_RIDING", needs: "HORSES", upgrade: "KNIGHT", },
+  SWORDSMAN:  { name: "Swordsman",     icon: "🗡️", cost: 75,  cs: 14, moves: 2, tech: "IRON_WORKING", needs: "IRON", upgrade: "LONGSWORD", },
+  CATAPULT:   { name: "Catapult",      icon: "🪨", cost: 75,  cs: 4,  rs: 14, range: 2, moves: 2, tech: "MATHEMATICS", siege: true, upgrade: "TREBUCHET", },
+  COMPOSITE:  { name: "Composite Bowman", icon: "🏹", cost: 80, cs: 7, rs: 11, range: 2, moves: 2, tech: "CONSTRUCTION", upgrade: "CROSSBOW", },
   PIKEMAN:    { name: "Pikeman",       icon: "🛡️", cost: 90,  cs: 16, moves: 2, tech: "CIVIL_SERVICE" },
   KNIGHT:     { name: "Knight",        icon: "🐴", cost: 120, cs: 20, moves: 4, tech: "CHIVALRY", needs: "HORSES" },
   CROSSBOW:   { name: "Crossbowman",   icon: "🎯", cost: 120, cs: 13, rs: 18, range: 2, moves: 2, tech: "MACHINERY" },
-  LONGSWORD:  { name: "Longswordsman", icon: "⚔️", cost: 130, cs: 21, moves: 2, tech: "STEEL", needs: "IRON" },
+  LONGSWORD:  { name: "Longswordsman", icon: "⚔️", cost: 130, cs: 21, moves: 2, tech: "STEEL", needs: "IRON", upgrade: "MUSKETMAN", },
   TREBUCHET:  { name: "Trebuchet",     icon: "🏰", cost: 130, cs: 6,  rs: 20, range: 2, moves: 2, tech: "PHYSICS", siege: true },
   MUSKETMAN:  { name: "Musketman",     icon: "🔫", cost: 160, cs: 24, moves: 2, tech: "GUNPOWDER" },
   // ---- Naval units (built in coastal cities only) ----
-  GALLEY:     { name: "Galley",        icon: "⛵", cost: 60,  cs: 10, moves: 4, tech: "SAILING", naval: true, coastOnly: true },
+  GALLEY:     { name: "Galley",        icon: "⛵", cost: 60,  cs: 10, moves: 4, tech: "SAILING", naval: true, coastOnly: true, upgrade: "GALLEASS", },
   GALLEASS:   { name: "War Galleass",  icon: "🚢", cost: 110, cs: 12, rs: 17, range: 2, moves: 5, tech: "COMPASS", naval: true },
   // ---- Religious units (purchased with faith, not production) ----
   MISSIONARY: { name: "Missionary",    icon: "🙏", cost: 0, faithCost: 120, cs: 0, moves: 4, civilian: true, missionary: true, charges: 2 },
@@ -301,6 +301,21 @@ for (const [id, m] of Object.entries(MINORS)) {
     trait: MINOR_TYPES[m.type].name + " City-State", traitDesc: MINOR_TYPES[m.type].desc,
     cities: m.cities, minor: true, minorType: m.type };
 }
+
+// The barbarian horde — hostile to everyone, wins nothing
+CIVS.BARBARIANS = { name: "Barbarians", leader: "—", adj: "Barbarian",
+  color: "#3d3d3d", color2: "#b03a2e", cities: [], barb: true,
+  trait: "", traitDesc: "" };
+
+const BARB = {
+  campEvery: 60,        // 1 camp per ~60 land tiles
+  spawnEvery: 9,        // turns between spawns per camp
+  maxPerCamp: 2,        // unit cap = camps * maxPerCamp + 2
+  clearReward: 40,      // gold for burning a camp
+  newCampEvery: 22,     // a new camp may appear this often (up to the initial count)
+};
+
+const RUIN_REWARDS = ["gold", "faith", "science", "xp", "map"];
 
 const INFLUENCE_FRIEND = 30;
 const INFLUENCE_ALLY = 60;

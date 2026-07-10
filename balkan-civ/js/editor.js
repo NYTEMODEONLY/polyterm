@@ -29,6 +29,7 @@ const EDITOR = (() => {
       activeHuman: 0, viewer: 0,
       cities: [], units: [], effects: [], anims: [], religions: [],
       isEmbarked: () => false,
+      campAt: () => null,
     };
   }
 
