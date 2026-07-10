@@ -31,6 +31,8 @@ const UI = (() => {
       if (id === chosen) card.classList.add("sel");
       wrap.appendChild(card);
     }
+    $("opt-custom").disabled = !localStorage.getItem("balkan-civ-custommap");
+    $("btn-editor").onclick = () => { $("start-screen").style.display = "none"; EDITOR.open(); };
     const saved = localStorage.getItem("balkan-civ-save");
     $("btn-continue").style.display = saved ? "inline-block" : "none";
     $("btn-continue").onclick = () => {
@@ -47,8 +49,15 @@ const UI = (() => {
       const numOpp = parseInt($("sel-opponents").value, 10);
       const size = $("sel-mapsize").value;
       const dims = { small: [36, 28], standard: [44, 34], large: [54, 42] }[size];
+      const numHumans = parseInt($("sel-humans").value, 10);
+      const mapType = $("sel-maptype").value;
+      let customMap = null;
+      if (mapType === "custom") {
+        try { customMap = JSON.parse(localStorage.getItem("balkan-civ-custommap")); } catch (e) { /* fall through */ }
+        if (!customMap) { alert("No custom map saved — open the Map Editor first."); return; }
+      }
       game = new Game({ playerCiv: chosen, numOpponents: numOpp, mapW: dims[0], mapH: dims[1],
-        mapType: $("sel-maptype").value, difficulty: $("sel-difficulty").value });
+        mapType, customMap, numHumans, difficulty: $("sel-difficulty").value });
       startPlaying();
     };
     $("start-screen").style.display = "flex";
@@ -60,8 +69,10 @@ const UI = (() => {
     $("game-ui").style.display = "block";
     notifSeen = game.notifications.length; // don't replay loaded history
     $("btn-mute").textContent = SFX.muted ? "🔇" : "🔊";
+    $("btn-music").textContent = SFX.musicOn ? "🎵" : "♪";
+    SFX.startMusic();
     resize();
-    const firstUnit = game.units.find(u => u.owner === 0);
+    const firstUnit = game.units.find(u => u.owner === game.activeHuman);
     if (firstUnit) rend.centerOn(game, firstUnit.c, firstUnit.r);
     selectUnit(firstUnit || null);
     refreshAll();
@@ -86,7 +97,7 @@ const UI = (() => {
 
   function computeAttackable(u) {
     if (u.isCivilian || u.attacked || u.moves <= 0 || game.isEmbarked(u)) return [];
-    const p = game.players[0];
+    const p = game.players[game.activeHuman];
     const range = u.isRanged ? u.def.range : 1;
     const out = [];
     for (const [c, r] of HEX.ring(u.c, u.r, range)) {
@@ -155,7 +166,7 @@ const UI = (() => {
           selectUnit(game.units.includes(u) ? u : null);
           refreshAll();
         }
-      }, !!target && u.moves > 0 && game.players[0].religionId !== null);
+      }, !!target && u.moves > 0 && game.players[game.activeHuman].religionId !== null);
     }
     if (u.def.worker) {
       if (u.building) {
@@ -190,7 +201,7 @@ const UI = (() => {
   }
 
   function cycleNextUnit() {
-    const candidates = game.units.filter(u => u.owner === 0 && u.moves > 0 && !u.fortified &&
+    const candidates = game.units.filter(u => u.owner === game.activeHuman && u.moves > 0 && !u.fortified &&
       !u.building && !u.autoExplore && !(u.path && u.path.length));
     if (!candidates.length) { selectUnit(null); return; }
     const cur = rend.selected ? candidates.indexOf(rend.selected) : -1;
@@ -204,7 +215,7 @@ const UI = (() => {
     const panel = $("city-panel");
     panel.style.display = "block";
     const y = game.cityYields(city);
-    const isMine = city.owner === 0;
+    const isMine = city.owner === game.activeHuman;
     let html = `
       <div class="panel-head">
         <b>${city.name}</b> ${city.isCapital ? "★" : ""} <span class="dim">(${CIVS[game.players[city.owner].civId].name})</span>
@@ -219,7 +230,7 @@ const UI = (() => {
       html += `<div class="city-buildings">${city.buildings.map(b => BUILDINGS[b].icon + " " + BUILDINGS[b].name).join(" · ")}</div>`;
     }
     if (isMine) {
-      const p0 = game.players[0];
+      const p0 = game.players[game.activeHuman];
       if (p0.religionId !== null) {
         const cost = UNITS.MISSIONARY.faithCost;
         html += `<div class="prod-current"><button ${p0.faith >= cost ? "" : "disabled"}
@@ -235,7 +246,7 @@ const UI = (() => {
       for (const o of opts) {
         const turns = Math.max(1, Math.ceil((o.cost - (cur && cur.key === o.key ? city.prodStored : 0)) / Math.max(1, y.prod)));
         const price = game.buyCost(o.cost);
-        const afford = game.players[0].gold >= price;
+        const afford = game.players[game.activeHuman].gold >= price;
         html += `<div class="prod-item ${o.wonder ? "wonder" : ""}">
           <span>${o.icon} ${o.name}</span>
           <span class="dim">${o.cost}⚙️ ~${turns}t</span>
@@ -276,7 +287,7 @@ const UI = (() => {
 
   // ---------------- tech screen ----------------
   function showTechScreen() {
-    const p = game.players[0];
+    const p = game.players[game.activeHuman];
     const modal = $("tech-modal");
     modal.style.display = "flex";
     const body = $("tech-body");
@@ -308,7 +319,7 @@ const UI = (() => {
 
   function pickTech(key) {
     SFX.play("click");
-    game.players[0].researching = key;
+    game.players[game.activeHuman].researching = key;
     $("tech-modal").style.display = "none";
     refreshAll();
   }
@@ -317,7 +328,7 @@ const UI = (() => {
   let foundingPromptTurn = -1;
 
   function showReligionScreen() {
-    const p = game.players[0];
+    const p = game.players[game.activeHuman];
     $("religion-modal").style.display = "flex";
     const body = $("religion-body");
     let html = `<div class="diplo-row">Your faith: <b>☦️ ${Math.floor(p.faith)}</b>`;
@@ -326,7 +337,7 @@ const UI = (() => {
         html += ` <span class="dim">— all ${MAX_RELIGIONS} religions have been founded.</span>`;
       } else {
         html += ` <span class="dim">— found a religion at ${RELIGION_FOUND_COST(game.religions.length)} faith.</span>`;
-        if (game.canFoundReligion(0)) html += ` <button onclick="UI.showFoundingModal()">🕊️ Found Religion</button>`;
+        if (game.canFoundReligion(game.activeHuman)) html += ` <button onclick="UI.showFoundingModal()">🕊️ Found Religion</button>`;
       }
     } else {
       const r = game.religions[p.religionId];
@@ -348,8 +359,8 @@ const UI = (() => {
   }
 
   function showFoundingModal() {
-    const p = game.players[0];
-    if (!game.canFoundReligion(0)) return;
+    const p = game.players[game.activeHuman];
+    if (!game.canFoundReligion(game.activeHuman)) return;
     $("religion-modal").style.display = "none";
     $("founding-modal").style.display = "flex";
     const names = game.availableReligionNames();
@@ -371,7 +382,7 @@ const UI = (() => {
     const name = $("sel-religion-name").value;
     const entry = RELIGION_NAMES.find(r => r.name === name);
     const belief = document.querySelector("input[name=belief]:checked").value;
-    if (game.foundReligion(0, entry.name, entry.icon, belief)) {
+    if (game.foundReligion(game.activeHuman, entry.name, entry.icon, belief)) {
       $("founding-modal").style.display = "none";
       refreshAll();
     }
@@ -384,7 +395,7 @@ const UI = (() => {
 
   // ---------------- espionage ----------------
   function showSpyScreen() {
-    const p = game.players[0];
+    const p = game.players[game.activeHuman];
     $("spy-modal").style.display = "flex";
     const body = $("spy-body");
     if (!p.spies.length) {
@@ -405,7 +416,7 @@ const UI = (() => {
       const city = spy.cityId !== null ? game.cities.find(c => c.id === spy.cityId) : null;
       if (!city) {
         html += `<span class="alert">idle</span>`;
-      } else if (city.owner === 0) {
+      } else if (city.owner === game.activeHuman) {
         html += `guarding <b>${city.name}</b>`;
       } else if (game.players[city.owner].isMinor) {
         html += `rigging elections in <b>${city.name}</b>`;
@@ -414,11 +425,11 @@ const UI = (() => {
       }
       // assignment dropdown
       let opts = `<option value="">— reassign —</option>`;
-      const mine = game.cities.filter(c => c.owner === 0);
+      const mine = game.cities.filter(c => c.owner === game.activeHuman);
       if (mine.length) opts += `<optgroup label="Defend">` +
         mine.map(c => `<option value="${c.id}">${c.name}</option>`).join("") + `</optgroup>`;
       for (const o of game.players) {
-        if (o.index === 0 || !o.alive || !p.met.has(o.index)) continue;
+        if (o.index === game.activeHuman || !o.alive || !p.met.has(o.index)) continue;
         const theirs = game.cities.filter(c => c.owner === o.index);
         if (!theirs.length) continue;
         const label = o.isMinor ? `Rig — ${o.civ.name}` : `Steal — ${o.civ.name}`;
@@ -432,20 +443,20 @@ const UI = (() => {
 
   function assignSpy(spyId, cityIdStr) {
     if (cityIdStr === "") return;
-    game.assignSpy(0, spyId, parseInt(cityIdStr, 10));
+    game.assignSpy(game.activeHuman, spyId, parseInt(cityIdStr, 10));
     SFX.play("spy");
     showSpyScreen();
   }
 
   // ---------------- diplomacy screen ----------------
   function showDiploScreen() {
-    const p = game.players[0];
+    const p = game.players[game.activeHuman];
     const modal = $("diplo-modal");
     modal.style.display = "flex";
     const body = $("diplo-body");
     let html = "";
     for (const p2 of game.players) {
-      if (p2.index === 0 || p2.isMinor) continue;
+      if (p2.index === game.activeHuman || p2.isMinor) continue;
       const met = p.met.has(p2.index);
       const civ = p2.civ;
       html += `<div class="diplo-row" style="border-left:6px solid ${met ? civ.color : "#555"}">
@@ -470,7 +481,7 @@ const UI = (() => {
             <span class='dead'>☠️ destroyed</span></div>`;
           continue;
         }
-        const status = game.minorStatus(0, m.index);
+        const status = game.minorStatus(game.activeHuman, m.index);
         const inf = Math.floor(p.influence[m.index] || 0);
         const statusTxt = { war: "<b class='war'>AT WAR</b>", ally: "<b style='color:#2ecc71'>ALLY</b>",
           friend: "<b style='color:#f1c40f'>Friend</b>", neutral: "neutral" }[status];
@@ -486,12 +497,12 @@ const UI = (() => {
         </div>`;
       }
     }
-    html += `<div class="diplo-row"><b>Your score:</b> ${game.score(0)} · Military ${Math.floor(game.militaryPower(0))}</div>`;
+    html += `<div class="diplo-row"><b>Your score:</b> ${game.score(game.activeHuman)} · Military ${Math.floor(game.militaryPower(game.activeHuman))}</div>`;
     body.innerHTML = html;
   }
 
   function gift(minorIdx, amount) {
-    if (game.giftInfluence(0, minorIdx, amount)) {
+    if (game.giftInfluence(game.activeHuman, minorIdx, amount)) {
       SFX.play("coin");
       showDiploScreen();
       refreshAll();
@@ -499,11 +510,11 @@ const UI = (() => {
   }
 
   function diploAction(idx) {
-    const p = game.players[0];
+    const p = game.players[game.activeHuman];
     if (p.atWarWith.has(idx)) {
       // AI accepts peace if weary or losing
       const weary = (game.players[idx].warWeariness[0] || 0) > 12;
-      const losing = game.militaryPower(idx) < game.militaryPower(0) * 0.8;
+      const losing = game.militaryPower(idx) < game.militaryPower(game.activeHuman) * 0.8;
       if (weary || losing) game.makePeace(0, idx);
       else game.notify(`${game.players[idx].civ.name} refuses to make peace!`);
     } else {
@@ -515,15 +526,15 @@ const UI = (() => {
 
   // ---------------- top bar / notifications ----------------
   function refreshTopBar() {
-    const p = game.players[0];
+    const p = game.players[game.activeHuman];
     let gold = 0, sci = 0, faith = 0;
     for (const c of game.cities) {
       if (c.owner !== 0) continue;
       const y = game.cityYields(c);
       gold += y.gold; sci += y.sci; faith += y.faith;
     }
-    gold -= Math.max(0, game.units.filter(u => u.owner === 0).length - 4);
-    gold += game.minorBonuses(0).gold;
+    gold -= Math.max(0, game.units.filter(u => u.owner === game.activeHuman).length - 4);
+    gold += game.minorBonuses(game.activeHuman).gold;
     if (p.religionId !== null && game.religions[p.religionId].belief === "TITHE") {
       gold += game.religionFollowers(p.religionId);
     }
@@ -535,10 +546,10 @@ const UI = (() => {
       ? `🔬 ${tech.name} ${Math.floor(p.scienceStored)}/${tech.cost} (+${sci})`
       : `🔬 <b class="alert">choose research!</b> (+${sci})`;
     // happiness + golden age
-    const hap = game.happinessOf(0);
-    const lux = game.luxuryTypesOf(0);
-    const nCities = game.cities.filter(c => c.owner === 0).length;
-    const popTotal = game.cities.filter(c => c.owner === 0).reduce((a, c) => a + c.pop, 0);
+    const hap = game.happinessOf(game.activeHuman);
+    const lux = game.luxuryTypesOf(game.activeHuman);
+    const nCities = game.cities.filter(c => c.owner === game.activeHuman).length;
+    const popTotal = game.cities.filter(c => c.owner === game.activeHuman).reduce((a, c) => a + c.pop, 0);
     const happyEl = $("stat-happy");
     if (p.goldenAgeTurns > 0) {
       happyEl.innerHTML = `✨ <b style="color:#f1c40f">GOLDEN AGE</b> (${p.goldenAgeTurns})`;
@@ -549,10 +560,10 @@ const UI = (() => {
         `\nGolden Age: ${Math.floor(p.gaMeter)}/${GOLDEN_AGE.threshold(p.gaCount)} (surplus happiness fills the meter)`;
     }
     const relIcon = p.religionId !== null ? game.religions[p.religionId].icon : "☦️";
-    $("stat-faith").innerHTML = game.canFoundReligion(0)
+    $("stat-faith").innerHTML = game.canFoundReligion(game.activeHuman)
       ? `${relIcon} <b class="alert">found a religion!</b>`
       : `${relIcon} ${Math.floor(p.faith)} (+${faith})`;
-    $("stat-score").textContent = `🏆 ${game.score(0)}`;
+    $("stat-score").textContent = `🏆 ${game.score(game.activeHuman)}`;
   }
 
   let notifSeen = 0;
@@ -567,12 +578,14 @@ const UI = (() => {
   function refreshNotifications() {
     const list = $("notif-list");
     const all = game.notifications;
+    const forMe = (n) => n.p === undefined || n.p === -1 || n.p === game.activeHuman;
     for (let i = notifSeen; i < all.length; i++) {
+      if (!forMe(all[i])) continue;
       const hit = NOTIF_SOUNDS.find(([re]) => re.test(all[i].msg));
       if (hit) { SFX.play(hit[1]); break; } // at most one sound per refresh
     }
     notifSeen = all.length;
-    const recent = all.slice(-6);
+    const recent = all.filter(forMe).slice(-6);
     list.innerHTML = recent.map(n => `<div class="notif"><span class="dim">T${n.turn}</span> ${n.msg}</div>`).join("");
     list.scrollTop = list.scrollHeight;
   }
@@ -592,11 +605,11 @@ const UI = (() => {
 
   // ---------------- end turn ----------------
   function endTurn() {
-    const p = game.players[0];
+    const p = game.players[game.activeHuman];
     if (!p.researching && p.availableTechs().length) { showTechScreen(); return; }
-    const idle = game.units.find(u => u.owner === 0 && u.moves > 0 && !u.fortified && !u.attacked &&
+    const idle = game.units.find(u => u.owner === game.activeHuman && u.moves > 0 && !u.fortified && !u.attacked &&
       !u.building && !u.autoExplore && !(u.path && u.path.length));
-    const cityIdle = game.cities.find(c => c.owner === 0 && !c.producing);
+    const cityIdle = game.cities.find(c => c.owner === game.activeHuman && !c.producing);
     if (cityIdle) { selectCity(cityIdle); rend.centerOn(game, cityIdle.c, cityIdle.r); return; }
     if (idle && !endTurn.skipIdle) {
       selectUnit(idle);
@@ -608,21 +621,58 @@ const UI = (() => {
     endTurn.skipIdle = false;
     $("btn-endturn").textContent = "End Turn ⏵";
     SFX.play("turn");
+    const before = game.activeHuman;
     game.endTurn();
     try { localStorage.setItem("balkan-civ-save", game.serialize()); } catch (e) { /* storage full */ }
     if (rend.selected && !game.units.includes(rend.selected)) rend.selected = null;
+    selectUnit(null);
+    closeCity();
+    if (game.humans > 1 && !game.over) {
+      showHandoff();
+      return;
+    }
     refreshAll();
     if (!game.over) cycleNextUnit();
-    if (game.canFoundReligion(0) && foundingPromptTurn !== game.turn) {
-      foundingPromptTurn = game.turn;
+    maybePromptFounding();
+  }
+
+  function maybePromptFounding() {
+    if (game.canFoundReligion(game.activeHuman) &&
+        foundingPromptTurn !== game.turn * 10 + game.activeHuman) {
+      foundingPromptTurn = game.turn * 10 + game.activeHuman;
       showFoundingModal();
     }
+  }
+
+  // hotseat: blackout screen between human turns
+  function showHandoff() {
+    const p = game.players[game.activeHuman];
+    $("handoff-modal").style.display = "flex";
+    $("handoff-body").innerHTML = `
+      <h2>🔄 Pass the device</h2>
+      <p style="font-size:18px;margin:14px 0"><b style="color:${p.civ.color}">Player ${game.activeHuman + 1}</b>
+      — ${p.civ.name} (${p.civ.leader})</p>
+      <p class="dim">Turn ${game.turn}. No peeking at the other empires!</p>
+      <button onclick="UI.beginHotseatTurn()" style="font-size:16px;padding:10px 28px;margin-top:10px">⚔ Begin Turn</button>`;
+  }
+
+  function beginHotseatTurn() {
+    $("handoff-modal").style.display = "none";
+    notifSeen = 0; // rescan visible notifications for this player (no sounds replayed: they're deduped by break)
+    notifSeen = game.notifications.length - Math.min(game.notifications.length, 30);
+    const p = game.players[game.activeHuman];
+    const home = game.cities.find(c => c.owner === game.activeHuman) ||
+                 game.units.find(u => u.owner === game.activeHuman);
+    if (home) rend.centerOn(game, home.c, home.r);
+    refreshAll();
+    cycleNextUnit();
+    maybePromptFounding();
   }
 
   function showVictory() {
     const modal = $("victory-modal");
     modal.style.display = "flex";
-    const won = game.winner === 0;
+    const won = game.players[game.winner].isHuman;
     SFX.play(won ? "golden" : "defeat");
     const civ = CIVS[game.players[game.winner].civId];
     $("victory-body").innerHTML = `
@@ -644,7 +694,7 @@ const UI = (() => {
     const [c, r] = rend.screenToHex(sx, sy);
     const t = game.tile(c, r);
     if (!t) return;
-    const p = game.players[0];
+    const p = game.players[game.activeHuman];
     if (!p.visible[game.map.idx(c, r)]) { selectUnit(null); return; }
 
     const sel = rend.selected;
@@ -657,7 +707,7 @@ const UI = (() => {
       return;
     }
     // move?
-    if (sel && sel.owner === 0 && (rightClick || rend.reachable.some(([mc, mr]) => mc === c && mr === r) ||
+    if (sel && sel.owner === game.activeHuman && (rightClick || rend.reachable.some(([mc, mr]) => mc === c && mr === r) ||
         (!game.combatUnitAt(c, r) && !t.city && !game.unitsAt(c, r).length))) {
       const isOwnTile = sel.c === c && sel.r === r;
       if (!isOwnTile && game.unitPassable(sel, t)) {
@@ -669,9 +719,9 @@ const UI = (() => {
       }
     }
     // select city / unit
-    if (t.city && t.city.owner === 0) { selectCity(t.city); return; }
-    if (t.city && t.city.owner !== 0) { showCityPanel(t.city); rend.selected = null; rend.dirty = true; return; }
-    const mine = game.unitsAt(c, r).filter(u => u.owner === 0);
+    if (t.city && t.city.owner === game.activeHuman) { selectCity(t.city); return; }
+    if (t.city && t.city.owner !== game.activeHuman) { showCityPanel(t.city); rend.selected = null; rend.dirty = true; return; }
+    const mine = game.unitsAt(c, r).filter(u => u.owner === game.activeHuman);
     if (mine.length) {
       // toggle through stacked units
       const cur = mine.indexOf(rend.selected);
@@ -760,6 +810,9 @@ const UI = (() => {
     $("btn-mute").onclick = () => {
       $("btn-mute").textContent = SFX.toggleMute() ? "🔇" : "🔊";
     };
+    $("btn-music").onclick = () => {
+      $("btn-music").textContent = SFX.toggleMusic() ? "🎵" : "♪";
+    };
     $("btn-menu").onclick = () => { if (confirm("Return to the main menu? (progress is auto-saved)")) showStartScreen(); };
     document.querySelectorAll(".modal").forEach(m => {
       m.addEventListener("mousedown", (e) => { if (e.target === m) m.style.display = "none"; });
@@ -780,9 +833,9 @@ const UI = (() => {
     rend.hoverTile = game.tile(c, r) ? [c, r] : null;
     rend.previewPath = null;
     const sel = rend.selected;
-    if (sel && sel.owner === 0 && rend.hoverTile && !(sel.c === c && sel.r === r)) {
+    if (sel && sel.owner === game.activeHuman && rend.hoverTile && !(sel.c === c && sel.r === r)) {
       const t = game.tile(c, r);
-      if (game.players[0].visible[game.map.idx(c, r)] && game.unitPassable(sel, t)) {
+      if (game.players[game.activeHuman].visible[game.map.idx(c, r)] && game.unitPassable(sel, t)) {
         rend.previewPath = game.findPath(sel, c, r);
       }
     }
@@ -797,14 +850,14 @@ const UI = (() => {
     if (e.clientX < rect.left || e.clientY < rect.top || e.clientY > rect.bottom) { tip.style.display = "none"; return; }
     const [c, r] = rend.screenToHex(e.clientX - rect.left, e.clientY - rect.top);
     const t = game.tile(c, r);
-    if (!t || !game.players[0].visible[game.map.idx(c, r)]) { tip.style.display = "none"; return; }
+    if (!t || !game.players[game.activeHuman].visible[game.map.idx(c, r)]) { tip.style.display = "none"; return; }
     const y = game.tileYield(t);
     let html = `<b>${TERRAIN[t.terrain].name}</b>${t.feature ? " / " + FEATURE[t.feature].name : ""}`;
     if (t.resource) html += ` · ${RESOURCE[t.resource].icon} ${RESOURCE[t.resource].name}${RESOURCE[t.resource].luxury ? " (luxury)" : ""}`;
     if (t.improvement) html += ` · ${IMPROVEMENT[t.improvement].icon} ${IMPROVEMENT[t.improvement].name}`;
     html += `<br><span class="dim">🍞${y.food} ⚙️${y.prod} 💰${y.gold}</span>`;
     if (t.owner !== -1) html += `<br><span style="color:${CIVS[game.players[t.owner].civId].color}">${CIVS[game.players[t.owner].civId].name} territory</span>`;
-    const visLevel = game.players[0].visible[game.map.idx(c, r)];
+    const visLevel = game.players[game.activeHuman].visible[game.map.idx(c, r)];
     if (visLevel === 2) {
       for (const u of game.unitsAt(c, r)) {
         html += `<br>${u.def.icon} ${u.def.name}${u.level ? " " + "⭐".repeat(u.level) : ""} (${CIVS[game.players[u.owner].civId].name}) HP ${u.hp}`;
@@ -832,7 +885,8 @@ const UI = (() => {
     showStartScreen();
     (function loop() {
       if (game && $("start-screen").style.display === "none" &&
-          (rend.dirty || game.effects.length)) {
+          $("editor-screen").style.display !== "flex" &&
+          (rend.dirty || game.effects.length || game.anims.length)) {
         rend.draw(game);
       }
       requestAnimationFrame(loop);
@@ -840,6 +894,6 @@ const UI = (() => {
   }
 
   return { init, setProduction, buyItem, closeCity, pickTech, diploAction, newGame,
-    showFoundingModal, confirmFounding, buyMissionary, gift, assignSpy,
+    showFoundingModal, confirmFounding, buyMissionary, gift, assignSpy, beginHotseatTurn,
     get game() { return game; }, get renderer() { return rend; } };
 })();

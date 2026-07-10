@@ -83,6 +83,21 @@ button:disabled { opacity: 0.4; cursor: default; }
   border: 1px solid #8a7648; border-radius: 4px; padding: 7px 10px; font-size: 12.5px;
   pointer-events: none; max-width: 220px; }
 
+/* ---------- map editor ---------- */
+#editor-screen { position: fixed; inset: 0; z-index: 45; display: none; flex-direction: column;
+  background: #0d1b2a; }
+#editor-toolbar { height: 60px; display: flex; align-items: center; gap: 8px; padding: 0 12px;
+  background: linear-gradient(#2a2318, #1c1810); border-bottom: 2px solid #8a7648;
+  flex-wrap: wrap; overflow-x: auto; }
+#editor-toolbar .spacer { flex: 1; }
+#editor-palette { display: flex; gap: 4px; flex-wrap: wrap; }
+.pal-btn { padding: 3px 8px; font-size: 12px; }
+.pal-btn.sel { background: #86682a; border-color: #f0d890; }
+#editor-canvas { flex: 1; cursor: crosshair; }
+#editor-minimap-wrap { position: fixed; right: 10px; bottom: 40px; z-index: 46;
+  border: 2px solid #8a7648; border-radius: 4px; background: #0d1b2a; line-height: 0; }
+#editor-hint { position: fixed; left: 10px; bottom: 10px; z-index: 46; }
+
 /* ---------- modals ---------- */
 .modal { position: fixed; inset: 0; z-index: 40; background: rgba(5,8,14,0.7);
   display: none; align-items: center; justify-content: center; }

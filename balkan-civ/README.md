@@ -1,8 +1,9 @@
 # ⚔ Balkan Civilizations
 
-A local, single-player, turn-based 4X strategy game in the spirit of Civilization V,
-set entirely in the Balkans. Runs 100% in your browser — no install, no server, no
-internet connection needed.
+A local, turn-based 4X strategy game in the spirit of Civilization V, set
+entirely in the Balkans — single-player against the AI or **hotseat with
+2–3 human players** on one device. Runs 100% in your browser: no install,
+no server, no internet connection needed.
 
 ![Balkan Civilizations mid-game](screenshot.png)
 
@@ -33,8 +34,12 @@ Game* on the title screen to pick up where you left off.
 
 ## Features
 
-- Procedurally generated hex maps, different every game — choose a rugged
-  **Peninsula** or an island-dotted **Archipelago**
+- Procedurally generated hex maps with smooth coastlines, different every
+  game — choose a rugged **Peninsula**, an island-dotted **Archipelago**,
+  or a **custom map** you painted yourself in the built-in **Map Editor**
+  (terrain, forests, and resources, saved locally)
+- **Hotseat multiplayer**: 2–3 humans share the device — each gets their
+  own fog of war, notifications, and a pass-the-device screen between turns
 - Naval warfare: research Sailing to embark land units onto the coast and
   build Galleys; Compass opens the deep sea and the ranged War Galleass.
   Ships hunt transports, bombard shores, and can capture coastal cities;
@@ -68,8 +73,10 @@ Game* on the title screen to pick up where you left off.
   Station them in rival cities to steal technology (and risk execution),
   in your own cities as counter-intelligence, or in city-states to rig
   elections for influence
-- **Sound**: procedurally synthesized effects (WebAudio, no files) for
-  combat, research, golden ages, spies and more — mute with the 🔊 button
+- **Sound & music**: procedurally synthesized effects (WebAudio, no audio
+  files) for combat, research, golden ages, spies and more, plus an ambient
+  score — a low drone under a wandering melody in the double-harmonic
+  "Balkan" scale. Toggle effects (🔊) and music (🎵) separately
 - Workers and tile improvements: farms, mines, and roads (roads cut movement
   cost to 1 on any terrain)
 - Strategic resources (horses, iron) gating unit types; luxury resources
@@ -80,7 +87,7 @@ Game* on the title screen to pick up where you left off.
 - Diplomacy screen: declare war, propose peace, compare scores
 - Three difficulty levels (Prince / King / Emperor) scaling AI output
 - Hover any hex for a movement path preview with turn count; scouts can
-  **auto-explore**
+  **auto-explore**; units glide between hexes instead of teleporting
 - Victory by **Domination** (control every capital) or **Score** at turn 300
 - Autosave + continue
 
@@ -114,10 +121,11 @@ js/hex.js         hex-grid math (odd-r offset, cube distance, pixel transforms)
 js/mapgen.js      seeded value-noise map generation + start placement
 js/model.js       game engine: cities, units, combat, research, turns, save/load
 js/ai.js          AI: settling, production, research, diplomacy, tactics
-js/render.js      canvas renderer + minimap
+js/render.js      canvas renderer + minimap (terrain shading, animations)
+js/editor.js      map editor
 js/ui.js          panels, modals, input handling
 ```
 
 ## Ideas for future expansion
 
-Hotseat multiplayer, a map editor, unit animations, music.
+Network multiplayer, campaign scenarios, more unit art.

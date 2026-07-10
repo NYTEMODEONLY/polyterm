@@ -92,5 +92,83 @@ const SFX = (() => {
     return muted;
   }
 
-  return { play, toggleMute, get muted() { return muted; } };
+  // ---------- ambient music: slow drone + wandering Hijaz melody ----------
+  let musicOn = true;
+  try { musicOn = localStorage.getItem("balkan-civ-music") !== "0"; } catch (e) { /* ignore */ }
+  let musicNodes = null, melodyTimer = null, nextNote = 0, melodyIdx = 3;
+  // D E♭ F♯ G A B♭ C♯ D — the double-harmonic colour of Balkan folk tunes
+  const SCALE = [293.66, 311.13, 369.99, 392.0, 440.0, 466.16, 554.37, 587.33];
+
+  function melodyNote(freq, dur, when, vol = 0.028) {
+    const a = ctx;
+    const o = a.createOscillator();
+    o.type = "sine";
+    o.frequency.setValueAtTime(freq, when);
+    const g = a.createGain();
+    g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(vol, when + dur * 0.25);
+    g.gain.linearRampToValueAtTime(0, when + dur);
+    o.connect(g).connect(a.destination);
+    o.start(when);
+    o.stop(when + dur + 0.1);
+  }
+
+  function scheduleMelody() {
+    const a = ctx;
+    if (!a || !musicNodes) return;
+    while (nextNote < a.currentTime + 1.6) {
+      const steps = [-2, -1, -1, 0, 1, 1, 2];
+      melodyIdx = Math.max(0, Math.min(SCALE.length - 1,
+        melodyIdx + steps[Math.floor(Math.random() * steps.length)]));
+      const dur = [1.1, 1.6, 2.2, 3.0][Math.floor(Math.random() * 4)];
+      if (Math.random() > 0.3) {
+        melodyNote(SCALE[melodyIdx], dur, nextNote);
+        if (Math.random() < 0.25) melodyNote(SCALE[melodyIdx] * 2, dur * 0.5, nextNote + 0.06, 0.012);
+      }
+      nextNote += dur;
+    }
+  }
+
+  function startMusic() {
+    if (!musicOn || musicNodes) return;
+    const a = ac();
+    if (!a) return;
+    const master = a.createGain();
+    master.gain.value = 0.05;
+    master.connect(a.destination);
+    const filt = a.createBiquadFilter();
+    filt.type = "lowpass";
+    filt.frequency.value = 300;
+    filt.connect(master);
+    const o1 = a.createOscillator();
+    o1.type = "sawtooth"; o1.frequency.value = 73.42;   // D2 drone
+    const o2 = a.createOscillator();
+    o2.type = "sawtooth"; o2.frequency.value = 110.0;   // A2 fifth
+    o2.detune.value = 5;
+    const dg = a.createGain();
+    dg.gain.value = 0.5;
+    o1.connect(dg); o2.connect(dg); dg.connect(filt);
+    o1.start(); o2.start();
+    musicNodes = { master, o1, o2 };
+    nextNote = a.currentTime + 0.8;
+    melodyTimer = setInterval(scheduleMelody, 400);
+  }
+
+  function stopMusic() {
+    if (melodyTimer) { clearInterval(melodyTimer); melodyTimer = null; }
+    if (musicNodes) {
+      try { musicNodes.o1.stop(); musicNodes.o2.stop(); musicNodes.master.disconnect(); } catch (e) { /* ok */ }
+      musicNodes = null;
+    }
+  }
+
+  function toggleMusic() {
+    musicOn = !musicOn;
+    try { localStorage.setItem("balkan-civ-music", musicOn ? "1" : "0"); } catch (e) { /* ignore */ }
+    if (musicOn) startMusic(); else stopMusic();
+    return musicOn;
+  }
+
+  return { play, toggleMute, startMusic, stopMusic, toggleMusic,
+    get muted() { return muted; }, get musicOn() { return musicOn; } };
 })();

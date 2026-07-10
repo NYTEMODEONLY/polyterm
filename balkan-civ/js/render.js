@@ -3,6 +3,9 @@
 // ============================================================
 "use strict";
 
+// which two neighbour directions flank each hex corner
+const CORNER_DIRS = [[0, 5], [4, 5], [3, 4], [2, 3], [1, 2], [0, 1]];
+
 // deterministic per-tile brightness variation
 function tileJitter(c, r) {
   let h = (c * 73856093) ^ (r * 19349663);
@@ -64,7 +67,7 @@ class Renderer {
     const W = this.canvas.width, H = this.canvas.height;
     ctx.fillStyle = "#0d1b2a";
     ctx.fillRect(0, 0, W, H);
-    const vis = game.players[0].visible;
+    const vis = game.players[game.activeHuman].visible;
     const s = this.size;
 
     // visible tile range
@@ -122,12 +125,27 @@ class Renderer {
       this.drawCity(ctx, game, city, sx, sy, s);
     }
 
-    // units (only on currently-visible tiles)
+    // units (only on currently-visible tiles), with movement animation
+    const nowMs = Date.now();
+    const ANIM_HOP = 110; // ms per tile
+    game.anims = game.anims.filter(a => nowMs - a.ts < (a.hops.length - 1) * ANIM_HOP + 80);
     for (const u of game.units) {
       const i = game.map.idx(u.c, u.r);
-      if (u.owner !== 0 && vis[i] !== 2) continue;
-      if (u.owner === 0 && vis[i] === 0) continue;
-      const [sx, sy] = this.worldToScreen(u.c, u.r);
+      if (u.owner !== game.activeHuman && vis[i] !== 2) continue;
+      if (u.owner === game.activeHuman && vis[i] === 0) continue;
+      let [sx, sy] = this.worldToScreen(u.c, u.r);
+      const anim = game.anims.find(a => a.id === u.id);
+      if (anim) {
+        const prog = (nowMs - anim.ts) / ANIM_HOP;
+        const total = anim.hops.length - 1;
+        if (prog < total) {
+          const seg = Math.floor(prog), f = prog - seg;
+          const [x1, y1] = this.worldToScreen(anim.hops[seg][0], anim.hops[seg][1]);
+          const [x2, y2] = this.worldToScreen(anim.hops[seg + 1][0], anim.hops[seg + 1][1]);
+          sx = x1 + (x2 - x1) * f;
+          sy = y1 + (y2 - y1) * f;
+        }
+      }
       if (sx < -2 * s || sy < -2 * s || sx > W + 2 * s || sy > H + 2 * s) continue;
       this.drawUnit(ctx, game, u, sx, sy, s);
     }
@@ -135,7 +153,7 @@ class Renderer {
     // hover highlight + path preview
     if (this.hoverTile) {
       const [hc, hr] = this.hoverTile;
-      if (game.tile(hc, hr) && game.players[0].visible[game.map.idx(hc, hr)]) {
+      if (game.tile(hc, hr) && game.players[game.activeHuman].visible[game.map.idx(hc, hr)]) {
         const [sx, sy] = this.worldToScreen(hc, hr);
         this.hexPath(ctx, sx, sy, s * 0.96);
         ctx.strokeStyle = "rgba(255,255,255,0.55)";
@@ -216,6 +234,25 @@ class Renderer {
     this.dirty = false;
   }
 
+  // Hex path with selected corners rounded (used to soften coastlines).
+  smoothHexPath(ctx, cx, cy, size, rounded) {
+    const pts = HEX.corners(cx, cy, size);
+    const k = 0.42;
+    const lerp = (a, b, f) => [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const prev = pts[(i + 5) % 6], cur = pts[i], next = pts[(i + 1) % 6];
+      if (rounded[i]) {
+        const p1 = lerp(cur, prev, k), p2 = lerp(cur, next, k);
+        if (i === 0) ctx.moveTo(p1[0], p1[1]); else ctx.lineTo(p1[0], p1[1]);
+        ctx.quadraticCurveTo(cur[0], cur[1], p2[0], p2[1]);
+      } else {
+        if (i === 0) ctx.moveTo(cur[0], cur[1]); else ctx.lineTo(cur[0], cur[1]);
+      }
+    }
+    ctx.closePath();
+  }
+
   hexPath(ctx, cx, cy, size) {
     const pts = HEX.corners(cx, cy, size);
     ctx.beginPath();
@@ -225,8 +262,31 @@ class Renderer {
   }
 
   drawTile(ctx, game, t, sx, sy, s, v) {
-    this.hexPath(ctx, sx, sy, s + 0.5);
     const water = t.terrain === "OCEAN" || t.terrain === "COAST";
+    // round the corners of land tiles that touch the sea
+    let rounded = null;
+    if (!water) {
+      const neigh = HEX.neighbors(t.c, t.r);
+      const wet = (d) => {
+        const n = game.tile(neigh[d][0], neigh[d][1]);
+        return !n || n.terrain === "OCEAN" || n.terrain === "COAST";
+      };
+      for (let i = 0; i < 6; i++) {
+        if (wet(CORNER_DIRS[i][0]) || wet(CORNER_DIRS[i][1])) {
+          if (!rounded) rounded = [false, false, false, false, false, false];
+          rounded[i] = true;
+        }
+      }
+    }
+    if (rounded) {
+      // fill the notch behind rounded corners with sea
+      this.hexPath(ctx, sx, sy, s + 0.5);
+      ctx.fillStyle = shade(TERRAIN.COAST.color, tileJitter(t.c, t.r) * 0.5);
+      ctx.fill();
+      this.smoothHexPath(ctx, sx, sy, s + 0.5, rounded);
+    } else {
+      this.hexPath(ctx, sx, sy, s + 0.5);
+    }
     ctx.fillStyle = shade(TERRAIN[t.terrain].color, water ? tileJitter(t.c, t.r) * 0.5 : tileJitter(t.c, t.r));
     ctx.fill();
     ctx.strokeStyle = water ? "rgba(0,0,0,0.08)" : "rgba(0,0,0,0.15)";
@@ -424,7 +484,7 @@ class Renderer {
   drawUnit(ctx, game, u, sx, sy, s) {
     const civ = CIVS[game.players[u.owner].civId];
     const rad = s * 0.42;
-    const spent = u.owner === 0 && u.moves <= 0;
+    const spent = u.owner === game.activeHuman && u.moves <= 0;
     if (spent) ctx.globalAlpha = 0.6;
     // shadow + disc
     ctx.beginPath();
@@ -435,7 +495,7 @@ class Renderer {
     ctx.arc(sx, sy, rad, 0, Math.PI * 2);
     ctx.fillStyle = civ.color;
     ctx.fill();
-    ctx.strokeStyle = u.owner === 0 ? "#fff" : civ.color2;
+    ctx.strokeStyle = u.owner === game.activeHuman ? "#fff" : civ.color2;
     ctx.lineWidth = 2;
     ctx.stroke();
     // icon
@@ -479,7 +539,7 @@ class Renderer {
     m.fillStyle = "#0d1b2a";
     m.fillRect(0, 0, W, H);
     const sx = W / game.map.w, sy = H / game.map.h;
-    const vis = game.players[0].visible;
+    const vis = game.players[game.activeHuman].visible;
     for (const t of game.map.tiles) {
       const v = vis[game.map.idx(t.c, t.r)];
       if (!v) continue;

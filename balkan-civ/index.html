@@ -15,6 +15,13 @@
   <div class="subtitle">Forge an empire from the Adriatic to the Black Sea — a turn-based 4X strategy game</div>
   <div id="civ-cards"></div>
   <div id="start-options">
+    <label>Humans:
+      <select id="sel-humans" title="Hotseat: extra human players get random civs and take turns on this device">
+        <option value="1" selected>1</option>
+        <option value="2">2 (hotseat)</option>
+        <option value="3">3 (hotseat)</option>
+      </select>
+    </label>
     <label>Opponents:
       <select id="sel-opponents">
         <option value="3">3</option>
@@ -35,6 +42,7 @@
       <select id="sel-maptype">
         <option value="peninsula" selected>Peninsula</option>
         <option value="archipelago">Archipelago</option>
+        <option value="custom" id="opt-custom">Custom (from editor)</option>
       </select>
     </label>
     <label>Difficulty:
@@ -46,6 +54,7 @@
     </label>
     <button id="btn-start">⚔ Begin Campaign</button>
     <button id="btn-continue">📜 Continue Saved Game</button>
+    <button id="btn-editor">🖌️ Map Editor</button>
   </div>
   <div class="dim" style="margin-top:14px">
     Controls: click to select · click a highlighted hex to move/attack · drag to pan · wheel to zoom ·
@@ -69,7 +78,8 @@
     <button id="btn-religion">☦️ Religion (R)</button>
     <button id="btn-diplo">🤝 Diplomacy (D)</button>
     <button id="btn-spies">🕵️ Spies (E)</button>
-    <button id="btn-mute" title="Toggle sound">🔊</button>
+    <button id="btn-mute" title="Toggle sound effects">🔊</button>
+    <button id="btn-music" title="Toggle music">🎵</button>
     <button id="btn-menu">☰ Menu</button>
     <button id="btn-endturn">End Turn ⏵</button>
   </div>
@@ -101,6 +111,26 @@
 <div id="spy-modal" class="modal">
   <div class="modal-box"><h2>🕵️ Espionage</h2><div id="spy-body"></div></div>
 </div>
+<div id="handoff-modal" class="modal" style="background:#0d1b2a">
+  <div class="modal-box" id="handoff-body" style="text-align:center"></div>
+</div>
+
+<!-- ============ map editor ============ -->
+<div id="editor-screen">
+  <div id="editor-toolbar">
+    <b>🖌️ Map Editor</b>
+    <span id="editor-palette"></span>
+    <span class="spacer"></span>
+    <button id="ed-random">🎲 Randomize</button>
+    <button id="ed-clear">🌊 All Sea</button>
+    <button id="ed-save">💾 Save &amp; Use</button>
+    <button id="ed-exit">✕ Exit</button>
+  </div>
+  <canvas id="editor-canvas"></canvas>
+  <div id="editor-minimap-wrap"><canvas id="editor-minimap" width="200" height="150"></canvas></div>
+  <div id="editor-hint" class="dim">Left-click / drag to paint · right-drag to pan · wheel to zoom ·
+    paint plenty of land or the civs won't fit!</div>
+</div>
 <div id="victory-modal" class="modal">
   <div class="modal-box" id="victory-body"></div>
 </div>
@@ -112,6 +142,7 @@
 <script src="js/model.js"></script>
 <script src="js/ai.js"></script>
 <script src="js/render.js"></script>
+<script src="js/editor.js"></script>
 <script src="js/ui.js"></script>
 <script>
   window.addEventListener("DOMContentLoaded", () => UI.init());

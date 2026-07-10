@@ -136,7 +136,18 @@ class Game {
     this.seed = opts.seed ?? Math.floor(Math.random() * 1e9);
     this.rng = mulberry32(this.seed);
     this.mapType = opts.mapType || "peninsula";
-    this.map = generateMap(opts.mapW || GAME_DEFAULTS.mapW, opts.mapH || GAME_DEFAULTS.mapH, this.seed, this.mapType);
+    this.humans = Math.max(1, opts.numHumans || 1);
+    this.activeHuman = 0;
+    this.anims = [];             // transient movement animations (not saved)
+    if (this.mapType === "custom" && opts.customMap) {
+      const cm = opts.customMap;
+      this.map = { w: cm.w, h: cm.h, idx: (c, r) => r * cm.w + c, seed: this.seed,
+        tiles: cm.tiles.map((t, i) => ({ c: i % cm.w, r: Math.floor(i / cm.w),
+          terrain: t.terrain, feature: t.feature || null, resource: t.resource || null,
+          improvement: null, owner: -1, city: null, workedBy: null })) };
+    } else {
+      this.map = generateMap(opts.mapW || GAME_DEFAULTS.mapW, opts.mapH || GAME_DEFAULTS.mapH, this.seed, this.mapType);
+    }
     this.units = [];
     this.cities = [];
     this.players = [];
@@ -158,7 +169,7 @@ class Game {
 
     const civs = [opts.playerCiv, ...civPool.slice(0, opts.numOpponents)];
     civs.forEach((cid, i) => {
-      const p = new Player(i, cid, i === 0);
+      const p = new Player(i, cid, i < this.humans);
       p.visible = new Uint8Array(this.map.w * this.map.h);
       this.players.push(p);
     });
@@ -251,8 +262,9 @@ class Game {
     return p.hasTech("COMPASS");
   }
 
-  notify(msg, playerIdx = 0) {
-    if (playerIdx === 0 || playerIdx === -1) this.notifications.push({ turn: this.turn, msg });
+  notify(msg, playerIdx = -1) {
+    this.notifications.push({ turn: this.turn, msg, p: playerIdx });
+    if (this.notifications.length > 200) this.notifications.shift();
   }
 
   addEffect(c, r, text, color = "#ff5544") {
@@ -313,7 +325,7 @@ class Game {
       u.building.turnsLeft--;
       if (u.building.turnsLeft <= 0) {
         t.improvement = u.building.type;
-        if (p.index === 0) this.notify(`${IMPROVEMENT[u.building.type].name} completed.`);
+        this.notify(`${IMPROVEMENT[u.building.type].name} completed.`, p.index);
         u.building = null;
       }
     }
@@ -372,14 +384,23 @@ class Game {
     return null;
   }
 
+  addMoveAnim(unit, hops) {
+    if (hops.length < 2) return;
+    this.anims = this.anims.filter(a => a.id !== unit.id);
+    this.anims.push({ id: unit.id, hops, ts: Date.now() });
+    if (this.anims.length > 24) this.anims.shift();
+  }
+
   // Execute as much of unit.path as movement allows this turn
   stepAlongPath(unit) {
+    const hops = [[unit.c, unit.r]];
     while (unit.path && unit.path.length && unit.moves > 0) {
       const [nc, nr] = unit.path[0];
       if (!this.canEnter(unit, nc, nr)) { unit.path = null; return; }
       const cost = this.moveCost(unit, nc, nr);
       unit.path.shift();
       unit.c = nc; unit.r = nr;
+      hops.push([nc, nr]);
       unit.moves = Math.max(0, unit.moves - cost);
       unit.fortified = false;
       unit.building = null; // moving abandons any construction job
@@ -388,10 +409,11 @@ class Game {
       const civ = this.civilianAt(nc, nr);
       if (civ && civ.owner !== unit.owner && !unit.isCivilian) {
         this.removeUnit(civ);
-        this.notify(`${CIVS[this.players[unit.owner].civId].adj} forces captured a ${civ.def.name}!`);
+        this.notify(`${CIVS[this.players[unit.owner].civId].adj} forces captured a ${civ.def.name}!`, -1);
       }
     }
     if (unit.path && !unit.path.length) unit.path = null;
+    this.addMoveAnim(unit, hops);
   }
 
   // Tiles reachable this turn (Dijkstra within unit.moves)
@@ -805,11 +827,11 @@ class Game {
     const pa = this.players[a], pb = this.players[b];
     if (!pa.met.has(b)) {
       pa.met.add(b); pb.met.add(a);
-      if (a === 0 || b === 0) {
-        const other = a === 0 ? pb : pa;
+      for (const [me, other] of [[pa, pb], [pb, pa]]) {
+        if (!me.isHuman) continue;
         this.notify(other.isMinor
           ? `You have met the city-state of ${other.civ.name} (${MINOR_TYPES[other.civ.minorType].name}).`
-          : `You have met ${other.civ.name} (${other.civ.leader}).`);
+          : `You have met ${other.civ.name} (${other.civ.leader}).`, me.index);
       }
     }
   }
@@ -820,8 +842,7 @@ class Game {
     if (pa.atWarWith.has(b)) return;
     pa.atWarWith.add(b); pb.atWarWith.add(a);
     pa.warWeariness[b] = 0; pb.warWeariness[a] = 0;
-    if (a === 0 || b === 0) this.notify(`⚔️ WAR! ${pa.civ.name} declares war on ${pb.civ.name}!`);
-    else this.notify(`${pa.civ.name} declared war on ${pb.civ.name}.`);
+    this.notify(`⚔️ ${pa.civ.name} declares war on ${pb.civ.name}!`, -1);
   }
 
   makePeace(a, b) {
@@ -829,7 +850,7 @@ class Game {
     if (!pa.atWarWith.has(b)) return;
     pa.atWarWith.delete(b); pb.atWarWith.delete(a);
     delete pa.warWeariness[b]; delete pb.warWeariness[a];
-    this.notify(`☮️ Peace between ${pa.civ.name} and ${pb.civ.name}.`);
+    this.notify(`☮️ Peace between ${pa.civ.name} and ${pb.civ.name}.`, -1);
   }
 
   // ---------- religion ----------
@@ -868,7 +889,7 @@ class Game {
     if (best !== null && bestP >= 60 && city.religion !== best) {
       city.religion = best;
       const r = this.religions[best];
-      if (city.owner === 0) this.notify(`${city.name} now follows ${r.icon} ${r.name}.`);
+      this.notify(`${city.name} now follows ${r.icon} ${r.name}.`, city.owner);
     }
   }
 
@@ -983,7 +1004,7 @@ class Game {
       while (p.spies.length < this.spySlots(p)) {
         p.spies.push({ id: uid(), name: SPY_NAMES[(p.index * 5 + p.spies.length * 3) % SPY_NAMES.length],
           cityId: null, progress: 0, deadUntil: 0 });
-        if (p.index === 0) this.notify(`🕵️ A new spy is ready — assign them in the Espionage panel (E).`);
+        this.notify(`🕵️ A new spy is ready — assign them in the Espionage panel (E).`, p.index);
       }
       for (const spy of p.spies) {
         if (spy.deadUntil > this.turn || spy.cityId === null) continue;
@@ -1007,8 +1028,8 @@ class Game {
           spy.cityId = null;
           spy.deadUntil = this.turn + SPY.deadTurns;
           this.stats.catches++;
-          if (p.index === 0) this.notify(`🕵️ ${spy.name} was caught in ${city.name} and executed! A replacement trains for ${SPY.deadTurns} turns.`);
-          if (city.owner === 0) this.notify(`🕵️ Your agents caught a ${p.civ.adj} spy in ${city.name}!`);
+          this.notify(`🕵️ ${spy.name} was caught in ${city.name} and executed! A replacement trains for ${SPY.deadTurns} turns.`, p.index);
+          this.notify(`🕵️ Your agents caught a ${p.civ.adj} spy in ${city.name}!`, city.owner);
         } else {
           const stealable = [...owner.techs].filter(t =>
             !p.techs.has(t) && TECHS[t].req.every(r => p.techs.has(r)));
@@ -1017,10 +1038,10 @@ class Game {
             p.techs.add(t);
             this.stats.steals++;
             if (p.researching && p.techs.has(p.researching)) p.researching = null;
-            if (p.index === 0) this.notify(`🕵️ ${spy.name} stole ${TECHS[t].name} from ${owner.civ.name}!`);
-            if (city.owner === 0) this.notify(`🕵️ Technology was stolen from ${city.name}! Station a spy there to catch thieves.`);
-          } else if (p.index === 0) {
-            this.notify(`🕵️ ${spy.name} reports nothing left to steal in ${city.name}.`);
+            this.notify(`🕵️ ${spy.name} stole ${TECHS[t].name} from ${owner.civ.name}!`, p.index);
+            this.notify(`🕵️ Technology was stolen from ${city.name}! Station a spy there to catch thieves.`, city.owner);
+          } else {
+            this.notify(`🕵️ ${spy.name} reports nothing left to steal in ${city.name}.`, p.index);
           }
         }
       }
@@ -1090,7 +1111,7 @@ class Game {
         if (!spot) continue;
         const type = this.bestGiftUnit(p);
         this.addUnit(type, p.index, spot[0], spot[1]);
-        if (p.index === 0) this.notify(`${m.civ.name} gifts you a ${UNITS[type].name}!`);
+        this.notify(`${m.civ.name} gifts you a ${UNITS[type].name}!`, p.index);
       }
     }
   }
@@ -1137,8 +1158,8 @@ class Game {
       else if (hap < 0) surplus = Math.floor(surplus / 2);
     }
     city.food += surplus;
-    if (city.food >= city.foodNeeded()) { city.food -= city.foodNeeded(); city.pop++; if (city.owner === 0) this.notify(`${city.name} grew to ${city.pop}.`); }
-    else if (city.food < 0) { city.food = 0; if (city.pop > 1) { city.pop--; if (city.owner === 0) this.notify(`${city.name} is starving!`); } }
+    if (city.food >= city.foodNeeded()) { city.food -= city.foodNeeded(); city.pop++; this.notify(`${city.name} grew to ${city.pop}.`, city.owner); }
+    else if (city.food < 0) { city.food = 0; if (city.pop > 1) { city.pop--; this.notify(`${city.name} is starving!`, city.owner); } }
 
     // production
     if (city.producing) {
@@ -1153,11 +1174,11 @@ class Game {
         if (item.kind === "building" && BUILDINGS[item.key].wonder &&
             this.cities.some(c => c.buildings.includes(item.key))) {
           city.prodStored = Math.floor(city.prodStored * 0.5);
-          if (city.owner === 0) this.notify(`${BUILDINGS[item.key].name} was completed elsewhere first!`);
+          this.notify(`${BUILDINGS[item.key].name} was completed elsewhere first!`, city.owner);
         } else {
           city.prodStored -= cost;
           this.completeProduction(city, item);
-          if (city.owner === 0) this.notify(`${city.name} finished ${item.kind === "unit" ? UNITS[item.key].name : BUILDINGS[item.key].name}.`);
+          this.notify(`${city.name} finished ${item.kind === "unit" ? UNITS[item.key].name : BUILDINGS[item.key].name}.`, city.owner);
         }
         city.producing = null;
       }
@@ -1214,22 +1235,21 @@ class Game {
       const hap = this.happinessOf(p.index);
       if (p.goldenAgeTurns > 0) {
         p.goldenAgeTurns--;
-        if (p.goldenAgeTurns === 0 && p.index === 0) this.notify("The Golden Age has ended.");
+        if (p.goldenAgeTurns === 0) this.notify("The Golden Age has ended.", p.index);
       } else {
         p.gaMeter += Math.max(0, hap);
         if (p.gaMeter >= GOLDEN_AGE.threshold(p.gaCount)) {
           p.gaMeter = 0;
           p.gaCount++;
           p.goldenAgeTurns = GOLDEN_AGE.duration;
-          this.notify(`✨ ${p.civ.name} enters a GOLDEN AGE! (+20% gold and production for ${GOLDEN_AGE.duration} turns)`,
-            p.index === 0 ? 0 : -1);
+          this.notify(`✨ ${p.civ.name} enters a GOLDEN AGE! (+20% gold and production for ${GOLDEN_AGE.duration} turns)`, -1);
         }
       }
-      if (p.index === 0 && hap < 0 && (p._lastHap ?? 0) >= 0) {
-        this.notify(`😞 Your empire is unhappy (${hap}) — growth is slowed. Build Taverns and secure luxuries!`);
+      if (hap < 0 && (p._lastHap ?? 0) >= 0) {
+        this.notify(`😞 Your empire is unhappy (${hap}) — growth is slowed. Build Taverns and secure luxuries!`, p.index);
       }
-      if (p.index === 0 && hap < HAPPINESS.strikeAt && (p._lastHap ?? 0) >= HAPPINESS.strikeAt) {
-        this.notify(`🔥 Unrest! Happiness ${hap}: growth has stopped and your units fight at -15% strength.`);
+      if (hap < HAPPINESS.strikeAt && (p._lastHap ?? 0) >= HAPPINESS.strikeAt) {
+        this.notify(`🔥 Unrest! Happiness ${hap}: growth has stopped and your units fight at -15% strength.`, p.index);
       }
       p._lastHap = hap;
     }
@@ -1248,7 +1268,7 @@ class Game {
       if (armies.length > 1) {
         const victim = armies[Math.floor(this.rng() * armies.length)];
         this.removeUnit(victim);
-        if (p.index === 0) this.notify(`A ${victim.def.name} disbanded — the treasury is empty!`);
+        this.notify(`A ${victim.def.name} disbanded — the treasury is empty!`, p.index);
       }
     }
 
@@ -1264,7 +1284,7 @@ class Game {
       if (p.scienceStored >= t.cost) {
         p.scienceStored -= t.cost;
         p.techs.add(p.researching);
-        if (p.index === 0) this.notify(`🔬 Research complete: ${t.name}!`);
+        this.notify(`🔬 Research complete: ${t.name}!`, p.index);
         p.researching = null;
       }
     } else if (p.isHuman) {
@@ -1289,7 +1309,7 @@ class Game {
       this.addEffect(target.c, target.r, "-" + dmg, "#66ccff");
       if (target.hp <= 0) {
         this.removeUnit(target);
-        if (target.owner === 0) this.notify(`Your ${target.def.name} fell to ${city.name}'s defenses!`);
+        this.notify(`Your ${target.def.name} fell to ${city.name}'s defenses!`, target.owner);
       }
     }
   }
@@ -1309,16 +1329,29 @@ class Game {
     }
   }
 
-  // Ends the human turn: run all AI players, then advance the clock.
+  // Ends the ACTIVE human's turn. With multiple humans (hotseat) this
+  // advances to the next human; after the last one the AI phase runs
+  // and the world clock advances.
   endTurn() {
     if (this.over) return;
-    const human = this.players[0];
+    const human = this.players[this.activeHuman];
     this.cityStrikes(human);
     this.healUnits(human);
     this.progressWorkers(human);
     this.processPlayerEconomy(human);
+    this.updateVisibility(human);
 
-    for (let i = 1; i < this.players.length; i++) {
+    // hand over to the next living human, if any
+    let next = this.activeHuman + 1;
+    while (next < this.humans && !this.players[next].alive) next++;
+    if (next < this.humans) {
+      this.activeHuman = next;
+      this.beginHumanTurn(next);
+      return;
+    }
+
+    // AI phase (majors beyond the humans, then city-states)
+    for (let i = this.humans; i < this.players.length; i++) {
       const p = this.players[i];
       if (!p.alive) continue;
       AI.takeTurn(this, p);
@@ -1343,15 +1376,22 @@ class Game {
 
     this.turn++;
     for (const u of this.units) u.resetTurn();
-    // continue queued paths and auto-exploration for the human player
-    for (const u of this.units) {
-      if (u.owner === 0 && u.path && u.path.length) this.stepAlongPath(u);
-    }
-    for (const u of this.units) {
-      if (u.owner === 0 && u.autoExplore && u.moves > 0) AI.autoExplore(this, u);
-    }
-    this.updateVisibility(human);
+    let first = 0;
+    while (first < this.humans - 1 && !this.players[first].alive) first++;
+    this.activeHuman = first;
+    this.beginHumanTurn(first);
     this.checkVictory();
+  }
+
+  // Housekeeping when a human's turn starts: queued paths + auto-explore
+  beginHumanTurn(idx) {
+    for (const u of this.units) {
+      if (u.owner === idx && u.path && u.path.length) this.stepAlongPath(u);
+    }
+    for (const u of this.units) {
+      if (u.owner === idx && u.autoExplore && u.moves > 0) AI.autoExplore(this, u);
+    }
+    this.updateVisibility(this.players[idx]);
   }
 
   checkVictory() {
@@ -1387,7 +1427,8 @@ class Game {
   serialize() {
     return JSON.stringify({
       v: 1, turn: this.turn, seed: this.seed, mapType: this.mapType,
-      difficulty: this.difficulty, over: this.over,
+      difficulty: this.difficulty, humans: this.humans, activeHuman: this.activeHuman,
+      over: this.over,
       winner: this.winner, victoryType: this.victoryType, nextId: NEXT_ID,
       religions: this.religions,
       map: { w: this.map.w, h: this.map.h, tiles: this.map.tiles.map(t => ({
@@ -1416,7 +1457,10 @@ class Game {
     const g = Object.create(Game.prototype);
     g.turn = d.turn; g.seed = d.seed; g.mapType = d.mapType || "peninsula"; g.over = d.over;
     g.difficulty = d.difficulty || "normal";
+    g.humans = d.humans || 1;
+    g.activeHuman = d.activeHuman || 0;
     g.effects = [];
+    g.anims = [];
     g.winner = d.winner; g.victoryType = d.victoryType;
     g.maxTurns = GAME_DEFAULTS.maxTurns;
     g.rng = mulberry32((d.seed + d.turn * 7919) >>> 0);
