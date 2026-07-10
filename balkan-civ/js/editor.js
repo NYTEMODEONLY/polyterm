@@ -26,7 +26,7 @@ const EDITOR = (() => {
       map,
       tile: (c, r) => (c < 0 || r < 0 || c >= map.w || r >= map.h) ? null : map.tiles[map.idx(c, r)],
       players: [{ visible: new Uint8Array(map.w * map.h).fill(2), civId: "SERBIA" }],
-      activeHuman: 0,
+      activeHuman: 0, viewer: 0,
       cities: [], units: [], effects: [], anims: [], religions: [],
       isEmbarked: () => false,
     };

@@ -138,6 +138,8 @@ class Game {
     this.mapType = opts.mapType || "peninsula";
     this.humans = Math.max(1, opts.numHumans || 1);
     this.activeHuman = 0;
+    this._viewer = null;         // network client override (not saved)
+    this.scenario = opts.scenario || null;
     this.anims = [];             // transient movement animations (not saved)
     if (this.mapType === "custom" && opts.customMap) {
       const cm = opts.customMap;
@@ -158,12 +160,15 @@ class Game {
     this.winner = null;
     this.victoryType = null;
 
-    // players: human first, then AI civs
-    const civPool = CIV_IDS.filter(id => id !== opts.playerCiv);
-    // shuffle
-    for (let i = civPool.length - 1; i > 0; i--) {
-      const j = Math.floor(this.rng() * (i + 1));
-      [civPool[i], civPool[j]] = [civPool[j], civPool[i]];
+    // players: humans first, then AI civs (scenarios pin the lineup)
+    let civPool = CIV_IDS.filter(id => id !== opts.playerCiv);
+    if (opts.fixedOpponents) {
+      civPool = [...opts.fixedOpponents];
+    } else {
+      for (let i = civPool.length - 1; i > 0; i--) {
+        const j = Math.floor(this.rng() * (i + 1));
+        [civPool[i], civPool[j]] = [civPool[j], civPool[i]];
+      }
     }
     this.religions = [];
 
@@ -219,7 +224,48 @@ class Game {
       }
       this.updateVisibility(p);
     });
+
+    if (this.scenario) this.applyScenario();
   }
+
+  // Scenario setup: shared tech era, gold, starting armies, opening wars
+  applyScenario() {
+    const sc = SCENARIOS[this.scenario];
+    if (!sc) { this.scenario = null; return; }
+    this.maxTurns = sc.victory.turns;
+    const byCiv = (id) => this.players.find(p => p.civId === id);
+    for (const p of this.players) {
+      if (p.isMinor || !p.alive) continue;
+      for (const [key, t] of Object.entries(TECHS)) {
+        if (t.era <= (sc.techEra ?? 0)) p.techs.add(key);
+      }
+      if (p.civId === sc.playerCiv) for (const t of sc.extraTechs || []) p.techs.add(t);
+      p.gold += sc.gold || 0;
+    }
+    for (const [civId, units] of Object.entries(sc.armies || {})) {
+      const p = byCiv(civId);
+      if (!p || !p.alive) continue;
+      const home = this.units.find(u => u.owner === p.index);
+      if (!home) continue;
+      for (const type of units) {
+        for (const [c, r] of HEX.ring(home.c, home.r, 2)) {
+          const t = this.tile(c, r);
+          if (!t || !TERRAIN[t.terrain].passable) continue;
+          if (!UNITS[type].civilian && this.combatUnitAt(c, r)) continue;
+          if (UNITS[type].civilian && this.civilianAt(c, r)) continue;
+          this.addUnit(type, p.index, c, r);
+          break;
+        }
+      }
+      this.updateVisibility(p);
+    }
+    for (const [a, b] of sc.warsAtStart || []) {
+      const pa = byCiv(a), pb = byCiv(b);
+      if (pa && pb) { this.meet(pa.index, pb.index); this.declareWar(pa.index, pb.index); }
+    }
+  }
+
+  get viewer() { return this._viewer ?? this.activeHuman; }
 
   // ---------- lookups ----------
   tile(c, r) {
@@ -1396,6 +1442,29 @@ class Game {
 
   checkVictory() {
     if (this.over) return;
+    if (this.scenario) {
+      const sc = SCENARIOS[this.scenario];
+      const me = this.players[0];
+      if (sc.victory.type === "capture") {
+        const target = this.players.find(p => p.civId === sc.victory.target);
+        const cap = this.cities.find(c => c.id === target.originalCapitalId);
+        if ((cap && cap.owner === 0) || !target.alive) {
+          this.over = true; this.winner = 0; this.victoryType = "Scenario";
+        } else if (this.turn > this.maxTurns || !me.alive) {
+          this.over = true; this.winner = target.index; this.victoryType = "Scenario";
+        }
+      } else { // survive
+        const myCap = this.cities.find(c => c.id === me.originalCapitalId);
+        const foe = this.players.find(p => p.civId ===
+          (sc.warsAtStart[0][0] === me.civId ? sc.warsAtStart[0][1] : sc.warsAtStart[0][0]));
+        if (!me.alive || (this.turn > 3 && (!myCap || myCap.owner !== 0))) {
+          this.over = true; this.winner = foe ? foe.index : 1; this.victoryType = "Scenario";
+        } else if (this.turn > this.maxTurns) {
+          this.over = true; this.winner = 0; this.victoryType = "Scenario";
+        }
+      }
+      return; // scenario games skip the standard victory rules
+    }
     const majors = this.players.filter(p => !p.isMinor);
     const alive = majors.filter(p => p.alive);
     if (alive.length === 1) {
@@ -1428,7 +1497,7 @@ class Game {
     return JSON.stringify({
       v: 1, turn: this.turn, seed: this.seed, mapType: this.mapType,
       difficulty: this.difficulty, humans: this.humans, activeHuman: this.activeHuman,
-      over: this.over,
+      scenario: this.scenario, over: this.over,
       winner: this.winner, victoryType: this.victoryType, nextId: NEXT_ID,
       religions: this.religions,
       map: { w: this.map.w, h: this.map.h, tiles: this.map.tiles.map(t => ({
@@ -1459,10 +1528,13 @@ class Game {
     g.difficulty = d.difficulty || "normal";
     g.humans = d.humans || 1;
     g.activeHuman = d.activeHuman || 0;
+    g._viewer = null;
+    g.scenario = d.scenario || null;
+    if (g.scenario && SCENARIOS[g.scenario]) g.maxTurns = SCENARIOS[g.scenario].victory.turns;
     g.effects = [];
     g.anims = [];
     g.winner = d.winner; g.victoryType = d.victoryType;
-    g.maxTurns = GAME_DEFAULTS.maxTurns;
+    if (!g.scenario) g.maxTurns = GAME_DEFAULTS.maxTurns;
     g.rng = mulberry32((d.seed + d.turn * 7919) >>> 0);
     g.notifications = d.notifications || [];
     g.religions = d.religions || [];

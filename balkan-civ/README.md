@@ -1,9 +1,10 @@
 # ⚔ Balkan Civilizations
 
 A local, turn-based 4X strategy game in the spirit of Civilization V, set
-entirely in the Balkans — single-player against the AI or **hotseat with
-2–3 human players** on one device. Runs 100% in your browser: no install,
-no server, no internet connection needed.
+entirely in the Balkans — single-player against the AI, **hotseat** on one
+device, or **online with friends** over a direct browser-to-browser
+connection (no game server, no accounts). Runs 100% in your browser: no
+install needed.
 
 ![Balkan Civilizations mid-game](screenshot.png)
 
@@ -40,6 +41,18 @@ Game* on the title screen to pick up where you left off.
   (terrain, forests, and resources, saved locally)
 - **Hotseat multiplayer**: 2–3 humans share the device — each gets their
   own fog of war, notifications, and a pass-the-device screen between turns
+- **Online multiplayer** (up to 4 humans, each with their own civilization):
+  serverless WebRTC. The host clicks *Host Online*, sends each friend an
+  invite code over any chat app, pastes back their replies, and starts —
+  after that the connection is direct between browsers. Each player picks
+  their civ on their own start screen, sees only their own fog of war, and
+  plays in turn while the others watch a waiting banner
+- **Campaign scenarios**: three historical set-pieces with their own victory
+  rules — *The Rise of Samuil* (976: take Constantinople as Macedonia before
+  turn 150), *The Fall of Constantinople* (1453: Mehmed II's Janissaries and
+  great bombards against the Theodosian Walls, 60 turns), and *Skanderbeg's
+  Rebellion* (1443: hold Krujë against the Ottoman tide for 100 turns, on
+  hard difficulty)
 - Naval warfare: research Sailing to embark land units onto the coast and
   build Galleys; Compass opens the deep sea and the ranged War Galleass.
   Ships hunt transports, bombard shores, and can capture coastal cities;
@@ -123,9 +136,18 @@ js/model.js       game engine: cities, units, combat, research, turns, save/load
 js/ai.js          AI: settling, production, research, diplomacy, tactics
 js/render.js      canvas renderer + minimap (terrain shading, animations)
 js/editor.js      map editor
+js/net.js         serverless WebRTC multiplayer (invite codes, state relay)
 js/ui.js          panels, modals, input handling
 ```
 
+## Notes on online play
+
+The invite/reply codes are standard WebRTC session descriptions — exchange
+them over any messenger. A STUN server (Google's public one) is used for
+NAT traversal; on very restrictive networks a direct connection may fail.
+The full game state is auto-saved locally on every turn, so if a connection
+drops mid-game the host can continue against the AI or re-host later.
+
 ## Ideas for future expansion
 
-Network multiplayer, campaign scenarios, more unit art.
+More scenarios, unit artwork, save-transfer for resuming online games.

@@ -320,5 +320,56 @@ const SPY = {
   rigPerTurn: 2,        // influence per turn when rigging a city-state
 };
 
+// ------------------------------------------------------------
+// Campaign scenarios — fixed matchups with special victory rules
+// ------------------------------------------------------------
+const SCENARIOS = {
+  SAMUIL_976: {
+    name: "The Rise of Samuil", year: "976 AD", icon: "👑",
+    blurb: "The Cometopuli brothers rise in Ohrid while Byzantium reels. Basil II will not forgive rebellion — take Constantinople before the Bulgar-Slayer takes you. Capture the Byzantine capital within 150 turns.",
+    playerCiv: "MACEDONIA", opponents: ["BYZANTIUM", "BULGARIA", "SERBIA"],
+    seed: 976001, mapType: "peninsula", difficulty: "normal",
+    techEra: 1, gold: 300,
+    armies: {
+      MACEDONIA: ["SAMUIL_GUARD", "SAMUIL_GUARD", "ARCHER", "WORKER"],
+      BYZANTIUM: ["SWORDSMAN", "ARCHER", "SETTLER"],
+    },
+    warsAtStart: [["MACEDONIA", "BYZANTIUM"]],
+    victory: { type: "capture", target: "BYZANTIUM", turns: 150,
+      winText: "The Empire kneels. Samuil's tsardom stretches from the Adriatic to the Bosphorus.",
+      loseText: "Basil II earns his dread name. The captives of Kleidion walk home blind." },
+  },
+  FALL_1453: {
+    name: "The Fall of Constantinople", year: "1453 AD", icon: "🏰",
+    blurb: "Mehmed II stands before the Theodosian Walls with the greatest cannons the world has seen. The Queen of Cities must fall. Capture the Byzantine capital within 60 turns.",
+    playerCiv: "OTTOMAN", opponents: ["BYZANTIUM", "SERBIA", "BULGARIA"],
+    seed: 1453001, mapType: "peninsula", difficulty: "normal",
+    techEra: 2, extraTechs: ["GUNPOWDER", "PHYSICS", "EDUCATION"], gold: 700,
+    armies: {
+      OTTOMAN: ["JANISSARY", "JANISSARY", "TREBUCHET", "TREBUCHET", "KNIGHT", "WORKER"],
+      BYZANTIUM: ["LONGSWORD", "CROSSBOW", "CROSSBOW", "PIKEMAN"],
+    },
+    warsAtStart: [["OTTOMAN", "BYZANTIUM"]],
+    victory: { type: "capture", target: "BYZANTIUM", turns: 60,
+      winText: "The Walls are breached. An age ends; the Ottoman age begins.",
+      loseText: "The Theodosian Walls hold. Byzantium endures another century." },
+  },
+  SKANDERBEG_1443: {
+    name: "Skanderbeg's Rebellion", year: "1443 AD", icon: "🦅",
+    blurb: "Gjergj Kastrioti has raised the double eagle over Krujë. The Sultan's armies are coming, year after year. Hold your capital for 100 turns against the Ottoman tide.",
+    playerCiv: "ALBANIA", opponents: ["OTTOMAN", "BYZANTIUM", "BOSNIA"],
+    seed: 1443001, mapType: "peninsula", difficulty: "hard",
+    techEra: 2, gold: 400,
+    armies: {
+      ALBANIA: ["STRADIOT", "STRADIOT", "PIKEMAN", "CROSSBOW", "WORKER"],
+      OTTOMAN: ["PIKEMAN", "PIKEMAN", "KNIGHT", "CATAPULT", "SETTLER", "SETTLER"],
+    },
+    warsAtStart: [["ALBANIA", "OTTOMAN"]],
+    victory: { type: "survive", turns: 100,
+      winText: "Twenty-five years, and Krujë never fell. The mountain eagle outlasted the empire.",
+      loseText: "Krujë burns. The Albanian highlands fall silent under the crescent." },
+  },
+};
+
 // Barbarian-free game; players fight each other.
 const GAME_DEFAULTS = { mapW: 44, mapH: 34, maxTurns: 300 };

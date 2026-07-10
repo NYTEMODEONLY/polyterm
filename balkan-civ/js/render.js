@@ -67,7 +67,7 @@ class Renderer {
     const W = this.canvas.width, H = this.canvas.height;
     ctx.fillStyle = "#0d1b2a";
     ctx.fillRect(0, 0, W, H);
-    const vis = game.players[game.activeHuman].visible;
+    const vis = game.players[game.viewer].visible;
     const s = this.size;
 
     // visible tile range
@@ -131,8 +131,8 @@ class Renderer {
     game.anims = game.anims.filter(a => nowMs - a.ts < (a.hops.length - 1) * ANIM_HOP + 80);
     for (const u of game.units) {
       const i = game.map.idx(u.c, u.r);
-      if (u.owner !== game.activeHuman && vis[i] !== 2) continue;
-      if (u.owner === game.activeHuman && vis[i] === 0) continue;
+      if (u.owner !== game.viewer && vis[i] !== 2) continue;
+      if (u.owner === game.viewer && vis[i] === 0) continue;
       let [sx, sy] = this.worldToScreen(u.c, u.r);
       const anim = game.anims.find(a => a.id === u.id);
       if (anim) {
@@ -153,7 +153,7 @@ class Renderer {
     // hover highlight + path preview
     if (this.hoverTile) {
       const [hc, hr] = this.hoverTile;
-      if (game.tile(hc, hr) && game.players[game.activeHuman].visible[game.map.idx(hc, hr)]) {
+      if (game.tile(hc, hr) && game.players[game.viewer].visible[game.map.idx(hc, hr)]) {
         const [sx, sy] = this.worldToScreen(hc, hr);
         this.hexPath(ctx, sx, sy, s * 0.96);
         ctx.strokeStyle = "rgba(255,255,255,0.55)";
@@ -484,7 +484,7 @@ class Renderer {
   drawUnit(ctx, game, u, sx, sy, s) {
     const civ = CIVS[game.players[u.owner].civId];
     const rad = s * 0.42;
-    const spent = u.owner === game.activeHuman && u.moves <= 0;
+    const spent = u.owner === game.viewer && u.moves <= 0;
     if (spent) ctx.globalAlpha = 0.6;
     // shadow + disc
     ctx.beginPath();
@@ -495,7 +495,7 @@ class Renderer {
     ctx.arc(sx, sy, rad, 0, Math.PI * 2);
     ctx.fillStyle = civ.color;
     ctx.fill();
-    ctx.strokeStyle = u.owner === game.activeHuman ? "#fff" : civ.color2;
+    ctx.strokeStyle = u.owner === game.viewer ? "#fff" : civ.color2;
     ctx.lineWidth = 2;
     ctx.stroke();
     // icon
@@ -539,7 +539,7 @@ class Renderer {
     m.fillStyle = "#0d1b2a";
     m.fillRect(0, 0, W, H);
     const sx = W / game.map.w, sy = H / game.map.h;
-    const vis = game.players[game.activeHuman].visible;
+    const vis = game.players[game.viewer].visible;
     for (const t of game.map.tiles) {
       const v = vis[game.map.idx(t.c, t.r)];
       if (!v) continue;

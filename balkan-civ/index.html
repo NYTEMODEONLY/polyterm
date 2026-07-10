@@ -55,6 +55,12 @@
     <button id="btn-start">⚔ Begin Campaign</button>
     <button id="btn-continue">📜 Continue Saved Game</button>
     <button id="btn-editor">🖌️ Map Editor</button>
+    <button id="btn-host">🌐 Host Online</button>
+    <button id="btn-join">🌐 Join Online</button>
+  </div>
+  <div id="scenario-strip">
+    <h2>📜 Campaign Scenarios</h2>
+    <div id="scenario-cards"></div>
   </div>
   <div class="dim" style="margin-top:14px">
     Controls: click to select · click a highlighted hex to move/attack · drag to pan · wheel to zoom ·
@@ -114,6 +120,10 @@
 <div id="handoff-modal" class="modal" style="background:#0d1b2a">
   <div class="modal-box" id="handoff-body" style="text-align:center"></div>
 </div>
+<div id="net-modal" class="modal">
+  <div class="modal-box" id="net-body"></div>
+</div>
+<div id="net-banner">🌐</div>
 
 <!-- ============ map editor ============ -->
 <div id="editor-screen">
@@ -142,6 +152,7 @@
 <script src="js/model.js"></script>
 <script src="js/ai.js"></script>
 <script src="js/render.js"></script>
+<script src="js/net.js"></script>
 <script src="js/editor.js"></script>
 <script src="js/ui.js"></script>
 <script>

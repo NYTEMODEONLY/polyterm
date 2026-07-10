@@ -5,13 +5,19 @@
 
 const UI = (() => {
   let game = null, rend = null;
+  let chosenCiv = CIV_IDS[0];
   const $ = (id) => document.getElementById(id);
+
+  // In a network game only the client whose turn it is may act.
+  function myTurn() {
+    return !NET.active || game.activeHuman === NET.myIndex;
+  }
 
   // ---------------- start screen ----------------
   function showStartScreen() {
     const wrap = $("civ-cards");
     wrap.innerHTML = "";
-    let chosen = CIV_IDS[0];
+
     for (const id of CIV_IDS) {
       const civ = CIVS[id];
       const uu = UNITS[civ.uu];
@@ -26,12 +32,15 @@ const UI = (() => {
       card.onclick = () => {
         document.querySelectorAll(".civ-card").forEach(c => c.classList.remove("sel"));
         card.classList.add("sel");
-        chosen = id;
+        chosenCiv = id;
       };
-      if (id === chosen) card.classList.add("sel");
+      if (id === chosenCiv) card.classList.add("sel");
       wrap.appendChild(card);
     }
+    buildScenarioCards();
     $("opt-custom").disabled = !localStorage.getItem("balkan-civ-custommap");
+    $("btn-host").onclick = showHostModal;
+    $("btn-join").onclick = showJoinModal;
     $("btn-editor").onclick = () => { $("start-screen").style.display = "none"; EDITOR.open(); };
     const saved = localStorage.getItem("balkan-civ-save");
     $("btn-continue").style.display = saved ? "inline-block" : "none";
@@ -56,12 +65,156 @@ const UI = (() => {
         try { customMap = JSON.parse(localStorage.getItem("balkan-civ-custommap")); } catch (e) { /* fall through */ }
         if (!customMap) { alert("No custom map saved — open the Map Editor first."); return; }
       }
-      game = new Game({ playerCiv: chosen, numOpponents: numOpp, mapW: dims[0], mapH: dims[1],
+      game = new Game({ playerCiv: chosenCiv, numOpponents: numOpp, mapW: dims[0], mapH: dims[1],
         mapType, customMap, numHumans, difficulty: $("sel-difficulty").value });
       startPlaying();
     };
     $("start-screen").style.display = "flex";
     $("game-ui").style.display = "none";
+  }
+
+  function buildScenarioCards() {
+    const wrap = $("scenario-cards");
+    wrap.innerHTML = "";
+    for (const [key, sc] of Object.entries(SCENARIOS)) {
+      const card = document.createElement("div");
+      card.className = "scenario-card";
+      card.innerHTML = `<h3>${sc.icon} ${sc.name}</h3><div class="year">${sc.year} ·
+        play as <b style="color:${CIVS[sc.playerCiv].color}">${CIVS[sc.playerCiv].name}</b> ·
+        ${sc.victory.turns} turns</div><p>${sc.blurb}</p>`;
+      card.onclick = () => {
+        NET.reset();
+        game = new Game({ playerCiv: sc.playerCiv, fixedOpponents: sc.opponents,
+          numOpponents: sc.opponents.length, seed: sc.seed, mapType: sc.mapType,
+          difficulty: sc.difficulty, scenario: key });
+        startPlaying();
+      };
+      wrap.appendChild(card);
+    }
+  }
+
+  // ---------------- online multiplayer ----------------
+  function netUpdateBanner() {
+    const b = $("net-banner");
+    if (!NET.active || !game || game.over) { b.style.display = "none"; return; }
+    b.style.display = "block";
+    if (myTurn()) {
+      b.innerHTML = `🌐 <b class="alert">Your turn</b> — you are ${CIVS[game.players[NET.myIndex].civId].name}`;
+    } else {
+      const p = game.players[game.activeHuman];
+      b.innerHTML = `🌐 Waiting for <b style="color:${p.civ.color}">${p.civ.name}</b> (Player ${game.activeHuman + 1})…`;
+    }
+  }
+
+  function netAfterLoad() {
+    selectUnit(null);
+    closeCity();
+    notifSeen = Math.max(0, game.notifications.length - 12);
+    refreshAll();
+    netUpdateBanner();
+    if (myTurn() && !game.over) {
+      SFX.play("turn");
+      cycleNextUnit();
+      maybePromptFounding();
+    }
+  }
+
+  async function showHostModal() {
+    NET.reset();
+    $("net-modal").style.display = "flex";
+    const body = $("net-body");
+    body.innerHTML = `<h2>🌐 Host Online Game</h2>
+      <p class="dim">You are <b>${CIVS[chosenCiv].name}</b> (pick a different civ card first if you like).
+      For each friend: create an invite, send them the code (any chat app), paste back their reply.
+      Friends pick their civ on their own start screen before joining.</p>
+      <div id="net-slots"></div>
+      <button onclick="UI.hostAddSlot()">➕ Invite a friend</button>
+      <button id="net-start-btn" disabled onclick="UI.hostStartOnline()">🚀 Start Online Game</button>
+      <span class="dim" id="net-status"></span>`;
+    hostAddSlot();
+  }
+
+  async function hostAddSlot() {
+    if (NET.peers.length >= 3) return;
+    const entry = await NET.hostInvite();
+    const i = NET.peers.length - 1;
+    const div = document.createElement("div");
+    div.className = "net-slot";
+    div.innerHTML = `<b>Friend ${i + 1}</b> — <span id="net-st-${i}">waiting for reply…</span><br>
+      <span class="dim">Send this invite code:</span>
+      <textarea class="net-code" readonly onclick="this.select()">${entry.inviteCode}</textarea>
+      <span class="dim">Paste their reply code:</span>
+      <textarea class="net-code" id="net-reply-${i}"></textarea>
+      <button onclick="UI.hostConnect(${i})">🔗 Connect</button>`;
+    $("net-slots").appendChild(div);
+  }
+
+  async function hostConnect(i) {
+    try {
+      await NET.hostAcceptReply(NET.peers[i], $(`net-reply-${i}`).value);
+      $(`net-st-${i}`).textContent = "connecting…";
+    } catch (e) {
+      $(`net-st-${i}`).textContent = "bad code — paste the full reply";
+    }
+  }
+
+  function refreshHostStatus() {
+    NET.peers.forEach((p, i) => {
+      const el = $(`net-st-${i}`);
+      if (el && p.open) el.innerHTML = `<b style="color:#2ecc71">connected</b>` +
+        (p.civ ? ` — wants ${CIVS[p.civ] ? CIVS[p.civ].name : "random"}` : "");
+    });
+    const btn = $("net-start-btn");
+    if (btn) btn.disabled = !NET.peers.some(p => p.open);
+  }
+
+  function hostStartOnline() {
+    const ready = NET.peers.filter(p => p.open);
+    if (!ready.length) return;
+    const taken = new Set([chosenCiv]);
+    for (const p of ready) {
+      let c = (p.civ && CIVS[p.civ] && !taken.has(p.civ)) ? p.civ
+        : CIV_IDS.find(x => !taken.has(x));
+      taken.add(c);
+      p.assignedCiv = c;
+    }
+    const aiCount = parseInt($("sel-opponents").value, 10);
+    const rest = CIV_IDS.filter(c => !taken.has(c)).sort(() => Math.random() - 0.5);
+    const dims = { small: [36, 28], standard: [44, 34], large: [54, 42] }[$("sel-mapsize").value];
+    const mapType = $("sel-maptype").value === "custom" ? "peninsula" : $("sel-maptype").value;
+    game = new Game({ playerCiv: chosenCiv,
+      fixedOpponents: [...ready.map(p => p.assignedCiv), ...rest.slice(0, aiCount)],
+      numOpponents: ready.length + Math.min(aiCount, rest.length),
+      numHumans: 1 + ready.length,
+      mapW: dims[0], mapH: dims[1], mapType, difficulty: $("sel-difficulty").value });
+    game._viewer = 0;
+    NET.hostStart(game);
+    $("net-modal").style.display = "none";
+    startPlaying();
+    netUpdateBanner();
+  }
+
+  function showJoinModal() {
+    NET.reset();
+    $("net-modal").style.display = "flex";
+    $("net-body").innerHTML = `<h2>🌐 Join Online Game</h2>
+      <p class="dim">You will play as <b>${CIVS[chosenCiv].name}</b> (close this and pick another civ card to change).
+      Paste the host's invite code:</p>
+      <textarea class="net-code" id="net-invite"></textarea>
+      <button onclick="UI.joinCreateReply()">🔗 Create Reply</button>
+      <div id="net-join-out"></div>`;
+  }
+
+  async function joinCreateReply() {
+    try {
+      const reply = await NET.joinWithInvite($("net-invite").value, chosenCiv);
+      $("net-join-out").innerHTML = `<span class="dim">Send this reply code back to the host,
+        then wait — the game starts automatically:</span>
+        <textarea class="net-code" readonly onclick="this.select()">${reply}</textarea>
+        <span class="alert">⏳ Waiting for the host to start…</span>`;
+    } catch (e) {
+      $("net-join-out").innerHTML = `<span class="war">Bad invite code — paste the whole thing.</span>`;
+    }
   }
 
   function startPlaying() {
@@ -72,7 +225,7 @@ const UI = (() => {
     $("btn-music").textContent = SFX.musicOn ? "🎵" : "♪";
     SFX.startMusic();
     resize();
-    const firstUnit = game.units.find(u => u.owner === game.activeHuman);
+    const firstUnit = game.units.find(u => u.owner === game.viewer);
     if (firstUnit) rend.centerOn(game, firstUnit.c, firstUnit.r);
     selectUnit(firstUnit || null);
     refreshAll();
@@ -97,7 +250,7 @@ const UI = (() => {
 
   function computeAttackable(u) {
     if (u.isCivilian || u.attacked || u.moves <= 0 || game.isEmbarked(u)) return [];
-    const p = game.players[game.activeHuman];
+    const p = game.players[game.viewer];
     const range = u.isRanged ? u.def.range : 1;
     const out = [];
     for (const [c, r] of HEX.ring(u.c, u.r, range)) {
@@ -166,7 +319,7 @@ const UI = (() => {
           selectUnit(game.units.includes(u) ? u : null);
           refreshAll();
         }
-      }, !!target && u.moves > 0 && game.players[game.activeHuman].religionId !== null);
+      }, !!target && u.moves > 0 && game.players[game.viewer].religionId !== null);
     }
     if (u.def.worker) {
       if (u.building) {
@@ -201,7 +354,7 @@ const UI = (() => {
   }
 
   function cycleNextUnit() {
-    const candidates = game.units.filter(u => u.owner === game.activeHuman && u.moves > 0 && !u.fortified &&
+    const candidates = game.units.filter(u => u.owner === game.viewer && u.moves > 0 && !u.fortified &&
       !u.building && !u.autoExplore && !(u.path && u.path.length));
     if (!candidates.length) { selectUnit(null); return; }
     const cur = rend.selected ? candidates.indexOf(rend.selected) : -1;
@@ -215,7 +368,7 @@ const UI = (() => {
     const panel = $("city-panel");
     panel.style.display = "block";
     const y = game.cityYields(city);
-    const isMine = city.owner === game.activeHuman;
+    const isMine = city.owner === game.viewer;
     let html = `
       <div class="panel-head">
         <b>${city.name}</b> ${city.isCapital ? "★" : ""} <span class="dim">(${CIVS[game.players[city.owner].civId].name})</span>
@@ -230,7 +383,7 @@ const UI = (() => {
       html += `<div class="city-buildings">${city.buildings.map(b => BUILDINGS[b].icon + " " + BUILDINGS[b].name).join(" · ")}</div>`;
     }
     if (isMine) {
-      const p0 = game.players[game.activeHuman];
+      const p0 = game.players[game.viewer];
       if (p0.religionId !== null) {
         const cost = UNITS.MISSIONARY.faithCost;
         html += `<div class="prod-current"><button ${p0.faith >= cost ? "" : "disabled"}
@@ -246,7 +399,7 @@ const UI = (() => {
       for (const o of opts) {
         const turns = Math.max(1, Math.ceil((o.cost - (cur && cur.key === o.key ? city.prodStored : 0)) / Math.max(1, y.prod)));
         const price = game.buyCost(o.cost);
-        const afford = game.players[game.activeHuman].gold >= price;
+        const afford = game.players[game.viewer].gold >= price;
         html += `<div class="prod-item ${o.wonder ? "wonder" : ""}">
           <span>${o.icon} ${o.name}</span>
           <span class="dim">${o.cost}⚙️ ~${turns}t</span>
@@ -260,6 +413,7 @@ const UI = (() => {
   }
 
   function setProduction(cityId, kind, key) {
+    if (!myTurn()) return;
     const city = game.cities.find(c => c.id === cityId);
     if (!city) return;
     city.producing = { kind, key };
@@ -269,6 +423,7 @@ const UI = (() => {
   }
 
   function buyItem(cityId, kind, key) {
+    if (!myTurn()) return;
     const city = game.cities.find(c => c.id === cityId);
     if (!city) return;
     const cost = kind === "unit" ? UNITS[key].cost : BUILDINGS[key].cost;
@@ -287,7 +442,7 @@ const UI = (() => {
 
   // ---------------- tech screen ----------------
   function showTechScreen() {
-    const p = game.players[game.activeHuman];
+    const p = game.players[game.viewer];
     const modal = $("tech-modal");
     modal.style.display = "flex";
     const body = $("tech-body");
@@ -318,8 +473,9 @@ const UI = (() => {
   }
 
   function pickTech(key) {
+    if (!myTurn()) return;
     SFX.play("click");
-    game.players[game.activeHuman].researching = key;
+    game.players[game.viewer].researching = key;
     $("tech-modal").style.display = "none";
     refreshAll();
   }
@@ -328,7 +484,7 @@ const UI = (() => {
   let foundingPromptTurn = -1;
 
   function showReligionScreen() {
-    const p = game.players[game.activeHuman];
+    const p = game.players[game.viewer];
     $("religion-modal").style.display = "flex";
     const body = $("religion-body");
     let html = `<div class="diplo-row">Your faith: <b>☦️ ${Math.floor(p.faith)}</b>`;
@@ -337,7 +493,7 @@ const UI = (() => {
         html += ` <span class="dim">— all ${MAX_RELIGIONS} religions have been founded.</span>`;
       } else {
         html += ` <span class="dim">— found a religion at ${RELIGION_FOUND_COST(game.religions.length)} faith.</span>`;
-        if (game.canFoundReligion(game.activeHuman)) html += ` <button onclick="UI.showFoundingModal()">🕊️ Found Religion</button>`;
+        if (game.canFoundReligion(game.viewer)) html += ` <button onclick="UI.showFoundingModal()">🕊️ Found Religion</button>`;
       }
     } else {
       const r = game.religions[p.religionId];
@@ -359,8 +515,8 @@ const UI = (() => {
   }
 
   function showFoundingModal() {
-    const p = game.players[game.activeHuman];
-    if (!game.canFoundReligion(game.activeHuman)) return;
+    const p = game.players[game.viewer];
+    if (!game.canFoundReligion(game.viewer)) return;
     $("religion-modal").style.display = "none";
     $("founding-modal").style.display = "flex";
     const names = game.availableReligionNames();
@@ -379,23 +535,25 @@ const UI = (() => {
   }
 
   function confirmFounding() {
+    if (!myTurn()) return;
     const name = $("sel-religion-name").value;
     const entry = RELIGION_NAMES.find(r => r.name === name);
     const belief = document.querySelector("input[name=belief]:checked").value;
-    if (game.foundReligion(game.activeHuman, entry.name, entry.icon, belief)) {
+    if (game.foundReligion(game.viewer, entry.name, entry.icon, belief)) {
       $("founding-modal").style.display = "none";
       refreshAll();
     }
   }
 
   function buyMissionary(cityId) {
+    if (!myTurn()) return;
     const city = game.cities.find(c => c.id === cityId);
     if (city && game.buyMissionary(city)) { SFX.play("coin"); showCityPanel(city); refreshAll(); }
   }
 
   // ---------------- espionage ----------------
   function showSpyScreen() {
-    const p = game.players[game.activeHuman];
+    const p = game.players[game.viewer];
     $("spy-modal").style.display = "flex";
     const body = $("spy-body");
     if (!p.spies.length) {
@@ -416,7 +574,7 @@ const UI = (() => {
       const city = spy.cityId !== null ? game.cities.find(c => c.id === spy.cityId) : null;
       if (!city) {
         html += `<span class="alert">idle</span>`;
-      } else if (city.owner === game.activeHuman) {
+      } else if (city.owner === game.viewer) {
         html += `guarding <b>${city.name}</b>`;
       } else if (game.players[city.owner].isMinor) {
         html += `rigging elections in <b>${city.name}</b>`;
@@ -425,11 +583,11 @@ const UI = (() => {
       }
       // assignment dropdown
       let opts = `<option value="">— reassign —</option>`;
-      const mine = game.cities.filter(c => c.owner === game.activeHuman);
+      const mine = game.cities.filter(c => c.owner === game.viewer);
       if (mine.length) opts += `<optgroup label="Defend">` +
         mine.map(c => `<option value="${c.id}">${c.name}</option>`).join("") + `</optgroup>`;
       for (const o of game.players) {
-        if (o.index === game.activeHuman || !o.alive || !p.met.has(o.index)) continue;
+        if (o.index === game.viewer || !o.alive || !p.met.has(o.index)) continue;
         const theirs = game.cities.filter(c => c.owner === o.index);
         if (!theirs.length) continue;
         const label = o.isMinor ? `Rig — ${o.civ.name}` : `Steal — ${o.civ.name}`;
@@ -442,21 +600,21 @@ const UI = (() => {
   }
 
   function assignSpy(spyId, cityIdStr) {
-    if (cityIdStr === "") return;
-    game.assignSpy(game.activeHuman, spyId, parseInt(cityIdStr, 10));
+    if (!myTurn() || cityIdStr === "") return;
+    game.assignSpy(game.viewer, spyId, parseInt(cityIdStr, 10));
     SFX.play("spy");
     showSpyScreen();
   }
 
   // ---------------- diplomacy screen ----------------
   function showDiploScreen() {
-    const p = game.players[game.activeHuman];
+    const p = game.players[game.viewer];
     const modal = $("diplo-modal");
     modal.style.display = "flex";
     const body = $("diplo-body");
     let html = "";
     for (const p2 of game.players) {
-      if (p2.index === game.activeHuman || p2.isMinor) continue;
+      if (p2.index === game.viewer || p2.isMinor) continue;
       const met = p.met.has(p2.index);
       const civ = p2.civ;
       html += `<div class="diplo-row" style="border-left:6px solid ${met ? civ.color : "#555"}">
@@ -481,7 +639,7 @@ const UI = (() => {
             <span class='dead'>☠️ destroyed</span></div>`;
           continue;
         }
-        const status = game.minorStatus(game.activeHuman, m.index);
+        const status = game.minorStatus(game.viewer, m.index);
         const inf = Math.floor(p.influence[m.index] || 0);
         const statusTxt = { war: "<b class='war'>AT WAR</b>", ally: "<b style='color:#2ecc71'>ALLY</b>",
           friend: "<b style='color:#f1c40f'>Friend</b>", neutral: "neutral" }[status];
@@ -497,12 +655,13 @@ const UI = (() => {
         </div>`;
       }
     }
-    html += `<div class="diplo-row"><b>Your score:</b> ${game.score(game.activeHuman)} · Military ${Math.floor(game.militaryPower(game.activeHuman))}</div>`;
+    html += `<div class="diplo-row"><b>Your score:</b> ${game.score(game.viewer)} · Military ${Math.floor(game.militaryPower(game.viewer))}</div>`;
     body.innerHTML = html;
   }
 
   function gift(minorIdx, amount) {
-    if (game.giftInfluence(game.activeHuman, minorIdx, amount)) {
+    if (!myTurn()) return;
+    if (game.giftInfluence(game.viewer, minorIdx, amount)) {
       SFX.play("coin");
       showDiploScreen();
       refreshAll();
@@ -510,11 +669,12 @@ const UI = (() => {
   }
 
   function diploAction(idx) {
-    const p = game.players[game.activeHuman];
+    if (!myTurn()) return;
+    const p = game.players[game.viewer];
     if (p.atWarWith.has(idx)) {
       // AI accepts peace if weary or losing
       const weary = (game.players[idx].warWeariness[0] || 0) > 12;
-      const losing = game.militaryPower(idx) < game.militaryPower(game.activeHuman) * 0.8;
+      const losing = game.militaryPower(idx) < game.militaryPower(game.viewer) * 0.8;
       if (weary || losing) game.makePeace(0, idx);
       else game.notify(`${game.players[idx].civ.name} refuses to make peace!`);
     } else {
@@ -526,15 +686,15 @@ const UI = (() => {
 
   // ---------------- top bar / notifications ----------------
   function refreshTopBar() {
-    const p = game.players[game.activeHuman];
+    const p = game.players[game.viewer];
     let gold = 0, sci = 0, faith = 0;
     for (const c of game.cities) {
       if (c.owner !== 0) continue;
       const y = game.cityYields(c);
       gold += y.gold; sci += y.sci; faith += y.faith;
     }
-    gold -= Math.max(0, game.units.filter(u => u.owner === game.activeHuman).length - 4);
-    gold += game.minorBonuses(game.activeHuman).gold;
+    gold -= Math.max(0, game.units.filter(u => u.owner === game.viewer).length - 4);
+    gold += game.minorBonuses(game.viewer).gold;
     if (p.religionId !== null && game.religions[p.religionId].belief === "TITHE") {
       gold += game.religionFollowers(p.religionId);
     }
@@ -546,10 +706,10 @@ const UI = (() => {
       ? `🔬 ${tech.name} ${Math.floor(p.scienceStored)}/${tech.cost} (+${sci})`
       : `🔬 <b class="alert">choose research!</b> (+${sci})`;
     // happiness + golden age
-    const hap = game.happinessOf(game.activeHuman);
-    const lux = game.luxuryTypesOf(game.activeHuman);
-    const nCities = game.cities.filter(c => c.owner === game.activeHuman).length;
-    const popTotal = game.cities.filter(c => c.owner === game.activeHuman).reduce((a, c) => a + c.pop, 0);
+    const hap = game.happinessOf(game.viewer);
+    const lux = game.luxuryTypesOf(game.viewer);
+    const nCities = game.cities.filter(c => c.owner === game.viewer).length;
+    const popTotal = game.cities.filter(c => c.owner === game.viewer).reduce((a, c) => a + c.pop, 0);
     const happyEl = $("stat-happy");
     if (p.goldenAgeTurns > 0) {
       happyEl.innerHTML = `✨ <b style="color:#f1c40f">GOLDEN AGE</b> (${p.goldenAgeTurns})`;
@@ -560,10 +720,10 @@ const UI = (() => {
         `\nGolden Age: ${Math.floor(p.gaMeter)}/${GOLDEN_AGE.threshold(p.gaCount)} (surplus happiness fills the meter)`;
     }
     const relIcon = p.religionId !== null ? game.religions[p.religionId].icon : "☦️";
-    $("stat-faith").innerHTML = game.canFoundReligion(game.activeHuman)
+    $("stat-faith").innerHTML = game.canFoundReligion(game.viewer)
       ? `${relIcon} <b class="alert">found a religion!</b>`
       : `${relIcon} ${Math.floor(p.faith)} (+${faith})`;
-    $("stat-score").textContent = `🏆 ${game.score(game.activeHuman)}`;
+    $("stat-score").textContent = `🏆 ${game.score(game.viewer)}`;
   }
 
   let notifSeen = 0;
@@ -578,7 +738,7 @@ const UI = (() => {
   function refreshNotifications() {
     const list = $("notif-list");
     const all = game.notifications;
-    const forMe = (n) => n.p === undefined || n.p === -1 || n.p === game.activeHuman;
+    const forMe = (n) => n.p === undefined || n.p === -1 || n.p === game.viewer;
     for (let i = notifSeen; i < all.length; i++) {
       if (!forMe(all[i])) continue;
       const hit = NOTIF_SOUNDS.find(([re]) => re.test(all[i].msg));
@@ -605,11 +765,12 @@ const UI = (() => {
 
   // ---------------- end turn ----------------
   function endTurn() {
-    const p = game.players[game.activeHuman];
+    if (!myTurn()) return;
+    const p = game.players[game.viewer];
     if (!p.researching && p.availableTechs().length) { showTechScreen(); return; }
-    const idle = game.units.find(u => u.owner === game.activeHuman && u.moves > 0 && !u.fortified && !u.attacked &&
+    const idle = game.units.find(u => u.owner === game.viewer && u.moves > 0 && !u.fortified && !u.attacked &&
       !u.building && !u.autoExplore && !(u.path && u.path.length));
-    const cityIdle = game.cities.find(c => c.owner === game.activeHuman && !c.producing);
+    const cityIdle = game.cities.find(c => c.owner === game.viewer && !c.producing);
     if (cityIdle) { selectCity(cityIdle); rend.centerOn(game, cityIdle.c, cityIdle.r); return; }
     if (idle && !endTurn.skipIdle) {
       selectUnit(idle);
@@ -621,12 +782,20 @@ const UI = (() => {
     endTurn.skipIdle = false;
     $("btn-endturn").textContent = "End Turn ⏵";
     SFX.play("turn");
-    const before = game.activeHuman;
+    const before = game.viewer;
     game.endTurn();
     try { localStorage.setItem("balkan-civ-save", game.serialize()); } catch (e) { /* storage full */ }
     if (rend.selected && !game.units.includes(rend.selected)) rend.selected = null;
     selectUnit(null);
     closeCity();
+    if (NET.active) {
+      game._viewer = NET.myIndex;
+      NET.sendState(game);
+      refreshAll();
+      netUpdateBanner();
+      if (myTurn() && !game.over) { cycleNextUnit(); maybePromptFounding(); }
+      return;
+    }
     if (game.humans > 1 && !game.over) {
       showHandoff();
       return;
@@ -637,20 +806,20 @@ const UI = (() => {
   }
 
   function maybePromptFounding() {
-    if (game.canFoundReligion(game.activeHuman) &&
-        foundingPromptTurn !== game.turn * 10 + game.activeHuman) {
-      foundingPromptTurn = game.turn * 10 + game.activeHuman;
+    if (game.canFoundReligion(game.viewer) &&
+        foundingPromptTurn !== game.turn * 10 + game.viewer) {
+      foundingPromptTurn = game.turn * 10 + game.viewer;
       showFoundingModal();
     }
   }
 
   // hotseat: blackout screen between human turns
   function showHandoff() {
-    const p = game.players[game.activeHuman];
+    const p = game.players[game.viewer];
     $("handoff-modal").style.display = "flex";
     $("handoff-body").innerHTML = `
       <h2>🔄 Pass the device</h2>
-      <p style="font-size:18px;margin:14px 0"><b style="color:${p.civ.color}">Player ${game.activeHuman + 1}</b>
+      <p style="font-size:18px;margin:14px 0"><b style="color:${p.civ.color}">Player ${game.viewer + 1}</b>
       — ${p.civ.name} (${p.civ.leader})</p>
       <p class="dim">Turn ${game.turn}. No peeking at the other empires!</p>
       <button onclick="UI.beginHotseatTurn()" style="font-size:16px;padding:10px 28px;margin-top:10px">⚔ Begin Turn</button>`;
@@ -660,9 +829,9 @@ const UI = (() => {
     $("handoff-modal").style.display = "none";
     notifSeen = 0; // rescan visible notifications for this player (no sounds replayed: they're deduped by break)
     notifSeen = game.notifications.length - Math.min(game.notifications.length, 30);
-    const p = game.players[game.activeHuman];
-    const home = game.cities.find(c => c.owner === game.activeHuman) ||
-                 game.units.find(u => u.owner === game.activeHuman);
+    const p = game.players[game.viewer];
+    const home = game.cities.find(c => c.owner === game.viewer) ||
+                 game.units.find(u => u.owner === game.viewer);
     if (home) rend.centerOn(game, home.c, home.r);
     refreshAll();
     cycleNextUnit();
@@ -672,8 +841,18 @@ const UI = (() => {
   function showVictory() {
     const modal = $("victory-modal");
     modal.style.display = "flex";
-    const won = game.players[game.winner].isHuman;
+    const won = NET.active ? game.winner === NET.myIndex : game.players[game.winner].isHuman;
     SFX.play(won ? "golden" : "defeat");
+    if (game.scenario) {
+      const sc = SCENARIOS[game.scenario];
+      $("victory-body").innerHTML = `
+        <h2>${won ? "🏆 SCENARIO COMPLETE" : "☠️ SCENARIO FAILED"}</h2>
+        <h3>${sc.icon} ${sc.name} — ${sc.year}</h3>
+        <p style="margin:14px 0;font-size:16px">${won ? sc.winText : sc.loseText}</p>
+        <p class="dim">Finished on turn ${game.turn} of ${game.maxTurns}.</p>
+        <button onclick="UI.newGame()">Back to Menu</button>`;
+      return;
+    }
     const civ = CIVS[game.players[game.winner].civId];
     $("victory-body").innerHTML = `
       <h2>${won ? "🏆 VICTORY!" : "☠️ DEFEAT"}</h2>
@@ -684,6 +863,7 @@ const UI = (() => {
   }
 
   function newGame() {
+    NET.reset();
     localStorage.removeItem("balkan-civ-save");
     $("victory-modal").style.display = "none";
     showStartScreen();
@@ -691,10 +871,11 @@ const UI = (() => {
 
   // ---------------- input ----------------
   function onMapClick(sx, sy, rightClick) {
+    if (!myTurn()) return;
     const [c, r] = rend.screenToHex(sx, sy);
     const t = game.tile(c, r);
     if (!t) return;
-    const p = game.players[game.activeHuman];
+    const p = game.players[game.viewer];
     if (!p.visible[game.map.idx(c, r)]) { selectUnit(null); return; }
 
     const sel = rend.selected;
@@ -707,7 +888,7 @@ const UI = (() => {
       return;
     }
     // move?
-    if (sel && sel.owner === game.activeHuman && (rightClick || rend.reachable.some(([mc, mr]) => mc === c && mr === r) ||
+    if (sel && sel.owner === game.viewer && (rightClick || rend.reachable.some(([mc, mr]) => mc === c && mr === r) ||
         (!game.combatUnitAt(c, r) && !t.city && !game.unitsAt(c, r).length))) {
       const isOwnTile = sel.c === c && sel.r === r;
       if (!isOwnTile && game.unitPassable(sel, t)) {
@@ -719,9 +900,9 @@ const UI = (() => {
       }
     }
     // select city / unit
-    if (t.city && t.city.owner === game.activeHuman) { selectCity(t.city); return; }
-    if (t.city && t.city.owner !== game.activeHuman) { showCityPanel(t.city); rend.selected = null; rend.dirty = true; return; }
-    const mine = game.unitsAt(c, r).filter(u => u.owner === game.activeHuman);
+    if (t.city && t.city.owner === game.viewer) { selectCity(t.city); return; }
+    if (t.city && t.city.owner !== game.viewer) { showCityPanel(t.city); rend.selected = null; rend.dirty = true; return; }
+    const mine = game.unitsAt(c, r).filter(u => u.owner === game.viewer);
     if (mine.length) {
       // toggle through stacked units
       const cur = mine.indexOf(rend.selected);
@@ -833,9 +1014,9 @@ const UI = (() => {
     rend.hoverTile = game.tile(c, r) ? [c, r] : null;
     rend.previewPath = null;
     const sel = rend.selected;
-    if (sel && sel.owner === game.activeHuman && rend.hoverTile && !(sel.c === c && sel.r === r)) {
+    if (sel && sel.owner === game.viewer && rend.hoverTile && !(sel.c === c && sel.r === r)) {
       const t = game.tile(c, r);
-      if (game.players[game.activeHuman].visible[game.map.idx(c, r)] && game.unitPassable(sel, t)) {
+      if (game.players[game.viewer].visible[game.map.idx(c, r)] && game.unitPassable(sel, t)) {
         rend.previewPath = game.findPath(sel, c, r);
       }
     }
@@ -850,14 +1031,14 @@ const UI = (() => {
     if (e.clientX < rect.left || e.clientY < rect.top || e.clientY > rect.bottom) { tip.style.display = "none"; return; }
     const [c, r] = rend.screenToHex(e.clientX - rect.left, e.clientY - rect.top);
     const t = game.tile(c, r);
-    if (!t || !game.players[game.activeHuman].visible[game.map.idx(c, r)]) { tip.style.display = "none"; return; }
+    if (!t || !game.players[game.viewer].visible[game.map.idx(c, r)]) { tip.style.display = "none"; return; }
     const y = game.tileYield(t);
     let html = `<b>${TERRAIN[t.terrain].name}</b>${t.feature ? " / " + FEATURE[t.feature].name : ""}`;
     if (t.resource) html += ` · ${RESOURCE[t.resource].icon} ${RESOURCE[t.resource].name}${RESOURCE[t.resource].luxury ? " (luxury)" : ""}`;
     if (t.improvement) html += ` · ${IMPROVEMENT[t.improvement].icon} ${IMPROVEMENT[t.improvement].name}`;
     html += `<br><span class="dim">🍞${y.food} ⚙️${y.prod} 💰${y.gold}</span>`;
     if (t.owner !== -1) html += `<br><span style="color:${CIVS[game.players[t.owner].civId].color}">${CIVS[game.players[t.owner].civId].name} territory</span>`;
-    const visLevel = game.players[game.activeHuman].visible[game.map.idx(c, r)];
+    const visLevel = game.players[game.viewer].visible[game.map.idx(c, r)];
     if (visLevel === 2) {
       for (const u of game.unitsAt(c, r)) {
         html += `<br>${u.def.icon} ${u.def.name}${u.level ? " " + "⭐".repeat(u.level) : ""} (${CIVS[game.players[u.owner].civId].name}) HP ${u.hp}`;
@@ -878,6 +1059,26 @@ const UI = (() => {
   }
 
   function init() {
+    NET.on("peers", () => refreshHostStatus());
+    NET.on("start", (state) => {
+      game = Game.deserialize(state);
+      game._viewer = NET.myIndex;
+      $("net-modal").style.display = "none";
+      startPlaying();
+      netAfterLoad();
+    });
+    NET.on("state", (state) => {
+      const cam = rend ? { ...rend.cam } : null;
+      game = Game.deserialize(state);
+      game._viewer = NET.myIndex;
+      if (cam) rend.cam = cam;
+      netAfterLoad();
+    });
+    NET.on("drop", () => {
+      const b = $("net-banner");
+      b.style.display = "block";
+      b.innerHTML = `🌐 <b class="war">A player disconnected.</b> The game is auto-saved locally.`;
+    });
     rend = new Renderer($("map"), $("minimap"));
     window.addEventListener("resize", resize);
     resize();
@@ -895,5 +1096,6 @@ const UI = (() => {
 
   return { init, setProduction, buyItem, closeCity, pickTech, diploAction, newGame,
     showFoundingModal, confirmFounding, buyMissionary, gift, assignSpy, beginHotseatTurn,
+    hostAddSlot, hostConnect, hostStartOnline, joinCreateReply,
     get game() { return game; }, get renderer() { return rend; } };
 })();
