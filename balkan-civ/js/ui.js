@@ -723,7 +723,7 @@ const UI = (() => {
     $("stat-faith").innerHTML = game.canFoundReligion(game.viewer)
       ? `${relIcon} <b class="alert">found a religion!</b>`
       : `${relIcon} ${Math.floor(p.faith)} (+${faith})`;
-    $("stat-score").textContent = `🏆 ${game.score(game.viewer)}`;
+    $("stat-score").textContent = game.scenario ? game.scenarioStatus() : `🏆 ${game.score(game.viewer)}`;
   }
 
   let notifSeen = 0;

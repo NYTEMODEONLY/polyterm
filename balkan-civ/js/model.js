@@ -140,6 +140,7 @@ class Game {
     this.activeHuman = 0;
     this._viewer = null;         // network client override (not saved)
     this.scenario = opts.scenario || null;
+    this.scenarioKills = 0;      // for "kills"-type scenario objectives
     this.anims = [];             // transient movement animations (not saved)
     if (this.mapType === "custom" && opts.customMap) {
       const cm = opts.customMap;
@@ -248,9 +249,11 @@ class Game {
       const home = this.units.find(u => u.owner === p.index);
       if (!home) continue;
       for (const type of units) {
+        const wantWater = !!UNITS[type].naval;
         for (const [c, r] of HEX.ring(home.c, home.r, 2)) {
           const t = this.tile(c, r);
-          if (!t || !TERRAIN[t.terrain].passable) continue;
+          if (!t) continue;
+          if (wantWater ? !this.isWater(t) : !TERRAIN[t.terrain].passable) continue;
           if (!UNITS[type].civilian && this.combatUnitAt(c, r)) continue;
           if (UNITS[type].civilian && this.civilianAt(c, r)) continue;
           this.addUnit(type, p.index, c, r);
@@ -262,6 +265,47 @@ class Game {
     for (const [a, b] of sc.warsAtStart || []) {
       const pa = byCiv(a), pb = byCiv(b);
       if (pa && pb) { this.meet(pa.index, pb.index); this.declareWar(pa.index, pb.index); }
+    }
+    this.notify(`${sc.icon} ${sc.name}: ${this.scenarioStatus()}`, 0);
+  }
+
+  // Live objective readout for the top bar
+  scenarioStatus() {
+    if (!this.scenario) return "";
+    const sc = SCENARIOS[this.scenario], v = sc.victory;
+    const left = Math.max(0, this.maxTurns - this.turn + 1);
+    const majors = this.players.filter(p => !p.isMinor);
+    switch (v.type) {
+      case "capture": {
+        const target = this.players.find(p => p.civId === v.target);
+        const cap = this.cities.find(c => c.id === target.originalCapitalId);
+        return `🎯 Take ${cap ? cap.name : "the enemy capital"} · ${left} turns left`;
+      }
+      case "survive":
+        return `🎯 Hold your capital · ${left} turns left`;
+      case "capitals": {
+        const n = this.cities.filter(c => c.owner === 0 &&
+          majors.some(p => p.originalCapitalId === c.id)).length;
+        return `🎯 Capitals ${n}/${v.count} · ${left} turns left`;
+      }
+      case "research":
+        return `🎯 Techs ${this.players[0].techs.size}/${Object.keys(TECHS).length} · ${left} turns left`;
+      case "kills":
+        return `🎯 ${CIVS[v.target].adj} units slain ${this.scenarioKills}/${v.count} · ${left} turns left`;
+      case "cities":
+        return `🎯 Cities ${this.cities.filter(c => c.owner === 0).length}/${v.count} · ${left} turns left`;
+    }
+    return "";
+  }
+
+  trackScenarioKill(killerIdx, victimIdx) {
+    if (!this.scenario || killerIdx !== 0) return;
+    const sc = SCENARIOS[this.scenario];
+    if (sc.victory.type !== "kills") return;
+    const victim = this.players[victimIdx];
+    if (victim && victim.civId === sc.victory.target) {
+      this.scenarioKills++;
+      this.checkVictory();
     }
   }
 
@@ -610,6 +654,7 @@ class Game {
       if (unit.hp > 0) unit.gainXp((ranged ? 3 : 5) + (targetUnit.hp <= 0 ? 5 : 0));
       if (targetUnit.hp <= 0) {
         this.removeUnit(targetUnit);
+        this.trackScenarioKill(unit.owner, targetUnit.owner);
         if (unit.def.healOnKill) unit.hp = Math.min(100, unit.hp + unit.def.healOnKill);
         if (!ranged && unit.hp > 0 && !this.combatUnitAt(c, r) &&
             !(t.city && t.city.owner !== unit.owner) && this.unitPassable(unit, t)) {
@@ -1355,6 +1400,7 @@ class Game {
       this.addEffect(target.c, target.r, "-" + dmg, "#66ccff");
       if (target.hp <= 0) {
         this.removeUnit(target);
+        this.trackScenarioKill(city.owner, target.owner);
         this.notify(`Your ${target.def.name} fell to ${city.name}'s defenses!`, target.owner);
       }
     }
@@ -1443,25 +1489,62 @@ class Game {
   checkVictory() {
     if (this.over) return;
     if (this.scenario) {
-      const sc = SCENARIOS[this.scenario];
+      const sc = SCENARIOS[this.scenario], v = sc.victory;
       const me = this.players[0];
-      if (sc.victory.type === "capture") {
-        const target = this.players.find(p => p.civId === sc.victory.target);
-        const cap = this.cities.find(c => c.id === target.originalCapitalId);
-        if ((cap && cap.owner === 0) || !target.alive) {
-          this.over = true; this.winner = 0; this.victoryType = "Scenario";
-        } else if (this.turn > this.maxTurns || !me.alive) {
-          this.over = true; this.winner = target.index; this.victoryType = "Scenario";
+      const majorsAll = this.players.filter(p => !p.isMinor);
+      const timeUp = this.turn > this.maxTurns;
+      let won = null;
+      if (!me.alive) won = false;
+      if (won === null) switch (v.type) {
+        case "capture": {
+          const target = this.players.find(p => p.civId === v.target);
+          const cap = this.cities.find(c => c.id === target.originalCapitalId);
+          if ((cap && cap.owner === 0) || !target.alive) won = true;
+          else if (timeUp) won = false;
+          break;
         }
-      } else { // survive
-        const myCap = this.cities.find(c => c.id === me.originalCapitalId);
-        const foe = this.players.find(p => p.civId ===
-          (sc.warsAtStart[0][0] === me.civId ? sc.warsAtStart[0][1] : sc.warsAtStart[0][0]));
-        if (!me.alive || (this.turn > 3 && (!myCap || myCap.owner !== 0))) {
-          this.over = true; this.winner = foe ? foe.index : 1; this.victoryType = "Scenario";
-        } else if (this.turn > this.maxTurns) {
-          this.over = true; this.winner = 0; this.victoryType = "Scenario";
+        case "survive": {
+          const myCap = this.cities.find(c => c.id === me.originalCapitalId);
+          if (this.turn > 3 && (!myCap || myCap.owner !== 0)) won = false;
+          else if (timeUp) won = true;
+          break;
         }
+        case "capitals": {
+          const n = this.cities.filter(c => c.owner === 0 &&
+            majorsAll.some(p => p.originalCapitalId === c.id)).length;
+          if (n >= v.count) won = true;
+          else if (timeUp) won = false;
+          break;
+        }
+        case "research": {
+          if (me.techs.size >= Object.keys(TECHS).length) won = true;
+          else if (timeUp) won = false;
+          break;
+        }
+        case "kills": {
+          if (this.scenarioKills >= v.count) won = true;
+          else if (timeUp) won = false;
+          break;
+        }
+        case "cities": {
+          if (this.cities.filter(c => c.owner === 0).length >= v.count) won = true;
+          else if (timeUp) won = false;
+          break;
+        }
+      }
+      if (won === true) {
+        this.over = true; this.winner = 0; this.victoryType = "Scenario";
+      } else if (won === false) {
+        let foe = v.target ? this.players.find(p => p.civId === v.target) : null;
+        if (!foe && sc.warsAtStart.length) {
+          const foeCiv = sc.warsAtStart[0][0] === me.civId ? sc.warsAtStart[0][1] : sc.warsAtStart[0][0];
+          foe = this.players.find(p => p.civId === foeCiv);
+        }
+        if (!foe) {
+          foe = majorsAll.filter(p => p.index !== 0 && p.alive)
+            .sort((a, b) => this.score(b.index) - this.score(a.index))[0];
+        }
+        this.over = true; this.winner = foe ? foe.index : 1; this.victoryType = "Scenario";
       }
       return; // scenario games skip the standard victory rules
     }
@@ -1497,7 +1580,7 @@ class Game {
     return JSON.stringify({
       v: 1, turn: this.turn, seed: this.seed, mapType: this.mapType,
       difficulty: this.difficulty, humans: this.humans, activeHuman: this.activeHuman,
-      scenario: this.scenario, over: this.over,
+      scenario: this.scenario, scenarioKills: this.scenarioKills, over: this.over,
       winner: this.winner, victoryType: this.victoryType, nextId: NEXT_ID,
       religions: this.religions,
       map: { w: this.map.w, h: this.map.h, tiles: this.map.tiles.map(t => ({
@@ -1530,6 +1613,7 @@ class Game {
     g.activeHuman = d.activeHuman || 0;
     g._viewer = null;
     g.scenario = d.scenario || null;
+    g.scenarioKills = d.scenarioKills || 0;
     if (g.scenario && SCENARIOS[g.scenario]) g.maxTurns = SCENARIOS[g.scenario].victory.turns;
     g.effects = [];
     g.anims = [];

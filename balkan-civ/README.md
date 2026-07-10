@@ -47,12 +47,21 @@ Game* on the title screen to pick up where you left off.
   after that the connection is direct between browsers. Each player picks
   their civ on their own start screen, sees only their own fog of war, and
   plays in turn while the others watch a waiting banner
-- **Campaign scenarios**: three historical set-pieces with their own victory
-  rules — *The Rise of Samuil* (976: take Constantinople as Macedonia before
-  turn 150), *The Fall of Constantinople* (1453: Mehmed II's Janissaries and
-  great bombards against the Theodosian Walls, 60 turns), and *Skanderbeg's
-  Rebellion* (1443: hold Krujë against the Ottoman tide for 100 turns, on
-  hard difficulty)
+- **Campaign scenarios — one for every civilization**, each with its own
+  victory rule and a live objective tracker in the top bar:
+  - *The Rise of Samuil* (Macedonia, 976) — take Constantinople in 150 turns
+  - *The Golden Age of Simeon* (Bulgaria, 893) — first to master every
+    technology, with Byzantium at your door
+  - *The Bulgar-Slayer* (Byzantium, 1014) — take Samuil's Ohrid in 100 turns
+  - *The Kingdom Crowned* (Croatia, 925) — survive Tsar Simeon's invasion
+  - *Dušan's Dream* (Serbia, 1346) — hold three imperial capitals
+  - *The Night Attack* (Wallachia, 1462) — destroy 12 Ottoman units as
+    Vlad Drăculea, on hard difficulty
+  - *Tvrtko's Crown* (Bosnia, 1377) — control six cities, by charter or sword
+  - *The Fall of Constantinople* (Ottomans, 1453) — breach the Theodosian
+    Walls in 60 turns
+  - *Skanderbeg's Rebellion* (Albania, 1443) — hold Krujë for 100 turns,
+    on hard difficulty
 - Naval warfare: research Sailing to embark land units onto the coast and
   build Galleys; Compass opens the deep sea and the ranged War Galleass.
   Ships hunt transports, bombard shores, and can capture coastal cities;
@@ -150,4 +159,4 @@ drops mid-game the host can continue against the AI or re-host later.
 
 ## Ideas for future expansion
 
-More scenarios, unit artwork, save-transfer for resuming online games.
+Unit artwork, save-transfer for resuming online games, scenario chains.
