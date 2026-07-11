@@ -1911,6 +1911,13 @@ class Game {
     else if (city.food < 0) { city.food = 0; if (city.pop > 1) { city.pop--; this.notify(`${city.name} is starving!`, city.owner); } }
 
     // production
+    // defensively drop a production item whose key no longer resolves (a
+    // corrupted save, a removed def) so a bad entry can never crash a turn
+    if (city.producing) {
+      const it = city.producing;
+      const def = it.kind === "unit" ? UNITS[it.key] : BUILDINGS[it.key];
+      if (!def) { city.producing = null; }
+    }
     if (city.producing) {
       let prod = y.prod;
       const item = city.producing;

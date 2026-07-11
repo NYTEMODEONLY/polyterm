@@ -1151,6 +1151,9 @@ const UI = (() => {
       const src = on && COLORBLIND_PALETTE[id] ? COLORBLIND_PALETTE[id] : civColorOriginals[id];
       CIVS[id].color = src.color; CIVS[id].color2 = src.color2;
     }
+    // Player.civ caches a merged civ+leader object (which includes colour), so
+    // invalidate it or the diplomacy/congress/graph UI would keep stale colours.
+    if (game) for (const p of game.players) p._civCache = null;
     if (rend) {
       rend._visSnap = null; rend._ownSnap = null; // force 3D recolor + border/banner rebuild
       rend.dirty = true;
