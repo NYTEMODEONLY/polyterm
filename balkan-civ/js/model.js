@@ -117,6 +117,8 @@ class Player {
     this.moodDelta = 0;          // size of that swing (+ festival, - unrest)
     this.lastEventTurn = -99;    // last turn a random event hit this player
     this.leaderIdx = 0;          // which of the civ's leaders is chosen
+    this.congressVote = null;    // World Congress: chosen candidate index
+    this.congressVoteTurn = -1;  // the session (turn) that vote belongs to
   }
   get civ() {
     const base = CIVS[this.civId];
@@ -176,6 +178,8 @@ class Game {
     this.speed = SPEEDS[opts.speed] ? opts.speed : "standard";
     this.routes = [];            // trade routes [{owner, fromId, toId, path, ends}]
     this.history = [];           // score history for the replay graph
+    this.congressTurn = -999;    // last World Congress session turn
+    this.congressLast = null;    // last session tally (for the UI)
     this.anims = [];             // transient movement animations (not saved)
     if (this.mapType === "custom" && opts.customMap) {
       const cm = opts.customMap;
@@ -218,6 +222,7 @@ class Game {
       const nLeaders = (CIVS[cid].leaders || [{}]).length;
       if (opts.leaders && opts.leaders[i] != null) p.leaderIdx = opts.leaders[i] % nLeaders;
       else if (i === 0 && opts.playerLeader != null) p.leaderIdx = opts.playerLeader % nLeaders;
+      else if (this.scenario) p.leaderIdx = 0; // scenarios use each civ's canonical leader
       else p.leaderIdx = Math.floor(this.rng() * nLeaders);
       this.players.push(p);
     });
@@ -2138,6 +2143,7 @@ class Game {
     this.processDiplomacy();
     this.processQuests();
     this.processRandomEvents();
+    if (this.congressDue()) this.runCongress();
     this.processMinorGifts();
     this.decayInfluence();
     this.processEspionage();
@@ -2264,6 +2270,80 @@ class Game {
     this.notify(`${ev.icon} <b>${ev.name}:</b> ${msg}.`, p.index);
   }
 
+  // ---------- World Congress ----------
+  congressUnlocked() {
+    return this.players.some(p => !p.isMinor && !p.isBarb && p.alive && p.hasTech(WCONGRESS.unlockTech));
+  }
+
+  // is a session resolving this round?
+  congressDue() {
+    return !this.scenario && this.congressUnlocked() && this.turn >= WCONGRESS.startTurn &&
+      (this.turn - (this.congressTurn ?? -999)) >= WCONGRESS.interval &&
+      this.players.filter(p => !p.isMinor && !p.isBarb && p.alive).length >= 3;
+  }
+
+  congressDelegates(idx) {
+    const p = this.players[idx];
+    if (!p || p.isMinor || p.isBarb || !p.alive) return 0;
+    let d = WCONGRESS.base;
+    for (const m of this.players) {
+      if (m.isMinor && m.alive && this.minorStatus(idx, m.index) === "ally") d += WCONGRESS.perAlly;
+    }
+    d += Math.floor(this.cities.filter(c => c.owner === idx).length / WCONGRESS.perCities);
+    return d;
+  }
+
+  congressCandidates() {
+    return this.players.filter(p => !p.isMinor && !p.isBarb && p.alive).map(p => p.index);
+  }
+
+  // AI ballot: back yourself if you lead, otherwise the friendliest major
+  // who isn't at war with you (helps a would-be diplomatic winner build a bloc)
+  aiCongressVote(p) {
+    const cands = this.congressCandidates();
+    const myDel = this.congressDelegates(p.index);
+    const ranked = cands.filter(i => i !== p.index)
+      .sort((a, b) => this.congressDelegates(b) - this.congressDelegates(a));
+    const leader = ranked[0];
+    // only lend support to a clear runaway ally you genuinely like — otherwise
+    // vote yourself, so a diplomatic win takes real city-state dominance
+    if (leader != null && this.congressDelegates(leader) > myDel * 2 &&
+        !p.atWarWith.has(leader) && this.attitudeOf(p.index, leader) >= 20 && this.rng() < 0.35) {
+      return leader;
+    }
+    return p.index; // otherwise vote for yourself
+  }
+
+  runCongress() {
+    const cands = this.congressCandidates();
+    if (cands.length < 2) { this.congressTurn = this.turn; return; }
+    const tally = {};
+    for (const i of cands) tally[i] = 0;
+    let total = 0;
+    for (const voter of cands) {
+      const p = this.players[voter];
+      let choice = (p.congressVoteTurn === this.turn && p.congressVote != null &&
+        tally[p.congressVote] != null) ? p.congressVote : this.aiCongressVote(p);
+      const del = this.congressDelegates(voter);
+      tally[choice] = (tally[choice] || 0) + del;
+      total += del;
+    }
+    // winner of the session
+    let best = cands[0];
+    for (const i of cands) if (tally[i] > tally[best]) best = i;
+    const bestCiv = this.players[best].civ.name;
+    this.congressTurn = this.turn;
+    this.congressLast = { tally, total, winner: best, turn: this.turn };
+    for (const p of this.players) { p.congressVote = null; }
+    const need = Math.ceil(total * WCONGRESS.winFraction);
+    if (tally[best] >= need) {
+      this.over = true; this.winner = best; this.victoryType = "Diplomatic";
+      this.notify(`🏛️ The World Congress elects ${bestCiv} World Leader with ${tally[best]}/${total} delegates — a Diplomatic Victory!`, -1);
+    } else {
+      this.notify(`🏛️ World Congress: ${bestCiv} leads the vote (${tally[best]}/${total}); ${need} delegates are needed to be elected World Leader.`, -1);
+    }
+  }
+
   checkVictory() {
     if (this.over) return;
     if (this.scenario) {
@@ -2368,6 +2448,7 @@ class Game {
       scenario: this.scenario, scenarioKills: this.scenarioKills,
       noBarbs: this.noBarbs, barbIndex: this.barbIndex, maxCamps: this.maxCamps || 0,
       camps: this.camps, speed: this.speed, routes: this.routes, history: this.history,
+      congressTurn: this.congressTurn, congressLast: this.congressLast,
       over: this.over,
       winner: this.winner, victoryType: this.victoryType, nextId: NEXT_ID,
       religions: this.religions,
@@ -2387,7 +2468,7 @@ class Game {
         culture: p.culture, policies: [...p.policies], attitude: p.attitude,
         pacts: [...p.pacts], deals: p.deals, quest: p.quest,
         moodTurns: p.moodTurns, moodDelta: p.moodDelta, lastEventTurn: p.lastEventTurn,
-        leaderIdx: p.leaderIdx })),
+        leaderIdx: p.leaderIdx, congressVote: p.congressVote, congressVoteTurn: p.congressVoteTurn })),
       cities: this.cities.map(c => ({ ...c })),
       units: this.units.map(u => ({ id: u.id, type: u.type, owner: u.owner, c: u.c, r: u.r,
         hp: u.hp, moves: u.moves, fortified: u.fortified, attacked: u.attacked, path: u.path,
@@ -2416,6 +2497,8 @@ class Game {
     g.speed = SPEEDS[d.speed] ? d.speed : "standard";
     g.routes = d.routes || [];
     g.history = d.history || [];
+    g.congressTurn = d.congressTurn ?? -999;
+    g.congressLast = d.congressLast || null;
     if (g.scenario && SCENARIOS[g.scenario]) g.maxTurns = SCENARIOS[g.scenario].victory.turns;
     g.effects = [];
     g.anims = [];
@@ -2467,6 +2550,8 @@ class Game {
       p.moodDelta = pd.moodDelta || 0;
       p.lastEventTurn = pd.lastEventTurn ?? -99;
       p.leaderIdx = pd.leaderIdx || 0;
+      p.congressVote = pd.congressVote ?? null;
+      p.congressVoteTurn = pd.congressVoteTurn ?? -1;
       return p;
     });
     return g;

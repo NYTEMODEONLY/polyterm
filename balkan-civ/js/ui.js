@@ -1195,6 +1195,8 @@ const UI = (() => {
       html: `<p>Be the last major civilization standing, or capture and hold every major civ's original capital.</p>` });
     E.push({ cat: "Victory", name: "Cultural Victory", icon: "🎭", tags: "victory culture policy",
       html: `<p>Complete every policy in <b>${CULTURE_VICTORY_BRANCHES} of the ${Object.keys(POLICY_BRANCHES).length} social-policy branches</b>. Culture accumulates from Monuments, Temples, wonders, and policies.</p>` });
+    E.push({ cat: "Victory", name: "Diplomatic Victory", icon: "🏛️", tags: "victory diplomacy congress world leader",
+      html: `<p>Once a civilization researches <b>${TECHS[WCONGRESS.unlockTech].name}</b>, the <b>World Congress</b> convenes every ${WCONGRESS.interval} turns to elect a World Leader. Each civ casts delegates — ${WCONGRESS.base} base, <b>+${WCONGRESS.perAlly} per allied city-state</b>, and +1 per ${WCONGRESS.perCities} cities. Win <b>${Math.round(WCONGRESS.winFraction * 100)}%</b> of all delegates in a single vote to be elected and win. Allying city-states is the key.</p>` });
     E.push({ cat: "Victory", name: "Score Victory", icon: "🏆", tags: "victory score time",
       html: `<p>If no one has won when the turn limit is reached, the civilization with the highest score (cities, population, techs, wonders) wins.</p>` });
     return E;
@@ -1257,6 +1259,7 @@ const UI = (() => {
     }
     rend.dirty = true;
     maybeAdvise();
+    maybeShowCongress();
     if (game.over) showVictory();
   }
 
@@ -1281,6 +1284,56 @@ const UI = (() => {
     { key: "cityState", title: "City-states", when: () => [...game.players[game.viewer].met].some(i => game.players[i].isMinor),
       body: "You've met a <b>city-state</b>. Win its friendship with gold gifts or by completing its <b>quests</b> (open Diplomacy to see them) for bonuses to your empire." },
   ];
+
+  // ---------------- World Congress ----------------
+  let congressSeenTurn = -1;
+
+  function maybeShowCongress() {
+    if (!game || game.over || !game.congressDue || !game.congressDue()) return;
+    if (!myTurn()) return;
+    if (congressSeenTurn === game.turn) return;       // shown once this session
+    const p = game.players[game.viewer];
+    if (p.congressVoteTurn === game.turn) return;      // already voted
+    congressSeenTurn = game.turn;
+    showCongressModal();
+  }
+
+  function showCongressModal() {
+    const me = game.viewer;
+    const cands = game.congressCandidates();
+    const total = cands.reduce((a, i) => a + game.congressDelegates(i), 0);
+    const need = Math.ceil(total * WCONGRESS.winFraction);
+    let html = `<p class="dim">Delegates come from your empire and, above all, your <b>city-state allies</b>.
+      Cast your ${game.congressDelegates(me)} delegate(s). Whoever reaches <b>${need}</b> of ${total} is elected
+      World Leader — a <b>Diplomatic Victory</b>.</p><div class="prod-list">`;
+    for (const i of cands) {
+      const pl = game.players[i];
+      const del = game.congressDelegates(i);
+      const isMe = i === me;
+      html += `<div class="prod-item">
+        <span><b style="color:${pl.civ.color}">${pl.civ.name}</b>${isMe ? " (you)" : ""}
+          <span class="dim">— ${pl.leaderName} · ${del} delegate${del !== 1 ? "s" : ""}</span></span>
+        <button ${myTurn() ? "" : "disabled"} onclick="UI.congressVote(${i})">🗳️ Vote</button>
+      </div>`;
+    }
+    html += `</div><div style="margin-top:10px"><button onclick="UI.congressAbstain()">Abstain</button></div>`;
+    $("congress-body").innerHTML = html;
+    $("congress-modal").style.display = "flex";
+  }
+
+  function congressVote(idx) {
+    if (!myTurn()) return;
+    const p = game.players[game.viewer];
+    p.congressVote = idx; p.congressVoteTurn = game.turn;
+    SFX.play("click");
+    $("congress-modal").style.display = "none";
+  }
+
+  function congressAbstain() {
+    const p = game.players[game.viewer];
+    p.congressVote = null; p.congressVoteTurn = game.turn; // recorded so we don't renag
+    $("congress-modal").style.display = "none";
+  }
 
   function advisorEnabled() { return localStorage.getItem("balkan-civ-tips-off") !== "1"; }
 
@@ -1641,6 +1694,7 @@ const UI = (() => {
         $("spy-modal").style.display = "none";
         $("policy-modal").style.display = "none";
         $("pedia-modal").style.display = "none";
+        $("congress-modal").style.display = "none";
         $("settings-modal").style.display = "none";
         $("log-modal").style.display = "none";
         $("menu-modal").style.display = "none";
@@ -1825,6 +1879,6 @@ const UI = (() => {
     showFoundingModal, confirmFounding, buyMissionary, gift, assignSpy, beginHotseatTurn,
     hostAddSlot, hostConnect, hostStartOnline, joinCreateReply, unqueue,
     saveSlot, loadSlot, exportSave, toMainMenu, toggleGraphics, showSettings: showSettingsModal,
-    diploTrade, diploGift, diploPact, adoptPolicy,
+    diploTrade, diploGift, diploPact, adoptPolicy, congressVote, congressAbstain,
     get game() { return game; }, get renderer() { return rend; } };
 })();

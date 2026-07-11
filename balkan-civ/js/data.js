@@ -679,3 +679,18 @@ const EVENTS = {
   graceTurns: 8,         // no events before this turn
   cooldown: 6,           // min turns between a player's events
 };
+
+// ------------------------------------------------------------
+// World Congress — a periodic World Leader election. Delegates come
+// from your empire and, crucially, your city-state allies. Winning a
+// supermajority is a Diplomatic Victory (the sixth way to win).
+// ------------------------------------------------------------
+const WCONGRESS = {
+  unlockTech: "CIVIL_SERVICE", // the Congress convenes once any major has this
+  startTurn: 60,               // ...and not before this turn
+  interval: 22,                // turns between sessions
+  base: 1,                     // delegates every major gets
+  perAlly: 1,                  // delegates per allied city-state
+  perCities: 5,                // +1 delegate per this many cities
+  winFraction: 0.65,           // share of all delegates needed to win
+};
