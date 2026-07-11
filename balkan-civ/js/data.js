@@ -46,7 +46,7 @@ const GOLDEN_AGE = {
 // ------------------------------------------------------------
 // Technology tree
 // ------------------------------------------------------------
-const ERAS = ["Ancient", "Classical", "Medieval", "Renaissance"];
+const ERAS = ["Ancient", "Classical", "Medieval", "Renaissance", "Industrial"];
 
 const TECHS = {
   AGRICULTURE:      { name: "Agriculture",      era: 0, cost: 20,  req: [] },
@@ -75,6 +75,13 @@ const TECHS = {
   PHYSICS:          { name: "Physics",          era: 2, cost: 400, req: ["MACHINERY", "STEEL"] },
   BANKING:          { name: "Banking",          era: 3, cost: 540, req: ["EDUCATION", "CHIVALRY"] },
   GUNPOWDER:        { name: "Gunpowder",        era: 3, cost: 650, req: ["PHYSICS", "EDUCATION"] },
+  // ---- Industrial era ----
+  METALLURGY:       { name: "Metallurgy",       era: 4, cost: 780,  req: ["GUNPOWDER"] },
+  INDUSTRIALIZATION:{ name: "Industrialization",era: 4, cost: 820,  req: ["BANKING", "GUNPOWDER"] },
+  RIFLING:          { name: "Rifling",          era: 4, cost: 900,  req: ["METALLURGY"] },
+  MILITARY_SCIENCE: { name: "Military Science", era: 4, cost: 900,  req: ["METALLURGY"] },
+  STEAM_POWER:      { name: "Steam Power",       era: 4, cost: 980,  req: ["INDUSTRIALIZATION"] },
+  SANITATION:       { name: "Sanitation",        era: 4, cost: 980,  req: ["INDUSTRIALIZATION"] },
 };
 
 // ------------------------------------------------------------
@@ -92,14 +99,19 @@ const UNITS = {
   CATAPULT:   { name: "Catapult",      icon: "🪨", cost: 75,  cs: 4,  rs: 14, range: 2, moves: 2, tech: "MATHEMATICS", siege: true, upgrade: "TREBUCHET", },
   COMPOSITE:  { name: "Composite Bowman", icon: "🏹", cost: 80, cs: 7, rs: 11, range: 2, moves: 2, tech: "CONSTRUCTION", upgrade: "CROSSBOW", },
   PIKEMAN:    { name: "Pikeman",       icon: "🛡️", cost: 90,  cs: 16, moves: 2, tech: "CIVIL_SERVICE" },
-  KNIGHT:     { name: "Knight",        icon: "🐴", cost: 120, cs: 20, moves: 4, tech: "CHIVALRY", needs: "HORSES" },
+  KNIGHT:     { name: "Knight",        icon: "🐴", cost: 120, cs: 20, moves: 4, tech: "CHIVALRY", needs: "HORSES", upgrade: "CAVALRY", },
   CROSSBOW:   { name: "Crossbowman",   icon: "🎯", cost: 120, cs: 13, rs: 18, range: 2, moves: 2, tech: "MACHINERY" },
   LONGSWORD:  { name: "Longswordsman", icon: "⚔️", cost: 130, cs: 21, moves: 2, tech: "STEEL", needs: "IRON", upgrade: "MUSKETMAN", },
-  TREBUCHET:  { name: "Trebuchet",     icon: "🏰", cost: 130, cs: 6,  rs: 20, range: 2, moves: 2, tech: "PHYSICS", siege: true },
-  MUSKETMAN:  { name: "Musketman",     icon: "🔫", cost: 160, cs: 24, moves: 2, tech: "GUNPOWDER" },
+  TREBUCHET:  { name: "Trebuchet",     icon: "🏰", cost: 130, cs: 6,  rs: 20, range: 2, moves: 2, tech: "PHYSICS", siege: true, upgrade: "CANNON", },
+  MUSKETMAN:  { name: "Musketman",     icon: "🔫", cost: 160, cs: 24, moves: 2, tech: "GUNPOWDER", upgrade: "RIFLEMAN", },
+  // ---- Industrial land units ----
+  RIFLEMAN:   { name: "Rifleman",      icon: "🪖", cost: 210, cs: 34, moves: 2, tech: "RIFLING" },
+  CANNON:     { name: "Cannon",        icon: "💥", cost: 200, cs: 10, rs: 28, range: 2, moves: 2, tech: "MILITARY_SCIENCE", siege: true },
+  CAVALRY:    { name: "Cavalry",       icon: "🐎", cost: 200, cs: 30, moves: 5, tech: "MILITARY_SCIENCE", needs: "HORSES" },
   // ---- Naval units (built in coastal cities only) ----
   GALLEY:     { name: "Galley",        icon: "⛵", cost: 60,  cs: 10, moves: 4, tech: "SAILING", naval: true, coastOnly: true, upgrade: "GALLEASS", },
-  GALLEASS:   { name: "War Galleass",  icon: "🚢", cost: 110, cs: 12, rs: 17, range: 2, moves: 5, tech: "COMPASS", naval: true },
+  GALLEASS:   { name: "War Galleass",  icon: "🚢", cost: 110, cs: 12, rs: 17, range: 2, moves: 5, tech: "COMPASS", naval: true, upgrade: "IRONCLAD", },
+  IRONCLAD:   { name: "Ironclad",      icon: "🛳️", cost: 200, cs: 24, rs: 30, range: 2, moves: 5, tech: "STEAM_POWER", naval: true },
   // ---- Trade ----
   CARAVAN:    { name: "Caravan",       icon: "🐫", cost: 70, cs: 0, moves: 2, civilian: true, caravan: true, tech: "CURRENCY" },
   // ---- Religious units (purchased with faith, not production) ----
@@ -158,6 +170,11 @@ const BUILDINGS = {
   CASTLE:    { name: "Castle",     icon: "🏯", cost: 160, cityHp: 75, cityStr: 6, tech: "CHIVALRY", requires: "WALLS" },
   WORKSHOP:  { name: "Workshop",   icon: "🛠️", cost: 150, prod: 4, tech: "MACHINERY" },
   BANK:      { name: "Bank",       icon: "🏦", cost: 200, gold: 5, tech: "BANKING" },
+  // ---- Industrial buildings ----
+  FACTORY:   { name: "Factory",    icon: "🏭", cost: 260, prod: 6, tech: "INDUSTRIALIZATION" },
+  HOSPITAL:  { name: "Hospital",   icon: "🏥", cost: 240, food: 3, happy: 2, tech: "SANITATION" },
+  ARSENAL:   { name: "Arsenal",    icon: "🎖️", cost: 240, cityHp: 100, cityStr: 8, tech: "MILITARY_SCIENCE", requires: "CASTLE" },
+  STOCK_EXCHANGE: { name: "Stock Exchange", icon: "📈", cost: 300, gold: 8, tech: "STEAM_POWER", requires: "BANK" },
   // ---- Wonders (one per world) ----
   DIOCLETIAN:   { name: "Diocletian's Palace",  icon: "🏛️", cost: 170, wonder: true, gold: 3, culture: 3, tech: "MASONRY",
                   blurb: "The emperor's retirement estate at Split. +3 gold, +3 culture." },
@@ -179,6 +196,10 @@ const BUILDINGS = {
                   blurb: "Bulgaria's mountain sanctuary. +5 science, +2 culture." },
   KALEMEGDAN:   { name: "Kalemegdan Fortress",  icon: "🏰", cost: 240, wonder: true, cityHp: 100, cityStr: 8, tech: "CHIVALRY",
                   blurb: "The white fortress over the Danube. +100 city HP, +8 city strength." },
+  IRON_GATES:   { name: "Iron Gates Works",     icon: "⚙️", cost: 340, wonder: true, prod: 6, gold: 3, tech: "STEAM_POWER",
+                  blurb: "Taming the Danube's great gorge. +6 production, +3 gold." },
+  ORIENT_EXPRESS: { name: "Orient Express",     icon: "🚂", cost: 340, wonder: true, gold: 5, sci: 3, culture: 2, tech: "INDUSTRIALIZATION",
+                  blurb: "The line from Paris to Constantinople. +5 gold, +3 science, +2 culture." },
 };
 
 // ------------------------------------------------------------
@@ -462,16 +483,16 @@ const SCENARIOS = {
   },
   SIMEON_893: {
     name: "The Golden Age of Simeon", year: "893 AD", icon: "📚",
-    blurb: "From Preslav's scriptoria flows a river of Slavic letters — while Byzantium probes your borders. Prove Bulgaria the light of the age: be the first to master every technology, within 220 turns, with a war at your doorstep.",
+    blurb: "From Preslav's scriptoria flows a river of Slavic letters — while Byzantium probes your borders. Prove Bulgaria the light of the age: be the first to master every technology, within 260 turns, with a war at your doorstep.",
     playerCiv: "BULGARIA", opponents: ["BYZANTIUM", "SERBIA", "MACEDONIA"],
     seed: 893001, mapType: "peninsula", difficulty: "normal",
-    techEra: 0, gold: 350,
+    techEra: 0, gold: 420,
     armies: {
       BULGARIA: ["KONNIK", "KONNIK", "SPEARMAN", "ARCHER", "WORKER"],
       BYZANTIUM: ["SPEARMAN", "ARCHER"],
     },
     warsAtStart: [["BULGARIA", "BYZANTIUM"]],
-    victory: { type: "research", turns: 220,
+    victory: { type: "research", turns: 260,
       winText: "Preslav outshines Constantinople. The golden age is written in a script the world will keep.",
       loseText: "The scriptoria fall silent. Others will write the next century." },
   },

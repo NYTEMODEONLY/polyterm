@@ -243,7 +243,7 @@ const AI = (() => {
     const atWar = realWars(game, p).length > 0;
     const milTechs = ["ARCHERY", "BRONZE_WORKING", "IRON_WORKING", "HORSEBACK_RIDING",
       "CHIVALRY", "STEEL", "MACHINERY", "GUNPOWDER", "MASONRY", "CONSTRUCTION", "PHYSICS", "MATHEMATICS",
-      "SAILING", "COMPASS"];
+      "SAILING", "COMPASS", "METALLURGY", "RIFLING", "MILITARY_SCIENCE", "STEAM_POWER"];
     const ranked = av.sort((a, b) => {
       let sa = TECHS[a].cost, sb = TECHS[b].cost;
       if (atWar) { if (milTechs.includes(a)) sa *= 0.5; if (milTechs.includes(b)) sb *= 0.5; }
