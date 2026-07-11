@@ -125,8 +125,19 @@ class Renderer {
       this.drawCity(ctx, game, city, sx, sy, s);
     }
 
-    // units (only on currently-visible tiles), with movement animation
+    // strike flashes on defenders
     const nowMs = Date.now();
+    game.strikes = (game.strikes || []).filter(st => nowMs - st.ts < 450);
+    for (const st of game.strikes) {
+      if (!vis[game.map.idx(st.tc, st.tr)]) continue;
+      const age = (nowMs - st.ts) / 450;
+      const [fx, fy] = this.worldToScreen(st.tc, st.tr);
+      this.hexPath(ctx, fx, fy, s * 0.92);
+      ctx.fillStyle = `rgba(255,68,51,${(0.5 * (1 - age)).toFixed(3)})`;
+      ctx.fill();
+    }
+
+    // units (only on currently-visible tiles), with movement animation
     const ANIM_HOP = 110; // ms per tile
     game.anims = game.anims.filter(a => nowMs - a.ts < (a.hops.length - 1) * ANIM_HOP + 80);
     for (const u of game.units) {
@@ -145,6 +156,14 @@ class Renderer {
           sx = x1 + (x2 - x1) * f;
           sy = y1 + (y2 - y1) * f;
         }
+      }
+      // attacker lunges toward its target
+      const strike = game.strikes.find(st => st.id === u.id);
+      if (strike) {
+        const f = Math.min(1, (nowMs - strike.ts) / 300);
+        const k = Math.sin(f * Math.PI) * (strike.ranged ? 0.16 : 0.4);
+        const [tx, ty] = this.worldToScreen(strike.tc, strike.tr);
+        sx += (tx - sx) * k; sy += (ty - sy) * k;
       }
       if (sx < -2 * s || sy < -2 * s || sx > W + 2 * s || sy > H + 2 * s) continue;
       this.drawUnit(ctx, game, u, sx, sy, s);

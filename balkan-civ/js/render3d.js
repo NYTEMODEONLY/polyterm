@@ -64,7 +64,7 @@ class Renderer3D {
       atk: new THREE.MeshBasicMaterial({ color: 0xe74c3c, transparent: true, opacity: 0.4, depthWrite: false }),
     };
     this._hexFillGeo = null;   // shared flat hexagon, built with map
-    this._pool = { move: [], atk: [], decor: [], fx: [], routes: [] };
+    this._pool = { move: [], atk: [], decor: [], fx: [], routes: [], flash: [] };
     this._units = new Map();   // unit id -> sprite
     this._cities = new Map();  // city object -> group
     this._builtFor = null;     // map object the static geometry was built for
@@ -315,7 +315,7 @@ class Renderer3D {
       for (const ch of [...g.children]) { g.remove(ch); if (ch.geometry) ch.geometry.dispose(); }
     }
     this._units.clear(); this._cities.clear();
-    this._pool = { move: [], atk: [], decor: [], fx: [], routes: [] };
+    this._pool = { move: [], atk: [], decor: [], fx: [], routes: [], flash: [] };
     this._hover = this._selRing = this._citySel = this._preview = null;
     this._visSnap = this._ownSnap = null;
     this._impHash = null;
@@ -380,14 +380,16 @@ class Renderer3D {
     this._terrainMesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }));
     this.gTerrain.add(this._terrainMesh);
 
-    // translucent sea surface over the whole map
+    // translucent sea surface over the whole map, gently wave-animated
     const [maxX] = HEX.toPixel(map.w, 0, S), [, maxZ] = HEX.toPixel(0, map.h, S);
     const sea = new THREE.Mesh(
-      new THREE.PlaneGeometry(maxX + S * 14, maxZ + S * 14),
+      new THREE.PlaneGeometry(maxX + S * 14, maxZ + S * 14, 48, 36),
       new THREE.MeshLambertMaterial({ color: 0x2d6a8f, transparent: true, opacity: 0.45, depthWrite: false }));
     sea.rotation.x = -Math.PI / 2;
     sea.position.set(maxX / 2 - S, SEA_Y, maxZ / 2 - S * 0.75);
     this.gTerrain.add(sea);
+    this._sea = sea;
+    this._center = new THREE.Vector3(maxX / 2, 0, maxZ / 2);
 
     // shared flat hexagon used by highlights / hover / shroud template
     const hpos = [], hcol = [];
@@ -395,10 +397,7 @@ class Renderer3D {
     this._hexFillGeo = new THREE.BufferGeometry();
     this._hexFillGeo.setAttribute("position", new THREE.Float32BufferAttribute(hpos, 3));
 
-    const sunAt = new THREE.Vector3(maxX / 2, 0, maxZ / 2);
-    this.sun.position.copy(sunAt).add(new THREE.Vector3(700, 1400, 500));
-    this.sun.target.position.copy(sunAt);
-
+    this.sun.target.position.copy(this._center);
     this._builtFor = map;
   }
 
@@ -635,6 +634,13 @@ class Renderer3D {
           wx = x1 + (x2 - x1) * f; wz = z1 + (z2 - z1) * f; y = y1 + (y2 - y1) * f;
         }
       }
+      const strike = (game.strikes || []).find(s => s.id === u.id);
+      if (strike) {
+        const f = Math.min(1, (nowMs - strike.ts) / 300);
+        const k = Math.sin(f * Math.PI) * (strike.ranged ? 0.16 : 0.4);
+        const [tx, tz] = HEX.toPixel(strike.tc, strike.tr, S);
+        wx += (tx - wx) * k; wz += (tz - wz) * k;
+      }
       sp.position.set(wx, y + 1, wz);
       sp.scale.set(S * 1.45, S * 1.72, 1);
       sp.renderOrder = 5;
@@ -776,6 +782,25 @@ class Renderer3D {
     }
   }
 
+  _syncStrikes(game, now) {
+    game.strikes = (game.strikes || []).filter(s => now - s.ts < 450);
+    this._hidePool(this._pool.flash);
+    const vis = game.players[game.viewer].visible;
+    for (const s of game.strikes) {
+      if (!vis[game.map.idx(s.tc, s.tr)]) continue;
+      const age = (now - s.ts) / 450;
+      const m = this._getPooled(this._pool.flash, () => {
+        const mesh = new THREE.Mesh(this._hexFillGeo,
+          new THREE.MeshBasicMaterial({ color: 0xff4433, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+        mesh.renderOrder = 3;
+        return mesh;
+      });
+      m.material.opacity = (1 - age) * 0.5;
+      const [wx, wz] = HEX.toPixel(s.tc, s.tr, this.hexSize);
+      m.position.set(wx, surfY3D(game.tile(s.tc, s.tr)) + 0.55, wz);
+    }
+  }
+
   _syncEffects(game, now) {
     game.effects = game.effects.filter(e => now - e.ts < 1300);
     const S = this.hexSize;
@@ -835,12 +860,39 @@ class Renderer3D {
     this._syncUnits(game, now);
     this._syncDecor(game);
     this._syncOverlays(game);
+    this._syncStrikes(game, now);
     this._syncEffects(game, now);
+    this._animateWater(now);
+    this._sunCycle(game);
 
     this._placeCamera();
     this.three.render(this.scene, this.camera);
     this.drawMinimap(game);
+    this._lastDraw = now;
     this.dirty = false;
+  }
+
+  // gentle rolling swell on the sea plane
+  _animateWater(now) {
+    if (!this._sea) return;
+    const t = now * 0.0012;
+    const posAttr = this._sea.geometry.getAttribute("position");
+    for (let i = 0; i < posAttr.count; i++) {
+      const x = posAttr.getX(i), y = posAttr.getY(i);
+      posAttr.setZ(i, Math.sin(x * 0.016 + t * 1.4) * 1.1 + Math.cos(y * 0.021 + t) * 0.8);
+    }
+    posAttr.needsUpdate = true;
+    this._sea.geometry.computeVertexNormals();
+  }
+
+  // the sun drifts slowly around the map as turns pass
+  _sunCycle(game) {
+    if (!this._center) return;
+    const az = ((game.turn % 80) / 80) * Math.PI * 2 + 0.6;
+    this.sun.position.copy(this._center)
+      .add(new THREE.Vector3(Math.cos(az) * 1300, 1500, Math.sin(az) * 1300));
+    const warm = (Math.sin(az * 2) + 1) / 2; // subtle temperature swing
+    this.sun.color.setRGB(1, 0.95 - warm * 0.06, 0.85 - warm * 0.12);
   }
 
   drawMinimap(game) {

@@ -1447,7 +1447,10 @@ const UI = (() => {
     (function loop() {
       if (game && $("start-screen").style.display === "none" &&
           $("editor-screen").style.display !== "flex" &&
-          (rend.dirty || game.effects.length || game.anims.length)) {
+          (rend.dirty || game.effects.length || game.anims.length ||
+           (game.strikes && game.strikes.length) ||
+           // 3D water swell: a slow ambient tick when otherwise idle
+           (rend.three && Date.now() - (rend._lastDraw || 0) > 140))) {
         rend.draw(game);
       }
       requestAnimationFrame(loop);

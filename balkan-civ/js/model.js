@@ -167,6 +167,7 @@ class Game {
     this.players = [];
     this.notifications = [];
     this.effects = [];           // transient combat popups (not saved)
+    this.strikes = [];           // transient attack animations (not saved)
     this.difficulty = opts.difficulty || "normal";
     this.over = false;
     this.winner = null;
@@ -691,6 +692,14 @@ class Game {
     if (this.effects.length > 40) this.effects.shift();
   }
 
+  // attacker lunge + defender flash, consumed by both renderers
+  addStrike(unit, tc, tr, ranged) {
+    this.strikes.push({ id: unit ? unit.id : null,
+      fc: unit ? unit.c : tc, fr: unit ? unit.r : tr,
+      tc, tr, ranged: !!ranged, ts: Date.now() });
+    if (this.strikes.length > 24) this.strikes.shift();
+  }
+
   // ---------- units ----------
   addUnit(type, owner, c, r) {
     const u = new Unit(type, owner, c, r);
@@ -954,6 +963,7 @@ class Game {
 
     const attStr = this.strengthOf(unit, { attacking: true, targetTile: t, ranged });
     unit.fortified = false;
+    this.addStrike(unit, c, r, ranged);
 
     if (targetCity && (!targetUnit || !ranged)) {
       // attack the city itself (garrison protects a city only vs ranged pokes)
@@ -1753,6 +1763,7 @@ class Game {
       if (!target) continue;
       const dmg = this.damageRoll(this.cityStrength(city) * 0.5, this.strengthOf(target, {}));
       target.hp -= dmg;
+      this.addStrike(null, target.c, target.r, true);
       this.addEffect(target.c, target.r, "-" + dmg, "#66ccff");
       if (target.hp <= 0) {
         this.removeUnit(target);
@@ -1995,6 +2006,7 @@ class Game {
     if (g.scenario && SCENARIOS[g.scenario]) g.maxTurns = SCENARIOS[g.scenario].victory.turns;
     g.effects = [];
     g.anims = [];
+    g.strikes = [];
     g.winner = d.winner; g.victoryType = d.victoryType;
     if (!g.scenario) g.maxTurns = SPEEDS[g.speed].turns;
     g.rng = mulberry32((d.seed + d.turn * 7919) >>> 0);
