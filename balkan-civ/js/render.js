@@ -211,6 +211,7 @@ class Renderer {
     const now = Date.now();
     game.effects = game.effects.filter(e => now - e.ts < 1300);
     for (const e of game.effects) {
+      if (!vis[game.map.idx(e.c, e.r)]) continue; // don't reveal events in the unexplored world
       const age = (now - e.ts) / 1300;
       const [ex, ey] = this.worldToScreen(e.c, e.r);
       ctx.save();

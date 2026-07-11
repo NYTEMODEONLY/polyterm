@@ -110,16 +110,47 @@ class Renderer3D {
     this.camera.lookAt(tx, 0, tz);
   }
 
-  screenToHex(sx, sy) {
+  _rayAt(sx, sy) {
     this._placeCamera();
     const ndc = new THREE.Vector2(
       (sx / this.canvas.width) * 2 - 1,
       -(sy / this.canvas.height) * 2 + 1);
     const ray = new THREE.Raycaster();
     ray.setFromCamera(ndc, this.camera);
-    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -2.4); // average land height
+    return ray;
+  }
+
+  // Ray → ground point on the plane at height y (null if parallel).
+  _groundPoint(ray, y) {
     const hit = new THREE.Vector3();
-    if (!ray.ray.intersectPlane(plane, hit)) return [-999, -999];
+    return ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -y), hit) ? hit : null;
+  }
+
+  // Pick by testing elevation planes from highest to lowest and accepting
+  // the first hex whose real surface matches that height — parallax-exact
+  // for tile tops without raycasting the full terrain mesh.
+  screenToHex(sx, sy) {
+    const ray = this._rayAt(sx, sy);
+    const game = this._game;
+    if (game) {
+      const vis = game.players[game.viewer].visible;
+      const levels = [
+        [13, (t, v) => v === 0],                                   // shroud prisms
+        [ELEV3D.HILLS, (t, v) => v > 0 && t.terrain === "HILLS"],
+        [ELEV3D.MOUNTAIN, (t, v) => v > 0 && t.terrain === "MOUNTAIN"],
+        [2.4, (t, v) => v > 0 && !isWater3D(t) && t.terrain !== "HILLS" && t.terrain !== "MOUNTAIN"],
+        [SEA_Y, (t, v) => v > 0 && isWater3D(t)],
+      ];
+      for (const [y, match] of levels) {
+        const hit = this._groundPoint(ray, y);
+        if (!hit) continue;
+        const [c, r] = HEX.fromPixel(hit.x, hit.z, this.hexSize);
+        const t = game.tile(c, r);
+        if (t && match(t, vis[game.map.idx(c, r)])) return [c, r];
+      }
+    }
+    const hit = this._groundPoint(ray, 2.4);
+    if (!hit) return [-999, -999];
     return HEX.fromPixel(hit.x, hit.z, this.hexSize);
   }
 
@@ -748,7 +779,9 @@ class Renderer3D {
   _syncEffects(game, now) {
     game.effects = game.effects.filter(e => now - e.ts < 1300);
     const S = this.hexSize;
+    const vis = game.players[game.viewer].visible;
     for (const e of game.effects) {
+      if (!vis[game.map.idx(e.c, e.r)]) continue; // don't reveal events in the unexplored world
       const age = (now - e.ts) / 1300;
       const [wx, wz] = HEX.toPixel(e.c, e.r, S);
       const t = game.tile(e.c, e.r);
@@ -759,6 +792,7 @@ class Renderer3D {
 
   // ---------------- main draw ----------------
   draw(game) {
+    this._game = game;
     const W = this.canvas.width, H = this.canvas.height;
     if (this._vw !== W || this._vh !== H) {
       this.three.setSize(W, H, false);
@@ -831,12 +865,24 @@ class Renderer3D {
       m.fillStyle = "#fff";
       m.fillRect(c.c * sx - 1, c.r * sy - 1, 3, 3);
     }
-    const s = this.size;
-    const hexW = s * Math.sqrt(3), hexH = s * 1.5;
-    m.strokeStyle = "rgba(255,255,255,0.8)";
-    m.lineWidth = 1;
-    m.strokeRect(
-      (this.cam.x / hexW) * sx, (this.cam.y / hexH) * sy,
-      (this.canvas.width / hexW) * sx, (this.canvas.height / hexH) * sy);
+    // viewport outline: unproject the screen corners onto the ground so the
+    // shape stays correct when the camera is rotated
+    const hexW = this.hexSize * Math.sqrt(3), hexH = this.hexSize * 1.5;
+    const cw = this.canvas.width, ch = this.canvas.height;
+    const pts = [[0, 0], [cw, 0], [cw, ch], [0, ch]].map(([px, py]) => {
+      const hit = this._groundPoint(this._rayAt(px, py), 2.4);
+      return hit ? [(hit.x / hexW) * sx, (hit.z / hexH) * sy] : null;
+    });
+    if (pts.every(p => p)) {
+      m.save();
+      m.beginPath(); m.rect(0, 0, W, H); m.clip();
+      m.strokeStyle = "rgba(255,255,255,0.8)";
+      m.lineWidth = 1;
+      m.beginPath();
+      pts.forEach(([px, py], i) => i === 0 ? m.moveTo(px, py) : m.lineTo(px, py));
+      m.closePath();
+      m.stroke();
+      m.restore();
+    }
   }
 }

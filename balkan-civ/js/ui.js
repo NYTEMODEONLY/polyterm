@@ -1150,10 +1150,10 @@ const UI = (() => {
     selectUnit(null);
   }
 
-  // Generic touch: tap, long-press, one-finger pan, two-finger pinch
+  // Generic touch: tap, long-press, one-finger pan, two-finger pinch/twist
   function bindTouch(cv, h) {
     let mode = null, sx = 0, sy = 0, lx = 0, ly = 0, t0 = 0, longTimer = null;
-    let pinchD = 0, pinchMX = 0, pinchMY = 0;
+    let pinchD = 0, pinchMX = 0, pinchMY = 0, pinchA = 0;
     const pt = (t) => {
       const r = cv.getBoundingClientRect();
       return [t.clientX - r.left, t.clientY - r.top];
@@ -1174,6 +1174,7 @@ const UI = (() => {
         const [x1, y1] = pt(e.touches[0]), [x2, y2] = pt(e.touches[1]);
         pinchD = Math.hypot(x2 - x1, y2 - y1);
         pinchMX = (x1 + x2) / 2; pinchMY = (y1 + y2) / 2;
+        pinchA = Math.atan2(y2 - y1, x2 - x1);
       }
     }, { passive: false });
     cv.addEventListener("touchmove", (e) => {
@@ -1193,6 +1194,14 @@ const UI = (() => {
         const d = Math.hypot(x2 - x1, y2 - y1);
         const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
         if (pinchD > 0) h.pinch(d / pinchD, mx, my, mx - pinchMX, my - pinchMY);
+        if (h.twist) {
+          const a = Math.atan2(y2 - y1, x2 - x1);
+          let da = a - pinchA;
+          if (da > Math.PI) da -= 2 * Math.PI;
+          if (da < -Math.PI) da += 2 * Math.PI;
+          h.twist(da);
+          pinchA = a;
+        }
         pinchD = d; pinchMX = mx; pinchMY = my;
       }
     }, { passive: false });
@@ -1220,6 +1229,12 @@ const UI = (() => {
       longpress: (x, y) => onMapClick(x, y, true),
       pan: (dx, dy) => { rend.cam.x -= dx; rend.cam.y -= dy; rend.dirty = true; },
       pinch: (f, mx, my, dx, dy) => { zoomAt(f, mx, my); rend.cam.x -= dx; rend.cam.y -= dy; },
+      // two-finger twist rotates the 3D camera (no-op in classic 2D)
+      twist: (da) => {
+        if (!rend.three) return;
+        rend.cam.rot = (rend.cam.rot || 0) - da;
+        rend.dirty = true;
+      },
     });
     let dragging = false, dragMoved = false, lastX = 0, lastY = 0;
 
