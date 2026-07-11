@@ -859,15 +859,17 @@ const UI = (() => {
         <span></span>
       </div>`;
     }
+    const is3d = !!rend.three;
     html += `</div>
       <div style="margin-top:12px">
         <button onclick="UI.exportSave()">📤 Export save file</button>
         <button onclick="document.getElementById('file-import').click()">📥 Import save file</button>
+        <button onclick="UI.toggleGraphics()">🎨 Switch to ${is3d ? "Classic 2D" : "3D"} graphics</button>
         <button onclick="document.getElementById('menu-modal').style.display='none'">▶ Resume</button>
         <button onclick="UI.toMainMenu()">🚪 Main Menu</button>
       </div>
       <p class="dim" style="margin-top:8px">The game also auto-saves every turn. Exported files can be
-      shared to continue a game on another machine.</p>`;
+      shared to continue a game on another machine.${is3d ? " In 3D mode, rotate the camera with Q / W." : ""}</p>`;
     $("menu-body").innerHTML = html;
   }
 
@@ -909,6 +911,21 @@ const UI = (() => {
     $("menu-modal").style.display = "none";
     NET.reset();
     showStartScreen();
+  }
+
+  // switching between the WebGL and 2D canvas renderers needs a reload
+  // (a canvas can hold only one kind of context); autosave first.
+  function toggleGraphics() {
+    if (NET.active) { alert("Finish the online game first — switching graphics reloads the page."); return; }
+    const is3d = !!rend.three;
+    localStorage.setItem("balkan-civ-gfx", is3d ? "2d" : "3d");
+    if (game && !game.over) {
+      try {
+        localStorage.setItem("balkan-civ-save", game.serialize());
+        localStorage.setItem("balkan-civ-resume", "1");
+      } catch (e) { /* storage full — reload to the menu instead */ }
+    }
+    location.reload();
   }
 
   function showLogModal() {
@@ -1264,6 +1281,7 @@ const UI = (() => {
       else if (e.key === "d") showDiploScreen();
       else if (e.key === "r") showReligionScreen();
       else if (e.key === "e") showSpyScreen();
+      else if ((e.key === "q" || e.key === "w") && rend.rotate) rend.rotate(e.key === "q" ? -1 : 1);
     });
 
     $("btn-endturn").onclick = endTurn;
@@ -1395,11 +1413,22 @@ const UI = (() => {
       b.style.display = "block";
       b.innerHTML = `🌐 <b class="war">A player disconnected.</b> The game is auto-saved locally.`;
     });
-    rend = new Renderer($("map"), $("minimap"));
+    const want3d = (localStorage.getItem("balkan-civ-gfx") || "3d") === "3d";
+    rend = (want3d && typeof Renderer3D !== "undefined" && Renderer3D.supported())
+      ? new Renderer3D($("map"), $("minimap"))
+      : new Renderer($("map"), $("minimap"));
     window.addEventListener("resize", resize);
     resize();
     bindInput();
     showStartScreen();
+    // resume seamlessly after a graphics-mode switch reloaded the page
+    if (localStorage.getItem("balkan-civ-resume") === "1") {
+      localStorage.removeItem("balkan-civ-resume");
+      const saved = localStorage.getItem("balkan-civ-save");
+      if (saved) {
+        try { game = Game.deserialize(saved); startPlaying(); } catch (e) { console.error(e); }
+      }
+    }
     (function loop() {
       if (game && $("start-screen").style.display === "none" &&
           $("editor-screen").style.display !== "flex" &&
@@ -1413,6 +1442,6 @@ const UI = (() => {
   return { init, setProduction, buyItem, closeCity, pickTech, diploAction, newGame,
     showFoundingModal, confirmFounding, buyMissionary, gift, assignSpy, beginHotseatTurn,
     hostAddSlot, hostConnect, hostStartOnline, joinCreateReply, unqueue,
-    saveSlot, loadSlot, exportSave, toMainMenu,
+    saveSlot, loadSlot, exportSave, toMainMenu, toggleGraphics,
     get game() { return game; }, get renderer() { return rend; } };
 })();

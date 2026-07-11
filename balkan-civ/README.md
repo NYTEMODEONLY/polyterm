@@ -43,6 +43,14 @@ Game* on the title screen to pick up where you left off.
 
 ## Features
 
+- **3D graphics** (default): a WebGL diorama built with Three.js — extruded
+  hex terrain with cliff faces, cone mountains with snow caps, stepped
+  hills, tree-covered forests, a translucent sea over a depth-shaded
+  seabed, and dark "uncharted" prisms hiding the unexplored world. Rotate
+  the camera with `Q` / `W`. Switch to the original **Classic 2D** renderer
+  any time from the ☰ Menu — the game autosaves and resumes seamlessly,
+  and both styles show the exact same match (Three.js is vendored locally,
+  so the game still works fully offline)
 - Procedurally generated hex maps with smooth coastlines, different every
   game — choose a rugged **Peninsula**, an island-dotted **Archipelago**,
   or a **custom map** you painted yourself in the built-in **Map Editor**
@@ -157,6 +165,7 @@ Game* on the title screen to pick up where you left off.
 | Right-click | Move selected unit |
 | Drag | Pan the map |
 | Mouse wheel | Zoom |
+| `Q` / `W` | Rotate the camera (3D mode) |
 | `Enter` | End turn |
 | `N` / `.` | Next idle unit |
 | `F` | Fortify selected unit |
@@ -179,7 +188,9 @@ js/hex.js         hex-grid math (odd-r offset, cube distance, pixel transforms)
 js/mapgen.js      seeded value-noise map generation + start placement
 js/model.js       game engine: cities, units, combat, research, turns, save/load
 js/ai.js          AI: settling, production, research, diplomacy, tactics
-js/render.js      canvas renderer + minimap (terrain shading, animations)
+js/render.js      classic 2D canvas renderer + minimap
+js/render3d.js    3D WebGL renderer (extruded hex terrain, sprite units)
+js/vendor/        three.min.js (r147, vendored so the game works offline)
 js/editor.js      map editor
 js/net.js         serverless WebRTC multiplayer (invite codes, state relay)
 js/ui.js          panels, modals, input handling
