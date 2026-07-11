@@ -1026,6 +1026,126 @@ const UI = (() => {
       `<div class="dim">Nothing has happened yet.</div>`;
   }
 
+  // ---------------- Civilopedia ----------------
+  // A searchable reference generated straight from the data tables, so it
+  // never drifts from the rules. Entries: {cat, name, icon, tags, html}.
+  let pediaEntries = null, pediaCat = "All";
+
+  function buildPediaEntries() {
+    const E = [];
+    const yields = (o) => {
+      const parts = [];
+      for (const [k, lbl] of [["food", "🍞"], ["prod", "⚙️"], ["gold", "💰"], ["sci", "🔬"],
+        ["culture", "🎭"], ["faith", "☦️"], ["happy", "😊"], ["cityHp", "🏰HP"], ["cityStr", "🏰Str"]]) {
+        if (o[k]) parts.push(`${lbl}+${o[k]}`);
+      }
+      return parts.join(" ");
+    };
+    // Units
+    for (const [key, u] of Object.entries(UNITS)) {
+      const stats = [];
+      if (u.cs) stats.push(`⚔️ ${u.cs}`);
+      if (u.rs) stats.push(`🎯 ${u.rs} (range ${u.range})`);
+      stats.push(`👟 ${u.moves}`);
+      if (u.cost) stats.push(`⚙️ ${u.cost}`);
+      if (u.faithCost) stats.push(`☦️ ${u.faithCost}`);
+      const notes = [];
+      if (u.tech) notes.push(`Needs <b>${TECHS[u.tech].name}</b>`);
+      if (u.needs) notes.push(`Requires <b>${RESOURCE[u.needs].name}</b>`);
+      if (u.uu) notes.push(`Unique to <b>${CIVS[u.uu].name}</b> (replaces ${UNITS[u.replaces].name})`);
+      if (u.upgrade) notes.push(`Upgrades to ${UNITS[u.upgrade].name}`);
+      if (u.siege) notes.push("Siege: +100% vs cities");
+      if (u.naval) notes.push("Naval unit — built in coastal cities");
+      if (u.great) notes.push("Great Person — earned, not built");
+      E.push({ cat: "Units", name: u.name, icon: u.icon, tags: key.toLowerCase(),
+        html: `<div class="dim">${stats.join(" · ")}</div>${u.blurb ? `<p>${u.blurb}</p>` : ""}${notes.length ? `<p class="dim">${notes.join(" · ")}</p>` : ""}` });
+    }
+    // Buildings & wonders
+    for (const [key, b] of Object.entries(BUILDINGS)) {
+      const notes = [];
+      if (b.tech) notes.push(`Needs <b>${TECHS[b.tech].name}</b>`);
+      if (b.requires) notes.push(`Requires ${BUILDINGS[b.requires].name}`);
+      E.push({ cat: b.wonder ? "Wonders" : "Buildings", name: b.name, icon: b.icon, tags: key.toLowerCase(),
+        html: `<div class="dim">⚙️ ${b.cost} · ${yields(b)}</div>${b.blurb ? `<p>${b.blurb}</p>` : ""}${notes.length ? `<p class="dim">${notes.join(" · ")}</p>` : ""}${b.wonder ? `<p class="dim">World wonder — only one may exist.</p>` : ""}` });
+    }
+    // Techs
+    for (const [key, t] of Object.entries(TECHS)) {
+      const unlocks = [];
+      for (const [uk, u] of Object.entries(UNITS)) if (u.tech === key) unlocks.push(u.icon + u.name);
+      for (const [bk, b] of Object.entries(BUILDINGS)) if (b.tech === key) unlocks.push(b.icon + b.name);
+      E.push({ cat: "Techs", name: t.name, icon: "🔬", tags: key.toLowerCase(),
+        html: `<div class="dim">${ERAS[t.era]} Era · 🔬 ${t.cost}${t.req.length ? " · after " + t.req.map(r => TECHS[r].name).join(", ") : ""}</div>${unlocks.length ? `<p>Unlocks: ${unlocks.join(", ")}</p>` : ""}` });
+    }
+    // Policies
+    for (const [bk, br] of Object.entries(POLICY_BRANCHES)) {
+      let inner = `<p class="dim">${br.blurb}</p>`;
+      for (const [pk, pol] of Object.entries(br.policies)) inner += `<p><b>${pol.name}</b> — ${pol.desc}</p>`;
+      inner += `<p class="dim">Branch bonus: ${br.finisher}</p>`;
+      E.push({ cat: "Policies", name: br.name + " branch", icon: br.icon, tags: bk.toLowerCase(),
+        html: inner });
+    }
+    // Promotions
+    for (const [pk, pr] of Object.entries(PROMOS)) {
+      E.push({ cat: "Policies", name: pr.name + " (promotion)", icon: pr.icon, tags: "promotion " + pk.toLowerCase(),
+        html: `<p>${pr.desc}</p><p class="dim">Chosen when a unit gains a level.</p>` });
+    }
+    // Religion
+    for (const [bk, bl] of Object.entries(BELIEFS)) {
+      E.push({ cat: "Religion", name: bl.name, icon: "☦️", tags: "belief " + bk.toLowerCase(),
+        html: `<p>${bl.desc}</p><p class="dim">A founder belief, chosen when you found a religion.</p>` });
+    }
+    for (const [mk, mt] of Object.entries(MINOR_TYPES)) {
+      E.push({ cat: "Religion", name: mt.name + " city-state", icon: mt.icon, tags: "city-state minor " + mk,
+        html: `<p>${mt.desc}</p><p class="dim">Raise influence with gifts or by completing its quests to become Friend (${INFLUENCE_FRIEND}) or Ally (${INFLUENCE_ALLY}).</p>` });
+    }
+    // Civilizations
+    for (const id of CIV_IDS) {
+      const civ = CIVS[id];
+      const uu = UNITS[civ.uu];
+      E.push({ cat: "Civilizations", name: civ.name, icon: "⚔️", tags: id.toLowerCase() + " " + civ.leader.toLowerCase(),
+        html: `<div class="dim">${civ.leader}</div><p><b>${civ.trait}:</b> ${civ.traitDesc}</p><p><b>${uu.icon} ${uu.name}</b> — ${uu.blurb}</p>` });
+    }
+    // Victory conditions
+    E.push({ cat: "Victory", name: "Domination Victory", icon: "⚔️", tags: "victory domination conquest",
+      html: `<p>Be the last major civilization standing, or capture and hold every major civ's original capital.</p>` });
+    E.push({ cat: "Victory", name: "Cultural Victory", icon: "🎭", tags: "victory culture policy",
+      html: `<p>Complete every policy in <b>${CULTURE_VICTORY_BRANCHES} of the ${Object.keys(POLICY_BRANCHES).length} social-policy branches</b>. Culture accumulates from Monuments, Temples, wonders, and policies.</p>` });
+    E.push({ cat: "Victory", name: "Score Victory", icon: "🏆", tags: "victory score time",
+      html: `<p>If no one has won when the turn limit is reached, the civilization with the highest score (cities, population, techs, wonders) wins.</p>` });
+    return E;
+  }
+
+  function showPediaScreen(initialQuery) {
+    if (!pediaEntries) pediaEntries = buildPediaEntries();
+    $("pedia-modal").style.display = "flex";
+    const cats = ["All", "Units", "Buildings", "Wonders", "Techs", "Policies", "Religion", "Civilizations", "Victory"];
+    $("pedia-tabs").innerHTML = cats.map(c =>
+      `<button class="pedia-tab${c === pediaCat ? " active" : ""}" data-cat="${c}">${c}</button>`).join("");
+    $("pedia-tabs").querySelectorAll("button").forEach(b => b.onclick = () => { pediaCat = b.dataset.cat; renderPedia(); });
+    if (initialQuery !== undefined) $("pedia-search").value = initialQuery;
+    renderPedia();
+    setTimeout(() => $("pedia-search").focus(), 30);
+  }
+
+  function renderPedia() {
+    const q = $("pedia-search").value.trim().toLowerCase();
+    $("pedia-tabs").querySelectorAll("button").forEach(b =>
+      b.classList.toggle("active", b.dataset.cat === pediaCat));
+    let list = pediaEntries.filter(e => pediaCat === "All" || e.cat === pediaCat);
+    if (q) list = list.filter(e => e.name.toLowerCase().includes(q) || e.tags.includes(q) ||
+      e.html.toLowerCase().includes(q) || e.cat.toLowerCase().includes(q));
+    // group by category when showing All
+    const body = $("pedia-body");
+    if (!list.length) { body.innerHTML = `<div class="dim">No entries match “${q}”.</div>`; return; }
+    let html = "";
+    let lastCat = null;
+    for (const e of list) {
+      if (pediaCat === "All" && e.cat !== lastCat) { html += `<h3>${e.cat}</h3>`; lastCat = e.cat; }
+      html += `<div class="pedia-entry"><div class="pedia-name">${e.icon} <b>${e.name}</b></div>${e.html}</div>`;
+    }
+    body.innerHTML = html;
+  }
+
   function refreshNotifications() {
     const list = $("notif-list");
     const all = game.notifications;
@@ -1051,8 +1171,60 @@ const UI = (() => {
       rend.attackable = computeAttackable(rend.selected);
     }
     rend.dirty = true;
+    maybeAdvise();
     if (game.over) showVictory();
   }
+
+  // ---------------- advisor tips ----------------
+  // Contextual, one-time hints for newcomers. Each fires the first time its
+  // `when` predicate holds; shown one at a time and remembered in localStorage.
+  const ADVISOR_TIPS = [
+    { key: "welcome", title: "Welcome, ruler!", when: () => game.turn <= 1,
+      body: "Select your <b>Settler</b> and press <b>🏛️ Found City</b> on good ground (grassland near water, hills, or a resource). Your capital is the heart of your empire. Press <b>?</b> any time to open the Civilopedia." },
+    { key: "founded", title: "Your first city", when: () => game.cities.some(c => c.owner === game.viewer),
+      body: "Click a city to set what it <b>builds</b> and which tiles it works. Build a <b>Warrior</b> or <b>Scout</b> to explore and defend, then a <b>Worker</b> to improve your land. Cities grow with food and expand their borders with culture." },
+    { key: "research", title: "Choose research", when: () => !game.players[game.viewer].researching && game.players[game.viewer].availableTechs().length > 0,
+      body: "Press <b>T</b> to open the tech tree and pick what to research. Technologies unlock new units, buildings, and wonders — the path you choose shapes your civilization." },
+    { key: "met", title: "You are not alone", when: () => [...game.players[game.viewer].met].some(i => !game.players[i].isMinor && !game.players[i].isBarb),
+      body: "You've met a rival civilization. Press <b>D</b> for diplomacy — trade luxuries, send gifts, sign defensive pacts, or declare war. Watch their <b>attitude</b> toward you." },
+    { key: "policy", title: "A social policy awaits", when: () => game.canAdoptPolicy(game.viewer),
+      body: "Your culture has funded a <b>social policy</b> — press <b>P</b>. Policies come in four branches; complete three branches to win a <b>Cultural Victory</b>." },
+    { key: "religion", title: "Found a religion", when: () => game.canFoundReligion(game.viewer),
+      body: "You have enough <b>faith</b> to found a religion — click the faith readout or press <b>R</b>. Pick a belief that suits your strategy, then spread it with Missionaries." },
+    { key: "promote", title: "Promote your veteran", when: () => game.units.some(u => u.owner === game.viewer && u.promoPts > 0),
+      body: "A unit has earned a <b>promotion</b>. Select it and choose an upgrade — Might, Bulwark, Field Medic, or Pathfinder. Promotions stack, so seasoned units become formidable." },
+    { key: "cityState", title: "City-states", when: () => [...game.players[game.viewer].met].some(i => game.players[i].isMinor),
+      body: "You've met a <b>city-state</b>. Win its friendship with gold gifts or by completing its <b>quests</b> (open Diplomacy to see them) for bonuses to your empire." },
+  ];
+
+  function advisorEnabled() { return localStorage.getItem("balkan-civ-tips-off") !== "1"; }
+
+  function maybeAdvise() {
+    if (!advisorEnabled() || !game || game.over || $("advisor").style.display === "block") return;
+    if (NET.active && game.activeHuman !== NET.myIndex) return;
+    let seen;
+    try { seen = new Set(JSON.parse(localStorage.getItem("balkan-civ-tips-seen") || "[]")); }
+    catch (e) { seen = new Set(); }
+    for (const tip of ADVISOR_TIPS) {
+      if (seen.has(tip.key)) continue;
+      let ok = false;
+      try { ok = tip.when(); } catch (e) { ok = false; }
+      if (!ok) continue;
+      showAdvisor(tip);
+      seen.add(tip.key);
+      try { localStorage.setItem("balkan-civ-tips-seen", JSON.stringify([...seen])); } catch (e) { /* full */ }
+      return;
+    }
+  }
+
+  function showAdvisor(tip) {
+    $("advisor-title").innerHTML = "💡 " + tip.title;
+    $("advisor-body").innerHTML = tip.body;
+    $("advisor").style.display = "block";
+    SFX.play("bell");
+  }
+
+  function hideAdvisor() { $("advisor").style.display = "none"; }
 
   // ---------------- end turn ----------------
   function endTurn() {
@@ -1367,6 +1539,12 @@ const UI = (() => {
 
     window.addEventListener("keydown", (e) => {
       if ($("start-screen").style.display !== "none") return;
+      // don't hijack keys while typing in a text field (search, net codes)
+      const tag = (e.target.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea") {
+        if (e.key === "Escape") e.target.blur();
+        return;
+      }
       if (e.key === "Enter") { endTurn(); }
       else if (e.key === "." || e.key === "n") cycleNextUnit();
       else if (e.key === "f" && rend.selected) { rend.selected.fortified = true; rend.selected.moves = 0; cycleNextUnit(); refreshAll(); }
@@ -1377,12 +1555,14 @@ const UI = (() => {
         $("founding-modal").style.display = "none";
         $("spy-modal").style.display = "none";
         $("policy-modal").style.display = "none";
+        $("pedia-modal").style.display = "none";
         $("log-modal").style.display = "none";
         $("menu-modal").style.display = "none";
         closeCity();
         selectUnit(null);
       } else if (e.key === "t") showTechScreen();
       else if (e.key === "p") showPolicyScreen();
+      else if (e.key === "?" || e.key === "/") { e.preventDefault(); showPediaScreen(); }
       else if (e.key === "d") showDiploScreen();
       else if (e.key === "r") showReligionScreen();
       else if (e.key === "e") showSpyScreen();
@@ -1397,6 +1577,13 @@ const UI = (() => {
     $("stat-faith").onclick = showReligionScreen;
     $("stat-culture").onclick = showPolicyScreen;
     $("btn-spies").onclick = showSpyScreen;
+    $("btn-pedia").onclick = () => showPediaScreen();
+    $("pedia-search").addEventListener("input", renderPedia);
+    $("advisor-close").onclick = hideAdvisor;
+    $("advisor-off-chk").onchange = (e) => {
+      localStorage.setItem("balkan-civ-tips-off", e.target.checked ? "1" : "0");
+      if (e.target.checked) hideAdvisor();
+    };
     $("notif-list").onclick = showLogModal;
     $("btn-mute").onclick = () => {
       $("btn-mute").textContent = SFX.toggleMute() ? "🔇" : "🔊";

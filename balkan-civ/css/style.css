@@ -150,3 +150,28 @@ button:disabled { opacity: 0.4; cursor: default; }
 .policy button { margin-top: 5px; }
 .policy-check { position: absolute; top: 6px; right: 10px; color: #2ecc71; font-weight: bold; }
 .policy-finisher { margin-top: 8px; font-style: italic; }
+
+/* ---------- Civilopedia ---------- */
+#pedia-search { width: 100%; box-sizing: border-box; padding: 8px 12px; margin-bottom: 10px;
+  background: #0f1725; border: 1px solid #33415c; border-radius: 6px; color: #e8eef7; font-size: 15px; }
+#pedia-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.pedia-tab { background: #16233a; border: 1px solid #2c3a55; color: #b9c6db; padding: 5px 12px;
+  border-radius: 14px; cursor: pointer; font-size: 13px; }
+.pedia-tab.active { background: #c9a648; border-color: #c9a648; color: #1a1206; font-weight: bold; }
+#pedia-body { max-height: 60vh; overflow-y: auto; }
+#pedia-body h3 { color: #c9a648; margin: 14px 0 6px; position: sticky; top: 0; background: #141c2a; padding: 4px 0; }
+.pedia-entry { background: #0f1725; border: 1px solid #26324a; border-radius: 6px;
+  padding: 8px 11px; margin: 6px 0; }
+.pedia-name { font-size: 15px; margin-bottom: 2px; }
+.pedia-entry p { margin: 4px 0; font-size: 13px; }
+
+/* ---------- advisor tips ---------- */
+#advisor { position: fixed; right: 16px; bottom: 92px; width: 320px; z-index: 55;
+  background: linear-gradient(150deg, #1c2740, #141c2a); border: 2px solid #c9a648;
+  border-radius: 10px; padding: 12px 14px; box-shadow: 0 6px 24px rgba(0,0,0,0.5); }
+#advisor-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+#advisor-title { color: #f0d890; font-weight: bold; font-size: 15px; }
+#advisor-close { background: none; border: none; color: #b9c6db; cursor: pointer; font-size: 15px; padding: 2px 6px; }
+#advisor-body { font-size: 13px; line-height: 1.45; color: #dfe7f2; }
+#advisor-off { display: flex; align-items: center; gap: 6px; margin-top: 9px; font-size: 11px; color: #8393ab; cursor: pointer; }
+#advisor-off input { cursor: pointer; }

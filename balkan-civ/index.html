@@ -96,6 +96,7 @@
     <button id="btn-religion">☦️ Religion (R)</button>
     <button id="btn-diplo">🤝 Diplomacy (D)</button>
     <button id="btn-spies">🕵️ Spies (E)</button>
+    <button id="btn-pedia" title="Civilopedia — searchable reference (?)">📖</button>
     <button id="btn-mute" title="Toggle sound effects">🔊</button>
     <button id="btn-music" title="Toggle music">🎵</button>
     <button id="btn-menu">☰ Menu</button>
@@ -112,6 +113,11 @@
 </div>
 
 <div id="tooltip"></div>
+<div id="advisor" style="display:none">
+  <div id="advisor-head"><span id="advisor-title"></span><button id="advisor-close" title="Dismiss">✕</button></div>
+  <div id="advisor-body"></div>
+  <label id="advisor-off"><input type="checkbox" id="advisor-off-chk"> Don't show advisor tips</label>
+</div>
 
 <!-- ============ modals ============ -->
 <div id="tech-modal" class="modal">
@@ -131,6 +137,13 @@
 </div>
 <div id="policy-modal" class="modal">
   <div class="modal-box wide"><h2>🎭 Social Policies</h2><div id="policy-body"></div></div>
+</div>
+<div id="pedia-modal" class="modal">
+  <div class="modal-box wide"><h2>📖 Civilopedia</h2>
+    <input id="pedia-search" type="text" placeholder="🔍 Search units, buildings, techs, policies…" autocomplete="off">
+    <div id="pedia-tabs"></div>
+    <div id="pedia-body"></div>
+  </div>
 </div>
 <div id="log-modal" class="modal">
   <div class="modal-box"><h2>📜 Message Log</h2><div id="log-body"></div></div>
