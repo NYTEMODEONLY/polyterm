@@ -116,8 +116,20 @@ class Player {
     this.moodTurns = 0;          // turns left on a temporary happiness swing
     this.moodDelta = 0;          // size of that swing (+ festival, - unrest)
     this.lastEventTurn = -99;    // last turn a random event hit this player
+    this.leaderIdx = 0;          // which of the civ's leaders is chosen
   }
-  get civ() { return CIVS[this.civId]; }
+  get civ() {
+    const base = CIVS[this.civId];
+    if (!base.leaders) return base;
+    const L = base.leaders[this.leaderIdx] || base.leaders[0];
+    // cache the merged view per (civId, leaderIdx) so hot paths stay cheap
+    if (!this._civCache || this._civLeader !== this.leaderIdx) {
+      this._civCache = Object.assign({}, base, L);
+      this._civLeader = this.leaderIdx;
+    }
+    return this._civCache;
+  }
+  get leaderName() { const b = CIVS[this.civId]; return b.leaders ? (b.leaders[this.leaderIdx] || b.leaders[0]).leader : "—"; }
   get isMinor() { return !!this.civ.minor; }
   get isBarb() { return !!this.civ.barb; }
   hasTech(t) { return this.techs.has(t); }
@@ -201,6 +213,12 @@ class Game {
     civs.forEach((cid, i) => {
       const p = new Player(i, cid, i < this.humans);
       p.visible = new Uint8Array(this.map.w * this.map.h);
+      // leader selection: explicit per-player list (online), else player 0's
+      // chosen leader and a random leader for everyone else
+      const nLeaders = (CIVS[cid].leaders || [{}]).length;
+      if (opts.leaders && opts.leaders[i] != null) p.leaderIdx = opts.leaders[i] % nLeaders;
+      else if (i === 0 && opts.playerLeader != null) p.leaderIdx = opts.playerLeader % nLeaders;
+      else p.leaderIdx = Math.floor(this.rng() * nLeaders);
       this.players.push(p);
     });
     const nMajors = this.players.length;
@@ -919,6 +937,8 @@ class Game {
     if (civ.roughBonus && here && (here.terrain === "HILLS" || here.feature === "FOREST")) mod += civ.roughBonus;
     if (civ.homeBonus && here && here.owner === unit.owner) mod += civ.homeBonus;
     if (civ.vsCityBonus && attacking && targetTile && targetTile.city) mod += civ.vsCityBonus;
+    if (civ.attackBonus && attacking) mod += civ.attackBonus;
+    if (civ.defendCiv && !attacking) mod += civ.defendCiv;
     if (unit.def.terrainBonus && here && (here.terrain === "HILLS" || here.feature === "FOREST")) mod += unit.def.terrainBonus;
     if (unit.def.siege && attacking && targetTile && targetTile.city) mod += 1.0; // siege vs cities
     // Holy Warriors: faith-fuelled fighting near follower cities
@@ -1201,6 +1221,9 @@ class Game {
     if (civ.cityScience) sci += civ.cityScience;
     if (civ.cityCulture) culture += civ.cityCulture;
     if (civ.cityGold) gold += civ.cityGold;
+    if (civ.cityFaith) faith += civ.cityFaith;
+    if (civ.cityProd) prod += civ.cityProd;
+    if (civ.cityFood) food += civ.cityFood;
     if (civ.capitalGold && city.isCapital) gold += civ.capitalGold;
     if (civ.coastalGold && city.coastal) gold += civ.coastalGold;
     if (civ.coastalFood && city.coastal) food += civ.coastalFood;
@@ -1879,6 +1902,7 @@ class Game {
       let prod = y.prod;
       const item = city.producing;
       if (item.kind === "building" && p.civ.buildingProdBonus) prod = Math.floor(prod * (1 + p.civ.buildingProdBonus));
+      if (item.kind === "unit" && p.civ.unitProdBonus) prod = Math.floor(prod * (1 + p.civ.unitProdBonus));
       if (p.goldenAgeTurns > 0) prod = Math.floor(prod * (1 + GOLDEN_AGE.bonus));
       city.prodStored += prod;
       const cost = item.kind === "unit" ? UNITS[item.key].cost : BUILDINGS[item.key].cost;
@@ -2362,7 +2386,8 @@ class Game {
         spies: p.spies, gpPoints: p.gpPoints, gpBorn: p.gpBorn,
         culture: p.culture, policies: [...p.policies], attitude: p.attitude,
         pacts: [...p.pacts], deals: p.deals, quest: p.quest,
-        moodTurns: p.moodTurns, moodDelta: p.moodDelta, lastEventTurn: p.lastEventTurn })),
+        moodTurns: p.moodTurns, moodDelta: p.moodDelta, lastEventTurn: p.lastEventTurn,
+        leaderIdx: p.leaderIdx })),
       cities: this.cities.map(c => ({ ...c })),
       units: this.units.map(u => ({ id: u.id, type: u.type, owner: u.owner, c: u.c, r: u.r,
         hp: u.hp, moves: u.moves, fortified: u.fortified, attacked: u.attacked, path: u.path,
@@ -2441,6 +2466,7 @@ class Game {
       p.moodTurns = pd.moodTurns || 0;
       p.moodDelta = pd.moodDelta || 0;
       p.lastEventTurn = pd.lastEventTurn ?? -99;
+      p.leaderIdx = pd.leaderIdx || 0;
       return p;
     });
     return g;

@@ -6,6 +6,7 @@
 const UI = (() => {
   let game = null, rend = null;
   let chosenCiv = CIV_IDS[0];
+  let chosenLeader = 0;
   const $ = (id) => document.getElementById(id);
 
   // In a network game only the client whose turn it is may act.
@@ -23,20 +24,40 @@ const UI = (() => {
       const uu = UNITS[civ.uu];
       const card = document.createElement("div");
       card.className = "civ-card";
+      const renderLeaders = (sel) => civ.leaders.map((L, li) =>
+        `<button class="leader-chip${id === chosenCiv && li === sel ? " sel" : ""}" data-li="${li}"
+          title="${L.trait}: ${L.traitDesc}">${L.leader}</button>`).join("");
+      const traitLine = (li) => `<div class="trait"><b>${civ.leaders[li].trait}</b><br>${civ.leaders[li].traitDesc}</div>`;
+      const paint = () => {
+        card.querySelector(".leaders").innerHTML = renderLeaders(id === chosenCiv ? chosenLeader : 0);
+        card.querySelector(".trait-slot").innerHTML = traitLine(id === chosenCiv ? chosenLeader : 0);
+        bindChips();
+      };
+      const bindChips = () => card.querySelectorAll(".leader-chip").forEach(b => b.onclick = (e) => {
+        e.stopPropagation();
+        chosenCiv = id; chosenLeader = parseInt(b.dataset.li, 10);
+        document.querySelectorAll(".civ-card").forEach(c => c.classList.remove("sel"));
+        card.classList.add("sel");
+        repaintAll();
+      });
       card.innerHTML = `
         <div class="civ-flag" style="background:${civ.color};border-color:${civ.color2}"></div>
         <h3>${civ.name}</h3>
-        <div class="leader">${civ.leader}</div>
-        <div class="trait"><b>${civ.trait}</b><br>${civ.traitDesc}</div>
+        <div class="leaders">${renderLeaders(id === chosenCiv ? chosenLeader : 0)}</div>
+        <div class="trait-slot">${traitLine(id === chosenCiv ? chosenLeader : 0)}</div>
         <div class="uu">${uu.icon} <b>${uu.name}</b> — ${uu.blurb}</div>`;
       card.onclick = () => {
+        if (chosenCiv !== id) { chosenCiv = id; chosenLeader = 0; }
         document.querySelectorAll(".civ-card").forEach(c => c.classList.remove("sel"));
         card.classList.add("sel");
-        chosenCiv = id;
+        repaintAll();
       };
+      card._paint = paint;
       if (id === chosenCiv) card.classList.add("sel");
+      bindChips();
       wrap.appendChild(card);
     }
+    const repaintAll = () => wrap.querySelectorAll(".civ-card").forEach(c => c._paint && c._paint());
     buildScenarioCards();
     $("opt-custom").disabled = !localStorage.getItem("balkan-civ-custommap");
     $("btn-host").onclick = showHostModal;
@@ -65,7 +86,8 @@ const UI = (() => {
         try { customMap = JSON.parse(localStorage.getItem("balkan-civ-custommap")); } catch (e) { /* fall through */ }
         if (!customMap) { alert("No custom map saved — open the Map Editor first."); return; }
       }
-      game = new Game({ playerCiv: chosenCiv, numOpponents: numOpp, mapW: dims[0], mapH: dims[1],
+      game = new Game({ playerCiv: chosenCiv, playerLeader: chosenLeader,
+        numOpponents: numOpp, mapW: dims[0], mapH: dims[1],
         mapType, customMap, numHumans, difficulty: $("sel-difficulty").value,
         noBarbs: !$("chk-barbs").checked, speed: $("sel-speed").value });
       startPlaying();
@@ -1159,12 +1181,14 @@ const UI = (() => {
       E.push({ cat: "Religion", name: mt.name + " city-state", icon: mt.icon, tags: "city-state minor " + mk,
         html: `<p>${mt.desc}</p><p class="dim">Raise influence with gifts or by completing its quests to become Friend (${INFLUENCE_FRIEND}) or Ally (${INFLUENCE_ALLY}).</p>` });
     }
-    // Civilizations
+    // Civilizations (with all their leaders)
     for (const id of CIV_IDS) {
       const civ = CIVS[id];
       const uu = UNITS[civ.uu];
-      E.push({ cat: "Civilizations", name: civ.name, icon: "⚔️", tags: id.toLowerCase() + " " + civ.leader.toLowerCase(),
-        html: `<div class="dim">${civ.leader}</div><p><b>${civ.trait}:</b> ${civ.traitDesc}</p><p><b>${uu.icon} ${uu.name}</b> — ${uu.blurb}</p>` });
+      const leaders = civ.leaders.map(L => `<p><b>${L.leader}</b> — <i>${L.trait}</i>: ${L.traitDesc}</p>`).join("");
+      E.push({ cat: "Civilizations", name: civ.name, icon: "⚔️",
+        tags: id.toLowerCase() + " " + civ.leaders.map(L => L.leader.toLowerCase()).join(" "),
+        html: `<p><b>${uu.icon} ${uu.name}</b> — ${uu.blurb}</p><div class="dim">Leaders:</div>${leaders}` });
     }
     // Victory conditions
     E.push({ cat: "Victory", name: "Domination Victory", icon: "⚔️", tags: "victory domination conquest",

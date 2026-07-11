@@ -184,69 +184,90 @@ const BUILDINGS = {
 // ------------------------------------------------------------
 // Civilizations
 // ------------------------------------------------------------
+// Each civ offers several leaders. A leader carries the trait + bonus set;
+// the unique unit and city list belong to the civ. Leader 0 preserves the
+// original balance. Player.civ merges the chosen leader over the civ base.
 const CIVS = {
   SERBIA: {
-    name: "Serbia", leader: "Stefan Dušan", adj: "Serbian",
-    color: "#c0392b", color2: "#f5e6c8",
-    trait: "Tsar of Serbs and Greeks", traitDesc: "+25% production toward buildings in every city.",
-    buildingProdBonus: 0.25, uu: "GUSAR",
+    name: "Serbia", adj: "Serbian", color: "#c0392b", color2: "#f5e6c8", uu: "GUSAR",
     cities: ["Beograd", "Prizren", "Niš", "Novo Brdo", "Kruševac", "Smederevo", "Peć", "Ras", "Priština", "Golubac"],
+    leaders: [
+      { leader: "Stefan Dušan", trait: "Tsar of Serbs and Greeks", traitDesc: "+25% production toward buildings in every city.", buildingProdBonus: 0.25 },
+      { leader: "Stefan Nemanja", trait: "Founder of the Nemanjić", traitDesc: "+2 culture in every city.", cityCulture: 2 },
+      { leader: "Lazar of Kosovo", trait: "Martyr's Resolve", traitDesc: "+25% combat strength when defending.", defendCiv: 0.25 },
+    ],
   },
   BULGARIA: {
-    name: "Bulgaria", leader: "Simeon I the Great", adj: "Bulgarian",
-    color: "#2e8b57", color2: "#ffffff",
-    trait: "Golden Age of Simeon", traitDesc: "+2 science in every city.",
-    cityScience: 2, uu: "KONNIK",
+    name: "Bulgaria", adj: "Bulgarian", color: "#2e8b57", color2: "#ffffff", uu: "KONNIK",
     cities: ["Preslav", "Tarnovo", "Sofia", "Plovdiv", "Pliska", "Varna", "Ohrid", "Vidin", "Silistra", "Burgas"],
+    leaders: [
+      { leader: "Simeon I the Great", trait: "Golden Age of Simeon", traitDesc: "+2 science in every city.", cityScience: 2 },
+      { leader: "Krum the Fearsome", trait: "Khan of the Bulgars", traitDesc: "+20% combat strength when attacking.", attackBonus: 0.2 },
+      { leader: "Boris I", trait: "Baptizer of Bulgaria", traitDesc: "+2 faith in every city.", cityFaith: 2 },
+    ],
   },
   BYZANTIUM: {
-    name: "Byzantium", leader: "Basil II", adj: "Byzantine",
-    color: "#6a0dad", color2: "#ffd700",
-    trait: "The Purple Bureaucracy", traitDesc: "+4 gold in the capital, +1 gold in every other city.",
-    capitalGold: 4, cityGold: 1, uu: "CATAPHRACT",
+    name: "Byzantium", adj: "Byzantine", color: "#6a0dad", color2: "#ffd700", uu: "CATAPHRACT",
     cities: ["Constantinople", "Thessalonica", "Adrianople", "Nicaea", "Dyrrachium", "Corinth", "Athens", "Smyrna", "Trebizond", "Mystras"],
+    leaders: [
+      { leader: "Basil II", trait: "The Purple Bureaucracy", traitDesc: "+4 gold in the capital, +1 gold in every other city.", capitalGold: 4, cityGold: 1 },
+      { leader: "Justinian I", trait: "Codifier of Law", traitDesc: "+2 culture and +1 science in every city.", cityCulture: 2, cityScience: 1 },
+      { leader: "Constantine the Great", trait: "First Christian Emperor", traitDesc: "+2 faith in every city.", cityFaith: 2 },
+    ],
   },
   OTTOMAN: {
-    name: "Ottomans", leader: "Mehmed II", adj: "Ottoman",
-    color: "#b03a2e", color2: "#27ae60",
-    trait: "Ghazi Warriors", traitDesc: "+20% combat strength when attacking cities.",
-    vsCityBonus: 0.2, uu: "JANISSARY",
+    name: "Ottomans", adj: "Ottoman", color: "#b03a2e", color2: "#27ae60", uu: "JANISSARY",
     cities: ["Edirne", "Bursa", "Üsküdar", "Gallipoli", "Iznik", "Manisa", "Ankara", "Konya", "Amasya", "Sivas"],
+    leaders: [
+      { leader: "Mehmed II", trait: "Ghazi Warriors", traitDesc: "+20% combat strength when attacking cities.", vsCityBonus: 0.2 },
+      { leader: "Suleiman the Magnificent", trait: "The Lawgiver", traitDesc: "+2 gold in every city.", cityGold: 2 },
+      { leader: "Osman I", trait: "Founder of the Dynasty", traitDesc: "+25% production toward units.", unitProdBonus: 0.25 },
+    ],
   },
   ALBANIA: {
-    name: "Albania", leader: "Skanderbeg", adj: "Albanian",
-    color: "#8b0000", color2: "#111111",
-    trait: "Lord of the Mountains", traitDesc: "+30% combat strength when fighting in hills or forest.",
-    roughBonus: 0.3, uu: "STRADIOT",
+    name: "Albania", adj: "Albanian", color: "#8b0000", color2: "#111111", uu: "STRADIOT",
     cities: ["Krujë", "Shkodër", "Durrës", "Berat", "Vlorë", "Lezhë", "Gjirokastër", "Elbasan", "Korçë", "Tiranë"],
+    leaders: [
+      { leader: "Skanderbeg", trait: "Lord of the Mountains", traitDesc: "+30% combat strength when fighting in hills or forest.", roughBonus: 0.3 },
+      { leader: "Gjergj Arianiti", trait: "Rebel of Epirus", traitDesc: "+20% combat strength when attacking.", attackBonus: 0.2 },
+      { leader: "Lekë Dukagjini", trait: "Lawgiver of the Highlands", traitDesc: "+2 culture in every city.", cityCulture: 2 },
+    ],
   },
   CROATIA: {
-    name: "Croatia", leader: "Tomislav", adj: "Croatian",
-    color: "#1f618d", color2: "#e74c3c",
-    trait: "Adriatic Kingdom", traitDesc: "+2 gold and +1 food in cities founded next to the sea.",
-    coastalGold: 2, coastalFood: 1, uu: "USKOK",
+    name: "Croatia", adj: "Croatian", color: "#1f618d", color2: "#e74c3c", uu: "USKOK",
     cities: ["Zagreb", "Split", "Dubrovnik", "Zadar", "Nin", "Šibenik", "Knin", "Osijek", "Rijeka", "Trogir"],
+    leaders: [
+      { leader: "Tomislav", trait: "Adriatic Kingdom", traitDesc: "+2 gold and +1 food in cities founded next to the sea.", coastalGold: 2, coastalFood: 1 },
+      { leader: "Petar Krešimir IV", trait: "King of the Dalmatians", traitDesc: "+2 gold in every city.", cityGold: 2 },
+      { leader: "Nikola Zrinski", trait: "Hero of Szigetvár", traitDesc: "+25% combat strength inside your own territory.", homeBonus: 0.25 },
+    ],
   },
   WALLACHIA: {
-    name: "Wallachia", leader: "Vlad III Drăculea", adj: "Wallachian",
-    color: "#4a235a", color2: "#c0392b",
-    trait: "Forest of the Impaled", traitDesc: "+25% combat strength inside your own territory.",
-    homeBonus: 0.25, uu: "CALARASI",
+    name: "Wallachia", adj: "Wallachian", color: "#4a235a", color2: "#c0392b", uu: "CALARASI",
     cities: ["Târgoviște", "București", "Curtea de Argeș", "Craiova", "Pitești", "Brăila", "Giurgiu", "Ploiești", "Câmpulung", "Snagov"],
+    leaders: [
+      { leader: "Vlad III Drăculea", trait: "Forest of the Impaled", traitDesc: "+25% combat strength inside your own territory.", homeBonus: 0.25 },
+      { leader: "Mircea the Elder", trait: "The Great Voivode", traitDesc: "+2 gold in every city.", cityGold: 2 },
+      { leader: "Michael the Brave", trait: "Unifier of the Three", traitDesc: "+20% combat strength when attacking.", attackBonus: 0.2 },
+    ],
   },
   MACEDONIA: {
-    name: "Macedonia", leader: "Tsar Samuil", adj: "Macedonian",
-    color: "#d35400", color2: "#f1c40f",
-    trait: "Ohrid Archbishopric", traitDesc: "+2 culture and +1 science in every city.",
-    cityCulture: 2, cityScience: 1, uu: "SAMUIL_GUARD",
+    name: "Macedonia", adj: "Macedonian", color: "#d35400", color2: "#f1c40f", uu: "SAMUIL_GUARD",
     cities: ["Ohrid", "Skopje", "Bitola", "Prilep", "Struga", "Štip", "Strumica", "Tetovo", "Veles", "Kratovo"],
+    leaders: [
+      { leader: "Tsar Samuil", trait: "Ohrid Archbishopric", traitDesc: "+2 culture and +1 science in every city.", cityCulture: 2, cityScience: 1 },
+      { leader: "Gavril Radomir", trait: "Warrior Prince", traitDesc: "+20% combat strength when defending.", defendCiv: 0.2 },
+      { leader: "Kliment of Ohrid", trait: "Enlightener of the Slavs", traitDesc: "+2 faith in every city.", cityFaith: 2 },
+    ],
   },
   BOSNIA: {
-    name: "Bosnia", leader: "Tvrtko I", adj: "Bosnian",
-    color: "#b7950b", color2: "#154360",
-    trait: "Crown of Three Lands", traitDesc: "+50% culture in every city (faster border growth).",
-    cultureBonus: 0.5, uu: "KRSTJANI",
+    name: "Bosnia", adj: "Bosnian", color: "#b7950b", color2: "#154360", uu: "KRSTJANI",
     cities: ["Visoko", "Jajce", "Sarajevo", "Srebrenica", "Travnik", "Bobovac", "Mostar", "Banja Luka", "Tuzla", "Zenica"],
+    leaders: [
+      { leader: "Tvrtko I", trait: "Crown of Three Lands", traitDesc: "+50% culture in every city (faster border growth).", cultureBonus: 0.5 },
+      { leader: "Kulin Ban", trait: "The Prosperous Reign", traitDesc: "+1 gold and +1 food in every city.", cityGold: 1, cityFood: 1 },
+      { leader: "Stjepan Vukčić", trait: "Herzog of Hum", traitDesc: "+2 production in every city.", cityProd: 2 },
+    ],
   },
 };
 

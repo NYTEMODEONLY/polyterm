@@ -181,3 +181,10 @@ button:disabled { opacity: 0.4; cursor: default; }
   border-bottom: 1px solid #26324a; cursor: pointer; }
 .setting input { margin-top: 3px; cursor: pointer; flex-shrink: 0; }
 .setting span span.dim { font-size: 12px; }
+
+/* ---------- leader picker on civ cards ---------- */
+.civ-card .leaders { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+.leader-chip { background: #16233a; border: 1px solid #2c3a55; color: #c9c0a8;
+  padding: 3px 8px; border-radius: 12px; cursor: pointer; font-size: 11px; font-style: italic; }
+.leader-chip:hover { border-color: #8a7648; }
+.leader-chip.sel { background: #c9a648; border-color: #c9a648; color: #1a1206; font-weight: bold; font-style: normal; }
