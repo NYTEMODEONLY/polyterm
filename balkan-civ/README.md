@@ -43,6 +43,24 @@ Game* on the title screen to pick up where you left off.
 
 ## Features
 
+- **Multiple leaders per civilization**: each of the nine civs offers
+  three historical leaders — 27 in all — with distinct traits, chosen on
+  the start screen. Play Serbia under Stefan Dušan's builders, Stefan
+  Nemanja's culture, or Lazar's stubborn defense; the unique unit stays
+  the same, the strategy changes
+- **Five eras** of technology, now reaching the **Industrial era**:
+  Rifling, Steam Power, and Military Science unlock Riflemen, Cannon,
+  Cavalry, and the Ironclad, plus Factories, Hospitals, Stock Exchanges,
+  and two new wonders (the Iron Gates Works and the Orient Express)
+- **Six ways to win**: Domination, Score, Cultural, and now a
+  **Diplomatic Victory** — once a civ researches Civil Service, the
+  **World Congress** convenes every few turns to elect a World Leader.
+  Delegates come from your empire and, above all, your **city-state
+  allies**; win a supermajority of the vote to be elected and win
+- **Campaign mode** — *A Thousand Years of the Balkans* strings all nine
+  scenarios into one chronological arc from 893 to 1462 AD. Chapters
+  unlock in sequence and a running **Glory** score is carried across the
+  whole campaign, saved between sessions
 - **Civilopedia** (📖 button or `?`): a searchable in-game reference —
   every unit, building, wonder, technology, social policy, promotion,
   belief, city-state type, civilization, and victory condition, with a
@@ -122,7 +140,7 @@ Game* on the title screen to pick up where you left off.
   production queues, gold purchasing, 16 buildings and 10 world wonders
   (Hagia Sophia, Mount Athos, the Hippodrome, Diocletian's Palace,
   Stari Most, Bran Castle, and more — each buildable once per world)
-- 26-technology research tree across four eras (Ancient → Renaissance)
+- 32-technology research tree across five eras (Ancient → Industrial)
 - Civ V-style combat: hit points, ranged vs melee, terrain defense bonuses,
   fortification, floating damage numbers, and sieges — cities bombard one
   besieger every turn, so bring catapults. Hover a target for a **combat
