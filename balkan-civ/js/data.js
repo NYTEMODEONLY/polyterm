@@ -694,3 +694,18 @@ const WCONGRESS = {
   perCities: 5,                // +1 delegate per this many cities
   winFraction: 0.65,           // share of all delegates needed to win
 };
+
+// ------------------------------------------------------------
+// Campaign — the nine scenarios strung into one chronological arc
+// through Balkan history, unlocked in sequence, with a running glory
+// score carried across chapters. Progress persists in localStorage.
+// ------------------------------------------------------------
+const CAMPAIGN = {
+  title: "A Thousand Years of the Balkans",
+  intro: "From the scriptoria of Preslav to Vlad's midnight raid, relive a thousand years of Balkan glory — nine chapters, nine peoples, one unbroken story. Win each to unlock the next and build your legend.",
+  outro: "Nine crowns, nine ages, one story told. From the First Bulgarian Empire to the walls of Târgoviște, you have carried the Balkans through a thousand years. The chronicle is complete — and it bears your name.",
+  chapters: [
+    "SIMEON_893", "TOMISLAV_925", "SAMUIL_976", "BASIL_1014", "DUSHAN_1346",
+    "TVRTKO_1377", "SKANDERBEG_1443", "FALL_1453", "VLAD_1462",
+  ],
+};

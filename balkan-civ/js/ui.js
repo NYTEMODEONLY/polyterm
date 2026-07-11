@@ -16,6 +16,7 @@ const UI = (() => {
 
   // ---------------- start screen ----------------
   function showStartScreen() {
+    campaignChapter = null; // leaving to the menu ends any campaign context
     const wrap = $("civ-cards");
     wrap.innerHTML = "";
 
@@ -62,6 +63,7 @@ const UI = (() => {
     $("opt-custom").disabled = !localStorage.getItem("balkan-civ-custommap");
     $("btn-host").onclick = showHostModal;
     $("btn-join").onclick = showJoinModal;
+    $("btn-campaign").onclick = showCampaignScreen;
     $("btn-editor").onclick = () => { $("start-screen").style.display = "none"; EDITOR.open(); };
     const saved = localStorage.getItem("balkan-civ-save");
     $("btn-continue").style.display = saved ? "inline-block" : "none";
@@ -105,15 +107,101 @@ const UI = (() => {
       card.innerHTML = `<h3>${sc.icon} ${sc.name}</h3><div class="year">${sc.year} ·
         play as <b style="color:${CIVS[sc.playerCiv].color}">${CIVS[sc.playerCiv].name}</b> ·
         ${sc.victory.turns} turns</div><p>${sc.blurb}</p>`;
-      card.onclick = () => {
-        NET.reset();
-        game = new Game({ playerCiv: sc.playerCiv, fixedOpponents: sc.opponents,
-          numOpponents: sc.opponents.length, seed: sc.seed, mapType: sc.mapType,
-          difficulty: sc.difficulty, scenario: key });
-        startPlaying();
-      };
+      card.onclick = () => launchScenario(key, null);
       wrap.appendChild(card);
     }
+  }
+
+  function launchScenario(key, chapter) {
+    const sc = SCENARIOS[key];
+    NET.reset();
+    campaignChapter = chapter;
+    game = new Game({ playerCiv: sc.playerCiv, fixedOpponents: sc.opponents,
+      numOpponents: sc.opponents.length, seed: sc.seed, mapType: sc.mapType,
+      difficulty: sc.difficulty, scenario: key });
+    startPlaying();
+  }
+
+  // ---------------- campaign ----------------
+  let campaignChapter = null; // scenario key when a game was launched from the campaign
+
+  function campaignState() {
+    try {
+      const d = JSON.parse(localStorage.getItem("balkan-civ-campaign") || "{}");
+      return { completed: Array.isArray(d.completed) ? d.completed : [], glory: d.glory || 0 };
+    } catch (e) { return { completed: [], glory: 0 }; }
+  }
+
+  function saveCampaign(st) {
+    try { localStorage.setItem("balkan-civ-campaign", JSON.stringify(st)); } catch (e) { /* full */ }
+  }
+
+  function chapterUnlocked(i, st) {
+    return i === 0 || st.completed.includes(CAMPAIGN.chapters[i - 1]);
+  }
+
+  function showCampaignScreen() {
+    const st = campaignState();
+    $("campaign-modal").style.display = "flex";
+    const done = st.completed.length, total = CAMPAIGN.chapters.length;
+    let html = `<p class="dim">${CAMPAIGN.intro}</p>
+      <div class="campaign-progress">🎖️ Glory: <b>${st.glory}</b> · Chapters: <b>${done}/${total}</b></div>
+      <div class="prod-list">`;
+    CAMPAIGN.chapters.forEach((key, i) => {
+      const sc = SCENARIOS[key];
+      const complete = st.completed.includes(key);
+      const unlocked = chapterUnlocked(i, st);
+      const status = complete ? `<span style="color:#2ecc71">✓ complete</span>`
+        : unlocked ? `<span class="alert">available</span>` : `🔒 locked`;
+      html += `<div class="campaign-chapter ${unlocked ? "" : "locked"}">
+        <div><b>${i + 1}. ${sc.icon} ${sc.name}</b> <span class="dim">— ${sc.year}, ${CIVS[sc.playerCiv].name}</span><br>
+          <span class="dim">${status} · ${sc.victory.turns} turns</span></div>
+        <button ${unlocked ? "" : "disabled"} onclick="UI.playChapter('${key}')">${complete ? "Replay" : "Play"}</button>
+      </div>`;
+    });
+    html += `</div>`;
+    if (done === total) html += `<div class="campaign-outro">🏆 <b>Campaign complete!</b> ${CAMPAIGN.outro}</div>`;
+    html += `<div style="margin-top:10px"><button onclick="document.getElementById('campaign-modal').style.display='none'">Close</button>
+      ${done ? `<button onclick="UI.resetCampaign()">Reset progress</button>` : ""}</div>`;
+    $("campaign-body").innerHTML = html;
+  }
+
+  function playChapter(key) {
+    $("campaign-modal").style.display = "none";
+    launchScenario(key, key);
+  }
+
+  // return to the campaign screen from the victory modal
+  function openCampaign() {
+    $("victory-modal").style.display = "none";
+    NET.reset();
+    showStartScreen();
+    showCampaignScreen();
+  }
+
+  function resetCampaign() {
+    if (!confirm("Reset all campaign progress and glory?")) return;
+    saveCampaign({ completed: [], glory: 0 });
+    showCampaignScreen();
+  }
+
+  // called from showVictory when a campaign chapter is finished
+  function recordCampaignResult(won) {
+    if (!campaignChapter) return null;
+    const key = campaignChapter, sc = SCENARIOS[key];
+    const st = campaignState();
+    let gained = 0, firstTime = false;
+    if (won) {
+      firstTime = !st.completed.includes(key);
+      gained = 100 + Math.max(0, sc.victory.turns - game.turn);
+      st.glory += gained;
+      if (firstTime) st.completed.push(key);
+      saveCampaign(st);
+    }
+    const idx = CAMPAIGN.chapters.indexOf(key);
+    const nextKey = idx >= 0 && idx + 1 < CAMPAIGN.chapters.length ? CAMPAIGN.chapters[idx + 1] : null;
+    const campaignDone = st.completed.length === CAMPAIGN.chapters.length;
+    return { won, gained, firstTime, nextKey, campaignDone, glory: st.glory };
   }
 
   // ---------------- online multiplayer ----------------
@@ -1447,12 +1535,32 @@ const UI = (() => {
     SFX.play(won ? "golden" : "defeat");
     if (game.scenario) {
       const sc = SCENARIOS[game.scenario];
+      const camp = recordCampaignResult(won);
+      let extra = "", buttons = `<button onclick="UI.newGame()">Back to Menu</button>`;
+      if (camp) {
+        if (won) {
+          extra = `<p class="campaign-progress">🎖️ +${camp.gained} glory${camp.firstTime ? " — chapter cleared!" : " (replay)"} · Total: <b>${camp.glory}</b></p>`;
+          if (camp.campaignDone) {
+            extra += `<p style="margin:12px 0"><b>🏆 The campaign is complete!</b><br>${CAMPAIGN.outro}</p>`;
+            buttons = `<button onclick="UI.openCampaign()">🎖️ Campaign</button> <button onclick="UI.newGame()">Menu</button>`;
+          } else if (camp.nextKey) {
+            const ns = SCENARIOS[camp.nextKey];
+            buttons = `<button onclick="UI.playChapter('${camp.nextKey}')">▶ Next: ${ns.icon} ${ns.name}</button>
+              <button onclick="UI.openCampaign()">🎖️ Campaign</button>`;
+          }
+        } else {
+          extra = `<p class="dim">The chapter is not yet won — try again.</p>`;
+          buttons = `<button onclick="UI.playChapter('${game.scenario}')">↻ Retry Chapter</button>
+            <button onclick="UI.openCampaign()">🎖️ Campaign</button>`;
+        }
+      }
       $("victory-body").innerHTML = `
         <h2>${won ? "🏆 SCENARIO COMPLETE" : "☠️ SCENARIO FAILED"}</h2>
         <h3>${sc.icon} ${sc.name} — ${sc.year}</h3>
         <p style="margin:14px 0;font-size:16px">${won ? sc.winText : sc.loseText}</p>
         <p class="dim">Finished on turn ${game.turn} of ${game.maxTurns}.</p>
-        <button onclick="UI.newGame()">Back to Menu</button>`;
+        ${extra}
+        <div>${buttons}</div>`;
       return;
     }
     const civ = CIVS[game.players[game.winner].civId];
@@ -1695,6 +1803,7 @@ const UI = (() => {
         $("policy-modal").style.display = "none";
         $("pedia-modal").style.display = "none";
         $("congress-modal").style.display = "none";
+        $("campaign-modal").style.display = "none";
         $("settings-modal").style.display = "none";
         $("log-modal").style.display = "none";
         $("menu-modal").style.display = "none";
@@ -1880,5 +1989,6 @@ const UI = (() => {
     hostAddSlot, hostConnect, hostStartOnline, joinCreateReply, unqueue,
     saveSlot, loadSlot, exportSave, toMainMenu, toggleGraphics, showSettings: showSettingsModal,
     diploTrade, diploGift, diploPact, adoptPolicy, congressVote, congressAbstain,
+    playChapter, resetCampaign, openCampaign,
     get game() { return game; }, get renderer() { return rend; } };
 })();

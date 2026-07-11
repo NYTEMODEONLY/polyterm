@@ -188,3 +188,13 @@ button:disabled { opacity: 0.4; cursor: default; }
   padding: 3px 8px; border-radius: 12px; cursor: pointer; font-size: 11px; font-style: italic; }
 .leader-chip:hover { border-color: #8a7648; }
 .leader-chip.sel { background: #c9a648; border-color: #c9a648; color: #1a1206; font-weight: bold; font-style: normal; }
+
+/* ---------- campaign ---------- */
+.campaign-progress { color: #f0d890; font-size: 15px; margin: 8px 0; }
+.campaign-chapter { display: flex; justify-content: space-between; align-items: center;
+  gap: 10px; padding: 9px 11px; margin: 6px 0; background: #0f1725;
+  border: 1px solid #26324a; border-radius: 6px; }
+.campaign-chapter.locked { opacity: 0.5; }
+.campaign-chapter button { flex-shrink: 0; }
+.campaign-outro { margin-top: 12px; padding: 10px; border: 1px solid #c9a648;
+  border-radius: 6px; background: rgba(201,166,72,0.1); font-style: italic; }
