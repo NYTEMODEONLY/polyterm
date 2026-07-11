@@ -214,3 +214,22 @@ button:disabled { opacity: 0.4; cursor: default; }
   100% { opacity: 0; transform: translate(-50%, -14px) scale(1); }
 }
 @media (prefers-reduced-motion: reduce) { #game-banner.show { animation-duration: 3.2s; } }
+
+/* ---------- needs-attention panel ---------- */
+#attention { position: fixed; top: 52px; left: 50%; transform: translateX(-50%);
+  display: none; flex-wrap: wrap; justify-content: center; gap: 6px; z-index: 30;
+  max-width: 80vw; pointer-events: auto; }
+.attention-title { align-self: center; color: #c9a648; font-size: 12px; font-weight: bold;
+  margin-right: 2px; text-shadow: 0 1px 3px #000; }
+.attention-chip { background: rgba(30,40,58,0.92); border: 1px solid #c9a648; color: #f0e6cc;
+  padding: 4px 11px; border-radius: 14px; cursor: pointer; font-size: 12.5px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+.attention-chip:hover { background: #c9a648; color: #1a1206; }
+
+/* ---------- turn recap ---------- */
+#recap { position: fixed; bottom: 92px; left: 50%; transform: translateX(-50%) translateY(8px);
+  z-index: 30; opacity: 0; pointer-events: none; max-width: 74vw;
+  background: rgba(15,20,34,0.94); border: 1px solid #3a4a63; border-left: 4px solid #c9a648;
+  border-radius: 6px; padding: 8px 14px; font-size: 13px; color: #dfe7f2;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity 0.4s, transform 0.4s; }
+#recap.show { opacity: 1; transform: translateX(-50%) translateY(0); }

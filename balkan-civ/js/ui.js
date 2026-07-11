@@ -1372,7 +1372,78 @@ const UI = (() => {
     rend.dirty = true;
     maybeAdvise();
     maybeShowCongress();
+    refreshAttention();
+    maybeShowRecap();
     if (game.over) showVictory();
+  }
+
+  // ---------------- needs-attention panel ----------------
+  // Compact clickable checklist of what still needs the player's decision
+  // this turn, so a long turn never leaves you wondering "what now?".
+  function computeAttention() {
+    const items = [];
+    if (!myTurn() || game.over) return items;
+    const v = game.viewer, p = game.players[v];
+    if (!p.researching && p.availableTechs().length)
+      items.push({ icon: "🔬", label: "Choose research", act: showTechScreen });
+    if (game.congressDue && game.congressDue() && p.congressVoteTurn !== game.turn)
+      items.push({ icon: "🗳️", label: "Congress vote", act: () => { congressSeenTurn = -1; maybeShowCongress(); } });
+    if (game.canFoundReligion(v))
+      items.push({ icon: "☦️", label: "Found religion", act: showReligionScreen });
+    if (game.canAdoptPolicy(v))
+      items.push({ icon: "🎭", label: "Adopt policy", act: showPolicyScreen });
+    const promoUnit = game.units.find(u => u.owner === v && u.promoPts > 0 && !u.isCivilian);
+    if (promoUnit)
+      items.push({ icon: "⭐", label: "Promote unit", act: () => { selectUnit(promoUnit); rend.centerOn(game, promoUnit.c, promoUnit.r); } });
+    const idleCity = game.cities.find(c => c.owner === v && !c.producing && !c.queue.length);
+    if (idleCity)
+      items.push({ icon: "🏙️", label: "Set production", act: () => { selectCity(idleCity); rend.centerOn(game, idleCity.c, idleCity.r); } });
+    const idleUnits = game.units.filter(u => u.owner === v && u.moves > 0 && !u.fortified &&
+      !u.attacked && !u.building && !u.autoExplore && !(u.path && u.path.length));
+    if (idleUnits.length)
+      items.push({ icon: "🎖️", label: `${idleUnits.length} unit${idleUnits.length > 1 ? "s" : ""} to move`, act: cycleNextUnit });
+    return items;
+  }
+
+  function refreshAttention() {
+    const el = $("attention");
+    const items = computeAttention();
+    if (!items.length) { el.style.display = "none"; el.innerHTML = ""; return; }
+    el.style.display = "flex";
+    el.innerHTML = `<span class="attention-title">Needs you:</span>` +
+      items.map((it, i) => `<button class="attention-chip" data-i="${i}">${it.icon} ${it.label}</button>`).join("");
+    el.querySelectorAll(".attention-chip").forEach(b => b.onclick = () => items[parseInt(b.dataset.i, 10)].act());
+  }
+
+  // ---------------- turn recap ----------------
+  // A brief note at the start of your turn recapping what happened while the
+  // world advanced — grown cities, finished builds, research, events.
+  let recapSnapshot = null;
+  function snapshotForRecap() {
+    if (!game || game.over) { recapSnapshot = null; return; }
+    const v = game.viewer, p = game.players[v];
+    recapSnapshot = { turn: game.turn, gold: Math.floor(p.gold), notifLen: game.notifications.length };
+  }
+  function maybeShowRecap() {
+    if (!recapSnapshot || game.over || !myTurn() || game.turn <= recapSnapshot.turn) return;
+    const v = game.viewer, p = game.players[v];
+    // gather this player's notifications logged since the snapshot
+    const fresh = game.notifications.slice(recapSnapshot.notifLen)
+      .filter(n => n.p === undefined || n.p === -1 || n.p === v);
+    const goldDelta = Math.floor(p.gold) - recapSnapshot.gold;
+    recapSnapshot = null;
+    const bits = [];
+    if (goldDelta) bits.push(`${goldDelta > 0 ? "+" : ""}${goldDelta}💰`);
+    // pull the most salient events (strip player-tag noise), max 3
+    const salient = fresh.map(n => n.msg.replace(/<[^>]+>/g, "")).slice(0, 3);
+    for (const s of salient) bits.push(s.length > 46 ? s.slice(0, 44) + "…" : s);
+    if (!bits.length) return;
+    const el = $("recap");
+    el.innerHTML = `<b>Last turn:</b> ${bits.join(" · ")}`;
+    el.classList.remove("show"); void el.offsetWidth;
+    el.classList.add("show");
+    clearTimeout(maybeShowRecap._t);
+    maybeShowRecap._t = setTimeout(() => el.classList.remove("show"), 4500);
   }
 
   // ---------------- advisor tips ----------------
@@ -1496,6 +1567,7 @@ const UI = (() => {
     $("btn-endturn").textContent = "End Turn ⏵";
     undoInfo = null;
     SFX.play("turn");
+    snapshotForRecap(); // capture state so the next turn can recap what changed
     const before = game.viewer;
     game.endTurn();
     try { localStorage.setItem("balkan-civ-save", game.serialize()); } catch (e) { /* storage full */ }
