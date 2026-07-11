@@ -565,7 +565,7 @@ const POLICY_BRANCHES = {
     },
   },
 };
-const POLICY_COST = (adopted) => Math.floor(30 * Math.pow(adopted + 1, 1.6));
+const POLICY_COST = (adopted) => Math.floor(37 * Math.pow(adopted + 1, 1.68));
 const CULTURE_VICTORY_BRANCHES = 3;
 
 // ------------------------------------------------------------
@@ -597,4 +597,28 @@ const QUESTS = {
   duration: 25,          // turns before a quest expires
   reward: 30,            // influence for completing one
   killCount: 3,          // barbarians to slay for KILL_BARBS
+};
+
+// ------------------------------------------------------------
+// Random events — periodic flavour with real mechanical bite.
+// kind: "good" | "bad" | "neutral". weight biases how often each fires.
+// Effects live in Game.applyEvent(); this table is content + balance.
+// ------------------------------------------------------------
+const RANDOM_EVENTS = {
+  HARVEST:     { name: "Bumper Harvest",       icon: "🌾", kind: "good", weight: 10, needsCity: true },
+  MIGRATION:   { name: "Migrants Arrive",      icon: "🧳", kind: "good", weight: 8,  needsCity: true },
+  RELICS:      { name: "Sacred Relics Found",  icon: "🕯️", kind: "good", weight: 7,  needsCity: true },
+  SCHOLARS:    { name: "Wandering Scholars",   icon: "📜", kind: "good", weight: 7,  needsCity: true },
+  TRADE_WINDS: { name: "Favourable Trade",     icon: "💰", kind: "good", weight: 9 },
+  FESTIVAL:    { name: "Spontaneous Festival", icon: "🎉", kind: "good", weight: 6 },
+  PLAGUE:      { name: "Plague",               icon: "🤢", kind: "bad",  weight: 8,  needsCity: true, minTurn: 20 },
+  UNREST:      { name: "Civil Unrest",         icon: "😠", kind: "bad",  weight: 7,  minTurn: 20 },
+  FIRE:        { name: "Great Fire",           icon: "🔥", kind: "bad",  weight: 5,  needsCity: true, minTurn: 25 },
+  RAIDERS:     { name: "Brigands on the Roads", icon: "🗡️", kind: "bad", weight: 6,  minTurn: 15 },
+  DROUGHT:     { name: "Drought",              icon: "🏜️", kind: "bad",  weight: 5,  needsCity: true, minTurn: 25 },
+};
+const EVENTS = {
+  chancePerTurn: 0.10,   // per living major, per turn
+  graceTurns: 8,         // no events before this turn
+  cooldown: 6,           // min turns between a player's events
 };

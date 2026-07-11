@@ -923,6 +923,8 @@ const UI = (() => {
     [/has been completed/, "wonder"], [/founded|now follows/, "bell"],
     [/captured/, "capture"], [/🕵️/, "spy"], [/destroyed/, "defeat"],
     [/gifts you/, "coin"], [/grew to/, "grow"], [/finished/, "build"],
+    [/Bumper Harvest|Migrants|Sacred Relics|Wandering Scholars|Favourable Trade|Festival/, "bell"],
+    [/Plague|Civil Unrest|Great Fire|Brigands|Drought/, "defeat"],
   ];
 
   // ---------------- menu: save slots, export/import ----------------

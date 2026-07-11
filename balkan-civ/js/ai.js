@@ -222,8 +222,13 @@ const AI = (() => {
         const theirCities = game.cities.filter(c => c.owner === other);
         if (!myCities.length || !theirCities.length) continue;
         const near = myCities.some(mc => theirCities.some(tc => HEX.distance(mc.c, mc.r, tc.c, tc.r) <= 9));
-        const warChance = game.attitudeOf(p.index, other) >= DIPLO.pactThreshold ? 0.015 : 0.06;
-        if (near && myPower > theirPower * 1.6 && myPower > 40 && game.rng() < warChance) {
+        let warChance = game.attitudeOf(p.index, other) >= DIPLO.pactThreshold ? 0.015 : 0.06;
+        // gang up: far likelier to pile on a target a pact partner already fights,
+        // and only need a slight edge when a friend is holding the other front
+        let powerNeeded = 1.6;
+        const allyAtWar = [...p.pacts].some(a => game.players[a].alive && game.players[a].atWarWith.has(other));
+        if (allyAtWar) { warChance = 0.3; powerNeeded = 1.0; }
+        if (near && myPower > theirPower * powerNeeded && myPower > 40 && game.rng() < warChance) {
           game.declareWar(p.index, other);
         }
       }

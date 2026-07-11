@@ -113,6 +113,9 @@ class Player {
     this.pacts = new Set();      // defensive-pact partner indexes
     this.deals = [];             // luxury deals: {give, get, other, ends}
     this.quest = null;           // minors: the active quest they offer
+    this.moodTurns = 0;          // turns left on a temporary happiness swing
+    this.moodDelta = 0;          // size of that swing (+ festival, - unrest)
+    this.lastEventTurn = -99;    // last turn a random event hit this player
   }
   get civ() { return CIVS[this.civId]; }
   get isMinor() { return !!this.civ.minor; }
@@ -1667,6 +1670,7 @@ class Game {
     hap += lux.size * HAPPINESS.perLuxury;
     if (p.policies.has("ELDERS")) hap += 2;
     if (p.policies.has("PILGRIMS")) hap += 2;
+    if (p.moodTurns > 0) hap += p.moodDelta;
     let nCities = 0, pop = 0;
     for (const c of this.cities) {
       if (c.owner !== idx) continue;
@@ -2109,6 +2113,7 @@ class Game {
     this.spreadReligionPressure();
     this.processDiplomacy();
     this.processQuests();
+    this.processRandomEvents();
     this.processMinorGifts();
     this.decayInfluence();
     this.processEspionage();
@@ -2141,6 +2146,98 @@ class Game {
       if (u.owner === idx && u.autoExplore && u.moves > 0) AI.autoExplore(this, u);
     }
     this.updateVisibility(this.players[idx]);
+  }
+
+  // ---------- random events ----------
+  processRandomEvents() {
+    for (const p of this.players) {
+      if (!p.alive || p.isMinor || p.isBarb) continue;
+      if (p.moodTurns > 0) p.moodTurns--;
+      if (this.turn < EVENTS.graceTurns) continue;
+      if (this.turn - p.lastEventTurn < EVENTS.cooldown) continue;
+      if (this.rng() > EVENTS.chancePerTurn) continue;
+      const myCities = this.cities.filter(c => c.owner === p.index);
+      const pool = Object.entries(RANDOM_EVENTS).filter(([k, e]) =>
+        (!e.needsCity || myCities.length > 0) && this.turn >= (e.minTurn || 0));
+      if (!pool.length) continue;
+      const total = pool.reduce((a, [, e]) => a + e.weight, 0);
+      let roll = this.rng() * total, pick = pool[0][0];
+      for (const [k, e] of pool) { roll -= e.weight; if (roll <= 0) { pick = k; break; } }
+      p.lastEventTurn = this.turn;
+      this.applyEvent(p, pick, myCities);
+    }
+  }
+
+  applyEvent(p, key, myCities) {
+    const ev = RANDOM_EVENTS[key];
+    const era = p.era();
+    const rc = myCities.length ? myCities[Math.floor(this.rng() * myCities.length)] : null;
+    const cap = this.cities.find(c => c.id === p.originalCapitalId && c.owner === p.index) || rc;
+    let msg = "";
+    switch (key) {
+      case "HARVEST":
+        rc.food += Math.floor(rc.foodNeeded() * 0.6);
+        msg = `a bumper harvest fills the granaries of ${rc.name}`;
+        break;
+      case "MIGRATION":
+        rc.pop += 1;
+        this.dirtyHappiness();
+        msg = `migrants settle in ${rc.name} (+1 population)`;
+        break;
+      case "RELICS": {
+        const f = 25 + era * 15;
+        p.faith += f;
+        msg = `sacred relics are unearthed near ${rc.name} (+${f} faith)`;
+        break;
+      }
+      case "SCHOLARS": {
+        const s = 30 + era * 25;
+        p.scienceStored += s;
+        msg = `wandering scholars share their learning (+${s} science)`;
+        break;
+      }
+      case "TRADE_WINDS": {
+        const g = 40 + era * 30;
+        p.gold += g;
+        msg = `favourable winds bring a windfall of trade (+${g} gold)`;
+        break;
+      }
+      case "FESTIVAL":
+        p.moodTurns = 8; p.moodDelta = 3; this.dirtyHappiness();
+        msg = `a spontaneous festival lifts spirits (+3 happiness for 8 turns)`;
+        break;
+      case "PLAGUE": {
+        const loss = rc.pop > 3 ? 2 : 1;
+        rc.pop = Math.max(1, rc.pop - loss);
+        p.moodTurns = 6; p.moodDelta = -3; this.dirtyHappiness();
+        msg = `plague sweeps through ${rc.name} (-${loss} population, unrest)`;
+        break;
+      }
+      case "UNREST":
+        p.moodTurns = 8; p.moodDelta = -4; this.dirtyHappiness();
+        msg = `civil unrest spreads through your empire (-4 happiness for 8 turns)`;
+        break;
+      case "FIRE":
+        rc.prodStored = Math.floor(rc.prodStored * 0.3);
+        rc.hp = Math.max(1, rc.hp - 40);
+        msg = `a great fire ravages ${rc.name} (production and defences set back)`;
+        break;
+      case "RAIDERS": {
+        const g = Math.min(p.gold, 25 + era * 15);
+        p.gold -= g;
+        msg = `brigands raid your caravans (-${g} gold)`;
+        break;
+      }
+      case "DROUGHT":
+        rc.food = Math.floor(rc.food * 0.4);
+        p.moodTurns = 6; p.moodDelta = -2; this.dirtyHappiness();
+        msg = `drought withers the fields around ${rc.name}`;
+        break;
+    }
+    const at = rc || cap;
+    if (at && ev.kind !== "good") this.addEffect(at.c, at.r, ev.icon, ev.kind === "bad" ? "#e74c3c" : "#f1c40f");
+    else if (at) this.addEffect(at.c, at.r, ev.icon, "#2ecc71");
+    this.notify(`${ev.icon} <b>${ev.name}:</b> ${msg}.`, p.index);
   }
 
   checkVictory() {
@@ -2264,7 +2361,8 @@ class Game {
         gaMeter: p.gaMeter, goldenAgeTurns: p.goldenAgeTurns, gaCount: p.gaCount,
         spies: p.spies, gpPoints: p.gpPoints, gpBorn: p.gpBorn,
         culture: p.culture, policies: [...p.policies], attitude: p.attitude,
-        pacts: [...p.pacts], deals: p.deals, quest: p.quest })),
+        pacts: [...p.pacts], deals: p.deals, quest: p.quest,
+        moodTurns: p.moodTurns, moodDelta: p.moodDelta, lastEventTurn: p.lastEventTurn })),
       cities: this.cities.map(c => ({ ...c })),
       units: this.units.map(u => ({ id: u.id, type: u.type, owner: u.owner, c: u.c, r: u.r,
         hp: u.hp, moves: u.moves, fortified: u.fortified, attacked: u.attacked, path: u.path,
@@ -2340,6 +2438,9 @@ class Game {
       p.pacts = new Set(pd.pacts || []);
       p.deals = pd.deals || [];
       p.quest = pd.quest || null;
+      p.moodTurns = pd.moodTurns || 0;
+      p.moodDelta = pd.moodDelta || 0;
+      p.lastEventTurn = pd.lastEventTurn ?? -99;
       return p;
     });
     return g;
