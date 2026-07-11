@@ -21,7 +21,9 @@ class Unit {
     this.attacked = false;
     this.path = null;            // queued multi-turn path [[c,r],...]
     this.xp = 0;
-    this.level = 0;              // each level: +10% combat strength
+    this.level = 0;              // veteran level (+5% strength each)
+    this.promos = [];            // chosen promotions (keys into PROMOS)
+    this.promoPts = 0;           // unspent promotion picks
     this.building = null;        // worker job: {type, turnsLeft}
     this.charges = UNITS[type].charges || 0; // missionary spreads
     this.healFortify = false;    // fortified until fully healed
@@ -37,6 +39,7 @@ class Unit {
     const thresholds = [15, 45, 90];
     while (this.level < 3 && this.xp >= thresholds[this.level]) {
       this.level++;
+      this.promoPts++;           // pick a promotion (or the AI auto-picks)
       this.hp = Math.min(100, this.hp + 20); // veterans rally on promotion
     }
   }
@@ -104,6 +107,12 @@ class Player {
     this.spies = [];             // {id, name, cityId, progress, deadUntil}
     this.gpPoints = { sci: 0, eng: 0, gen: 0 };
     this.gpBorn = { sci: 0, eng: 0, gen: 0 };
+    this.culture = 0;            // stored culture toward the next policy
+    this.policies = new Set();   // adopted policy keys
+    this.attitude = {};          // other player index -> -100..100
+    this.pacts = new Set();      // defensive-pact partner indexes
+    this.deals = [];             // luxury deals: {give, get, other, ends}
+    this.quest = null;           // minors: the active quest they offer
   }
   get civ() { return CIVS[this.civId]; }
   get isMinor() { return !!this.civ.minor; }
@@ -320,6 +329,7 @@ class Game {
       this.stats.campsCleared = (this.stats.campsCleared || 0) + 1;
       this.addEffect(unit.c, unit.r, "+" + BARB.clearReward + "💰", "#f1c40f");
       this.notify(`🏕️ Barbarian camp burned — +${BARB.clearReward} gold!`, unit.owner);
+      this.questEvent("CLEAR_CAMP", unit.owner, { c: unit.c, r: unit.r });
     }
     if (t.ruin) {
       t.ruin = false;
@@ -365,7 +375,8 @@ class Game {
     const from = this.cityAt(caravan.c, caravan.r);
     const p = this.players[caravan.owner];
     if (!from || from.owner !== caravan.owner) return [];
-    if (this.routes.filter(r => r.owner === caravan.owner).length >= TRADE.maxRoutes) return [];
+    const routeCap = TRADE.maxRoutes + (p.policies.has("CARAVANSERAI") ? 1 : 0);
+    if (this.routes.filter(r => r.owner === caravan.owner).length >= routeCap) return [];
     return this.cities.filter(c => {
       if (c === from) return false;
       if (HEX.distance(from.c, from.r, c.c, c.r) > TRADE.maxDist) return false;
@@ -449,14 +460,15 @@ class Game {
     }
     p.gpPoints.sci += sci;
     p.gpPoints.eng += eng;
+    const gpMul = this.policyBranchDone(p.index, "SABOR") ? 0.8 : 1;
     for (const type of ["sci", "eng", "gen"]) {
-      if (p.gpPoints[type] < GP.threshold(p.gpBorn[type])) continue;
+      if (p.gpPoints[type] < GP.threshold(p.gpBorn[type]) * gpMul) continue;
       const cap = this.cities.find(c => c.id === p.originalCapitalId && c.owner === p.index) ||
                   this.cities.find(c => c.owner === p.index);
       if (!cap) break;
       const spot = this.civilianAt(cap.c, cap.r) ? this.freeAdjacent(cap.c, cap.r) : [cap.c, cap.r];
       if (!spot) break;
-      p.gpPoints[type] -= GP.threshold(p.gpBorn[type]);
+      p.gpPoints[type] -= Math.floor(GP.threshold(p.gpBorn[type]) * gpMul);
       p.gpBorn[type]++;
       const key = { sci: "GREAT_SCIENTIST", eng: "GREAT_ENGINEER", gen: "GREAT_GENERAL" }[type];
       const u = this.addUnit(key, p.index, spot[0], spot[1]);
@@ -720,6 +732,7 @@ class Game {
     if (t.improvement === "ROAD" || t.city) return 1;
     let cost = TERRAIN[t.terrain].moveCost;
     if (t.feature) cost = Math.max(cost, FEATURE[t.feature].moveCost);
+    if (cost > 1 && cost < 99 && unit.promos && unit.promos.includes("PATHFINDER")) cost = 1;
     return cost;
   }
 
@@ -880,7 +893,16 @@ class Game {
     const here = this.tile(unit.c, unit.r);
     // wounded units fight at 50–100%
     mod *= 0.5 + 0.5 * (unit.hp / 100);
-    mod += unit.level * 0.1; // veteran promotions
+    mod += unit.level * 0.05; // seasoning on top of chosen promotions
+    if (attacking && unit.promos.includes("MIGHT")) mod += 0.15;
+    if (!attacking && unit.promos.includes("BULWARK")) mod += 0.15;
+    if (!p.isMinor && !p.isBarb) {
+      if (attacking && p.policies.has("WARRIOR_CULT")) mod += 0.10;
+      if (attacking && p.policies.has("GUSLARS") && targetTile) {
+        const foe = this.combatUnitAt(targetTile.c, targetTile.r);
+        if ((foe && this.players[foe.owner].isBarb) || this.campAt(targetTile.c, targetTile.r)) mod += 0.25;
+      }
+    }
     if (!attacking) {
       if (here) {
         mod += TERRAIN[here.terrain].defense || 0;
@@ -1002,6 +1024,11 @@ class Game {
         this.trackScenarioKill(unit.owner, targetUnit.owner);
         const kp = this.players[unit.owner];
         if (!kp.isBarb && !kp.isMinor) kp.gpPoints.gen += GP.killPts;
+        if (!kp.isBarb && !kp.isMinor && this.policyBranchDone(unit.owner, "JUNAK")) {
+          kp.gold += 8;
+          this.addEffect(c, r, "+8💰", "#f1c40f");
+        }
+        if (this.players[targetUnit.owner].isBarb) this.questEvent("KILL_BARBS", unit.owner, {});
         if (unit.def.healOnKill) unit.hp = Math.min(100, unit.hp + unit.def.healOnKill);
         if (!ranged && unit.hp > 0 && !this.combatUnitAt(c, r) &&
             !(t.city && t.city.owner !== unit.owner) && this.unitPassable(unit, t)) {
@@ -1157,6 +1184,16 @@ class Game {
       const mb = this.minorBonuses(city.owner);
       food += mb.food; culture += mb.culture;
     }
+    // social policies
+    if (!p.isMinor && !p.isBarb) {
+      if (p.policies.has("HARVEST")) food += 1;
+      if (p.policies.has("ICONS")) faith += 1;
+      if (p.policies.has("FRESCOES")) culture += 2;
+      if (city.isCapital) {
+        if (p.policies.has("HEARTH")) food += 2;
+        if (p.policies.has("BAZAAR")) gold = Math.floor(gold * 1.25);
+      }
+    }
     // civ traits
     if (civ.cityScience) sci += civ.cityScience;
     if (civ.cityCulture) culture += civ.cityCulture;
@@ -1218,11 +1255,15 @@ class Game {
     return this.map.tiles.some(t => t.owner === playerIdx && t.resource === res);
   }
 
-  buyCost(cost) { return cost * 3; }
+  buyCost(cost, ownerIdx) {
+    let price = cost * 3;
+    if (ownerIdx !== undefined && this.players[ownerIdx].policies.has("MINTERS")) price = Math.floor(price * 0.85);
+    return price;
+  }
 
   purchase(city, opt) {
     const p = this.players[city.owner];
-    const price = this.buyCost(opt.cost);
+    const price = this.buyCost(opt.cost, city.owner);
     if (p.gold < price) return false;
     p.gold -= price;
     this.completeProduction(city, opt);
@@ -1294,6 +1335,19 @@ class Game {
     pa.atWarWith.add(b); pb.atWarWith.add(a);
     pa.warWeariness[b] = 0; pb.warWeariness[a] = 0;
     this.notify(`⚔️ ${pa.civ.name} declares war on ${pb.civ.name}!`, -1);
+    this.changeAttitude(a, b, -40); this.changeAttitude(b, a, -40);
+    // war dissolves any pact between the two, and cancels their deals
+    pa.pacts.delete(b); pb.pacts.delete(a);
+    pa.deals = pa.deals.filter(d => d.other !== b);
+    pb.deals = pb.deals.filter(d => d.other !== a);
+    // the victim's defensive-pact partners join the war
+    for (const q of this.players) {
+      if (!q.alive || q.isMinor || q.isBarb) continue;
+      if (q.index !== a && q.index !== b && q.pacts.has(b) && !q.atWarWith.has(a)) {
+        this.notify(`🤝 ${q.civ.name} honours its defensive pact with ${pb.civ.name}!`, -1);
+        this.declareWar(q.index, a);
+      }
+    }
   }
 
   makePeace(a, b) {
@@ -1303,6 +1357,203 @@ class Game {
     pa.atWarWith.delete(b); pb.atWarWith.delete(a);
     delete pa.warWeariness[b]; delete pb.warWeariness[a];
     this.notify(`☮️ Peace between ${pa.civ.name} and ${pb.civ.name}.`, -1);
+    this.changeAttitude(a, b, 10); this.changeAttitude(b, a, 10);
+  }
+
+  // ---------- attitude, deals & pacts ----------
+  attitudeOf(a, b) { return Math.round(this.players[a].attitude[b] || 0); }
+
+  changeAttitude(a, b, delta) {
+    const p = this.players[a];
+    if (p.isMinor || p.isBarb) return;
+    p.attitude[b] = Math.max(-100, Math.min(100, (p.attitude[b] || 0) + delta));
+  }
+
+  attitudeLabel(a, b) {
+    const v = this.attitudeOf(a, b);
+    return v >= 40 ? "Friendly" : v >= 10 ? "Warm" : v > -10 ? "Neutral" : v > -40 ? "Wary" : "Hostile";
+  }
+
+  // luxury types a has that b lacks (counting imports)
+  tradableLuxes(a, b) {
+    const pb = this.players[b];
+    const theirs = new Set(this.luxuryTypesOf(b));
+    for (const d of pb.deals) if (d.ends > this.turn) theirs.add(d.get);
+    return this.luxuryTypesOf(a).filter(l => !theirs.has(l));
+  }
+
+  activeDealBetween(a, b) {
+    return this.players[a].deals.some(d => d.other === b && d.ends > this.turn);
+  }
+
+  canLuxuryDeal(a, b) {
+    const pa = this.players[a], pb = this.players[b];
+    if (pa.isMinor || pb.isMinor || pa.isBarb || pb.isBarb) return false;
+    if (!pa.alive || !pb.alive || pa.atWarWith.has(b) || !pa.met.has(b)) return false;
+    if (this.activeDealBetween(a, b)) return false;
+    return this.tradableLuxes(a, b).length > 0 && this.tradableLuxes(b, a).length > 0;
+  }
+
+  makeLuxuryDeal(a, b) {
+    if (!this.canLuxuryDeal(a, b)) return false;
+    const give = this.tradableLuxes(a, b)[0], get = this.tradableLuxes(b, a)[0];
+    const ends = this.turn + DIPLO.luxuryDealTurns;
+    this.players[a].deals.push({ give, get, other: b, ends });
+    this.players[b].deals.push({ give: get, get: give, other: a, ends });
+    this.changeAttitude(a, b, 10); this.changeAttitude(b, a, 10);
+    this.dirtyHappiness();
+    this.notify(`🤝 ${this.players[a].civ.name} and ${this.players[b].civ.name} trade ` +
+      `${RESOURCE[give].name} for ${RESOURCE[get].name} (${DIPLO.luxuryDealTurns} turns).`, -1);
+    return true;
+  }
+
+  giftGold(a, b) {
+    const pa = this.players[a];
+    if (pa.gold < DIPLO.giftGold || pa.atWarWith.has(b)) return false;
+    pa.gold -= DIPLO.giftGold;
+    this.players[b].gold += DIPLO.giftGold;
+    this.changeAttitude(b, a, DIPLO.giftAttitude);
+    this.notify(`🎁 ${pa.civ.name} sends ${DIPLO.giftGold} gold to ${this.players[b].civ.name}.`, -1);
+    return true;
+  }
+
+  canPact(a, b) {
+    const pa = this.players[a], pb = this.players[b];
+    if (pa.isMinor || pb.isMinor || pa.isBarb || pb.isBarb) return false;
+    if (!pa.alive || !pb.alive || pa.atWarWith.has(b) || !pa.met.has(b)) return false;
+    if (pa.pacts.has(b)) return false;
+    return this.attitudeOf(a, b) >= DIPLO.pactThreshold && this.attitudeOf(b, a) >= DIPLO.pactThreshold;
+  }
+
+  makePact(a, b) {
+    if (!this.canPact(a, b)) return false;
+    this.players[a].pacts.add(b);
+    this.players[b].pacts.add(a);
+    this.changeAttitude(a, b, 15); this.changeAttitude(b, a, 15);
+    this.notify(`🛡️ Defensive pact: ${this.players[a].civ.name} and ${this.players[b].civ.name}!`, -1);
+    return true;
+  }
+
+  processDiplomacy() {
+    for (const p of this.players) {
+      if (p.isMinor || p.isBarb || !p.alive) continue;
+      for (const k of Object.keys(p.attitude)) {
+        const v = p.attitude[k];
+        p.attitude[k] = Math.abs(v) <= DIPLO.attitudeDecay ? 0
+          : v - Math.sign(v) * DIPLO.attitudeDecay;
+      }
+      const before = p.deals.length;
+      p.deals = p.deals.filter(d => d.ends > this.turn);
+      if (p.deals.length < before) this.dirtyHappiness();
+    }
+  }
+
+  // ---------- social policies ----------
+  policyBranchOf(key) {
+    return Object.keys(POLICY_BRANCHES).find(b => POLICY_BRANCHES[b].policies[key]) || null;
+  }
+
+  policyBranchDone(idx, branch) {
+    const p = this.players[idx];
+    if (!p || p.isMinor || p.isBarb) return false;
+    return Object.keys(POLICY_BRANCHES[branch].policies).every(k => p.policies.has(k));
+  }
+
+  branchesDone(idx) {
+    return Object.keys(POLICY_BRANCHES).filter(b => this.policyBranchDone(idx, b)).length;
+  }
+
+  nextPolicyCost(idx) { return POLICY_COST(this.players[idx].policies.size); }
+
+  canAdoptPolicy(idx) {
+    const p = this.players[idx];
+    const total = Object.values(POLICY_BRANCHES).reduce((a, b) => a + Object.keys(b.policies).length, 0);
+    return !p.isMinor && !p.isBarb && p.alive && p.policies.size < total &&
+      p.culture >= this.nextPolicyCost(idx);
+  }
+
+  adoptPolicy(idx, key) {
+    const p = this.players[idx];
+    const branch = this.policyBranchOf(key);
+    if (!branch || p.policies.has(key) || !this.canAdoptPolicy(idx)) return false;
+    p.culture -= this.nextPolicyCost(idx);
+    p.policies.add(key);
+    p._couldAdopt = this.canAdoptPolicy(idx);
+    this.notify(`📜 ${p.civ.name} adopts ${POLICY_BRANCHES[branch].policies[key].name}.`, idx);
+    if (this.policyBranchDone(idx, branch)) {
+      this.notify(`📜 ${p.civ.name} completes the ${POLICY_BRANCHES[branch].name} branch! (${POLICY_BRANCHES[branch].finisher})`, -1);
+      if (branch === "ZADRUGA") {
+        for (const c of this.cities) if (c.owner === idx) c.pop++;
+      }
+    }
+    this.dirtyHappiness();
+    this.checkVictory();
+    return true;
+  }
+
+  // ---------- city-state quests ----------
+  processQuests() {
+    for (const m of this.players) {
+      if (!m.isMinor || !m.alive) continue;
+      if (m.quest && m.quest.expires <= this.turn) m.quest = null;
+      if (!m.quest && (this.turn + m.index * 7) % QUESTS.everyTurns === 0) {
+        m.quest = this.rollQuest(m);
+        if (m.quest) {
+          this.notify(`🏛️ ${m.civ.name} asks: ${this.questText(m.quest)} (+${QUESTS.reward} influence)`, -1);
+        }
+      }
+    }
+  }
+
+  rollQuest(m) {
+    const expires = this.turn + QUESTS.duration;
+    const mCity = this.cities.find(c => c.owner === m.index);
+    if (this.camps.length && mCity && this.rng() < 0.45) {
+      const camp = [...this.camps].sort((x, y) =>
+        HEX.distance(x.c, x.r, mCity.c, mCity.r) - HEX.distance(y.c, y.r, mCity.c, mCity.r))[0];
+      return { type: "CLEAR_CAMP", c: camp.c, r: camp.r, expires };
+    }
+    if (!this.noBarbs && this.rng() < 0.5) {
+      return { type: "KILL_BARBS", progress: {}, expires };
+    }
+    const majors = this.players.filter(p => !p.isMinor && !p.isBarb && p.alive);
+    const candidates = Object.keys(TECHS).filter(t =>
+      majors.filter(p => !p.techs.has(t)).length >= 2 &&
+      majors.some(p => p.availableTechs().includes(t)));
+    if (candidates.length) {
+      const tech = candidates.sort((a, b) => TECHS[a].cost - TECHS[b].cost)[0];
+      return { type: "FIRST_TECH", tech, expires };
+    }
+    return !this.noBarbs ? { type: "KILL_BARBS", progress: {}, expires } : null;
+  }
+
+  questText(q) {
+    if (q.type === "CLEAR_CAMP") return `burn the barbarian camp at (${q.c}, ${q.r})`;
+    if (q.type === "KILL_BARBS") return `slay ${QUESTS.killCount} barbarians`;
+    return `be first to research ${TECHS[q.tech].name}`;
+  }
+
+  // called from gameplay hooks; the first major to finish claims the reward
+  questEvent(type, playerIdx, data) {
+    const p = this.players[playerIdx];
+    if (!p || p.isMinor || p.isBarb) return;
+    for (const m of this.players) {
+      if (!m.isMinor || !m.alive || !m.quest || m.quest.type !== type) continue;
+      const q = m.quest;
+      let done = false;
+      if (type === "CLEAR_CAMP") done = q.c === data.c && q.r === data.r;
+      else if (type === "KILL_BARBS") {
+        q.progress[playerIdx] = (q.progress[playerIdx] || 0) + 1;
+        done = q.progress[playerIdx] >= QUESTS.killCount;
+      } else if (type === "FIRST_TECH") done = q.tech === data.tech;
+      if (done) {
+        p.influence[m.index] = (p.influence[m.index] || 0) + QUESTS.reward;
+        m.quest = null;
+        if (!this.stats) this.stats = { steals: 0, catches: 0 };
+        this.stats.questsDone = (this.stats.questsDone || 0) + 1;
+        this.notify(`🏛️ ${m.civ.name} is grateful to ${p.civ.name}! (+${QUESTS.reward} influence)`, -1);
+      }
+    }
   }
 
   // ---------- religion ----------
@@ -1361,12 +1612,17 @@ class Game {
     for (const c of this.cities) this.updateCityReligion(c);
   }
 
+  missionaryCost(ownerIdx) {
+    const mul = this.players[ownerIdx].policies.has("SYNOD") ? 0.75 : 1;
+    return Math.floor(UNITS.MISSIONARY.faithCost * mul);
+  }
+
   buyMissionary(city) {
     const p = this.players[city.owner];
-    if (p.religionId === null || p.faith < UNITS.MISSIONARY.faithCost) return false;
+    if (p.religionId === null || p.faith < this.missionaryCost(city.owner)) return false;
     const spot = this.civilianAt(city.c, city.r) ? this.freeAdjacent(city.c, city.r) : [city.c, city.r];
     if (!spot) return false;
-    p.faith -= UNITS.MISSIONARY.faithCost;
+    p.faith -= this.missionaryCost(city.owner);
     this.addUnit("MISSIONARY", city.owner, spot[0], spot[1]);
     return true;
   }
@@ -1406,11 +1662,11 @@ class Game {
     if (!this._hap) this._hap = {};
     if (this._hap[idx] !== undefined) return this._hap[idx];
     let hap = HAPPINESS.base;
-    const lux = new Set();
-    for (const t of this.map.tiles) {
-      if (t.owner === idx && t.resource && RESOURCE[t.resource].luxury) lux.add(t.resource);
-    }
+    const lux = new Set(this.luxuryTypesOf(idx));
+    for (const d of p.deals) if (d.ends > this.turn) lux.add(d.get);
     hap += lux.size * HAPPINESS.perLuxury;
+    if (p.policies.has("ELDERS")) hap += 2;
+    if (p.policies.has("PILGRIMS")) hap += 2;
     let nCities = 0, pop = 0;
     for (const c of this.cities) {
       if (c.owner !== idx) continue;
@@ -1641,8 +1897,10 @@ class Game {
 
     // border growth
     city.cultureStored += y.culture;
-    if (city.cultureStored >= city.borderCost()) {
-      city.cultureStored -= city.borderCost();
+    const growCost = Math.floor(city.borderCost() *
+      (this.players[city.owner].policies.has("HOMESTEAD") ? 0.75 : 1));
+    if (city.cultureStored >= growCost) {
+      city.cultureStored -= growCost;
       const target = this.bestBorderTile(city);
       if (target) { target.owner = city.owner; city.expansions++; }
     }
@@ -1675,16 +1933,26 @@ class Game {
   processPlayerEconomy(p) {
     if (!p.alive || p.isBarb) return;
     this.dirtyHappiness(); // borders/pop may have changed since last compute
-    let gold = 0, sci = 0, faith = 0;
+    let gold = 0, sci = 0, faith = 0, cult = 0;
     for (const city of this.cities) {
       if (city.owner !== p.index) continue;
       const y = this.processCityTurn(city);
-      gold += y.gold; sci += y.sci; faith += y.faith;
+      gold += y.gold; sci += y.sci; faith += y.faith; cult += y.culture || 0;
+    }
+    if (!p.isMinor) {
+      p.culture += cult;
+      p._cpt = cult; // shown in the top bar
+      const can = this.canAdoptPolicy(p.index);
+      if (can && !p._couldAdopt && p.isHuman) {
+        this.notify(`📜 Enough culture for a social policy — open the Policies screen!`, p.index);
+      }
+      p._couldAdopt = can;
     }
     if (p.goldenAgeTurns > 0 && gold > 0) gold = Math.floor(gold * (1 + GOLDEN_AGE.bonus));
-    // unit maintenance: first 4 free
+    // unit maintenance: first 4 free (Frontiersmen raises that to 8)
+    const freeUnits = 4 + (p.policies.has("FRONTIERSMEN") ? 4 : 0);
     const nUnits = this.units.filter(u => u.owner === p.index).length;
-    gold -= Math.max(0, nUnits - 4);
+    gold -= Math.max(0, nUnits - freeUnits);
     if (!p.isMinor) {
       // golden age bookkeeping: surplus happiness fills the meter
       const hap = this.happinessOf(p.index);
@@ -1710,6 +1978,8 @@ class Game {
     }
     if (!p.isMinor) {
       gold += this.tradeIncome(p.index);
+      if (p.policies.has("GUILDS")) gold += this.luxuryTypesOf(p.index).length;
+      if (this.policyBranchDone(p.index, "CARSIJA")) gold += 2 * this.cities.filter(c => c.owner === p.index).length;
       this.accrueGreatPeople(p);
       gold += this.minorBonuses(p.index).gold;
       // Tithe: gold from every follower city in the world
@@ -1739,10 +2009,12 @@ class Game {
       p.scienceStored += sci;
       const t = TECHS[p.researching];
       if (p.scienceStored >= this.techCost(p.researching)) {
-        p.scienceStored -= this.techCost(p.researching);
-        p.techs.add(p.researching);
+        const done = p.researching;
+        p.scienceStored -= this.techCost(done);
+        p.techs.add(done);
         this.notify(`🔬 Research complete: ${t.name}!`, p.index);
         p.researching = null;
+        this.questEvent("FIRST_TECH", p.index, { tech: done });
       }
     } else if (p.isHuman) {
       p.scienceStored += sci; // banks until a tech is chosen
@@ -1784,6 +2056,12 @@ class Game {
       else if (t.owner === p.index) heal = 10;
       if (t.city && t.city.owner === p.index) heal = 20;
       if (t.owner !== -1 && this.players[p.index].atWarWith.has(t.owner)) heal = 0;
+      if (heal > 0) {
+        if (this.players[p.index].policies.has("BROTHERHOOD")) heal += 5;
+        if (u.promos.includes("MEDIC")) heal += 5;
+        else if (this.units.some(m => m !== u && m.owner === u.owner && m.promos.includes("MEDIC") &&
+          HEX.distance(m.c, m.r, u.c, u.r) <= 1)) heal += 3;
+      }
       u.hp = Math.min(100, u.hp + heal);
     }
   }
@@ -1829,6 +2107,8 @@ class Game {
     }
 
     this.spreadReligionPressure();
+    this.processDiplomacy();
+    this.processQuests();
     this.processMinorGifts();
     this.decayInfluence();
     this.processEspionage();
@@ -1926,6 +2206,13 @@ class Game {
       return; // scenario games skip the standard victory rules
     }
     const majors = this.players.filter(p => !p.isMinor && !p.isBarb);
+    // cultural victory: complete three policy branches
+    for (const p of majors) {
+      if (p.alive && this.branchesDone(p.index) >= CULTURE_VICTORY_BRANCHES) {
+        this.over = true; this.winner = p.index; this.victoryType = "Culture";
+        return;
+      }
+    }
     const alive = majors.filter(p => p.alive);
     if (alive.length === 1) {
       this.over = true; this.winner = alive[0].index; this.victoryType = "Domination";
@@ -1975,11 +2262,14 @@ class Game {
         visible: Array.from(p.visible), originalCapitalId: p.originalCapitalId,
         faith: p.faith, religionId: p.religionId, influence: p.influence,
         gaMeter: p.gaMeter, goldenAgeTurns: p.goldenAgeTurns, gaCount: p.gaCount,
-        spies: p.spies, gpPoints: p.gpPoints, gpBorn: p.gpBorn })),
+        spies: p.spies, gpPoints: p.gpPoints, gpBorn: p.gpBorn,
+        culture: p.culture, policies: [...p.policies], attitude: p.attitude,
+        pacts: [...p.pacts], deals: p.deals, quest: p.quest })),
       cities: this.cities.map(c => ({ ...c })),
       units: this.units.map(u => ({ id: u.id, type: u.type, owner: u.owner, c: u.c, r: u.r,
         hp: u.hp, moves: u.moves, fortified: u.fortified, attacked: u.attacked, path: u.path,
-        xp: u.xp, level: u.level, building: u.building, charges: u.charges,
+        xp: u.xp, level: u.level, promos: u.promos, promoPts: u.promoPts,
+        building: u.building, charges: u.charges,
         autoExplore: u.autoExplore || false, healFortify: u.healFortify || false,
         gpName: u.gpName || null })),
       notifications: this.notifications.slice(-30),
@@ -2026,6 +2316,11 @@ class Game {
       delete t._cityId;
     }
     g.units = d.units.map(ud => Object.assign(new Unit(ud.type, ud.owner, ud.c, ud.r), ud));
+    for (const u of g.units) {
+      if (!Array.isArray(u.promos)) u.promos = [];
+      // pre-promotion saves: bank the earned levels as pending picks
+      if (typeof u.promoPts !== "number") u.promoPts = Math.max(0, (u.level || 0) - u.promos.length);
+    }
     g.players = d.players.map(pd => {
       const p = new Player(pd.index, pd.civId, pd.isHuman);
       p.alive = pd.alive; p.gold = pd.gold; p.scienceStored = pd.scienceStored;
@@ -2039,6 +2334,12 @@ class Game {
       p.gaCount = pd.gaCount || 0; p.spies = pd.spies || [];
       p.gpPoints = pd.gpPoints || { sci: 0, eng: 0, gen: 0 };
       p.gpBorn = pd.gpBorn || { sci: 0, eng: 0, gen: 0 };
+      p.culture = pd.culture || 0;
+      p.policies = new Set(pd.policies || []);
+      p.attitude = pd.attitude || {};
+      p.pacts = new Set(pd.pacts || []);
+      p.deals = pd.deals || [];
+      p.quest = pd.quest || null;
       return p;
     });
     return g;

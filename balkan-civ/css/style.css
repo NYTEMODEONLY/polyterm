@@ -137,3 +137,16 @@ button:disabled { opacity: 0.4; cursor: default; }
 #victory-modal .modal-box { text-align: center; }
 #victory-modal h2 { font-size: 34px; }
 #victory-modal p { margin: 10px 0; }
+
+/* ---------- social policies ---------- */
+.modal-box.wide { max-width: 1100px; width: 94vw; }
+.policy-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.policy-branch { background: #0f1725; border: 1px solid #33415c; border-radius: 8px; padding: 10px; }
+.policy-branch.done { border-color: #c9a648; box-shadow: 0 0 12px rgba(201,166,72,0.25); }
+.policy-branch h3 { margin-top: 0; }
+.policy { position: relative; background: #16233a; border: 1px solid #2c3a55; border-radius: 6px;
+  padding: 7px 9px; margin: 7px 0; }
+.policy.has { border-color: #2ecc71; }
+.policy button { margin-top: 5px; }
+.policy-check { position: absolute; top: 6px; right: 10px; color: #2ecc71; font-weight: bold; }
+.policy-finisher { margin-top: 8px; font-style: italic; }

@@ -78,6 +78,24 @@ Game* on the title screen to pick up where you left off.
     Walls in 60 turns
   - *Skanderbeg's Rebellion* (Albania, 1443) — hold Krujë for 100 turns,
     on hard difficulty
+- **Social policies** — four Balkan-flavoured branches you unlock with
+  accumulated culture: **Zadruga** (the family homestead — growth and land),
+  **Junak** (the hero's path — war and glory), **Čaršija** (the bazaar
+  quarter — trade and coin), and **Sabor** (the church council — faith and
+  art). Each policy costs more than the last; completing every policy in a
+  branch grants a powerful finisher. Complete **three branches** to win a
+  **Cultural Victory** — the fifth way to win, alongside Domination and Score
+- **Deeper diplomacy** between major civs: swap surplus **luxuries** for a
+  fixed term (both sides gain happiness), send **gold gifts** to warm a
+  rival's attitude, and sign **defensive pacts** with friends — if either
+  signatory is attacked, the other joins the war. Every rival tracks an
+  attitude toward you, shown on the diplomacy screen
+- **Unit promotions**: veterans that earn a level let you *choose* an
+  upgrade — **Might** (+attack), **Bulwark** (+defense), **Field Medic**
+  (heals itself and nearby units), or **Pathfinder** (ignores rough terrain)
+- **City-state quests**: minors periodically ask a favour — burn a specific
+  barbarian camp, slay raiders, or be first to a technology — and reward the
+  civ that delivers with a burst of influence
 - Naval warfare: research Sailing to embark land units onto the coast and
   build Galleys; Compass opens the deep sea and the ranged War Galleass.
   Ships hunt transports, bombard shores, and can capture coastal cities;
@@ -170,6 +188,7 @@ Game* on the title screen to pick up where you left off.
 | `N` / `.` | Next idle unit |
 | `F` | Fortify selected unit |
 | `T` | Technology tree |
+| `P` | Social policies |
 | `R` | Religion overview |
 | `E` | Espionage |
 | `D` | Diplomacy |

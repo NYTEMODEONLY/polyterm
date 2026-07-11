@@ -22,11 +22,48 @@ const AI = (() => {
       return;
     }
     diplomacy(game, p);
+    adoptPolicies(game, p);
+    autoPromote(game, p);
     religion(game, p);
     espionage(game, p);
     chooseResearch(game, p);
     runCities(game, p);
     runUnits(game, p);
+  }
+
+  // ---------- social policies ----------
+  function adoptPolicies(game, p) {
+    // each civ leans on a branch order derived from its identity
+    const branches = Object.keys(POLICY_BRANCHES);
+    const lean = p.civId.charCodeAt(0) % branches.length;
+    const order = [...branches.slice(lean), ...branches.slice(0, lean)];
+    let guard = 0;
+    while (game.canAdoptPolicy(p.index) && guard++ < 20) {
+      let picked = null;
+      for (const b of order) {
+        picked = Object.keys(POLICY_BRANCHES[b].policies).find(k => !p.policies.has(k));
+        if (picked) break;
+      }
+      if (!picked || !game.adoptPolicy(p.index, picked)) break;
+    }
+  }
+
+  // ---------- promotions ----------
+  function autoPromote(game, p) {
+    for (const u of game.units) {
+      if (u.owner !== p.index || u.isCivilian) continue;
+      while (u.promoPts > 0) {
+        const open = Object.keys(PROMOS).filter(k => !u.promos.includes(k));
+        if (!open.length) { u.promoPts = 0; break; }
+        let pick;
+        if (u.isRanged && open.includes("MIGHT")) pick = "MIGHT";
+        else if (u.def.defendBonus && open.includes("BULWARK")) pick = "BULWARK";
+        else if (open.includes("MIGHT")) pick = "MIGHT";
+        else pick = open[0];
+        u.promos.push(pick);
+        u.promoPts--;
+      }
+    }
   }
 
   // ---------- espionage ----------
@@ -167,14 +204,26 @@ const AI = (() => {
           game.makePeace(p.index, other);
         }
       } else {
-        // consider declaring war on a weaker neighbour
+        if (!o.isMinor) {
+          // friendly overtures first: luxury deals, then pacts with friends
+          if (game.canLuxuryDeal(p.index, other) && game.rng() < 0.35) {
+            game.makeLuxuryDeal(p.index, other);
+          }
+          if (game.canPact(p.index, other) && game.rng() < 0.15) {
+            game.makePact(p.index, other);
+          }
+        }
+        // consider declaring war on a weaker neighbour — never a pact partner,
+        // and friendship stays the sword hand
+        if (p.pacts.has(other)) continue;
         const myPower = game.militaryPower(p.index);
         const theirPower = game.militaryPower(other);
         const myCities = game.cities.filter(c => c.owner === p.index);
         const theirCities = game.cities.filter(c => c.owner === other);
         if (!myCities.length || !theirCities.length) continue;
         const near = myCities.some(mc => theirCities.some(tc => HEX.distance(mc.c, mc.r, tc.c, tc.r) <= 9));
-        if (near && myPower > theirPower * 1.6 && myPower > 40 && game.rng() < 0.06) {
+        const warChance = game.attitudeOf(p.index, other) >= DIPLO.pactThreshold ? 0.015 : 0.06;
+        if (near && myPower > theirPower * 1.6 && myPower > 40 && game.rng() < warChance) {
           game.declareWar(p.index, other);
         }
       }

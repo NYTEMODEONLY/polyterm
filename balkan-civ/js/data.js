@@ -517,3 +517,84 @@ const SCENARIOS = {
 
 // Barbarian-free game; players fight each other.
 const GAME_DEFAULTS = { mapW: 44, mapH: 34, maxTurns: 300 };
+
+// ------------------------------------------------------------
+// Social policies — four Balkan-flavoured branches. Adopting all
+// policies in a branch "completes" it; completing three branches
+// wins a Cultural Victory in standard games.
+// ------------------------------------------------------------
+const POLICY_BRANCHES = {
+  ZADRUGA: {
+    name: "Zadruga", icon: "🏡", blurb: "The family homestead — growth and land",
+    finisher: "+1 population in every city, at once",
+    policies: {
+      HEARTH:    { name: "Hearth",            desc: "+2 food in the capital" },
+      ELDERS:    { name: "Council of Elders", desc: "+2 happiness" },
+      HOMESTEAD: { name: "Homestead",         desc: "Borders grow 25% faster" },
+      HARVEST:   { name: "Harvest Feast",     desc: "+1 food in every city" },
+    },
+  },
+  JUNAK: {
+    name: "Junak", icon: "🗡️", blurb: "The hero's path — war and glory",
+    finisher: "+8 gold for every enemy unit slain",
+    policies: {
+      WARRIOR_CULT: { name: "Warrior Cult",  desc: "+10% strength when attacking" },
+      BROTHERHOOD:  { name: "Brotherhood",   desc: "Units heal +5 HP per turn" },
+      FRONTIERSMEN: { name: "Frontiersmen",  desc: "4 more maintenance-free units" },
+      GUSLARS:      { name: "Guslars",       desc: "+25% strength against barbarians" },
+    },
+  },
+  CARSIJA: {
+    name: "Čaršija", icon: "🪙", blurb: "The bazaar quarter — trade and coin",
+    finisher: "+2 gold in every city",
+    policies: {
+      BAZAAR:       { name: "Grand Bazaar",  desc: "+25% gold in the capital" },
+      CARAVANSERAI: { name: "Caravanserai",  desc: "+1 trade route" },
+      GUILDS:       { name: "Guilds",        desc: "+1 gold per luxury you control" },
+      MINTERS:      { name: "Minters",       desc: "Buying in cities costs 15% less" },
+    },
+  },
+  SABOR: {
+    name: "Sabor", icon: "⛪", blurb: "The church council — faith and art",
+    finisher: "Great People arrive 20% sooner",
+    policies: {
+      ICONS:    { name: "Icon Painters", desc: "+1 faith in every city" },
+      FRESCOES: { name: "Frescoes",      desc: "+2 culture in every city" },
+      SYNOD:    { name: "Synod",         desc: "Missionaries cost 25% less faith" },
+      PILGRIMS: { name: "Pilgrims",      desc: "+2 happiness" },
+    },
+  },
+};
+const POLICY_COST = (adopted) => Math.floor(30 * Math.pow(adopted + 1, 1.6));
+const CULTURE_VICTORY_BRANCHES = 3;
+
+// ------------------------------------------------------------
+// Unit promotions — chosen on level-up
+// ------------------------------------------------------------
+const PROMOS = {
+  MIGHT:      { name: "Might",       icon: "⚔️", desc: "+15% strength when attacking" },
+  BULWARK:    { name: "Bulwark",     icon: "🛡️", desc: "+15% strength when defending" },
+  MEDIC:      { name: "Field Medic", icon: "💊", desc: "Heals +5 HP per turn, nearby friends +3" },
+  PATHFINDER: { name: "Pathfinder",  icon: "🥾", desc: "Moves through forest and hills without slowing" },
+};
+
+// ------------------------------------------------------------
+// Diplomacy deals
+// ------------------------------------------------------------
+const DIPLO = {
+  luxuryDealTurns: 30,   // length of a luxury exchange
+  giftGold: 100,         // lump-sum gift size
+  giftAttitude: 15,      // attitude gained by the recipient
+  pactThreshold: 25,     // attitude needed for a defensive pact
+  attitudeDecay: 0.5,    // per-turn drift toward neutral
+};
+
+// ------------------------------------------------------------
+// City-state quests
+// ------------------------------------------------------------
+const QUESTS = {
+  everyTurns: 25,        // a new quest roughly this often per minor
+  duration: 25,          // turns before a quest expires
+  reward: 30,            // influence for completing one
+  killCount: 3,          // barbarians to slay for KILL_BARBS
+};

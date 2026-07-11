@@ -289,7 +289,7 @@ const UI = (() => {
     const def = u.def;
     $("unit-info").innerHTML = `
       <span class="unit-icon">${def.icon}</span>
-      <div><b>${u.gpName ? u.gpName + " — " : ""}${def.name}</b>${u.level ? " " + "⭐".repeat(u.level) : ""}${game.isEmbarked(u) ? " <span class='alert'>⛵ embarked</span>" : ""}<br>
+      <div><b>${u.gpName ? u.gpName + " — " : ""}${def.name}</b>${u.level ? " " + "⭐".repeat(u.level) : ""}${u.promos.map(k => PROMOS[k].icon).join("")}${game.isEmbarked(u) ? " <span class='alert'>⛵ embarked</span>" : ""}<br>
       <span class="dim">HP ${u.hp}/100 · Moves ${u.moves}/${def.moves}
       ${def.cs ? " · Str " + def.cs : ""}${def.rs ? " · Ranged " + def.rs + " (r" + def.range + ")" : ""}
       ${!u.isCivilian ? " · XP " + u.xp : ""}</span>
@@ -303,6 +303,18 @@ const UI = (() => {
       b.onclick = fn;
       actions.appendChild(b);
     };
+    if (u.promoPts > 0 && u.owner === game.viewer && !u.isCivilian) {
+      for (const key of Object.keys(PROMOS)) {
+        if (u.promos.includes(key)) continue;
+        const pr = PROMOS[key];
+        btn(`⭐ ${pr.icon} ${pr.name}`, () => {
+          u.promos.push(key);
+          u.promoPts--;
+          SFX.play("build");
+          refreshAll();
+        }, myTurn());
+      }
+    }
     if (u.type === "SETTLER") {
       const t = game.tile(u.c, u.r);
       const canFound = t && TERRAIN[t.terrain].passable && !t.city &&
@@ -468,7 +480,7 @@ const UI = (() => {
     if (isMine) {
       const p0 = game.players[game.viewer];
       if (p0.religionId !== null) {
-        const cost = UNITS.MISSIONARY.faithCost;
+        const cost = game.missionaryCost(game.viewer);
         html += `<div class="prod-current"><button ${p0.faith >= cost ? "" : "disabled"}
           onclick="UI.buyMissionary(${city.id})">🙏 Missionary (${cost} ☦️)</button></div>`;
       }
@@ -486,7 +498,7 @@ const UI = (() => {
       html += `<div class="prod-list">`;
       for (const o of opts) {
         const turns = Math.max(1, Math.ceil((o.cost - (cur && cur.key === o.key ? city.prodStored : 0)) / Math.max(1, y.prod)));
-        const price = game.buyCost(o.cost);
+        const price = game.buyCost(o.cost, game.viewer);
         const afford = game.players[game.viewer].gold >= price;
         html += `<div class="prod-item ${o.wonder ? "wonder" : ""}">
           <span>${o.icon} ${o.name}</span>
@@ -599,7 +611,7 @@ const UI = (() => {
       }
     } else {
       const r = game.religions[p.religionId];
-      html += ` <span class="dim">— buy a Missionary for ${UNITS.MISSIONARY.faithCost} faith from any city panel.</span>`;
+      html += ` <span class="dim">— buy a Missionary for ${game.missionaryCost(game.viewer)} faith from any city panel.</span>`;
     }
     html += `</div>`;
     if (!game.religions.length) {
@@ -725,9 +737,26 @@ const UI = (() => {
           ${!p2.alive ? " <span class='dead'>☠️ destroyed</span>" : ""}</div>`;
       if (met && p2.alive) {
         const atWar = p.atWarWith.has(p2.index);
+        const att = game.attitudeOf(p2.index, game.viewer);
+        const attColor = att >= 10 ? "#2ecc71" : att <= -10 ? "#e74c3c" : "#aaa";
+        const deal = p.deals.find(d => d.other === p2.index && d.ends > game.turn);
+        const pact = p.pacts.has(p2.index);
         html += `<div class="dim">Score ${game.score(p2.index)} · Military ${Math.floor(game.militaryPower(p2.index))} ·
-          ${atWar ? "<b class='war'>AT WAR</b>" : "at peace"}</div>
-          <button onclick="UI.diploAction(${p2.index})">${atWar ? "☮️ Propose Peace" : "⚔️ Declare War"}</button>`;
+          ${atWar ? "<b class='war'>AT WAR</b>" : "at peace"} ·
+          feels <b style="color:${attColor}">${game.attitudeLabel(p2.index, game.viewer)}</b> (${att >= 0 ? "+" : ""}${att})</div>`;
+        if (deal) html += `<div class="dim">🤝 Trading your ${RESOURCE[deal.give].icon}${RESOURCE[deal.give].name} for their ${RESOURCE[deal.get].icon}${RESOURCE[deal.get].name} (until turn ${deal.ends})</div>`;
+        if (pact) html += `<div class="dim">🛡️ Defensive pact — an attack on one is an attack on both</div>`;
+        html += `<button onclick="UI.diploAction(${p2.index})">${atWar ? "☮️ Propose Peace" : "⚔️ Declare War"}</button>`;
+        if (!atWar) {
+          const canDeal = game.canLuxuryDeal(game.viewer, p2.index);
+          const dealHint = canDeal ? `${RESOURCE[game.tradableLuxes(game.viewer, p2.index)[0]].icon} for ${RESOURCE[game.tradableLuxes(p2.index, game.viewer)[0]].icon}` : "";
+          html += `<button ${canDeal ? "" : "disabled"} title="Swap surplus luxuries for ${DIPLO.luxuryDealTurns} turns — both sides gain happiness"
+              onclick="UI.diploTrade(${p2.index})">🤝 Trade Luxuries ${dealHint}</button>
+            <button ${p.gold >= DIPLO.giftGold ? "" : "disabled"} title="Improves their attitude toward you"
+              onclick="UI.diploGift(${p2.index})">🎁 Gift ${DIPLO.giftGold}💰</button>
+            <button ${game.canPact(game.viewer, p2.index) ? "" : "disabled"} title="Both sides must feel Friendly (attitude ${DIPLO.pactThreshold}+). If either is attacked, the other joins the war."
+              onclick="UI.diploPact(${p2.index})">🛡️ Defensive Pact</button>`;
+        }
       }
       html += `</div>`;
     }
@@ -748,7 +777,9 @@ const UI = (() => {
         html += `<div class="diplo-row" style="border-left:6px solid ${m.civ.color}">
           <div><b>${m.civ.name}</b> <span class="dim">${type.icon} ${type.name}</span> · ${statusTxt}</div>
           <div class="dim">${type.desc}</div>
-          <div class="dim">Influence: ${inf} (friend ${INFLUENCE_FRIEND} · ally ${INFLUENCE_ALLY})</div>`;
+          <div class="dim">Influence: ${inf} (friend ${INFLUENCE_FRIEND} · ally ${INFLUENCE_ALLY})</div>` +
+          (m.quest ? `<div><b class="alert">🏛️ Quest:</b> ${game.questText(m.quest)} — +${QUESTS.reward} influence, ${m.quest.expires - game.turn} turns left` +
+            (m.quest.type === "KILL_BARBS" ? ` <span class="dim">(you: ${(m.quest.progress[game.viewer] || 0)}/${QUESTS.killCount})</span>` : "") + `</div>` : "");
         if (status !== "war") {
           html += `<button ${p.gold >= 100 ? "" : "disabled"} onclick="UI.gift(${m.index},100)">🎁 100💰 (+25)</button>
             <button ${p.gold >= 250 ? "" : "disabled"} onclick="UI.gift(${m.index},250)">🎁 250💰 (+70)</button>`;
@@ -777,13 +808,66 @@ const UI = (() => {
       // AI accepts peace if weary or losing
       const weary = (game.players[idx].warWeariness[0] || 0) > 12;
       const losing = game.militaryPower(idx) < game.militaryPower(game.viewer) * 0.8;
-      if (weary || losing) game.makePeace(0, idx);
+      if (weary || losing) game.makePeace(game.viewer, idx);
       else game.notify(`${game.players[idx].civ.name} refuses to make peace!`);
     } else {
-      game.declareWar(0, idx);
+      game.declareWar(game.viewer, idx);
     }
     showDiploScreen();
     refreshAll();
+  }
+
+  function diploTrade(idx) {
+    if (!myTurn()) return;
+    if (game.makeLuxuryDeal(game.viewer, idx)) { SFX.play("coin"); showDiploScreen(); refreshAll(); }
+  }
+
+  function diploGift(idx) {
+    if (!myTurn()) return;
+    if (game.giftGold(game.viewer, idx)) { SFX.play("coin"); showDiploScreen(); refreshAll(); }
+  }
+
+  function diploPact(idx) {
+    if (!myTurn()) return;
+    if (game.makePact(game.viewer, idx)) { SFX.play("peace"); showDiploScreen(); refreshAll(); }
+  }
+
+  // ---------------- social policies ----------------
+  function showPolicyScreen() {
+    const p = game.players[game.viewer];
+    $("policy-modal").style.display = "flex";
+    const cost = game.nextPolicyCost(game.viewer);
+    const can = game.canAdoptPolicy(game.viewer);
+    let html = `<div class="dim" style="margin-bottom:8px">
+      🎭 Culture: <b>${Math.floor(p.culture)}</b> / ${cost} for the next policy (+${Math.floor(p._cpt || 0)} per turn)
+      · Complete <b>${CULTURE_VICTORY_BRANCHES} branches</b> for a Cultural Victory
+      (you have <b>${game.branchesDone(game.viewer)}</b>)</div><div class="policy-grid">`;
+    for (const [bk, br] of Object.entries(POLICY_BRANCHES)) {
+      const done = game.policyBranchDone(game.viewer, bk);
+      html += `<div class="policy-branch${done ? " done" : ""}">
+        <h3>${br.icon} ${br.name}</h3>
+        <div class="dim">${br.blurb}</div>`;
+      for (const [pk, pol] of Object.entries(br.policies)) {
+        const has = p.policies.has(pk);
+        html += `<div class="policy${has ? " has" : ""}">
+          <b>${pol.name}</b><br><span class="dim">${pol.desc}</span>
+          ${has ? `<span class="policy-check">✓</span>`
+                : `<button ${can && myTurn() ? "" : "disabled"} onclick="UI.adoptPolicy('${pk}')">Adopt (${cost}🎭)</button>`}
+        </div>`;
+      }
+      html += `<div class="dim policy-finisher">${done ? "✓ " : ""}Branch bonus: ${br.finisher}</div></div>`;
+    }
+    html += `</div>`;
+    $("policy-body").innerHTML = html;
+  }
+
+  function adoptPolicy(key) {
+    if (!myTurn()) return;
+    if (game.adoptPolicy(game.viewer, key)) {
+      SFX.play("research");
+      showPolicyScreen();
+      refreshAll();
+    }
   }
 
   // ---------------- top bar / notifications ----------------
@@ -821,6 +905,10 @@ const UI = (() => {
       happyEl.title = `Happiness: ${HAPPINESS.base} base + ${lux.length * HAPPINESS.perLuxury} luxuries (${lux.map(l => RESOURCE[l].icon).join("") || "none"}) + buildings − ${nCities * HAPPINESS.perCity} cities − ${Math.floor(popTotal * HAPPINESS.perPop)} population` +
         `\nGolden Age: ${Math.floor(p.gaMeter)}/${GOLDEN_AGE.threshold(p.gaCount)} (surplus happiness fills the meter)`;
     }
+    const cpt = Math.floor(p._cpt || 0);
+    $("stat-culture").innerHTML = game.canAdoptPolicy(game.viewer)
+      ? `🎭 <b class="alert">new policy!</b>`
+      : `🎭 ${Math.floor(p.culture)}/${game.nextPolicyCost(game.viewer)} (+${cpt})`;
     const relIcon = p.religionId !== null ? game.religions[p.religionId].icon : "☦️";
     $("stat-faith").innerHTML = game.canFoundReligion(game.viewer)
       ? `${relIcon} <b class="alert">found a religion!</b>`
@@ -1288,11 +1376,13 @@ const UI = (() => {
         $("religion-modal").style.display = "none";
         $("founding-modal").style.display = "none";
         $("spy-modal").style.display = "none";
+        $("policy-modal").style.display = "none";
         $("log-modal").style.display = "none";
         $("menu-modal").style.display = "none";
         closeCity();
         selectUnit(null);
       } else if (e.key === "t") showTechScreen();
+      else if (e.key === "p") showPolicyScreen();
       else if (e.key === "d") showDiploScreen();
       else if (e.key === "r") showReligionScreen();
       else if (e.key === "e") showSpyScreen();
@@ -1305,6 +1395,7 @@ const UI = (() => {
     $("btn-diplo").onclick = showDiploScreen;
     $("btn-religion").onclick = showReligionScreen;
     $("stat-faith").onclick = showReligionScreen;
+    $("stat-culture").onclick = showPolicyScreen;
     $("btn-spies").onclick = showSpyScreen;
     $("notif-list").onclick = showLogModal;
     $("btn-mute").onclick = () => {
@@ -1461,5 +1552,6 @@ const UI = (() => {
     showFoundingModal, confirmFounding, buyMissionary, gift, assignSpy, beginHotseatTurn,
     hostAddSlot, hostConnect, hostStartOnline, joinCreateReply, unqueue,
     saveSlot, loadSlot, exportSave, toMainMenu, toggleGraphics,
+    diploTrade, diploGift, diploPact, adoptPolicy,
     get game() { return game; }, get renderer() { return rend; } };
 })();
