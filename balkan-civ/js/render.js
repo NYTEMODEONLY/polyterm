@@ -158,7 +158,7 @@ class Renderer {
         }
       }
       // attacker lunges toward its target
-      const strike = game.strikes.find(st => st.id === u.id);
+      const strike = !this.reduceMotion && game.strikes.find(st => st.id === u.id);
       if (strike) {
         const f = Math.min(1, (nowMs - strike.ts) / 300);
         const k = Math.sin(f * Math.PI) * (strike.ranged ? 0.16 : 0.4);

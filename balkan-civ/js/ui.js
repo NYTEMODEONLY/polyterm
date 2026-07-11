@@ -227,6 +227,7 @@ const UI = (() => {
     $("btn-music").textContent = SFX.musicOn ? "🎵" : "♪";
     SFX.startMusic();
     resize();
+    applyAccessibility();
     const firstUnit = game.units.find(u => u.owner === game.viewer);
     if (firstUnit) rend.centerOn(game, firstUnit.c, firstUnit.r);
     selectUnit(firstUnit || null);
@@ -955,6 +956,7 @@ const UI = (() => {
         <button onclick="UI.exportSave()">📤 Export save file</button>
         <button onclick="document.getElementById('file-import').click()">📥 Import save file</button>
         <button onclick="UI.toggleGraphics()">🎨 Switch to ${is3d ? "Classic 2D" : "3D"} graphics</button>
+        <button onclick="UI.showSettings()">⚙️ Settings</button>
         <button onclick="document.getElementById('menu-modal').style.display='none'">▶ Resume</button>
         <button onclick="UI.toMainMenu()">🚪 Main Menu</button>
       </div>
@@ -1001,6 +1003,63 @@ const UI = (() => {
     $("menu-modal").style.display = "none";
     NET.reset();
     showStartScreen();
+  }
+
+  // ---------------- settings & accessibility ----------------
+  let civColorOriginals = null;
+
+  function applyColorblind(on) {
+    if (!civColorOriginals) {
+      civColorOriginals = {};
+      for (const id of CIV_IDS) civColorOriginals[id] = { color: CIVS[id].color, color2: CIVS[id].color2 };
+    }
+    for (const id of CIV_IDS) {
+      const src = on && COLORBLIND_PALETTE[id] ? COLORBLIND_PALETTE[id] : civColorOriginals[id];
+      CIVS[id].color = src.color; CIVS[id].color2 = src.color2;
+    }
+    if (rend) {
+      rend._visSnap = null; rend._ownSnap = null; // force 3D recolor + border/banner rebuild
+      rend.dirty = true;
+    }
+  }
+
+  function applyReduceMotion(on) {
+    if (rend) rend.reduceMotion = on;
+  }
+
+  // apply saved accessibility prefs; called at boot and after a renderer swap
+  function applyAccessibility() {
+    applyColorblind(localStorage.getItem("balkan-civ-colorblind") === "1");
+    applyReduceMotion(localStorage.getItem("balkan-civ-reduce-motion") === "1");
+  }
+
+  function showSettingsModal() {
+    $("settings-modal").style.display = "flex";
+    const cb = localStorage.getItem("balkan-civ-colorblind") === "1";
+    const rm = localStorage.getItem("balkan-civ-reduce-motion") === "1";
+    const tipsOff = localStorage.getItem("balkan-civ-tips-off") === "1";
+    $("settings-body").innerHTML = `
+      <label class="setting"><input type="checkbox" id="set-colorblind" ${cb ? "checked" : ""}>
+        <span><b>Colorblind-friendly colours</b><br><span class="dim">Recolours the nine civilizations with a palette distinguishable under common colour blindness.</span></span></label>
+      <label class="setting"><input type="checkbox" id="set-motion" ${rm ? "checked" : ""}>
+        <span><b>Reduce motion</b><br><span class="dim">Stops the animated sea, drifting sun, and attack lunges. Helps on slower devices and for motion sensitivity.</span></span></label>
+      <label class="setting"><input type="checkbox" id="set-tips" ${tipsOff ? "" : "checked"}>
+        <span><b>Show advisor tips</b><br><span class="dim">One-time contextual hints for newcomers.</span></span></label>
+      <div style="margin-top:12px">
+        <button onclick="document.getElementById('settings-modal').style.display='none'">▶ Close</button>
+      </div>`;
+    $("set-colorblind").onchange = (e) => {
+      localStorage.setItem("balkan-civ-colorblind", e.target.checked ? "1" : "0");
+      applyColorblind(e.target.checked);
+      if (rend.selectedCity) showCityPanel(rend.selectedCity);
+    };
+    $("set-motion").onchange = (e) => {
+      localStorage.setItem("balkan-civ-reduce-motion", e.target.checked ? "1" : "0");
+      applyReduceMotion(e.target.checked);
+    };
+    $("set-tips").onchange = (e) => {
+      localStorage.setItem("balkan-civ-tips-off", e.target.checked ? "0" : "1");
+    };
   }
 
   // switching between the WebGL and 2D canvas renderers needs a reload
@@ -1558,6 +1617,7 @@ const UI = (() => {
         $("spy-modal").style.display = "none";
         $("policy-modal").style.display = "none";
         $("pedia-modal").style.display = "none";
+        $("settings-modal").style.display = "none";
         $("log-modal").style.display = "none";
         $("menu-modal").style.display = "none";
         closeCity();
@@ -1730,7 +1790,7 @@ const UI = (() => {
           (rend.dirty || game.effects.length || game.anims.length ||
            (game.strikes && game.strikes.length) ||
            // 3D water swell: a slow ambient tick when otherwise idle
-           (rend.three && Date.now() - (rend._lastDraw || 0) > 140))) {
+           (rend.three && !rend.reduceMotion && Date.now() - (rend._lastDraw || 0) > 140))) {
         rend.draw(game);
       }
       requestAnimationFrame(loop);
@@ -1740,7 +1800,7 @@ const UI = (() => {
   return { init, setProduction, buyItem, closeCity, pickTech, diploAction, newGame,
     showFoundingModal, confirmFounding, buyMissionary, gift, assignSpy, beginHotseatTurn,
     hostAddSlot, hostConnect, hostStartOnline, joinCreateReply, unqueue,
-    saveSlot, loadSlot, exportSave, toMainMenu, toggleGraphics,
+    saveSlot, loadSlot, exportSave, toMainMenu, toggleGraphics, showSettings: showSettingsModal,
     diploTrade, diploGift, diploPact, adoptPolicy,
     get game() { return game; }, get renderer() { return rend; } };
 })();

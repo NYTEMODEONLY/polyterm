@@ -175,3 +175,9 @@ button:disabled { opacity: 0.4; cursor: default; }
 #advisor-body { font-size: 13px; line-height: 1.45; color: #dfe7f2; }
 #advisor-off { display: flex; align-items: center; gap: 6px; margin-top: 9px; font-size: 11px; color: #8393ab; cursor: pointer; }
 #advisor-off input { cursor: pointer; }
+
+/* ---------- settings ---------- */
+.setting { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0;
+  border-bottom: 1px solid #26324a; cursor: pointer; }
+.setting input { margin-top: 3px; cursor: pointer; flex-shrink: 0; }
+.setting span span.dim { font-size: 12px; }

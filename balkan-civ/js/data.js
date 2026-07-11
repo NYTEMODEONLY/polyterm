@@ -252,6 +252,21 @@ const CIVS = {
 
 const CIV_IDS = Object.keys(CIVS);
 
+// Colorblind-safe civ palette (Okabe-Ito derived, distinct under deutan/
+// protan/tritan vision and legible on the dark map). Applied by swapping
+// CIVS[id].color/color2 in place when the accessibility toggle is on.
+const COLORBLIND_PALETTE = {
+  SERBIA:    { color: "#E69F00", color2: "#4a3200" }, // orange
+  BULGARIA:  { color: "#56B4E9", color2: "#0b3a52" }, // sky blue
+  BYZANTIUM: { color: "#CC79A7", color2: "#4d2138" }, // reddish purple
+  OTTOMAN:   { color: "#009E73", color2: "#00382a" }, // bluish green
+  ALBANIA:   { color: "#D55E00", color2: "#4a2100" }, // vermillion
+  CROATIA:   { color: "#0072B2", color2: "#00263b" }, // blue
+  WALLACHIA: { color: "#F0E442", color2: "#4a4600" }, // yellow
+  BOSNIA:    { color: "#999999", color2: "#2b2b2b" }, // grey
+  MACEDONIA: { color: "#CA9161", color2: "#402d18" }, // tan
+};
+
 // ------------------------------------------------------------
 // Religion
 // ------------------------------------------------------------

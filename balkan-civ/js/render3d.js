@@ -634,7 +634,7 @@ class Renderer3D {
           wx = x1 + (x2 - x1) * f; wz = z1 + (z2 - z1) * f; y = y1 + (y2 - y1) * f;
         }
       }
-      const strike = (game.strikes || []).find(s => s.id === u.id);
+      const strike = !this.reduceMotion && (game.strikes || []).find(s => s.id === u.id);
       if (strike) {
         const f = Math.min(1, (nowMs - strike.ts) / 300);
         const k = Math.sin(f * Math.PI) * (strike.ranged ? 0.16 : 0.4);
@@ -874,7 +874,7 @@ class Renderer3D {
 
   // gentle rolling swell on the sea plane
   _animateWater(now) {
-    if (!this._sea) return;
+    if (!this._sea || this.reduceMotion) return;
     const t = now * 0.0012;
     const posAttr = this._sea.geometry.getAttribute("position");
     for (let i = 0; i < posAttr.count; i++) {
@@ -887,7 +887,7 @@ class Renderer3D {
 
   // the sun drifts slowly around the map as turns pass
   _sunCycle(game) {
-    if (!this._center) return;
+    if (!this._center || this.reduceMotion) return;
     const az = ((game.turn % 80) / 80) * Math.PI * 2 + 0.6;
     this.sun.position.copy(this._center)
       .add(new THREE.Vector3(Math.cos(az) * 1300, 1500, Math.sin(az) * 1300));
