@@ -502,6 +502,7 @@ class Game {
       if (!this.stats) this.stats = { steals: 0, catches: 0 };
       this.stats.greats = (this.stats.greats || 0) + 1;
       this.notify(`${UNITS[key].icon} A great soul is born in ${cap.name}: ${u.gpName} the ${UNITS[key].name.replace("Great ", "")}!`, p.index);
+      this.addBurst(spot[0], spot[1], "#ffd700");
     }
   }
 
@@ -727,6 +728,12 @@ class Game {
 
   addEffect(c, r, text, color = "#ff5544") {
     this.effects.push({ c, r, text, color, ts: Date.now() });
+    if (this.effects.length > 40) this.effects.shift();
+  }
+
+  // an expanding ring flourish at a tile (city founded, great person born)
+  addBurst(c, r, color = "#f1c40f") {
+    this.effects.push({ c, r, ring: true, color, ts: Date.now() });
     if (this.effects.length > 40) this.effects.shift();
   }
 
@@ -1156,6 +1163,7 @@ class Game {
     this.removeUnit(settler);
     this.updateVisibility(p);
     this.dirtyHappiness();
+    this.addBurst(city.c, city.r, CIVS[p.civId].color);
     return city;
   }
 

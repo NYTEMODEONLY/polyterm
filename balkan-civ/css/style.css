@@ -198,3 +198,19 @@ button:disabled { opacity: 0.4; cursor: default; }
 .campaign-chapter button { flex-shrink: 0; }
 .campaign-outro { margin-top: 12px; padding: 10px; border: 1px solid #c9a648;
   border-radius: 6px; background: rgba(201,166,72,0.1); font-style: italic; }
+
+/* ---------- headline banner (era transitions, big moments) ---------- */
+#game-banner { position: fixed; top: 24%; left: 50%; transform: translate(-50%, -8px);
+  z-index: 58; pointer-events: none; opacity: 0;
+  padding: 14px 34px; border-radius: 10px; font-size: 26px; color: #f5ead0;
+  background: linear-gradient(180deg, rgba(30,24,12,0.92), rgba(18,14,8,0.92));
+  border: 2px solid #c9a648; box-shadow: 0 8px 40px rgba(0,0,0,0.6), 0 0 30px rgba(201,166,72,0.25);
+  text-shadow: 0 2px 8px rgba(0,0,0,0.6); white-space: nowrap; }
+#game-banner.show { animation: bannerPop 3.2s ease-in-out forwards; }
+@keyframes bannerPop {
+  0% { opacity: 0; transform: translate(-50%, 14px) scale(0.94); }
+  12% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  82% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -14px) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) { #game-banner.show { animation-duration: 3.2s; } }

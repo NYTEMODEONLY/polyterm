@@ -233,6 +233,18 @@ class Renderer {
       if (!vis[game.map.idx(e.c, e.r)]) continue; // don't reveal events in the unexplored world
       const age = (now - e.ts) / 1300;
       const [ex, ey] = this.worldToScreen(e.c, e.r);
+      if (e.ring) {
+        if (this.reduceMotion) continue;
+        ctx.save();
+        ctx.globalAlpha = (1 - age) * 0.8;
+        ctx.strokeStyle = e.color;
+        ctx.lineWidth = Math.max(2, s * 0.09);
+        ctx.beginPath();
+        ctx.arc(ex, ey, s * (0.2 + age * 1.1), 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+        continue;
+      }
       ctx.save();
       ctx.globalAlpha = 1 - age;
       ctx.fillStyle = e.color;

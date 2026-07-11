@@ -338,6 +338,7 @@ const UI = (() => {
     SFX.startMusic();
     resize();
     applyAccessibility();
+    lastEraShown = null; // re-baseline era banners for this game
     const firstUnit = game.units.find(u => u.owner === game.viewer);
     if (firstUnit) rend.centerOn(game, firstUnit.c, firstUnit.r);
     selectUnit(firstUnit || null);
@@ -434,7 +435,7 @@ const UI = (() => {
         });
       btn("🏛️ Found City", () => {
         const city = game.foundCity(u);
-        if (city) { SFX.play("build"); selectCity(city); refreshAll(); }
+        if (city) { SFX.play("found"); selectCity(city); refreshAll(); }
       }, canFound && u.moves > 0);
     }
     if (u.def.caravan) {
@@ -975,7 +976,7 @@ const UI = (() => {
   function adoptPolicy(key) {
     if (!myTurn()) return;
     if (game.adoptPolicy(game.viewer, key)) {
-      SFX.play("research");
+      SFX.play("policy");
       showPolicyScreen();
       refreshAll();
     }
@@ -997,7 +998,16 @@ const UI = (() => {
     }
     const tech = p.researching ? TECHS[p.researching] : null;
     $("stat-turn").textContent = `Turn ${game.turn}/${game.maxTurns}`;
-    $("stat-era").textContent = ERAS[p.era()] + " Era";
+    const era = p.era();
+    $("stat-era").textContent = ERAS[era] + " Era";
+    SFX.setEra(era); // brighten the music (and chime) as ages pass
+    // headline banner the first time the viewer reaches a new era
+    if (lastEraShown === null) lastEraShown = era;
+    else if (era > lastEraShown) {
+      const icons = ["🏺", "🏛️", "⚔️", "📜", "⚙️"];
+      showBanner(`${icons[era] || "✨"} You have entered the <b>${ERAS[era]} Era</b>`);
+      lastEraShown = era;
+    }
     $("stat-gold").textContent = `💰 ${Math.floor(p.gold)} (${gold >= 0 ? "+" : ""}${gold})`;
     $("stat-sci").innerHTML = tech
       ? `🔬 ${tech.name} ${Math.floor(p.scienceStored)}/${game.techCost(p.researching)} (+${sci})`
@@ -1027,15 +1037,29 @@ const UI = (() => {
     $("stat-score").textContent = game.scenario ? game.scenarioStatus() : `🏆 ${game.score(game.viewer)}`;
   }
 
+  // ---------------- headline banner ----------------
+  let lastEraShown = null, bannerTimer = null;
+  function showBanner(html) {
+    const b = $("game-banner");
+    b.innerHTML = html;
+    b.classList.remove("show"); void b.offsetWidth; // restart the animation
+    b.classList.add("show");
+    clearTimeout(bannerTimer);
+    bannerTimer = setTimeout(() => b.classList.remove("show"), 3200);
+  }
+
   let notifSeen = 0;
   const NOTIF_SOUNDS = [
     [/WAR!/, "war"], [/Peace between|refuses to make peace/, "peace"],
     [/GOLDEN AGE/, "golden"], [/Research complete/, "research"],
-    [/has been completed/, "wonder"], [/founded|now follows/, "bell"],
+    [/has been completed/, "wonder"], [/A great soul is born/, "greatperson"],
+    [/adopts .*(branch|Hearth|Elders|Homestead|Harvest|Warrior|Brotherhood|Frontiersmen|Guslars|Bazaar|Caravanserai|Guilds|Minters|Icons|Frescoes|Synod|Pilgrims)|completes the .* branch/, "policy"],
+    [/World Congress|World Leader/, "vote"],
+    [/founded|now follows/, "bell"],
     [/captured/, "capture"], [/🕵️/, "spy"], [/destroyed/, "defeat"],
     [/gifts you/, "coin"], [/grew to/, "grow"], [/finished/, "build"],
-    [/Bumper Harvest|Migrants|Sacred Relics|Wandering Scholars|Favourable Trade|Festival/, "bell"],
-    [/Plague|Civil Unrest|Great Fire|Brigands|Drought/, "defeat"],
+    [/Bumper Harvest|Migrants|Sacred Relics|Wandering Scholars|Favourable Trade|Festival/, "goodevent"],
+    [/Plague|Civil Unrest|Great Fire|Brigands|Drought/, "badevent"],
   ];
 
   // ---------------- menu: save slots, export/import ----------------
@@ -1413,7 +1437,7 @@ const UI = (() => {
     if (!myTurn()) return;
     const p = game.players[game.viewer];
     p.congressVote = idx; p.congressVoteTurn = game.turn;
-    SFX.play("click");
+    SFX.play("vote");
     $("congress-modal").style.display = "none";
   }
 
@@ -1532,7 +1556,7 @@ const UI = (() => {
     const modal = $("victory-modal");
     modal.style.display = "flex";
     const won = NET.active ? game.winner === NET.myIndex : game.players[game.winner].isHuman;
-    SFX.play(won ? "golden" : "defeat");
+    SFX.play(won ? "fanfare" : "defeat");
     if (game.scenario) {
       const sc = SCENARIOS[game.scenario];
       const camp = recordCampaignResult(won);

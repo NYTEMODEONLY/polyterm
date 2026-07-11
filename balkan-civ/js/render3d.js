@@ -64,7 +64,7 @@ class Renderer3D {
       atk: new THREE.MeshBasicMaterial({ color: 0xe74c3c, transparent: true, opacity: 0.4, depthWrite: false }),
     };
     this._hexFillGeo = null;   // shared flat hexagon, built with map
-    this._pool = { move: [], atk: [], decor: [], fx: [], routes: [], flash: [] };
+    this._pool = { move: [], atk: [], decor: [], fx: [], routes: [], flash: [], rings: [] };
     this._units = new Map();   // unit id -> sprite
     this._cities = new Map();  // city object -> group
     this._builtFor = null;     // map object the static geometry was built for
@@ -315,7 +315,7 @@ class Renderer3D {
       for (const ch of [...g.children]) { g.remove(ch); if (ch.geometry) ch.geometry.dispose(); }
     }
     this._units.clear(); this._cities.clear();
-    this._pool = { move: [], atk: [], decor: [], fx: [], routes: [], flash: [] };
+    this._pool = { move: [], atk: [], decor: [], fx: [], routes: [], flash: [], rings: [] };
     this._hover = this._selRing = this._citySel = this._preview = null;
     this._visSnap = this._ownSnap = null;
     this._impHash = null;
@@ -805,11 +805,29 @@ class Renderer3D {
     game.effects = game.effects.filter(e => now - e.ts < 1300);
     const S = this.hexSize;
     const vis = game.players[game.viewer].visible;
+    this._hidePool(this._pool.rings);
     for (const e of game.effects) {
       if (!vis[game.map.idx(e.c, e.r)]) continue; // don't reveal events in the unexplored world
       const age = (now - e.ts) / 1300;
       const [wx, wz] = HEX.toPixel(e.c, e.r, S);
       const t = game.tile(e.c, e.r);
+      if (e.ring) {
+        if (this.reduceMotion) continue;
+        const m = this._getPooled(this._pool.rings, () => {
+          const mesh = new THREE.Mesh(
+            new THREE.RingGeometry(0.82, 1.0, 32),
+            new THREE.MeshBasicMaterial({ transparent: true, side: THREE.DoubleSide, depthWrite: false }));
+          mesh.rotation.x = -Math.PI / 2;
+          mesh.renderOrder = 4;
+          return mesh;
+        });
+        m.material.color.set(e.color);
+        m.material.opacity = (1 - age) * 0.85;
+        const rad = S * (0.3 + age * 1.3);
+        m.scale.set(rad, rad, rad);
+        m.position.set(wx, surfY3D(t) + 0.8, wz);
+        continue;
+      }
       const y = surfY3D(t) + S * 0.7 + age * S * 0.9;
       this._spriteAt(this._pool.fx, this._textTex(e.text, e.color), wx, y, wz, S * 1.9, S * 0.72, 1 - age);
     }

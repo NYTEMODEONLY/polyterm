@@ -79,6 +79,25 @@ const SFX = (() => {
     grow:     () => { tone(392, 0.08, "sine", 0.07); tone(523, 0.12, "sine", 0.07, 0.07); },
     wonder:   () => arp([392, 494, 587, 784, 988], 0.1, 0.4, "triangle", 0.1),
     defeat:   () => arp([392, 330, 262, 196], 0.12, 0.35, "sawtooth", 0.09),
+    // grand victory fanfare: brass-like triad rise into a held chord
+    fanfare:  () => {
+      arp([392, 523, 659, 784], 0.12, 0.28, "sawtooth", 0.09);
+      [523, 659, 784, 1047].forEach(f => tone(f, 1.4, "triangle", 0.07, 0.5));
+      tone(261.6, 1.6, "sine", 0.06, 0.5);
+    },
+    // a policy adopted — a warm, cultured chime
+    policy:   () => { arp([523, 587, 698], 0.09, 0.3, "sine", 0.08); tone(1047, 0.4, "triangle", 0.04, 0.1); },
+    // a great person is born — shimmering high sparkle
+    greatperson: () => { arp([784, 988, 1175, 1568], 0.07, 0.35, "sine", 0.06); tone(2093, 0.3, "sine", 0.03, 0.28); },
+    // era transition — a rising, opening motif
+    era:      () => { arp([196, 262, 330, 392, 523], 0.11, 0.5, "triangle", 0.09); tone(784, 1.0, "sine", 0.05, 0.5); },
+    // random events, good and ill
+    goodevent: () => arp([587, 740, 880], 0.07, 0.22, "sine", 0.07),
+    badevent:  () => { tone(220, 0.3, "sawtooth", 0.1); tone(207, 0.34, "sawtooth", 0.08, 0.04); noise(0.2, 0.08, 0, 400); },
+    // a city is founded — a grounded, settling chord
+    found:    () => { [261.6, 329.6, 392].forEach(f => tone(f, 0.5, "triangle", 0.07)); tone(130.8, 0.6, "sine", 0.06); },
+    // a congress vote / gavel
+    vote:     () => { noise(0.06, 0.14, 0, 1200); tone(180, 0.12, "square", 0.08, 0.02); },
   };
 
   function play(name) {
@@ -96,6 +115,7 @@ const SFX = (() => {
   let musicOn = true;
   try { musicOn = localStorage.getItem("balkan-civ-music") !== "0"; } catch (e) { /* ignore */ }
   let musicNodes = null, melodyTimer = null, nextNote = 0, melodyIdx = 3;
+  let musicEra = 0; // 0..4 — the score brightens and quickens as ages pass
   // D E♭ F♯ G A B♭ C♯ D — the double-harmonic colour of Balkan folk tunes
   const SCALE = [293.66, 311.13, 369.99, 392.0, 440.0, 466.16, 554.37, 587.33];
 
@@ -120,7 +140,8 @@ const SFX = (() => {
       const steps = [-2, -1, -1, 0, 1, 1, 2];
       melodyIdx = Math.max(0, Math.min(SCALE.length - 1,
         melodyIdx + steps[Math.floor(Math.random() * steps.length)]));
-      const dur = [1.1, 1.6, 2.2, 3.0][Math.floor(Math.random() * 4)];
+      const tempo = 1 - musicEra * 0.08; // later eras move a touch quicker
+      const dur = [1.1, 1.6, 2.2, 3.0][Math.floor(Math.random() * 4)] * tempo;
       if (Math.random() > 0.3) {
         melodyNote(SCALE[melodyIdx], dur, nextNote);
         if (Math.random() < 0.25) melodyNote(SCALE[melodyIdx] * 2, dur * 0.5, nextNote + 0.06, 0.012);
@@ -149,9 +170,28 @@ const SFX = (() => {
     dg.gain.value = 0.5;
     o1.connect(dg); o2.connect(dg); dg.connect(filt);
     o1.start(); o2.start();
-    musicNodes = { master, o1, o2 };
+    musicNodes = { master, o1, o2, filt };
     nextNote = a.currentTime + 0.8;
     melodyTimer = setInterval(scheduleMelody, 400);
+    applyEra(); // set the brightness for the current era
+  }
+
+  // Brighten the drone's filter as eras advance — Ancient feels muffled and
+  // archaic, the Industrial age opens up clear and bright.
+  function applyEra() {
+    if (!musicNodes || !ctx) return;
+    const cutoff = 260 + musicEra * 150; // 260 → 860 Hz across the five eras
+    musicNodes.filt.frequency.setTargetAtTime(cutoff, ctx.currentTime, 1.5);
+  }
+
+  // Called by the UI when the viewing player's era changes.
+  function setEra(era) {
+    era = Math.max(0, Math.min(4, era | 0));
+    if (era === musicEra) return;
+    const advanced = era > musicEra;
+    musicEra = era;
+    applyEra();
+    if (advanced) play("era");
   }
 
   function stopMusic() {
@@ -169,6 +209,6 @@ const SFX = (() => {
     return musicOn;
   }
 
-  return { play, toggleMute, startMusic, stopMusic, toggleMusic,
+  return { play, toggleMute, startMusic, stopMusic, toggleMusic, setEra,
     get muted() { return muted; }, get musicOn() { return musicOn; } };
 })();
