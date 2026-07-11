@@ -43,6 +43,23 @@ Game* on the title screen to pick up where you left off.
 
 ## Features
 
+- **Civilopedia** (📖 button or `?`): a searchable in-game reference —
+  every unit, building, wonder, technology, social policy, promotion,
+  belief, city-state type, civilization, and victory condition, with a
+  live search box and category tabs. Generated straight from the game's
+  data tables, so it always matches the actual rules
+- **Advisor tips**: dismissible contextual hints for newcomers that appear
+  the first time each situation arises (found your first city, choose
+  research, met a rival, a policy is affordable, and so on) — with a
+  one-click opt-out
+- **Random events**: harvests, migrations, relics, and trade windfalls on
+  the upside; plagues, unrest, fires, drought, and brigands on the down —
+  each with real mechanical effects and occasional temporary happiness
+  swings, so no two games play out the same
+- **Accessibility settings** (Menu → ⚙️): a colorblind-friendly civ
+  palette, a reduce-motion toggle (stops the animated sea, drifting sun,
+  and attack lunges), and an advisor-tips switch — all remembered between
+  sessions
 - **3D graphics** (default): a WebGL diorama built with Three.js — extruded
   hex terrain with cliff faces, cone mountains with snow caps, stepped
   hills, tree-covered forests, a translucent sea over a depth-shaded
@@ -189,6 +206,7 @@ Game* on the title screen to pick up where you left off.
 | `F` | Fortify selected unit |
 | `T` | Technology tree |
 | `P` | Social policies |
+| `?` | Civilopedia (searchable reference) |
 | `R` | Religion overview |
 | `E` | Espionage |
 | `D` | Diplomacy |
@@ -214,6 +232,17 @@ js/editor.js      map editor
 js/net.js         serverless WebRTC multiplayer (invite codes, state relay)
 js/ui.js          panels, modals, input handling
 ```
+
+## Performance
+
+The 3D renderer rebuilds terrain geometry only when the map changes and
+re-meshes fog, borders, and improvements only when their state changes, so
+steady-state frames stay flat regardless of map size. Benchmarked in
+Chromium, steady frames render in **2–5 ms** from the Standard map all the
+way up to an 84×64 grid (over 3× the Large map, ~54k triangles); the
+one-time geometry build stays around 140 ms even at that size. The
+**Reduce motion** setting disables the ambient water/sun animation for
+slower devices.
 
 ## Notes on online play
 
