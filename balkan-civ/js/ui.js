@@ -40,6 +40,7 @@ const UI = (() => {
         document.querySelectorAll(".civ-card").forEach(c => c.classList.remove("sel"));
         card.classList.add("sel");
         repaintAll();
+        refreshStartSummary();
       });
       card.innerHTML = `
         <div class="civ-flag" style="background:${civ.color};border-color:${civ.color2}"></div>
@@ -52,6 +53,7 @@ const UI = (() => {
         document.querySelectorAll(".civ-card").forEach(c => c.classList.remove("sel"));
         card.classList.add("sel");
         repaintAll();
+        refreshStartSummary();
       };
       card._paint = paint;
       if (id === chosenCiv) card.classList.add("sel");
@@ -59,6 +61,7 @@ const UI = (() => {
       wrap.appendChild(card);
     }
     const repaintAll = () => wrap.querySelectorAll(".civ-card").forEach(c => c._paint && c._paint());
+    refreshStartSummary();
     buildScenarioCards();
     $("opt-custom").disabled = !localStorage.getItem("balkan-civ-custommap");
     $("btn-host").onclick = showHostModal;
@@ -96,6 +99,17 @@ const UI = (() => {
     };
     $("start-screen").style.display = "flex";
     $("game-ui").style.display = "none";
+  }
+
+  function refreshStartSummary() {
+    const el = $("selected-civ-summary");
+    if (!el) return;
+    const civ = CIVS[chosenCiv];
+    const leader = civ.leaders[chosenLeader] || civ.leaders[0];
+    el.style.borderColor = civ.color2;
+    el.innerHTML = `<div class="pick-name">${civ.name}</div>
+      <div class="pick-leader">${leader.leader} · ${leader.trait}</div>
+      <div class="pick-trait">${leader.traitDesc}</div>`;
   }
 
   function buildScenarioCards() {
@@ -338,6 +352,10 @@ const UI = (() => {
     SFX.startMusic();
     resize();
     applyAccessibility();
+    const rotateDisplay = rend.three ? "block" : "none";
+    $("btn-rot-left").style.display = rotateDisplay;
+    $("btn-rot-right").style.display = rotateDisplay;
+    $("map-controls").querySelector(".control-rule").style.display = rotateDisplay;
     lastEraShown = null; // re-baseline era banners for this game
     const firstUnit = game.units.find(u => u.owner === game.viewer);
     if (firstUnit) rend.centerOn(game, firstUnit.c, firstUnit.r);
@@ -750,36 +768,132 @@ const UI = (() => {
     rend.dirty = true;
   }
 
-  // ---------------- tech screen ----------------
+  // ---------------- tech dependency tree ----------------
+  let techFocusKey = null;
+
+  function techDepths() {
+    const memo = {};
+    const depthOf = (key) => {
+      if (memo[key] !== undefined) return memo[key];
+      const req = TECHS[key].req;
+      memo[key] = req.length ? 1 + Math.max(...req.map(depthOf)) : 0;
+      return memo[key];
+    };
+    for (const key of Object.keys(TECHS)) depthOf(key);
+    return memo;
+  }
+
+  function techAncestors(key, out = new Set()) {
+    if (!key || !TECHS[key]) return out;
+    out.add(key);
+    for (const req of TECHS[key].req) techAncestors(req, out);
+    return out;
+  }
+
+  function highlightTechPath(key) {
+    const tree = $("tech-tree");
+    if (!tree) return;
+    const path = techAncestors(key);
+    tree.querySelectorAll(".tech").forEach(n => {
+      n.classList.toggle("path", path.has(n.dataset.tech));
+      n.classList.toggle("strategy", n.dataset.tech === key);
+      n.setAttribute("aria-pressed", n.dataset.tech === techFocusKey ? "true" : "false");
+    });
+    tree.querySelectorAll(".tech-link").forEach(edge => {
+      edge.classList.toggle("path", path.has(edge.dataset.from) && path.has(edge.dataset.to));
+    });
+  }
+
+  function drawTechConnections() {
+    const tree = $("tech-tree");
+    const svg = $("tech-links");
+    if (!tree || !svg) return;
+    const root = tree.getBoundingClientRect();
+    const width = tree.scrollWidth, height = tree.scrollHeight;
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    svg.setAttribute("width", width);
+    svg.setAttribute("height", height);
+    let paths = "";
+    for (const [to, tech] of Object.entries(TECHS)) {
+      const target = tree.querySelector(`[data-tech="${to}"]`);
+      if (!target) continue;
+      const tr = target.getBoundingClientRect();
+      for (const from of tech.req) {
+        const source = tree.querySelector(`[data-tech="${from}"]`);
+        if (!source) continue;
+        const sr = source.getBoundingClientRect();
+        const x1 = sr.right - root.left + tree.scrollLeft;
+        const y1 = sr.top + sr.height / 2 - root.top + tree.scrollTop;
+        const x2 = tr.left - root.left + tree.scrollLeft;
+        const y2 = tr.top + tr.height / 2 - root.top + tree.scrollTop;
+        const bend = Math.max(24, (x2 - x1) * 0.46);
+        paths += `<path class="tech-link" data-from="${from}" data-to="${to}"
+          d="M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}"/>`;
+      }
+    }
+    svg.innerHTML = paths;
+    highlightTechPath(techFocusKey || game.players[game.viewer].researching);
+  }
+
   function showTechScreen() {
     const p = game.players[game.viewer];
     const modal = $("tech-modal");
     modal.style.display = "flex";
     const body = $("tech-body");
-    let html = "";
-    for (let era = 0; era < ERAS.length; era++) {
-      html += `<h3>${ERAS[era]} Era</h3><div class="tech-row">`;
-      for (const [key, t] of Object.entries(TECHS)) {
-        if (t.era !== era) continue;
-        const has = p.techs.has(key);
-        const avail = !has && t.req.every(r => p.techs.has(r));
-        const researching = p.researching === key;
-        const unlocks = [];
-        for (const [uk, u] of Object.entries(UNITS)) {
-          if (u.tech === key && (!u.uu || u.uu === p.civId)) unlocks.push(u.icon + " " + u.name);
-        }
-        for (const [bk, b] of Object.entries(BUILDINGS)) if (b.tech === key) unlocks.push(b.icon + " " + b.name);
-        html += `<div class="tech ${has ? "done" : avail ? "avail" : "locked"} ${researching ? "active" : ""}"
-          ${avail ? `onclick="UI.pickTech('${key}')"` : ""}>
-          <b>${t.name}</b> <span class="dim">${game.techCost(key)}🔬</span>
-          ${researching ? `<div class="dim">researching (${Math.floor(p.scienceStored)}/${t.cost})</div>` : ""}
-          ${unlocks.length ? `<div class="unlocks">${unlocks.join(", ")}</div>` : ""}
-          ${t.req.length ? `<div class="req dim">needs: ${t.req.map(r => TECHS[r].name).join(", ")}</div>` : ""}
-        </div>`;
-      }
-      html += `</div>`;
-    }
+    const depth = techDepths();
+    const maxDepth = Math.max(...Object.values(depth));
+    const layers = Array.from({ length: maxDepth + 1 }, () => []);
+    for (const key of Object.keys(TECHS)) layers[depth[key]].push(key);
+    const rows = Math.max(...layers.map(x => x.length));
+    const eraRanges = ERAS.map((_, era) => {
+      const ds = Object.keys(TECHS).filter(k => TECHS[k].era === era).map(k => depth[k]);
+      return [Math.min(...ds), Math.max(...ds)];
+    });
+    let html = `<div class="tech-help">Select a gold technology to research. Select or hover any other technology to trace its prerequisite path.</div>
+      <div id="tech-tree" class="tech-tree" style="--tech-cols:${maxDepth + 1};--tech-rows:${rows}">
+        <svg id="tech-links" class="tech-links" aria-hidden="true"></svg>
+        <div class="tech-era-ruler">`;
+    ERAS.forEach((era, i) => {
+      html += `<div class="tech-era" style="grid-column:${eraRanges[i][0] + 1}/${eraRanges[i][1] + 2}">${era}</div>`;
+    });
+    html += `</div><div class="tech-node-grid">`;
+    layers.forEach((layer, d) => layer.forEach((key, i) => {
+      const t = TECHS[key];
+      const has = p.techs.has(key);
+      const avail = !has && t.req.every(r => p.techs.has(r));
+      const researching = p.researching === key;
+      const unlocks = [];
+      for (const u of Object.values(UNITS)) if (u.tech === key && (!u.uu || u.uu === p.civId)) unlocks.push(u.icon + " " + u.name);
+      for (const b of Object.values(BUILDINGS)) if (b.tech === key) unlocks.push(b.icon + " " + b.name);
+      const row = layer.length === 1 ? 1 + Math.floor((rows - 1) / 2)
+        : 1 + Math.round(i * (rows - 1) / (layer.length - 1));
+      html += `<div class="tech ${has ? "done" : avail ? "avail" : "locked"} ${researching ? "active" : ""}"
+        data-tech="${key}" data-avail="${avail ? "1" : "0"}" role="button" tabindex="0"
+        style="grid-column:${d + 1};grid-row:${row}" aria-label="${t.name}, ${game.techCost(key)} science">
+        <div class="tech-name"><b>${t.name}</b><span>${game.techCost(key)}🔬</span></div>
+        ${researching ? `<div class="tech-progress"><i style="width:${Math.min(100, p.scienceStored / game.techCost(key) * 100)}%"></i></div>` : ""}
+        ${unlocks.length ? `<div class="unlocks">${unlocks.join(" · ")}</div>` : `<div class="unlocks dim">No direct unlock</div>`}
+        ${t.req.length ? `<div class="req">← ${t.req.map(r => TECHS[r].name).join(" + ")}</div>` : `<div class="req">Starting knowledge</div>`}
+      </div>`;
+    }));
+    html += `</div></div>`;
     body.innerHTML = html;
+    const tree = $("tech-tree");
+    tree.querySelectorAll(".tech").forEach(node => {
+      const key = node.dataset.tech;
+      node.onclick = () => {
+        if (node.dataset.avail === "1") pickTech(key);
+        else { techFocusKey = key; highlightTechPath(key); }
+      };
+      node.onkeydown = (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); node.click(); }
+      };
+      node.onmouseenter = () => highlightTechPath(key);
+      node.onmouseleave = () => highlightTechPath(techFocusKey || p.researching);
+      node.onfocus = () => highlightTechPath(key);
+      node.onblur = () => highlightTechPath(techFocusKey || p.researching);
+    });
+    requestAnimationFrame(drawTechConnections);
   }
 
   function pickTech(key) {
@@ -1107,7 +1221,7 @@ const UI = (() => {
     const p = game.players[game.viewer];
     let gold = 0, sci = 0, faith = 0;
     for (const c of game.cities) {
-      if (c.owner !== 0) continue;
+      if (c.owner !== game.viewer) continue;
       const y = game.cityYields(c);
       gold += y.gold; sci += y.sci; faith += y.faith;
     }
@@ -1510,9 +1624,9 @@ const UI = (() => {
       rend.attackable = computeAttackable(rend.selected);
     }
     rend.dirty = true;
+    refreshAttention();
     maybeAdvise();
     maybeShowCongress();
-    refreshAttention();
     maybeShowRecap();
     if (game.over) showVictory();
   }
@@ -1525,19 +1639,26 @@ const UI = (() => {
     if (!myTurn() || game.over) return items;
     const v = game.viewer, p = game.players[v];
     if (!p.researching && p.availableTechs().length)
-      items.push({ icon: "🔬", label: "Choose research", act: showTechScreen });
+      items.push({ icon: "🔬", label: "Choose research", tipKey: "research",
+        hint: "Choose the technology path that will shape your next units and buildings.", act: showTechScreen });
     if (game.congressDue && game.congressDue() && p.congressVoteTurn !== game.turn)
       items.push({ icon: "🗳️", label: "Congress vote", act: () => { congressSeenTurn = -1; maybeShowCongress(); } });
     if (game.canFoundReligion(v))
-      items.push({ icon: "☦️", label: "Found religion", act: showReligionScreen });
+      items.push({ icon: "☦️", label: "Found religion", tipKey: "religion",
+        hint: "Choose a founder belief, then spread the faith with Missionaries.", act: showReligionScreen });
     if (game.canAdoptPolicy(v))
-      items.push({ icon: "🎭", label: "Adopt policy", act: showPolicyScreen });
+      items.push({ icon: "🎭", label: "Adopt policy", tipKey: "policy",
+        hint: "Spend culture on a policy branch; completing three branches wins a Cultural Victory.", act: showPolicyScreen });
     const promoUnit = game.units.find(u => u.owner === v && u.promoPts > 0 && !u.isCivilian);
     if (promoUnit)
-      items.push({ icon: "⭐", label: "Promote unit", act: () => { selectUnit(promoUnit); rend.centerOn(game, promoUnit.c, promoUnit.r); } });
+      items.push({ icon: "⭐", label: "Promote unit", tipKey: "promote",
+        hint: "Select a veteran upgrade before sending this unit back into battle.",
+        act: () => { selectUnit(promoUnit); rend.centerOn(game, promoUnit.c, promoUnit.r); } });
     const idleCity = game.cities.find(c => c.owner === v && !c.producing && !c.queue.length);
     if (idleCity)
-      items.push({ icon: "🏙️", label: "Set production", act: () => { selectCity(idleCity); rend.centerOn(game, idleCity.c, idleCity.r); } });
+      items.push({ icon: "🏙️", label: "Set production", tipKey: "founded",
+        hint: "Choose what this city should build; early military and workers establish momentum.",
+        act: () => { selectCity(idleCity); rend.centerOn(game, idleCity.c, idleCity.r); } });
     const idleUnits = game.units.filter(u => u.owner === v && u.moves > 0 && !u.fortified &&
       !u.attacked && !u.building && !u.autoExplore && !(u.path && u.path.length));
     if (idleUnits.length)
@@ -1549,9 +1670,11 @@ const UI = (() => {
     const el = $("attention");
     const items = computeAttention();
     if (!items.length) { el.style.display = "none"; el.innerHTML = ""; return; }
+    for (const it of items) if (it.tipKey) markAdvisorSeen(it.tipKey);
+    if (items.some(it => it.tipKey === $("advisor").dataset.tipKey)) hideAdvisor();
     el.style.display = "flex";
     el.innerHTML = `<span class="attention-title">Needs you:</span>` +
-      items.map((it, i) => `<button class="attention-chip" data-i="${i}">${it.icon} ${it.label}</button>`).join("");
+      items.map((it, i) => `<button class="attention-chip" data-i="${i}" title="${it.hint || ""}">${it.icon} ${it.label}</button>`).join("");
     el.querySelectorAll(".attention-chip").forEach(b => b.onclick = () => items[parseInt(b.dataset.i, 10)].act());
   }
 
@@ -1660,32 +1783,43 @@ const UI = (() => {
 
   function advisorEnabled() { return localStorage.getItem("balkan-civ-tips-off") !== "1"; }
 
+  function advisorSeenKeys() {
+    try { return new Set(JSON.parse(localStorage.getItem("balkan-civ-tips-seen") || "[]")); }
+    catch (e) { return new Set(); }
+  }
+
+  function markAdvisorSeen(key) {
+    if (!key) return;
+    const seen = advisorSeenKeys();
+    if (seen.has(key)) return;
+    seen.add(key);
+    try { localStorage.setItem("balkan-civ-tips-seen", JSON.stringify([...seen])); } catch (e) { /* storage full */ }
+  }
+
   function maybeAdvise() {
     if (!advisorEnabled() || !game || game.over || $("advisor").style.display === "block") return;
     if (NET.active && game.activeHuman !== NET.myIndex) return;
-    let seen;
-    try { seen = new Set(JSON.parse(localStorage.getItem("balkan-civ-tips-seen") || "[]")); }
-    catch (e) { seen = new Set(); }
+    const seen = advisorSeenKeys();
     for (const tip of ADVISOR_TIPS) {
       if (seen.has(tip.key)) continue;
       let ok = false;
       try { ok = tip.when(); } catch (e) { ok = false; }
       if (!ok) continue;
       showAdvisor(tip);
-      seen.add(tip.key);
-      try { localStorage.setItem("balkan-civ-tips-seen", JSON.stringify([...seen])); } catch (e) { /* full */ }
+      markAdvisorSeen(tip.key);
       return;
     }
   }
 
   function showAdvisor(tip) {
+    $("advisor").dataset.tipKey = tip.key;
     $("advisor-title").innerHTML = "💡 " + tip.title;
     $("advisor-body").innerHTML = tip.body;
     $("advisor").style.display = "block";
     SFX.play("bell");
   }
 
-  function hideAdvisor() { $("advisor").style.display = "none"; }
+  function hideAdvisor() { $("advisor").style.display = "none"; $("advisor").dataset.tipKey = ""; }
 
   // ---------------- end turn ----------------
   function endTurn() {
@@ -2018,6 +2152,11 @@ const UI = (() => {
       zoomAt(e.deltaY < 0 ? 1.12 : 0.89, e.clientX - rect.left, e.clientY - rect.top);
     }, { passive: false });
 
+    $("btn-zoom-in").onclick = () => zoomAt(1.18, cv.width / 2, cv.height / 2);
+    $("btn-zoom-out").onclick = () => zoomAt(0.84, cv.width / 2, cv.height / 2);
+    $("btn-rot-left").onclick = () => { if (rend.rotate) rend.rotate(-1); };
+    $("btn-rot-right").onclick = () => { if (rend.rotate) rend.rotate(1); };
+
     // minimap click
     $("minimap").addEventListener("mousedown", (e) => {
       const rect = e.target.getBoundingClientRect();
@@ -2174,8 +2313,18 @@ const UI = (() => {
   // ---------------- boot ----------------
   function resize() {
     const cv = $("map");
-    cv.width = window.innerWidth;
-    cv.height = window.innerHeight - 44;
+    const oldW = cv.width || window.innerWidth;
+    const oldH = cv.height || window.innerHeight;
+    const hudHeight = Math.round($("topbar").getBoundingClientRect().height) || 48;
+    const newW = window.innerWidth;
+    const newH = Math.max(1, window.innerHeight - hudHeight);
+    if (rend && game) {
+      rend.cam.x += (oldW - newW) / 2;
+      rend.cam.y += (oldH - newH) / 2;
+    }
+    cv.style.top = hudHeight + "px";
+    cv.width = newW;
+    cv.height = newH;
     if (rend) rend.dirty = true;
   }
 

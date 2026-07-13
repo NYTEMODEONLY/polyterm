@@ -194,7 +194,8 @@ class Renderer3D {
     const hpB = u.hp >= 100 ? 100 : Math.ceil(u.hp / 5) * 5;
     const spent = u.owner === game.viewer && u.moves <= 0;
     const emb = game.isEmbarked(u);
-    const key = `u|${u.def.icon}|${civ.color}|${outline}|${hpB}|${u.level}|${u.fortified ? 1 : 0}|${emb ? 1 : 0}|${spent ? 1 : 0}`;
+    const art = UNIT_ART.kind(u.def);
+    const key = `u|${art}|${civ.color}|${outline}|${hpB}|${u.level}|${u.fortified ? 1 : 0}|${emb ? 1 : 0}|${spent ? 1 : 0}`;
     return this._tex(key, 128, 152, (ctx) => {
       if (spent) ctx.globalAlpha = 0.55;
       // disc
@@ -205,10 +206,7 @@ class Renderer3D {
       ctx.lineWidth = 6;
       ctx.strokeStyle = outline;
       ctx.stroke();
-      ctx.font = "50px serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(u.def.icon, 64, 84);
+      UNIT_ART.draw(ctx, u.def, 64, 84, 72);
       // HP bar
       if (hpB < 100) {
         ctx.fillStyle = "#222";

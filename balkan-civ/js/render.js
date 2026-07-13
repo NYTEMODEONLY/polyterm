@@ -558,11 +558,8 @@ class Renderer {
     ctx.strokeStyle = u.owner === game.viewer ? "#fff" : civ.color2;
     ctx.lineWidth = 2;
     ctx.stroke();
-    // icon
-    ctx.font = `${Math.floor(rad * 1.1)}px serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(u.def.icon, sx, sy + 1);
+    // shared code-native silhouette (the UI keeps compact emoji labels)
+    UNIT_ART.draw(ctx, u.def, sx, sy + 1, rad * 1.62);
     // HP bar
     if (u.hp < 100) {
       const w = rad * 2;
