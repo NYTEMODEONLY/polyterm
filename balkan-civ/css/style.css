@@ -76,8 +76,15 @@ button:disabled { opacity: 0.4; cursor: default; }
 
 #notif-list { position: fixed; right: 10px; top: 54px; z-index: 9; width: 320px; max-height: 180px;
   overflow-y: auto; cursor: pointer; }
-.notif { background: rgba(15,18,26,0.85); border-left: 3px solid #8a7648; padding: 4px 8px;
-  margin-bottom: 3px; font-size: 12.5px; border-radius: 0 4px 4px 0; }
+#notif-list { pointer-events: none; }
+.notif { background: rgba(15,18,26,0.9); border-left: 3px solid #8a7648; padding: 4px 8px;
+  margin-bottom: 3px; font-size: 12.5px; border-radius: 0 4px 4px 0; pointer-events: auto;
+  animation: notifIn 0.25s ease-out; transition: opacity 0.6s ease, transform 0.6s ease; }
+.notif.fade { opacity: 0; transform: translateX(24px); }
+@keyframes notifIn { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .notif { animation: none; } }
+.prod-cancel { color: #e08a7a; font-size: 11px; text-decoration: none; margin-left: 6px; }
+.prod-cancel:hover { text-decoration: underline; }
 
 #tooltip { position: fixed; z-index: 30; display: none; background: rgba(12,15,22,0.94);
   border: 1px solid #8a7648; border-radius: 4px; padding: 7px 10px; font-size: 12.5px;

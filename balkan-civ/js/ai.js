@@ -201,7 +201,9 @@ const AI = (() => {
         const weary = (p.warWeariness[other] || 0) > 25;
         const losing = game.militaryPower(p.index) < game.militaryPower(other) * 0.55;
         if ((weary && game.rng() < 0.2) || (losing && game.rng() < 0.3)) {
-          game.makePeace(p.index, other);
+          // never end a war with a human unilaterally — offer it and let them decide
+          if (o.isHuman) game.offerPeace(p.index, other);
+          else game.makePeace(p.index, other);
         }
       } else {
         if (!o.isMinor) {

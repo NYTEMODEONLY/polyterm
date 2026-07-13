@@ -220,7 +220,7 @@ const UI = (() => {
   function netAfterLoad() {
     selectUnit(null);
     closeCity();
-    notifSeen = Math.max(0, game.notifications.length - 12);
+    notifSeen = Math.max(0, game.notifications.length - 3);
     refreshAll();
     netUpdateBanner();
     if (myTurn() && !game.over) {
@@ -381,6 +381,63 @@ const UI = (() => {
       }
     }
     return out;
+  }
+
+  // Is the clicked tile a legal *war* target — an at-peace rival's unit or city
+  // in this unit's strike range? Returns the owner index, or -1 if none.
+  // Lets a player start a war the intuitive way: by attacking.
+  function warTargetOwner(u, c, r) {
+    if (!u || u.owner !== game.viewer || u.isCivilian || u.attacked || u.moves <= 0 || game.isEmbarked(u)) return -1;
+    const p = game.players[game.viewer];
+    const range = u.isRanged ? u.def.range : 1;
+    if (HEX.distance(u.c, u.r, c, r) > range) return -1;
+    const t = game.tile(c, r);
+    if (!t || !p.visible[game.map.idx(c, r)]) return -1;
+    if (!u.isRanged && !u.def.naval && game.isWater(t)) return -1;
+    if (!u.isRanged && u.def.naval && !game.isWater(t) && !t.city) return -1;
+    const cu = game.combatUnitAt(c, r);
+    const civ = game.civilianAt(c, r);
+    const owner = cu ? cu.owner : (t.city ? t.city.owner : (civ ? civ.owner : -1));
+    if (owner < 0 || owner === game.viewer) return -1;
+    const op = game.players[owner];
+    // barbarians are already at war; skip our own pact partners and unmet powers
+    if (!op || op.isBarb || p.atWarWith.has(owner) || p.pacts.has(owner) || !p.met.has(owner)) return -1;
+    return owner;
+  }
+
+  function showWarConfirm(unit, c, r) {
+    const owner = warTargetOwner(unit, c, r);
+    if (owner < 0) return false;
+    const civ = game.players[owner].civ;
+    const pactAllies = [...game.players[game.viewer].pacts].filter(a =>
+      game.players[a] && game.players[a].alive && game.players[a].pacts.has(owner));
+    $("war-body").innerHTML = `
+      <div class="diplo-row" style="border-left:6px solid ${civ.color}">
+        <div>Attack <b>${civ.name}</b> <span class="dim">— ${civ.leader}</span>?</div>
+        <div class="dim">This declares <b>war</b>. Military ${Math.floor(game.militaryPower(owner))} ·
+          they feel <b>${game.attitudeLabel(owner, game.viewer)}</b> toward you.</div>
+        ${game.players[owner].pacts.size ? `<div class="dim">⚠️ Their defensive-pact allies may join against you.</div>` : ""}
+      </div>
+      <div style="display:flex;gap:10px;margin-top:6px">
+        <button onclick="UI.declareWarAndAttack(${c}, ${r})">⚔️ Declare War & Attack</button>
+        <button onclick="document.getElementById('war-modal').style.display='none'">Cancel</button>
+      </div>`;
+    $("war-modal").style.display = "flex";
+    return true;
+  }
+
+  function declareWarAndAttack(c, r) {
+    $("war-modal").style.display = "none";
+    if (!myTurn()) return;
+    const sel = rend.selected;
+    const owner = warTargetOwner(sel, c, r);
+    if (owner < 0) return;
+    game.declareWar(game.viewer, owner);
+    const t = game.tile(c, r);
+    SFX.play(t && t.city ? "cityhit" : "attack");
+    game.attack(sel, c, r);
+    selectUnit(game.units.includes(sel) ? sel : null);
+    refreshAll();
   }
 
   function selectCity(city) {
@@ -601,7 +658,7 @@ const UI = (() => {
       html += `<div class="prod-current">Producing: <b>${cur
         ? (cur.kind === "unit" ? UNITS[cur.key].icon + " " + UNITS[cur.key].name : BUILDINGS[cur.key].icon + " " + BUILDINGS[cur.key].name) +
           ` (${city.prodStored}/${cur.kind === "unit" ? UNITS[cur.key].cost : BUILDINGS[cur.key].cost})`
-        : "—"}</b></div>`;
+        : "—"}</b>${cur ? ` <a href="#" class="prod-cancel" title="Stop producing this" onclick="UI.cancelProduction(${city.id});return false">✕ cancel</a>` : ""}</div>`;
       if (city.queue.length) {
         html += `<div class="prod-current">Queue: ${city.queue.map((q, i) =>
           `${q.kind === "unit" ? UNITS[q.key].icon : BUILDINGS[q.key].icon}
@@ -615,7 +672,8 @@ const UI = (() => {
         html += `<div class="prod-item ${o.wonder ? "wonder" : ""}">
           <span>${o.icon} ${o.name}</span>
           <span class="dim">${o.cost}⚙️ ~${turns}t</span>
-          <button onclick="UI.setProduction(${city.id},'${o.kind}','${o.key}')">${cur ? "Queue" : "Build"}</button>
+          <button title="Build this now${cur ? " (replaces current production)" : ""}" onclick="UI.buildNow(${city.id},'${o.kind}','${o.key}')">🔨 Build</button>
+          ${cur ? `<button title="Add to the build queue" onclick="UI.setProduction(${city.id},'${o.kind}','${o.key}')">＋ Queue</button>` : ""}
           <button ${afford ? "" : "disabled"} onclick="UI.buyItem(${city.id},'${o.kind}','${o.key}')">💰${price}</button>
         </div>`;
       }
@@ -635,6 +693,32 @@ const UI = (() => {
     } else {
       city.producing = { kind, key };
     }
+    SFX.play("click");
+    showCityPanel(city);
+    refreshAll();
+  }
+
+  // Switch what the city is building right now (stored production carries over).
+  function buildNow(cityId, kind, key) {
+    if (!myTurn()) return;
+    const city = game.cities.find(c => c.id === cityId);
+    if (!city) return;
+    if (city.producing && city.producing.key === key) return;
+    // dropping a half-built wonder shouldn't silently waste all its hammers, but
+    // switching between ordinary items keeps progress (Civ-style)
+    city.producing = { kind, key };
+    SFX.play("click");
+    showCityPanel(city);
+    refreshAll();
+  }
+
+  // Stop current production; if a queue exists, promote its next item.
+  function cancelProduction(cityId) {
+    if (!myTurn()) return;
+    const city = game.cities.find(c => c.id === cityId);
+    if (!city) return;
+    city.producing = city.queue.length ? city.queue.shift() : null;
+    if (!city.producing) city.prodStored = 0;
     SFX.play("click");
     showCityPanel(city);
     refreshAll();
@@ -911,6 +995,42 @@ const UI = (() => {
       showDiploScreen();
       refreshAll();
     }
+  }
+
+  // ---- peace proposals from the AI (shown at the start of your turn) ----
+  function maybeShowPeaceOffers() {
+    if (!game || game.over || !myTurn()) return;
+    const offers = game.pendingPeaceOffers(game.viewer);
+    if (!offers.length) return;
+    showPeaceModal(offers);
+  }
+  function showPeaceModal(offers) {
+    const modal = $("peace-modal");
+    const o = offers[0];
+    const other = game.players[o.from];
+    const civ = other.civ;
+    $("peace-body").innerHTML = `
+      <div class="diplo-row" style="border-left:6px solid ${civ.color}">
+        <div><b>${civ.name}</b> <span class="dim">— ${civ.leader}</span></div>
+        <div class="dim">Military ${Math.floor(game.militaryPower(o.from))} · they feel
+          <b>${game.attitudeLabel(o.from, game.viewer)}</b> toward you</div>
+        <p style="margin:10px 0">“Let us end this war and make peace.”</p>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:6px">
+        <button onclick="UI.answerPeace(${o.from}, true)">☮️ Accept Peace</button>
+        <button onclick="UI.answerPeace(${o.from}, false)">⚔️ Fight On</button>
+      </div>
+      ${offers.length > 1 ? `<div class="dim" style="margin-top:8px">${offers.length - 1} more proposal${offers.length > 2 ? "s" : ""} pending…</div>` : ""}`;
+    modal.style.display = "flex";
+  }
+  function answerPeace(fromIdx, accept) {
+    if (accept) { game.acceptPeaceOffer(game.viewer, fromIdx); SFX.play("policy"); }
+    else { game.declinePeaceOffer(game.viewer, fromIdx); }
+    $("peace-modal").style.display = "none";
+    refreshAll();
+    // chain to the next pending offer, if any
+    const rest = game.pendingPeaceOffers(game.viewer);
+    if (rest.length) showPeaceModal(rest);
   }
 
   function diploAction(idx) {
@@ -1348,19 +1468,36 @@ const UI = (() => {
     body.innerHTML = html;
   }
 
-  function refreshNotifications() {
+  // Notifications surface as transient toasts that fade after a few seconds so
+  // they never pile up and cover the map; the full history lives in the log
+  // (click the panel). Only genuinely new entries toast — notifSeen advances.
+  function addNotifToast(n) {
     const list = $("notif-list");
+    const div = document.createElement("div");
+    div.className = "notif";
+    div.innerHTML = `<span class="dim">T${n.turn}</span> ${n.msg}`;
+    list.appendChild(div);
+    while (list.children.length > 6) list.removeChild(list.firstChild);
+    list.scrollTop = list.scrollHeight;
+    const dwell = rend && rend.reduceMotion ? 9000 : 6500;
+    setTimeout(() => {
+      div.classList.add("fade");
+      setTimeout(() => { if (div.parentNode) div.parentNode.removeChild(div); }, 700);
+    }, dwell);
+  }
+  function refreshNotifications() {
     const all = game.notifications;
     const forMe = (n) => n.p === undefined || n.p === -1 || n.p === game.viewer;
+    let playedSound = false;
     for (let i = notifSeen; i < all.length; i++) {
       if (!forMe(all[i])) continue;
-      const hit = NOTIF_SOUNDS.find(([re]) => re.test(all[i].msg));
-      if (hit) { SFX.play(hit[1]); break; } // at most one sound per refresh
+      if (!playedSound) {
+        const hit = NOTIF_SOUNDS.find(([re]) => re.test(all[i].msg));
+        if (hit) { SFX.play(hit[1]); playedSound = true; } // at most one sound per refresh
+      }
+      addNotifToast(all[i]);
     }
     notifSeen = all.length;
-    const recent = all.filter(forMe).slice(-6);
-    list.innerHTML = recent.map(n => `<div class="notif"><span class="dim">T${n.turn}</span> ${n.msg}</div>`).join("");
-    list.scrollTop = list.scrollHeight;
   }
 
   function refreshAll() {
@@ -1582,7 +1719,7 @@ const UI = (() => {
       NET.sendState(game);
       refreshAll();
       netUpdateBanner();
-      if (myTurn() && !game.over) { cycleNextUnit(); maybePromptFounding(); }
+      if (myTurn() && !game.over) { cycleNextUnit(); maybePromptFounding(); maybeShowPeaceOffers(); }
       return;
     }
     if (game.humans > 1 && !game.over) {
@@ -1592,6 +1729,7 @@ const UI = (() => {
     refreshAll();
     if (!game.over) cycleNextUnit();
     maybePromptFounding();
+    maybeShowPeaceOffers();
   }
 
   function maybePromptFounding() {
@@ -1616,8 +1754,8 @@ const UI = (() => {
 
   function beginHotseatTurn() {
     $("handoff-modal").style.display = "none";
-    notifSeen = 0; // rescan visible notifications for this player (no sounds replayed: they're deduped by break)
-    notifSeen = game.notifications.length - Math.min(game.notifications.length, 30);
+    // start this player's toasts fresh; the recap panel covers what they missed
+    notifSeen = game.notifications.length - Math.min(game.notifications.length, 3);
     const p = game.players[game.viewer];
     const home = game.cities.find(c => c.owner === game.viewer) ||
                  game.units.find(u => u.owner === game.viewer);
@@ -1625,6 +1763,7 @@ const UI = (() => {
     refreshAll();
     cycleNextUnit();
     maybePromptFounding();
+    maybeShowPeaceOffers();
   }
 
   function showVictory() {
@@ -1726,6 +1865,11 @@ const UI = (() => {
       game.attack(sel, c, r);
       if (game.units.includes(sel)) selectUnit(sel); else selectUnit(null);
       refreshAll();
+      return;
+    }
+    // clicking an at-peace rival's unit/city in range: offer to declare war & strike
+    if (sel && !rightClick && warTargetOwner(sel, c, r) >= 0) {
+      showWarConfirm(sel, c, r);
       return;
     }
     // move?
@@ -2008,6 +2152,8 @@ const UI = (() => {
           `You deal <b>${f.out[0]}–${f.out[1]}</b>${kills ? " — <b class='alert'>lethal!</b>" : ""}` +
           (f.back ? `<br>You take <b>${f.back[0]}–${f.back[1]}</b>` : "<br><span class='dim'>no counterattack</span>");
       }
+    } else if (sel0 && warTargetOwner(sel0, c, r) >= 0) {
+      html += `<br><b class="war">⚔ Click to declare war on ${game.players[warTargetOwner(sel0, c, r)].civ.name}</b>`;
     }
     if (t.resource) html += ` · ${RESOURCE[t.resource].icon} ${RESOURCE[t.resource].name}${RESOURCE[t.resource].luxury ? " (luxury)" : ""}`;
     if (t.improvement) html += ` · ${IMPROVEMENT[t.improvement].icon} ${IMPROVEMENT[t.improvement].name}`;
@@ -2088,6 +2234,7 @@ const UI = (() => {
     hostAddSlot, hostConnect, hostStartOnline, joinCreateReply, unqueue,
     saveSlot, loadSlot, exportSave, toMainMenu, toggleGraphics, showSettings: showSettingsModal,
     diploTrade, diploGift, diploPact, adoptPolicy, congressVote, congressAbstain,
-    playChapter, resetCampaign, openCampaign,
+    playChapter, resetCampaign, openCampaign, answerPeace, cancelProduction, buildNow,
+    declareWarAndAttack,
     get game() { return game; }, get renderer() { return rend; } };
 })();

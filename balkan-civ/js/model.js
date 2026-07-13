@@ -180,6 +180,7 @@ class Game {
     this.history = [];           // score history for the replay graph
     this.congressTurn = -999;    // last World Congress session turn
     this.congressLast = null;    // last session tally (for the UI)
+    this.peaceOffers = [];       // AI->human peace proposals awaiting a decision [{from,to}]
     this.anims = [];             // transient movement animations (not saved)
     if (this.mapType === "custom" && opts.customMap) {
       const cm = opts.customMap;
@@ -776,7 +777,11 @@ class Game {
     const t = this.tile(unit.c, unit.r);
     const p = this.players[unit.owner];
     if (!imp || !t || !p.hasTech(imp.tech)) return false;
-    if (t.owner !== unit.owner || t.city) return false;
+    if (t.city) return false;
+    // roads may be laid in your own land or unclaimed neutral ground (to connect
+    // distant cities); farms/mines still require your own territory.
+    if (imp.road) { if (t.owner !== unit.owner && t.owner !== -1) return false; }
+    else if (t.owner !== unit.owner) return false;
     if (!imp.terrains.includes(t.terrain)) return false;
     if (t.feature && !imp.road) return false;      // farms/mines need clear ground
     if (imp.road ? t.improvement === "ROAD" : t.improvement === type) return false;
@@ -795,7 +800,9 @@ class Game {
     for (const u of this.units) {
       if (u.owner !== p.index || !u.building) continue;
       const t = this.tile(u.c, u.r);
-      if (!t || t.owner !== p.index) { u.building = null; continue; } // lost the tile
+      // roads survive on neutral ground; other improvements need your territory
+      const isRoad = IMPROVEMENT[u.building.type] && IMPROVEMENT[u.building.type].road;
+      if (!t || (t.owner !== p.index && !(isRoad && t.owner === -1))) { u.building = null; continue; } // lost the tile
       u.building.turnsLeft--;
       if (u.building.turnsLeft <= 0) {
         t.improvement = u.building.type;
@@ -1395,8 +1402,34 @@ class Game {
     if (!pa.atWarWith.has(b)) return;
     pa.atWarWith.delete(b); pb.atWarWith.delete(a);
     delete pa.warWeariness[b]; delete pb.warWeariness[a];
+    this.peaceOffers = this.peaceOffers.filter(o =>
+      !((o.from === a && o.to === b) || (o.from === b && o.to === a)));
     this.notify(`☮️ Peace between ${pa.civ.name} and ${pb.civ.name}.`, -1);
     this.changeAttitude(a, b, 10); this.changeAttitude(b, a, 10);
+  }
+
+  // An AI proposes peace to a human. It doesn't take effect until the player
+  // accepts, so a war can never end without the human's say-so.
+  offerPeace(from, to) {
+    const pf = this.players[from], pt = this.players[to];
+    if (!pf || !pt || pf.isBarb || pt.isBarb || !pf.atWarWith.has(to)) return;
+    if (this.peaceOffers.some(o => o.from === from && o.to === to)) return;
+    this.peaceOffers.push({ from, to });
+    this.notify(`☮️ ${pf.civ.name} proposes peace.`, to);
+  }
+  pendingPeaceOffers(to) {
+    return this.peaceOffers.filter(o => o.to === to &&
+      this.players[o.from].alive && this.players[o.from].atWarWith.has(to));
+  }
+  acceptPeaceOffer(to, from) {
+    if (!this.peaceOffers.some(o => o.from === from && o.to === to)) return false;
+    this.makePeace(from, to); // also prunes the offer
+    return true;
+  }
+  declinePeaceOffer(to, from) {
+    this.peaceOffers = this.peaceOffers.filter(o => !(o.from === from && o.to === to));
+    // spurning peace sours them a little
+    this.changeAttitude(from, to, -4);
   }
 
   // ---------- attitude, deals & pacts ----------
@@ -2464,7 +2497,7 @@ class Game {
       noBarbs: this.noBarbs, barbIndex: this.barbIndex, maxCamps: this.maxCamps || 0,
       camps: this.camps, speed: this.speed, routes: this.routes, history: this.history,
       congressTurn: this.congressTurn, congressLast: this.congressLast,
-      over: this.over,
+      peaceOffers: this.peaceOffers, over: this.over,
       winner: this.winner, victoryType: this.victoryType, nextId: NEXT_ID,
       religions: this.religions,
       map: { w: this.map.w, h: this.map.h, tiles: this.map.tiles.map(t => ({
@@ -2514,6 +2547,7 @@ class Game {
     g.history = d.history || [];
     g.congressTurn = d.congressTurn ?? -999;
     g.congressLast = d.congressLast || null;
+    g.peaceOffers = d.peaceOffers || [];
     if (g.scenario && SCENARIOS[g.scenario]) g.maxTurns = SCENARIOS[g.scenario].victory.turns;
     g.effects = [];
     g.anims = [];
