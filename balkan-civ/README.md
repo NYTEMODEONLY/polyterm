@@ -167,7 +167,11 @@ events, or AI choices.
   followed by Gunpowder Frigates and Steam-powered Ironclads. Ships hunt
   transports, bombard shores, and can capture coastal cities;
   embarked units are nearly defenseless — escort them. AI fleets chart unknown
-  seas, modernize in home waters, screen transports, and coordinate bombardment
+  seas, modernize in home waters, screen transports, and coordinate bombardment.
+  A stronger adjacent fleet **blockades** a hostile port, halving city gold,
+  suspending endpoint trade routes, and stopping repairs until defending
+  warships restore local naval control. AI fleets impose and break these
+  blockades as part of their coastal campaigns
 - Fog of war with explored/visible states
 - Cities: population growth, worked tiles, culture-driven border expansion,
   production queues, gold purchasing, 16 buildings and 10 world wonders
@@ -321,5 +325,5 @@ drops mid-game the host can continue against the AI or re-host later.
 
 ## Ideas for future expansion
 
-Naval blockades and fleet logistics, longer historical campaign chains,
-additional Industrial-era scenarios, and localized interface text.
+Fleet logistics, longer historical campaign chains, additional Industrial-era
+scenarios, and localized interface text.

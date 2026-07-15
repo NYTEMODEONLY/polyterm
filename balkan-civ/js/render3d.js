@@ -312,9 +312,11 @@ class Renderer3D {
   _bannerTex(city, game) {
     const civ = CIVS[game.players[city.owner].civId];
     const rel = city.religion !== null && game.religions[city.religion];
-    const label = `${rel ? rel.icon + " " : ""}${city.name}${city.isCapital ? " ★" : ""}`;
+    const seenNow = game.players[game.viewer].visible[game.map.idx(city.c, city.r)] === 2;
+    const blockaded = (city.owner === game.viewer || seenNow) && game.cityBlockade(city).active;
+    const label = `${blockaded ? "⚓ " : ""}${rel ? rel.icon + " " : ""}${city.name}${city.isCapital ? " ★" : ""}`;
     const hpB = city.hp >= city.maxHp ? 100 : Math.ceil(city.hp / city.maxHp * 20) * 5;
-    const key = `b|${label}|${city.pop}|${civ.color}|${hpB}`;
+    const key = `b|${label}|${city.pop}|${civ.color}|${hpB}|${blockaded ? 1 : 0}`;
     let t = this._texCache.get(key);
     if (t) return t;
     const meas = document.createElement("canvas").getContext("2d");
@@ -327,7 +329,7 @@ class Renderer3D {
       ctx.roundRect(5, 5, w - 10, 49, 5);
       ctx.fill();
       ctx.lineWidth = 3;
-      ctx.strokeStyle = "#d5ba73";
+      ctx.strokeStyle = blockaded ? "#de684b" : "#d5ba73";
       ctx.stroke();
       ctx.fillStyle = civ.color;
       ctx.fillRect(10, 10, w - 20, 5);
@@ -928,11 +930,13 @@ class Renderer3D {
     this._pool.routes = [];
     for (const route of game.routes || []) {
       if (route.owner !== game.viewer) continue;
+      const suspended = !game.tradeRouteStatus(route).active;
       const pts = route.path.map(([pc, pr]) => {
         const [wx, wz] = HEX.toPixel(pc, pr, S);
         return [wx, surfY3D(game.tile(pc, pr)) + 1.4, wz];
       });
-      const l = this._lineOf(pts, 0xf1c40f, true);
+      const l = this._lineOf(pts, suspended ? 0xde684b : 0xf1c40f, true);
+      if (suspended) l.material.opacity = 0.62;
       this.gDyn.add(l);
       this._pool.routes.push(l);
     }

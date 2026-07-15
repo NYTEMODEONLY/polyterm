@@ -270,10 +270,10 @@ test("AI ships upgrade, explore in peace, and reserve distinct bombardment posit
     const battle = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 64005,
       mapW: 24, mapH: 18, mapType: "archipelago", noMinors: true, noBarbs: true });
     resetWorld(battle);
-    for (const tile of battle.map.tiles) if (tile.c >= 8 && tile.c <= 15) tile.terrain =
-      tile.c === 8 || tile.c === 15 ? "COAST" : "OCEAN";
+    for (const tile of battle.map.tiles) if (tile.c >= 8 && tile.c <= 11) tile.terrain =
+      tile.c === 8 || tile.c === 11 ? "COAST" : "OCEAN";
     const battlePort = addCity(battle, 0, 7, 8, "Port", true); battlePort.coastal = true;
-    const enemy = addCity(battle, 1, 16, 8, "Enemy Port", true); enemy.coastal = true;
+    const enemy = addCity(battle, 1, 12, 8, "Enemy Port", true); enemy.coastal = true;
     const fleet = [addUnit(battle, "GALLEASS", 0, 8, 7), addUnit(battle, "GALLEASS", 0, 8, 9)];
     battle.players[0].techs.add("COMPASS"); battle.players[0].met.add(1); battle.players[1].met.add(0);
     battle.declareWar(0, 1); battle.rng = () => 0.5;
@@ -282,14 +282,111 @@ test("AI ships upgrade, explore in peace, and reserve distinct bombardment posit
       ? ship.path[ship.path.length - 1] : [ship.c, ship.r]);
     return JSON.stringify({ upgraded: oldShip.type, start, explored: [explorer.c, explorer.r],
       explorePath: explorer.path, endpoints,
-      distances: endpoints.map(([c, r]) => HEX.distance(c, r, enemy.c, enemy.r)) });
+      distances: endpoints.map(([c, r]) => HEX.distance(c, r, enemy.c, enemy.r)),
+      blockade: battle.cityBlockade(enemy).active,
+      overseas: AI.campaignIsOverseas(battle, battle.players[0], enemy) });
   `));
 
   assert.equal(result.upgraded, "GALLEASS");
   assert.ok(result.explored[0] !== result.start[0] || result.explored[1] !== result.start[1] || result.explorePath,
     "a peacetime ship should leave port to chart unseen reachable water");
-  assert.deepEqual([...result.distances].sort((a, b) => a - b), [2, 2]);
+  assert.deepEqual([...result.distances].sort((a, b) => a - b), [1, 2]);
+  assert.equal(result.overseas, true, "the controlled fleet should cross a genuine sea gap");
+  assert.equal(result.blockade, true, "one fleet unit should accept the exposed blockade position");
   assert.equal(new Set(result.endpoints.map(([c, r]) => c + "," + r)).size, 2);
+});
+
+test("naval pressure blockades ports, suspends trade, and yields immediately to stronger defense", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    ${controlledWorldSource}
+    const g = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 64010,
+      mapW: 24, mapH: 18, mapType: "archipelago", noMinors: true, noBarbs: true });
+    resetWorld(g);
+    const port = addCity(g, 0, 7, 8, "Port", true); port.coastal = true;
+    const market = addCity(g, 0, 15, 8, "Market");
+    const water = HEX.neighbors(port.c, port.r).slice(0, 3);
+    for (const [c, r] of water) g.tile(c, r).terrain = "COAST";
+    const baselineGold = g.cityYields(port).gold;
+    const route = { owner: 0, fromId: port.id, toId: market.id,
+      path: [[port.c, port.r], [market.c, market.r]], ends: g.turn + 20 };
+    g.routes.push(route);
+    const routeGold = g.routeIncome(port, market);
+    g.players[0].met.add(1); g.players[1].met.add(0); g.declareWar(0, 1);
+    const attacker = addUnit(g, "FRIGATE", 1, water[0][0], water[0][1]);
+    const escort = addUnit(g, "GALLEY", 0, water[1][0], water[1][1]);
+    port.hp = 120;
+    const blockade = g.cityBlockade(port);
+    const blockedGold = g.cityYields(port).gold;
+    const blockedRoute = g.tradeRouteStatus(route);
+    const blockedIncome = g.tradeIncome(0);
+    const forecast = g.empireEconomy(0);
+    const treasuryBefore = g.players[0].gold;
+    g.processPlayerEconomy(g.players[0]);
+    const appliedGold = g.players[0].gold - treasuryBefore;
+    const hpWhileBlocked = port.hp;
+
+    const relief = addUnit(g, "IRONCLAD", 0, water[2][0], water[2][1]);
+    const relieved = g.cityBlockade(port);
+    const resumedRoute = g.tradeRouteStatus(route);
+    const resumedIncome = g.tradeIncome(0);
+    const relievedGold = g.cityYields(port).gold;
+    g.processCityTurn(port);
+    return JSON.stringify({ baselineGold, routeGold, blockedGold, blockedIncome, forecast, appliedGold,
+      blockade: { active: blockade.active, attackers: blockade.attackers.length,
+        defenders: blockade.defenders.length, attackPower: blockade.attackPower,
+        defensePower: blockade.defensePower },
+      blockedRoute: blockedRoute.active, hpWhileBlocked, routes: g.routes.length,
+      relieved: { active: relieved.active, attackPower: relieved.attackPower,
+        defensePower: relieved.defensePower, route: resumedRoute.active,
+        income: resumedIncome, gold: relievedGold, hp: port.hp } });
+  `));
+
+  assert.deepEqual(result.blockade.active, true);
+  assert.deepEqual([result.blockade.attackers, result.blockade.defenders], [1, 1]);
+  assert.ok(result.blockade.attackPower > result.blockade.defensePower,
+    "a token escort must not cancel a stronger hostile fleet");
+  assert.equal(result.blockedGold, Math.floor(result.baselineGold * 0.5));
+  assert.equal(result.blockedRoute, false);
+  assert.equal(result.blockedIncome, 0);
+  assert.equal(result.forecast.tradeGold, 0);
+  assert.equal(result.appliedGold, result.forecast.netGold,
+    "the blockade forecast must match authoritative turn accounting");
+  assert.equal(result.hpWhileBlocked, 120);
+  assert.equal(result.routes, 1, "a blockade suspends rather than destroys the route");
+  assert.equal(result.relieved.active, false);
+  assert.ok(result.relieved.defensePower > result.relieved.attackPower);
+  assert.equal(result.relieved.route, true);
+  assert.equal(result.relieved.income, result.routeGold);
+  assert.equal(result.relieved.gold, result.baselineGold);
+  assert.equal(result.relieved.hp, 135);
+});
+
+test("AI fleets advance to impose blockades and intercept ships blockading home ports", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    ${controlledWorldSource}
+    const g = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 64011,
+      mapW: 24, mapH: 18, mapType: "archipelago", noMinors: true, noBarbs: true });
+    resetWorld(g);
+    for (const tile of g.map.tiles) if (tile.c >= 8 && tile.c <= 14) tile.terrain = "COAST";
+    const home = addCity(g, 0, 7, 8, "Home Port", true); home.coastal = true;
+    const enemy = addCity(g, 1, 15, 8, "Enemy Port", true); enemy.coastal = true;
+    const blockader = addUnit(g, "FRIGATE", 1, 8, 8);
+    const defender = addUnit(g, "GALLEASS", 0, 13, 8);
+    g.players[0].techs = new Set(Object.keys(TECHS));
+    g.players[0].met.add(1); g.players[1].met.add(0); g.declareWar(0, 1);
+    const activeBefore = g.cityBlockade(home).active;
+    const distanceBefore = HEX.distance(defender.c, defender.r, blockader.c, blockader.r);
+    g.rng = () => 0.5; AI.takeTurn(g, g.players[0]);
+    const endpoint = defender.path && defender.path.length
+      ? defender.path[defender.path.length - 1] : [defender.c, defender.r];
+    return JSON.stringify({ activeBefore, distanceBefore,
+      distanceAfter: HEX.distance(endpoint[0], endpoint[1], blockader.c, blockader.r),
+      blockerHp: blockader.hp, activeAfter: g.cityBlockade(home).active });
+  `));
+
+  assert.equal(result.activeBefore, true);
+  assert.ok(result.distanceAfter < result.distanceBefore, "the defending ship should close on the blockader");
+  assert.ok(result.blockerHp < 100, "the defending fleet should attack once it reaches interception range");
 });
 
 test("naval progression and promotion choices remain role-specific across upgrades", () => {
@@ -517,10 +614,10 @@ test("seeded AI campaigns sustain support arms without opportunistic extra front
     "siege-capable wartime empires should usually field or queue siege");
 });
 
-test("seeded archipelago campaigns build active fleets and resolve overseas objectives", () => {
+test("seeded archipelago campaigns build active fleets and contest ports", () => {
   const metrics = JSON.parse(evaluate(loadGameContext(), `
     const metrics = { warTurns: 0, quietWarTurns: 0, attacks: 0, navalAttacks: 0,
-      captures: 0, shipsBuilt: 0, overseasTurns: 0, preparedOverseasTurns: 0 };
+      captures: 0, shipsBuilt: 0, blockadeCityTurns: 0, blockadesBroken: 0 };
     for (let seed = 1; seed <= 5; seed++) {
       const g = new Game({ playerCiv: CIV_IDS[seed % CIV_IDS.length], numOpponents: 5,
         seed: seed * 7919, mapW: 38, mapH: 28, mapType: "archipelago", difficulty: "normal" });
@@ -547,6 +644,7 @@ test("seeded archipelago campaigns build active fleets and resolve overseas obje
         return attacked;
       };
 
+      let activeBlockades = new Set();
       for (let step = 0; step < 150 && !g.over; step++) {
         const attacksBefore = gameAttacks;
         AI.takeTurn(g, g.players[0]); g.endTurn();
@@ -557,14 +655,19 @@ test("seeded archipelago campaigns build active fleets and resolve overseas obje
           metrics.warTurns++;
           if (gameAttacks === attacksBefore) metrics.quietWarTurns++;
         }
-        for (const p of majors) {
-          const target = AI.campaignTarget(g, p);
-          if (!AI.campaignIsOverseas(g, p, target)) continue;
-          metrics.overseasTurns++;
-          if (p.hasTech("COMPASS") && g.units.some(u => u.owner === p.index && u.def.naval)) {
-            metrics.preparedOverseasTurns++;
-          }
+        const nowBlockaded = new Set();
+        for (const city of g.cities) {
+          const blockade = g.cityBlockade(city);
+          if (!blockade.active) continue;
+          nowBlockaded.add(city.id + ":" + city.owner);
+          metrics.blockadeCityTurns++;
         }
+        for (const key of activeBlockades) {
+          if (nowBlockaded.has(key)) continue;
+          const [id, owner] = key.split(":").map(Number);
+          if (g.cities.some(city => city.id === id && city.owner === owner)) metrics.blockadesBroken++;
+        }
+        activeBlockades = nowBlockaded;
       }
     }
     return JSON.stringify(metrics);
@@ -573,9 +676,8 @@ test("seeded archipelago campaigns build active fleets and resolve overseas obje
   assert.ok(metrics.shipsBuilt >= 30, "island civilizations should establish expedition fleets");
   assert.ok(metrics.navalAttacks >= 20, "fleets should participate directly in major wars");
   assert.ok(metrics.captures >= 3, "island campaigns should convert pressure into captures");
-  assert.ok(metrics.overseasTurns > 0, "the sample should exercise genuine cross-landmass campaigns");
-  assert.ok(metrics.preparedOverseasTurns / metrics.overseasTurns >= 0.5,
-    "most active overseas campaigns should have Compass and a fleet");
+  assert.ok(metrics.blockadeCityTurns > 0, "wartime fleets should convert sea control into port pressure");
+  assert.ok(metrics.blockadesBroken > 0, "defenders or peace settlements should lift some blockades");
   assert.ok(metrics.quietWarTurns / metrics.warTurns <= 0.4,
     "archipelago wars should not spend most turns completely stalled");
 });

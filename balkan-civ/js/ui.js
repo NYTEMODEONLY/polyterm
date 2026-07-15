@@ -887,6 +887,7 @@ const UI = (() => {
     const panel = $("city-panel");
     panel.style.display = "block";
     const y = game.cityYields(city);
+    const blockade = game.cityBlockade(city);
     const isMine = city.owner === game.viewer;
     const foodNeeded = city.foodNeeded();
     const surplus = game.cityFoodSurplus(city, y);
@@ -910,6 +911,7 @@ const UI = (() => {
           <span class="meter-track"><span style="width:${foodPct}%"></span></span>
         </div>
         <div class="city-vitals dim"><span>👥 ${worked}/${city.pop} worked tiles</span><span>♥ ${city.hp}/${city.maxHp}</span></div>
+        ${blockade.active ? `<div class="city-blockade" role="status"><b>⚓ Blockaded</b><span>Naval pressure ${Math.ceil(blockade.attackPower)} vs ${Math.ceil(blockade.defensePower)}. Gold halved; trade and repairs suspended.</span></div>` : ""}
         ${city.religion !== null ? `<br><span class="dim">Faith: ${game.religions[city.religion].icon} ${game.religions[city.religion].name}</span>` : ""}
       </div>`;
     if (city.buildings.length) {
@@ -1583,6 +1585,7 @@ const UI = (() => {
   function renderEmpireCities() {
     const rows = game.cities.filter(c => c.owner === game.viewer).map(city => {
       const y = game.cityYields(city);
+      const blockade = game.cityBlockade(city);
       const surplus = game.cityFoodSurplus(city, y);
       const growthTurns = surplus > 0
         ? Math.max(1, Math.ceil((city.foodNeeded() - city.food) / surplus)) : Infinity;
@@ -1593,7 +1596,7 @@ const UI = (() => {
         !game.productionUnitSpot(city, current.key));
       const productionTurns = current && !blocked
         ? Math.max(1, Math.ceil(Math.max(0, def.cost - city.prodStored) / Math.max(1, rate))) : Infinity;
-      return { city, y, surplus, growthTurns, current, def, rate, blocked, productionTurns };
+      return { city, y, blockade, surplus, growthTurns, current, def, rate, blocked, productionTurns };
     });
     rows.sort((a, b) => {
       if (empireCitySort === "population") return b.city.pop - a.city.pop || a.city.name.localeCompare(b.city.name);
@@ -1604,7 +1607,7 @@ const UI = (() => {
     const sortOptions = [["capital", "Capital first"], ["population", "Population"],
       ["growth", "Growth forecast"], ["production", "Production output"]]
       .map(([key, label]) => `<option value="${key}" ${empireCitySort === key ? "selected" : ""}>${label}</option>`).join("");
-    const cityRows = rows.map(({ city, y, surplus, growthTurns, current, def, rate, blocked, productionTurns }) => {
+    const cityRows = rows.map(({ city, y, blockade, surplus, growthTurns, current, def, rate, blocked, productionTurns }) => {
       const growth = surplus > 0 ? `+${surplus} food · ${growthTurns}t`
         : surplus < 0 ? `${surplus} food · starving` : "Growth stalled";
       const production = current
@@ -1612,11 +1615,11 @@ const UI = (() => {
         : `<strong class="alert">Production needed</strong><span class="dim">No current project</span>`;
       const focusOptions = Object.entries(CITY_FOCUS).map(([key, focus]) =>
         `<option value="${key}" ${city.focus === key ? "selected" : ""}>${focus.icon} ${focus.name}</option>`).join("");
-      return `<div class="empire-row empire-city-row${current ? "" : " needs-order"}">
+      return `<div class="empire-row empire-city-row${current ? "" : " needs-order"}${blockade.active ? " blockaded" : ""}">
         <button class="empire-jump" title="Center map on ${city.name}" aria-label="Center map on ${city.name}"
           onclick="UI.empireJumpCity(${city.id})">⌖</button>
         <div class="empire-primary"><strong>${city.name}${city.isCapital ? " ★" : ""}</strong>
-          <span class="dim">${city.buildings.length} building${city.buildings.length === 1 ? "" : "s"} · ${city.hp}/${city.maxHp} HP</span></div>
+          <span class="${blockade.active ? "alert" : "dim"}">${blockade.active ? `⚓ Blockaded · ${Math.ceil(blockade.attackPower)} vs ${Math.ceil(blockade.defensePower)} pressure` : `${city.buildings.length} building${city.buildings.length === 1 ? "" : "s"} · ${city.hp}/${city.maxHp} HP`}</span></div>
         <div class="empire-pop"><b>👥 ${city.pop}</b><span class="${surplus < 0 ? "alert" : "dim"}">${growth}</span></div>
         <div class="empire-yields" aria-label="City yields"><span>🍞 ${y.food}</span><span>⚙️ ${y.prod}</span>
           <span>💰 ${y.gold}</span><span>🔬 ${y.sci}</span><span>🎭 ${Math.floor(y.culture)}</span><span>☦️ ${y.faith}</span></div>
@@ -1725,13 +1728,15 @@ const UI = (() => {
     ].map(([label, value, detail]) => `<div class="ledger-row ${value > 0 ? "positive" : value < 0 ? "negative" : "zero"}">
       <span><b>${label}</b><small>${detail}</small></span><strong>${signed(value)}</strong></div>`).join("");
     const routes = game.routes.map(route => {
-      const from = game.cities.find(c => c.id === route.fromId);
-      const to = game.cities.find(c => c.id === route.toId);
+      const status = game.tradeRouteStatus(route);
+      const { from, to } = status;
       if (!from || !to || (route.owner !== game.viewer && to.owner !== game.viewer)) return null;
-      const income = route.owner === game.viewer ? game.routeIncome(from, to) : 1;
+      const income = status.active ? (route.owner === game.viewer ? game.routeIncome(from, to) : 1) : 0;
       const kind = route.owner === game.viewer ? "Outbound" : "Destination share";
-      return `<div class="empire-route"><span>🐫 <b>${from.name} → ${to.name}</b><small>${kind}</small></span>
-        <span><b>+${income} 💰</b><small>${Math.max(0, route.ends - game.turn)} turns</small></span></div>`;
+      const blockedAt = [status.fromBlockade && status.fromBlockade.active ? from.name : null,
+        status.toBlockade && status.toBlockade.active ? to.name : null].filter(Boolean).join(" and ");
+      return `<div class="empire-route${status.active ? "" : " suspended"}"><span>🐫 <b>${from.name} → ${to.name}</b><small>${status.active ? kind : `Blockade at ${blockedAt}`}</small></span>
+        <span><b>${status.active ? `+${income} 💰` : "⚓ Suspended"}</b><small>${Math.max(0, route.ends - game.turn)} turns</small></span></div>`;
     }).filter(Boolean).join("");
     const routeCap = TRADE.maxRoutes + (p.policies.has("CARAVANSERAI") ? 1 : 0);
     const outbound = game.routes.filter(r => r.owner === game.viewer).length;
@@ -2133,6 +2138,11 @@ const UI = (() => {
       E.push({ cat: "Religion", name: mt.name + " city-state", icon: mt.icon, tags: "city-state minor " + mk,
         html: `<p>${mt.desc}</p><p class="dim">Raise influence with gifts or by completing its quests to become Friend (${INFLUENCE_FRIEND}) or Ally (${INFLUENCE_ALLY}).</p>` });
     }
+    // Core systems
+    E.push({ cat: "Mechanics", name: "Trade Routes", icon: "🐫", tags: "trade route caravan gold commerce",
+      html: `<p>Build a Caravan and send it from one of your cities to a peaceful city within ${TRADE.maxDist} hexes. A route lasts ${TRADE.duration} turns and earns more gold over longer distances, with a bonus for foreign trade.</p><p class="dim">Hostile units can plunder the route path for ${TRADE.plunderGold} gold. A blockade at either endpoint suspends its income without destroying it.</p>` });
+    E.push({ cat: "Mechanics", name: "Naval Blockades", icon: "⚓", tags: "naval blockade port pressure trade repair coastal gold",
+      html: `<p>Warships within ${BLOCKADE.radius} hex of an enemy coastal city exert pressure based on combat strength, health, and level. If hostile pressure exceeds the nearby defending fleet, the port is blockaded.</p><p><b>Effects:</b> city gold is reduced by ${Math.round((1 - BLOCKADE.cityGoldMultiplier) * 100)}%, endpoint trade routes are suspended, and city repairs stop. The city can still bombard attackers; move enough friendly naval strength beside it to break the blockade immediately.</p>` });
     // Civilizations (with all their leaders)
     for (const id of CIV_IDS) {
       const civ = CIVS[id];
@@ -2161,7 +2171,7 @@ const UI = (() => {
   function showPediaScreen(initialQuery) {
     if (!pediaEntries) pediaEntries = buildPediaEntries();
     $("pedia-modal").style.display = "flex";
-    const cats = ["All", "Units", "Buildings", "Wonders", "Techs", "Policies", "Promotions", "Religion", "Civilizations", "Victory"];
+    const cats = ["All", "Units", "Buildings", "Wonders", "Techs", "Policies", "Promotions", "Mechanics", "Religion", "Civilizations", "Victory"];
     $("pedia-tabs").innerHTML = cats.map(c =>
       `<button class="pedia-tab${c === pediaCat ? " active" : ""}" data-cat="${c}">${c}</button>`).join("");
     $("pedia-tabs").querySelectorAll("button").forEach(b => b.onclick = () => { pediaCat = b.dataset.cat; renderPedia(); });

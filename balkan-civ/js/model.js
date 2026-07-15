@@ -410,6 +410,41 @@ class Game {
     return 2 + Math.floor(dist / 2) + (fromCity.owner === toCity.owner ? 0 : 2);
   }
 
+  blockadeStrength(unit) {
+    if (!unit || unit.isCivilian || !unit.def.naval) return 0;
+    const base = Math.max(unit.def.cs || 0, unit.def.rs || 0);
+    const health = 0.5 + 0.5 * Math.max(0, Math.min(100, unit.hp)) / 100;
+    return base * health * (1 + unit.level * 0.05);
+  }
+
+  cityBlockade(city) {
+    const clear = { active: false, attackers: [], defenders: [], attackPower: 0, defensePower: 0 };
+    if (!city || !city.coastal || !this.cities.includes(city)) return clear;
+    const owner = this.players[city.owner];
+    if (!owner || !owner.alive) return clear;
+    for (const unit of this.units) {
+      if (unit.isCivilian || !unit.def.naval ||
+          HEX.distance(city.c, city.r, unit.c, unit.r) > BLOCKADE.radius) continue;
+      if (unit.owner === city.owner) clear.defenders.push(unit);
+      else if (owner.atWarWith.has(unit.owner)) clear.attackers.push(unit);
+    }
+    clear.attackPower = clear.attackers.reduce((sum, unit) => sum + this.blockadeStrength(unit), 0);
+    clear.defensePower = clear.defenders.reduce((sum, unit) => sum + this.blockadeStrength(unit), 0);
+    clear.active = clear.attackers.length > 0 && clear.attackPower > clear.defensePower;
+    return clear;
+  }
+
+  tradeRouteStatus(route) {
+    const from = route && this.cities.find(city => city.id === route.fromId);
+    const to = route && this.cities.find(city => city.id === route.toId);
+    if (!from || !to) return { active: false, reason: "invalid", from, to };
+    const fromBlockade = this.cityBlockade(from);
+    const toBlockade = this.cityBlockade(to);
+    const blocked = fromBlockade.active || toBlockade.active;
+    return { active: !blocked, reason: blocked ? "blockade" : null,
+      from, to, fromBlockade, toBlockade };
+  }
+
   // Cities a caravan standing in one of its own cities could trade with
   tradeDestinations(caravan) {
     const from = this.cityAt(caravan.c, caravan.r);
@@ -448,9 +483,9 @@ class Game {
   tradeIncome(playerIdx) {
     let gold = 0;
     for (const r of this.routes) {
-      const from = this.cities.find(c => c.id === r.fromId);
-      const to = this.cities.find(c => c.id === r.toId);
-      if (!from || !to) continue;
+      const status = this.tradeRouteStatus(r);
+      if (!status.active) continue;
+      const { from, to } = status;
       if (r.owner === playerIdx) gold += this.routeIncome(from, to);
       else if (to.owner === playerIdx) gold += 1; // destination's cut
     }
@@ -1534,6 +1569,7 @@ class Game {
       prod = Math.floor(prod * mult); gold = Math.floor(gold * mult);
       sci = sci * mult;
     }
+    if (this.cityBlockade(city).active) gold = Math.floor(gold * BLOCKADE.cityGoldMultiplier);
     return { food, prod, gold, sci: Math.floor(sci), culture, faith };
   }
 
@@ -2367,8 +2403,10 @@ class Game {
       if (target) { target.owner = city.owner; city.expansions++; }
     }
 
-    // heal city
-    if (city.hp < city.maxHp) city.hp = Math.min(city.maxHp, city.hp + 15);
+    // A fleet that controls the port prevents supplies and repairs from arriving.
+    if (city.hp < city.maxHp && (!BLOCKADE.preventsRepair || !this.cityBlockade(city).active)) {
+      city.hp = Math.min(city.maxHp, city.hp + 15);
+    }
 
     return y;
   }

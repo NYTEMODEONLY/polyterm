@@ -227,10 +227,11 @@ class Renderer {
     // trade routes of the viewing player (dashed gold roads)
     for (const route of game.routes || []) {
       if (route.owner !== game.viewer) continue;
+      const suspended = !game.tradeRouteStatus(route).active;
       ctx.save();
-      ctx.strokeStyle = "rgba(241,196,15,0.5)";
+      ctx.strokeStyle = suspended ? "rgba(222,104,75,0.72)" : "rgba(241,196,15,0.5)";
       ctx.lineWidth = Math.max(1.5, s * 0.07);
-      ctx.setLineDash([s * 0.2, s * 0.25]);
+      ctx.setLineDash(suspended ? [s * 0.08, s * 0.18] : [s * 0.2, s * 0.25]);
       ctx.beginPath();
       route.path.forEach(([pc, pr], i) => {
         const [px, py] = this.worldToScreen(pc, pr);
@@ -556,7 +557,9 @@ class Renderer {
 
     // banner
     const rel = city.religion !== null && game.religions[city.religion];
-    const label = `${city.pop}  ${rel ? rel.icon + " " : ""}${city.name}${city.isCapital ? " ★" : ""}`;
+    const seenNow = game.players[game.viewer].visible[game.map.idx(city.c, city.r)] === 2;
+    const blockaded = (city.owner === game.viewer || seenNow) && game.cityBlockade(city).active;
+    const label = `${blockaded ? "⚓ " : ""}${city.pop}  ${rel ? rel.icon + " " : ""}${city.name}${city.isCapital ? " ★" : ""}`;
     ctx.font = `bold ${Math.max(11, Math.floor(s * 0.34))}px 'Segoe UI', sans-serif`;
     const tw = ctx.measureText(label).width;
     const bx = sx - tw / 2 - 8, by = sy - s * 1.05, bh = Math.max(16, s * 0.46);
@@ -564,10 +567,10 @@ class Renderer {
     ctx.beginPath();
     ctx.roundRect(bx, by - bh / 2, tw + 16, bh, 4);
     ctx.fill();
-    ctx.strokeStyle = civ.color;
+    ctx.strokeStyle = blockaded ? "#de684b" : civ.color;
     ctx.lineWidth = 2;
     ctx.stroke();
-    ctx.fillStyle = civ.color;
+    ctx.fillStyle = blockaded ? "#de684b" : civ.color;
     ctx.fillRect(bx + 3, by - bh / 2 + 3, 5, bh - 6);
     ctx.fillStyle = "#fff";
     ctx.textAlign = "center";

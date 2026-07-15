@@ -408,6 +408,14 @@ const TRADE = {
   plunderGold: 30,     // reward for plundering a route
 };
 
+// Hostile warships adjacent to a coastal city contest its port. A blockade
+// takes hold only when their combined pressure beats the local defending fleet.
+const BLOCKADE = {
+  radius: 1,
+  cityGoldMultiplier: 0.5,
+  preventsRepair: true,
+};
+
 // ------------------------------------------------------------
 // Great People
 // ------------------------------------------------------------

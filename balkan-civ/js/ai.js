@@ -619,7 +619,8 @@ const AI = (() => {
     const myUnits = game.units.filter(u => u.owner === p.index);
     const target = campaignTarget(game, p);
     const campaign = { target, overseas: campaignIsOverseas(game, p, target),
-      approaches: new Set(), navalApproaches: new Set(), escortAssigned: false };
+      approaches: new Set(), navalApproaches: new Set(), escortAssigned: false,
+      blockaderAssigned: false };
     for (const u of myUnits) {
       if (!game.units.includes(u)) continue; // died mid-loop
       if (u.type === "SETTLER") runSettler(game, p, u);
@@ -796,12 +797,82 @@ const AI = (() => {
     return null;
   }
 
+  function navalInterceptionApproach(game, u, target) {
+    const candidates = HEX.neighbors(target.c, target.r).sort((a, b) =>
+      HEX.distance(u.c, u.r, a[0], a[1]) - HEX.distance(u.c, u.r, b[0], b[1]) ||
+      a[1] - b[1] || a[0] - b[0]);
+    for (const [c, r] of candidates) {
+      const tile = game.tile(c, r);
+      const occupant = game.combatUnitAt(c, r);
+      if (!tile || !game.isWater(tile) || !game.unitPassable(u, tile) ||
+          (occupant && occupant.id !== u.id) || !game.findPath(u, c, r)) continue;
+      return [c, r];
+    }
+    return null;
+  }
+
+  function threatenedPort(game, p, u) {
+    const ports = game.cities.filter(city => city.owner === p.index && city.coastal)
+      .map(city => ({ city, blockade: game.cityBlockade(city) }))
+      .filter(entry => entry.blockade.active)
+      .sort((a, b) => HEX.distance(u.c, u.r, a.city.c, a.city.r) -
+        HEX.distance(u.c, u.r, b.city.c, b.city.r) || b.blockade.attackPower - a.blockade.attackPower ||
+        a.city.id - b.city.id);
+    const range = u.isRanged ? u.def.range : 1;
+    for (const port of ports) {
+      const attackers = [...port.blockade.attackers].sort((a, b) =>
+        HEX.distance(u.c, u.r, a.c, a.r) - HEX.distance(u.c, u.r, b.c, b.r) || a.id - b.id);
+      for (const attacker of attackers) {
+        if (HEX.distance(u.c, u.r, attacker.c, attacker.r) <= range) {
+          return { ...port, attacker, approach: null };
+        }
+        const approach = navalInterceptionApproach(game, u, attacker);
+        if (approach) return { ...port, attacker, approach };
+      }
+    }
+    return null;
+  }
+
+  function blockadeTarget(game, p, u, campaign, enemies) {
+    const candidates = game.cities.filter(city => city.coastal && enemies.includes(city.owner) &&
+      HEX.neighbors(city.c, city.r).some(([c, r]) => {
+        const tile = game.tile(c, r);
+        return tile && game.isWater(tile) && game.unitPassable(u, tile) &&
+          !game.combatUnitAt(c, r) && game.findPath(u, c, r);
+      }));
+    return candidates.map(city => {
+      const routeValue = game.routes.filter(route => route.fromId === city.id || route.toId === city.id).length * 12;
+      const yields = game.cityYields(city);
+      const strategic = campaign && campaign.target && campaign.target.id === city.id ? 120 : 0;
+      return { city, score: strategic + (city.isCapital ? 35 : 0) + city.pop * 5 +
+        yields.gold * 4 + routeValue - HEX.distance(u.c, u.r, city.c, city.r) };
+    }).sort((a, b) => b.score - a.score || a.city.id - b.city.id)[0]?.city || null;
+  }
+
   function runShip(game, p, u, campaign = null) {
     const enemies = realWars(game, p);
     if (!p.isMinor) {
       const upgrade = game.canUpgrade(u);
       const reserve = campaign && campaign.overseas ? 80 : 200;
       if (upgrade && p.gold > upgrade.cost + reserve && game.upgradeUnit(u)) return;
+    }
+    if (campaign && enemies.length && game.cities.some(city => city.coastal && enemies.includes(city.owner) &&
+        game.cityBlockade(city).active && game.cityBlockade(city).attackers.some(ship => ship.owner === p.index))) {
+      campaign.blockaderAssigned = true;
+    }
+    // A blockading ship is a higher-value target than an opportunistic city
+    // shot: engage it directly so the threatened port can reopen this turn.
+    const defense = enemies.length ? threatenedPort(game, p, u) : null;
+    if (defense) {
+      const { attacker } = defense;
+      const range = u.isRanged ? u.def.range : 1;
+      if (HEX.distance(u.c, u.r, attacker.c, attacker.r) <= range &&
+          game.attack(u, attacker.c, attacker.r)) return;
+      if (defense.approach) game.moveUnitTo(u, defense.approach[0], defense.approach[1]);
+      if (HEX.distance(u.c, u.r, attacker.c, attacker.r) <= range) {
+        game.attack(u, attacker.c, attacker.r);
+      }
+      return;
     }
     if (tryAttack(game, p, u)) return;
     if (enemies.length) {
@@ -817,6 +888,8 @@ const AI = (() => {
       }
       const strategicCity = campaign && campaign.target && campaign.target.coastal &&
         enemies.includes(campaign.target.owner) ? campaign.target : null;
+      const portTarget = campaign && !campaign.blockaderAssigned
+        ? blockadeTarget(game, p, u, campaign, enemies) : null;
       let escort = null, escortD = Infinity;
       if (campaign && campaign.overseas && !campaign.escortAssigned) {
         for (const friendly of game.units) {
@@ -832,6 +905,12 @@ const AI = (() => {
         if (escortD > 2) target = escort;
         else { u.fortified = true; return; }
       }
+      let blockadeMission = false;
+      if (!target && portTarget && campaign && !campaign.blockaderAssigned) {
+        campaign.blockaderAssigned = true;
+        blockadeMission = true;
+        target = portTarget;
+      }
       if (!target && strategicCity) target = strategicCity;
       if (!target && waterEnemy) target = waterEnemy;
       if (!target) target = game.cities.filter(c => enemies.includes(c.owner) && c.coastal)
@@ -840,10 +919,11 @@ const AI = (() => {
       if (target) {
         const bestD = HEX.distance(u.c, u.r, target.c, target.r);
         if (u.hp < 40 && bestD > 2) { u.fortified = true; return; }
-        if (u.isRanged && bestD <= u.def.range) { tryAttack(game, p, u); return; }
+        if (!blockadeMission && u.isRanged && bestD <= u.def.range) { tryAttack(game, p, u); return; }
         const targetCity = target.name !== undefined ? target : null;
         const dest = targetCity && campaign
-          ? navalCampaignApproach(game, u, targetCity, campaign)
+          ? (blockadeMission ? navalBlockadeApproach(game, u, targetCity, campaign) :
+            navalCampaignApproach(game, u, targetCity, campaign))
           : nearestApproach(game, u, target.c, target.r);
         if (dest) game.moveUnitTo(u, dest[0], dest[1]);
         tryAttack(game, p, u);
@@ -1087,6 +1167,23 @@ const AI = (() => {
       return [c, r];
     }
     return nearestApproach(game, u, target.c, target.r);
+  }
+
+  function navalBlockadeApproach(game, u, target, campaign) {
+    const candidates = HEX.ring(target.c, target.r, BLOCKADE.radius).filter(([c, r]) =>
+      HEX.distance(c, r, target.c, target.r) === BLOCKADE.radius).sort((a, b) =>
+      HEX.distance(u.c, u.r, a[0], a[1]) - HEX.distance(u.c, u.r, b[0], b[1]) ||
+      a[1] - b[1] || a[0] - b[0]);
+    for (const [c, r] of candidates) {
+      const key = c + "," + r;
+      if (campaign.navalApproaches.has(key)) continue;
+      const tile = game.tile(c, r);
+      if (!tile || !game.isWater(tile) || !game.unitPassable(u, tile) || game.combatUnitAt(c, r)) continue;
+      if (!game.findPath(u, c, r)) continue;
+      campaign.navalApproaches.add(key);
+      return [c, r];
+    }
+    return navalCampaignApproach(game, u, target, campaign);
   }
 
   // find a tile this unit can stand on, adjacent to (tc,tr), to path to

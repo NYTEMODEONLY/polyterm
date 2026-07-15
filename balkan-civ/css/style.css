@@ -152,6 +152,10 @@ button:disabled { opacity: 0.4; cursor: default; }
 .meter-track > span { display: block; height: 100%; background: #75ad68; }
 .meter-track.production > span { background: #c99e45; }
 .city-vitals { margin-top: 5px; font-size: 11px; }
+.city-blockade { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 7px;
+  margin-top: 7px; padding: 6px 7px; color: #f4d5c9; background: rgba(146,55,40,0.24);
+  border-left: 3px solid #de684b; font-size: 11px; }
+.city-blockade b { color: #ff9a7c; white-space: nowrap; }
 .city-buildings { font-size: 12px; color: #b8b09a; margin-bottom: 8px; border-top: 1px solid #3a4a63;
   padding-top: 6px; }
 .city-section-title { margin: 9px 0 4px; color: #d7bd77; font-size: 11px; font-weight: 800; text-transform: uppercase; }
@@ -331,6 +335,7 @@ button:disabled { opacity: 0.4; cursor: default; }
 .empire-focus select { width: 100%; min-width: 0; text-transform: none; }
 .empire-production strong { color: #e4d5aa; }
 .empire-city-row.needs-order { box-shadow: inset 3px 0 0 #d6a34f; }
+.empire-city-row.blockaded { box-shadow: inset 3px 0 0 #de684b; background: rgba(146,55,40,0.08); }
 .empire-health span { display: flex; justify-content: space-between; font-size: 10px; }
 .empire-health > i { display: block; height: 5px; margin-top: 4px; overflow: hidden; border: 1px solid #46534c; background: #111817; }
 .empire-health > i > b { display: block; height: 100%; background: #77ad70; }
@@ -365,6 +370,8 @@ button:disabled { opacity: 0.4; cursor: default; }
 .empire-luxuries span { font-size: 11px; }
 .empire-trade { grid-column: 1 / -1; }
 .empire-route > span:last-child { flex: 0 0 auto; text-align: right; }
+.empire-route.suspended { border-left: 3px solid #de684b; padding-left: 8px; background: rgba(146,55,40,0.08); }
+.empire-route.suspended > span:last-child b { color: #ff9a7c; }
 
 /* ---------- victory progress ---------- */
 .victory-intro { display: flex; justify-content: space-between; gap: 16px; align-items: baseline;
@@ -664,8 +671,8 @@ button:disabled { opacity: 0.4; cursor: default; }
   .option-grid { grid-template-columns: 1fr 1fr; }
   .secondary-actions { grid-template-columns: 1fr 1fr; }
   #btn-mute, #btn-music { display: none; }
-  .command-bar { justify-content: center; }
-  .command-bar button { flex-basis: 43px; }
-  #btn-endturn { flex-basis: 102px; }
+  .command-bar { justify-content: stretch; overflow-x: hidden; }
+  .command-bar button { min-width: 0; flex: 1 1 0; }
+  #btn-endturn { min-width: 0; flex: 1.9 1 0; }
   #advisor { bottom: 218px; }
 }
