@@ -67,6 +67,7 @@ class City {
     this.religion = null;        // majority religion id
     this.pressure = {};          // religionId -> accumulated pressure
     this.queue = [];             // production queue after the current item
+    this.focus = "balanced";     // citizen tile-assignment priority
   }
 
   get maxHp() {
@@ -1297,9 +1298,48 @@ class Game {
     const out = [];
     for (const [c, r] of HEX.ring(city.c, city.r, 3)) {
       const t = this.tile(c, r);
-      if (t && t.owner === city.owner && !(t.c === city.c && t.r === city.r)) out.push(t);
+      if (t && t.owner === city.owner && !t.city && !(t.c === city.c && t.r === city.r)) out.push(t);
     }
     return out;
+  }
+
+  assignWorkedTiles(owner) {
+    const cities = this.cities.filter(c => c.owner === owner).sort((a, b) => a.id - b.id);
+    const cityIds = new Set(cities.map(c => c.id));
+    for (const t of this.map.tiles) {
+      if (t.owner === owner || cityIds.has(t.workedBy)) t.workedBy = null;
+    }
+    const choices = new Map();
+    for (const city of cities) {
+      const focus = CITY_FOCUS[city.focus] || CITY_FOCUS.balanced;
+      const ranked = this.cityWorkableTiles(city).map(t => {
+        const y = this.tileYield(t);
+        return { t, score: y.food * focus.food + y.prod * focus.prod + y.gold * focus.gold };
+      }).sort((a, b) => b.score - a.score ||
+        HEX.distance(city.c, city.r, a.t.c, a.t.r) - HEX.distance(city.c, city.r, b.t.c, b.t.r) ||
+        a.t.r - b.t.r || a.t.c - b.t.c);
+      choices.set(city.id, ranked.map(x => x.t));
+    }
+    const maxPop = cities.reduce((m, c) => Math.max(m, c.pop), 0);
+    for (let slot = 0; slot < maxPop; slot++) {
+      for (const city of cities) {
+        if (slot >= city.pop) continue;
+        const tile = choices.get(city.id).find(t => t.workedBy === null);
+        if (tile) tile.workedBy = city.id;
+      }
+    }
+  }
+
+  workedTiles(city) {
+    this.assignWorkedTiles(city.owner);
+    return this.map.tiles.filter(t => t.workedBy === city.id);
+  }
+
+  setCityFocus(city, focus, actorIdx) {
+    if (!city || city.owner !== actorIdx || !CITY_FOCUS[focus] || !this.cities.includes(city)) return false;
+    city.focus = focus;
+    this.assignWorkedTiles(city.owner);
+    return true;
   }
 
   tileYield(t) {
@@ -1320,12 +1360,9 @@ class Game {
     // centre tile minimum yield
     const centre = this.tileYield(this.tile(city.c, city.r));
     let food = Math.max(2, centre.food), prod = Math.max(2, centre.prod), gold = Math.max(1, centre.gold);
-    // work best tiles up to pop
-    const tiles = this.cityWorkableTiles(city)
-      .map(t => ({ t, y: this.tileYield(t) }))
-      .sort((a, b) => (b.y.food * 1.3 + b.y.prod + b.y.gold * 0.5) - (a.y.food * 1.3 + a.y.prod + a.y.gold * 0.5));
-    for (let i = 0; i < Math.min(city.pop, tiles.length); i++) {
-      food += tiles[i].y.food; prod += tiles[i].y.prod; gold += tiles[i].y.gold;
+    for (const t of this.workedTiles(city)) {
+      const y = this.tileYield(t);
+      food += y.food; prod += y.prod; gold += y.gold;
     }
     let sci = 2 + city.pop * 0.5;
     let culture = 1;
@@ -1375,42 +1412,78 @@ class Game {
     return { food, prod, gold, sci: Math.floor(sci), culture, faith };
   }
 
-  // Drop queue entries that became invalid (e.g. building completed elsewhere)
-  validQueueItem(city, item) {
-    if (!item) return false;
-    if (item.kind === "building") {
-      if (city.buildings.includes(item.key)) return false;
-      const b = BUILDINGS[item.key];
-      if (b.wonder && this.cities.some(c => c.buildings.includes(item.key))) return false;
+  cityFoodSurplus(city, yields = null) {
+    const p = this.players[city.owner];
+    const y = yields || this.cityYields(city);
+    let surplus = y.food - city.pop * 2;
+    if (!p.isMinor && surplus > 0) {
+      const happiness = this.happinessOf(p.index);
+      if (happiness < HAPPINESS.strikeAt) surplus = 0;
+      else if (happiness < 0) surplus = Math.floor(surplus / 2);
     }
-    return true;
+    return surplus;
   }
 
-  productionOptions(city) {
+  cityProductionRate(city, item = null, yields = null) {
     const p = this.players[city.owner];
+    const y = yields || this.cityYields(city);
+    let prod = y.prod;
+    const current = item || city.producing;
+    if (current && current.kind === "building" && p.civ.buildingProdBonus)
+      prod = Math.floor(prod * (1 + p.civ.buildingProdBonus));
+    if (current && current.kind === "unit" && p.civ.unitProdBonus)
+      prod = Math.floor(prod * (1 + p.civ.unitProdBonus));
+    if (p.goldenAgeTurns > 0) prod = Math.floor(prod * (1 + GOLDEN_AGE.bonus));
+    return prod;
+  }
+
+  productionStatus(city, item) {
+    if (!city || !this.cities.includes(city) || !item)
+      return { ok: false, code: "INVALID_CITY" };
+    const p = this.players[city.owner];
+    if (!p || !p.alive) return { ok: false, code: "INVALID_OWNER" };
+    if (item.kind === "unit") {
+      const u = UNITS[item.key];
+      if (!u) return { ok: false, code: "UNKNOWN_ITEM" };
+      if (u.faithCost || u.great) return { ok: false, code: "NOT_PRODUCIBLE" };
+      if (u.uu && u.uu !== p.civId) return { ok: false, code: "WRONG_CIV" };
+      if (u.replaces && p.civId !== u.uu) return { ok: false, code: "WRONG_CIV" };
+      if (Object.entries(UNITS).some(([, v]) => v.uu === p.civId && v.replaces === item.key))
+        return { ok: false, code: "REPLACED_UNIT" };
+      if (u.tech && !p.hasTech(u.tech)) return { ok: false, code: "MISSING_TECH" };
+      if (u.needs && !this.playerHasResource(p.index, u.needs))
+        return { ok: false, code: "MISSING_RESOURCE" };
+      if (u.naval && !city.coastal) return { ok: false, code: "INLAND_CITY" };
+      return { ok: true, code: "OK", def: u };
+    }
+    if (item.kind !== "building") return { ok: false, code: "UNKNOWN_KIND" };
+    const b = BUILDINGS[item.key];
+    if (!b) return { ok: false, code: "UNKNOWN_ITEM" };
+    if (city.buildings.includes(item.key)) return { ok: false, code: "ALREADY_BUILT" };
+    if (b.tech && !p.hasTech(b.tech)) return { ok: false, code: "MISSING_TECH" };
+    if (b.requires && !city.buildings.includes(b.requires)) return { ok: false, code: "MISSING_BUILDING" };
+    if (b.wonder) {
+      if (p.isMinor) return { ok: false, code: "MINOR_WONDER" };
+      if (this.cities.some(c => c.buildings.includes(item.key)))
+        return { ok: false, code: "WONDER_BUILT" };
+      const reservedElsewhere = this.cities.some(c => c.owner === city.owner && c !== city &&
+        ((c.producing && c.producing.key === item.key) || c.queue.some(q => q.key === item.key)));
+      if (reservedElsewhere) return { ok: false, code: "WONDER_RESERVED" };
+    }
+    return { ok: true, code: "OK", def: b };
+  }
+
+  // Drop queue entries that became invalid (e.g. a wonder completed elsewhere).
+  validQueueItem(city, item) { return this.productionStatus(city, item).ok; }
+
+  productionOptions(city) {
     const opts = [];
     for (const [key, u] of Object.entries(UNITS)) {
-      if (u.faithCost || u.great) continue; // faith-bought or earned, never built
-      if (u.uu && u.uu !== p.civId) continue;
-      if (u.replaces && p.civId !== u.uu) continue;
-      // if civ has a UU replacing this unit, hide the base unit
-      const replacedBy = Object.entries(UNITS).find(([, v]) => v.uu === p.civId && v.replaces === key);
-      if (replacedBy) continue;
-      if (u.tech && !p.hasTech(u.tech)) continue;
-      if (u.needs && !this.playerHasResource(p.index, u.needs)) continue;
-      if (u.naval && !city.coastal) continue; // shipyards need the sea
+      if (!this.productionStatus(city, { kind: "unit", key }).ok) continue;
       opts.push({ kind: "unit", key, cost: u.cost, name: u.name, icon: u.icon, naval: u.naval });
     }
     for (const [key, b] of Object.entries(BUILDINGS)) {
-      if (city.buildings.includes(key)) continue;
-      if (b.tech && !p.hasTech(b.tech)) continue;
-      if (b.requires && !city.buildings.includes(b.requires)) continue;
-      if (b.wonder) {
-        if (p.isMinor) continue; // city-states don't race for wonders
-        const builtAnywhere = this.cities.some(c => c.buildings.includes(key)) ||
-          this.cities.some(c => c !== city && c.producing && c.producing.key === key && c.owner === city.owner);
-        if (builtAnywhere) continue;
-      }
+      if (!this.productionStatus(city, { kind: "building", key }).ok) continue;
       opts.push({ kind: "building", key, cost: b.cost, name: b.name, icon: b.icon, wonder: b.wonder });
     }
     return opts;
@@ -1426,27 +1499,89 @@ class Game {
     return price;
   }
 
-  purchase(city, opt) {
-    const p = this.players[city.owner];
-    const price = this.buyCost(opt.cost, city.owner);
-    if (p.gold < price) return false;
-    p.gold -= price;
-    this.completeProduction(city, opt);
+  setCityProduction(city, item, queue, actorIdx) {
+    if (!city || city.owner !== actorIdx || !this.productionStatus(city, item).ok) return false;
+    const normalized = { kind: item.kind, key: item.key };
+    if (queue && city.producing) {
+      if (city.queue.length >= 6 || city.producing.key === item.key || city.queue.some(q => q.key === item.key))
+        return false;
+      city.queue.push(normalized);
+      return true;
+    }
+    if (city.producing && city.producing.kind === item.kind && city.producing.key === item.key) return true;
+    city.queue = city.queue.filter(q => q.kind !== item.kind || q.key !== item.key);
+    city.producing = normalized;
     return true;
   }
 
-  completeProduction(city, item) {
-    if (item.kind === "unit") {
-      let spot;
-      if (UNITS[item.key].naval) {
-        spot = this.freeAdjacent(city.c, city.r, true); // launch onto water
-      } else {
-        spot = this.combatUnitAt(city.c, city.r) && !UNITS[item.key].civilian
-          ? this.freeAdjacent(city.c, city.r) : [city.c, city.r];
+  advanceCityQueue(city) {
+    do {
+      city.producing = city.queue.length ? city.queue.shift() : null;
+    } while (city.producing && !this.validQueueItem(city, city.producing));
+    return city.producing;
+  }
+
+  cancelCityProduction(city, actorIdx) {
+    if (!city || city.owner !== actorIdx || !this.cities.includes(city)) return false;
+    this.advanceCityQueue(city);
+    if (!city.producing) city.prodStored = 0;
+    return true;
+  }
+
+  removeQueuedProduction(city, index, actorIdx) {
+    if (!city || city.owner !== actorIdx || !Number.isInteger(index) || index < 0 || index >= city.queue.length)
+      return false;
+    city.queue.splice(index, 1);
+    return true;
+  }
+
+  productionUnitSpot(city, unitKey) {
+    const def = UNITS[unitKey];
+    if (!def) return null;
+    const open = (c, r) => {
+      const t = this.tile(c, r);
+      if (!t) return false;
+      if (this.unitsAt(c, r).some(u => u.owner !== city.owner)) return false;
+      if (def.naval) {
+        if (!this.isWater(t) || (def.coastOnly && t.terrain !== "COAST")) return false;
+        return !this.combatUnitAt(c, r);
       }
-      if (!spot) { city.prodStored = UNITS[item.key].cost; return; } // wait for space
+      if (!TERRAIN[t.terrain].passable) return false;
+      return def.civilian ? !this.civilianAt(c, r) : !this.combatUnitAt(c, r);
+    };
+    if (!def.naval && open(city.c, city.r)) return [city.c, city.r];
+    for (const [c, r] of HEX.neighbors(city.c, city.r)) if (open(c, r)) return [c, r];
+    return null;
+  }
+
+  purchase(city, item, buyerIdx) {
+    if (!city || city.owner !== buyerIdx) return false;
+    const status = this.productionStatus(city, item);
+    if (!status.ok) return false;
+    const spot = item.kind === "unit" ? this.productionUnitSpot(city, item.key) : null;
+    if (item.kind === "unit" && !spot) return false;
+    const p = this.players[city.owner];
+    const price = this.buyCost(status.def.cost, city.owner);
+    if (p.gold < price || !this.completeProduction(city, item, spot)) return false;
+    p.gold -= price;
+    if (item.kind === "building") {
+      city.queue = city.queue.filter(q => q.kind !== item.kind || q.key !== item.key);
+      if (city.producing && city.producing.kind === item.kind && city.producing.key === item.key) {
+        city.prodStored = 0;
+        this.advanceCityQueue(city);
+      }
+    }
+    return true;
+  }
+
+  completeProduction(city, item, unitSpot = null) {
+    if (item.kind === "unit") {
+      const spot = unitSpot || this.productionUnitSpot(city, item.key);
+      if (!spot) return false;
       this.addUnit(item.key, city.owner, spot[0], spot[1]);
     } else {
+      if (!BUILDINGS[item.key] || city.buildings.includes(item.key)) return false;
+      if (BUILDINGS[item.key].wonder && this.cities.some(c => c.buildings.includes(item.key))) return false;
       city.buildings.push(item.key);
       this.dirtyHappiness();
       if (BUILDINGS[item.key].cityHp) city.hp += BUILDINGS[item.key].cityHp;
@@ -1454,6 +1589,7 @@ class Game {
         this.notify(`${BUILDINGS[item.key].name} has been completed in ${city.name}!`, -1);
       }
     }
+    return true;
   }
 
   // ---------- visibility ----------
@@ -2053,12 +2189,7 @@ class Game {
     const y = this.cityYields(city);
 
     // growth (unhappy empires grow slowly; miserable ones not at all)
-    let surplus = y.food - city.pop * 2;
-    if (!p.isMinor && surplus > 0) {
-      const hap = this.happinessOf(p.index);
-      if (hap < HAPPINESS.strikeAt) surplus = 0;
-      else if (hap < 0) surplus = Math.floor(surplus / 2);
-    }
+    const surplus = this.cityFoodSurplus(city, y);
     city.food += surplus;
     if (city.food >= city.foodNeeded()) { city.food -= city.foodNeeded(); city.pop++; this.notify(`${city.name} grew to ${city.pop}.`, city.owner); }
     else if (city.food < 0) { city.food = 0; if (city.pop > 1) { city.pop--; this.notify(`${city.name} is starving!`, city.owner); } }
@@ -2072,27 +2203,30 @@ class Game {
       if (!def) { city.producing = null; }
     }
     if (city.producing) {
-      let prod = y.prod;
       const item = city.producing;
-      if (item.kind === "building" && p.civ.buildingProdBonus) prod = Math.floor(prod * (1 + p.civ.buildingProdBonus));
-      if (item.kind === "unit" && p.civ.unitProdBonus) prod = Math.floor(prod * (1 + p.civ.unitProdBonus));
-      if (p.goldenAgeTurns > 0) prod = Math.floor(prod * (1 + GOLDEN_AGE.bonus));
+      const prod = this.cityProductionRate(city, item, y);
       city.prodStored += prod;
       const cost = item.kind === "unit" ? UNITS[item.key].cost : BUILDINGS[item.key].cost;
       if (city.prodStored >= cost) {
+        let resolved = true;
         // wonder race check
         if (item.kind === "building" && BUILDINGS[item.key].wonder &&
             this.cities.some(c => c.buildings.includes(item.key))) {
           city.prodStored = Math.floor(city.prodStored * 0.5);
           this.notify(`${BUILDINGS[item.key].name} was completed elsewhere first!`, city.owner);
         } else {
-          city.prodStored -= cost;
-          this.completeProduction(city, item);
-          this.notify(`${city.name} finished ${item.kind === "unit" ? UNITS[item.key].name : BUILDINGS[item.key].name}.`, city.owner);
+          const complete = this.completeProduction(city, item);
+          if (complete) {
+            city.prodStored -= cost;
+            this.notify(`${city.name} finished ${item.kind === "unit" ? UNITS[item.key].name : BUILDINGS[item.key].name}.`, city.owner);
+          } else {
+            city.prodStored = cost;
+            resolved = false;
+          }
         }
-        do {
-          city.producing = city.queue.length ? city.queue.shift() : null;
-        } while (city.producing && !this.validQueueItem(city, city.producing));
+        if (resolved) {
+          this.advanceCityQueue(city);
+        }
       }
     }
 

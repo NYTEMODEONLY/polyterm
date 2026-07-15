@@ -810,14 +810,28 @@ const UI = (() => {
     panel.style.display = "block";
     const y = game.cityYields(city);
     const isMine = city.owner === game.viewer;
+    const foodNeeded = city.foodNeeded();
+    const surplus = game.cityFoodSurplus(city, y);
+    const growthTurns = surplus > 0 ? Math.max(1, Math.ceil((foodNeeded - city.food) / surplus)) : null;
+    const growthLabel = surplus > 0 ? `+${surplus}/turn · ${growthTurns}t`
+      : surplus < 0 ? `${surplus}/turn · starving` : "Growth stalled";
+    const foodPct = Math.max(0, Math.min(100, city.food / foodNeeded * 100));
+    const worked = game.workedTiles(city).length;
     let html = `
       <div class="panel-head">
         <b>${city.name}</b> ${city.isCapital ? "★" : ""} <span class="dim">(${CIVS[game.players[city.owner].civId].name})</span>
         <button class="close" onclick="UI.closeCity()">✕</button>
       </div>
       <div class="city-stats">
-        Pop ${city.pop} · 🍞${y.food} ⚙️${y.prod} 💰${y.gold} 🔬${y.sci} 🎭${Math.floor(y.culture)}${y.faith ? " ☦️" + y.faith : ""}<br>
-        <span class="dim">Growth ${city.food}/${city.foodNeeded()} · HP ${city.hp}/${city.maxHp}</span>
+        <div class="city-yields">
+          <span>🍞 <b>${y.food}</b></span><span>⚙️ <b>${y.prod}</b></span><span>💰 <b>${y.gold}</b></span>
+          <span>🔬 <b>${y.sci}</b></span><span>🎭 <b>${Math.floor(y.culture)}</b></span><span>☦️ <b>${y.faith}</b></span>
+        </div>
+        <div class="city-meter">
+          <div><span>Population ${city.pop}</span><span class="dim">${growthLabel}</span></div>
+          <span class="meter-track"><span style="width:${foodPct}%"></span></span>
+        </div>
+        <div class="city-vitals dim"><span>👥 ${worked}/${city.pop} worked tiles</span><span>♥ ${city.hp}/${city.maxHp}</span></div>
         ${city.religion !== null ? `<br><span class="dim">Faith: ${game.religions[city.religion].icon} ${game.religions[city.religion].name}</span>` : ""}
       </div>`;
     if (city.buildings.length) {
@@ -825,33 +839,59 @@ const UI = (() => {
     }
     if (isMine) {
       const p0 = game.players[game.viewer];
+      const focus = CITY_FOCUS[city.focus] ? city.focus : "balanced";
+      html += `<div class="city-section-title">Citizen focus</div>
+        <div class="city-focus" role="group" aria-label="Citizen tile focus">${Object.entries(CITY_FOCUS).map(([key, f]) =>
+          `<button class="${key === focus ? "active" : ""}" aria-pressed="${key === focus}" title="${f.hint}"
+            onclick="UI.setCityFocus(${city.id},'${key}')">${f.icon} ${f.name}</button>`).join("")}</div>`;
       if (p0.religionId !== null) {
         const cost = game.missionaryCost(game.viewer);
-        html += `<div class="prod-current"><button ${p0.faith >= cost ? "" : "disabled"}
+        html += `<div class="city-actions"><button ${p0.faith >= cost ? "" : "disabled"}
           onclick="UI.buyMissionary(${city.id})">🙏 Missionary (${cost} ☦️)</button></div>`;
       }
       const opts = game.productionOptions(city);
       const cur = city.producing;
-      html += `<div class="prod-current">Producing: <b>${cur
-        ? (cur.kind === "unit" ? UNITS[cur.key].icon + " " + UNITS[cur.key].name : BUILDINGS[cur.key].icon + " " + BUILDINGS[cur.key].name) +
-          ` (${city.prodStored}/${cur.kind === "unit" ? UNITS[cur.key].cost : BUILDINGS[cur.key].cost})`
-        : "—"}</b>${cur ? ` <a href="#" class="prod-cancel" title="Stop producing this" onclick="UI.cancelProduction(${city.id});return false">✕ cancel</a>` : ""}</div>`;
+      const curDef = cur ? (cur.kind === "unit" ? UNITS[cur.key] : BUILDINGS[cur.key]) : null;
+      const curCost = curDef ? curDef.cost : 0;
+      const prodRate = cur ? game.cityProductionRate(city, cur, y) : y.prod;
+      const blocked = !!(cur && cur.kind === "unit" && city.prodStored >= curCost && !game.productionUnitSpot(city, cur.key));
+      const prodTurns = cur && !blocked ? Math.max(1, Math.ceil(Math.max(0, curCost - city.prodStored) / Math.max(1, prodRate))) : null;
+      const prodPct = curCost ? Math.max(0, Math.min(100, city.prodStored / curCost * 100)) : 0;
+      html += `<div class="city-section-title">Production</div>
+        <div class="prod-current">
+          <div><span>${curDef ? `${curDef.icon} <b>${curDef.name}</b>` : "Choose a project"}</span>
+            ${cur ? `<button class="prod-cancel" title="Stop production" aria-label="Stop production" onclick="UI.cancelProduction(${city.id})">✕</button>` : ""}</div>
+          ${cur ? `<div class="dim">${city.prodStored}/${curCost} ⚙️ · ${blocked ? "Waiting for unit space" : `${prodRate}/turn · ${prodTurns}t`}</div>
+            <span class="meter-track production"><span style="width:${prodPct}%"></span></span>` : ""}
+        </div>`;
       if (city.queue.length) {
-        html += `<div class="prod-current">Queue: ${city.queue.map((q, i) =>
-          `${q.kind === "unit" ? UNITS[q.key].icon : BUILDINGS[q.key].icon}
-           <a href="#" onclick="UI.unqueue(${city.id},${i});return false" title="remove">✕</a>`).join(" → ")}</div>`;
+        html += `<div class="prod-queue"><span class="dim">Queue</span>${city.queue.map((q, i) => {
+          const d = q.kind === "unit" ? UNITS[q.key] : BUILDINGS[q.key];
+          return `<span class="queue-entry">${d.icon} ${d.name}<button title="Remove from queue" aria-label="Remove ${d.name} from queue"
+            onclick="UI.unqueue(${city.id},${i})">✕</button></span>`;
+        }).join("")}</div>`;
       }
       html += `<div class="prod-list">`;
       for (const o of opts) {
-        const turns = Math.max(1, Math.ceil((o.cost - (cur && cur.key === o.key ? city.prodStored : 0)) / Math.max(1, y.prod)));
-        const price = game.buyCost(o.cost, game.viewer);
-        const afford = game.players[game.viewer].gold >= price;
+        const current = !!(cur && cur.kind === o.kind && cur.key === o.key);
+        const queued = city.queue.some(q => q.kind === o.kind && q.key === o.key);
+        const rate = game.cityProductionRate(city, { kind: o.kind, key: o.key }, y);
+        const turns = Math.max(1, Math.ceil((o.cost - (current ? city.prodStored : 0)) / Math.max(1, rate)));
+        const price = game.buyCost(o.cost, city.owner);
+        const canPlace = o.kind !== "unit" || !!game.productionUnitSpot(city, o.key);
+        const afford = p0.gold >= price;
+        const canQueue = !!cur && !current && !queued && city.queue.length < 6;
         html += `<div class="prod-item ${o.wonder ? "wonder" : ""}">
-          <span>${o.icon} ${o.name}</span>
-          <span class="dim">${o.cost}⚙️ ~${turns}t</span>
-          <button title="Build this now${cur ? " (replaces current production)" : ""}" onclick="UI.buildNow(${city.id},'${o.kind}','${o.key}')">🔨 Build</button>
-          ${cur ? `<button title="Add to the build queue" onclick="UI.setProduction(${city.id},'${o.kind}','${o.key}')">＋ Queue</button>` : ""}
-          <button ${afford ? "" : "disabled"} onclick="UI.buyItem(${city.id},'${o.kind}','${o.key}')">💰${price}</button>
+          <span class="prod-name">${o.icon} ${o.name}</span>
+          <span class="prod-meta">${o.cost}⚙️ · ${rate}/t · ~${turns}t</span>
+          <div class="prod-actions">
+            <button ${current ? "disabled" : ""} title="${current ? "Current project" : "Build this now"}"
+              onclick="UI.buildNow(${city.id},'${o.kind}','${o.key}')">${current ? "✓ Current" : "🔨 Build"}</button>
+            ${cur ? `<button ${canQueue ? "" : "disabled"} title="${queued ? "Already queued" : city.queue.length >= 6 ? "Queue is full" : "Add to queue"}"
+              onclick="UI.setProduction(${city.id},'${o.kind}','${o.key}')">${queued ? "✓ Queued" : "＋ Queue"}</button>` : ""}
+            <button ${afford && canPlace ? "" : "disabled"} title="${!canPlace ? "No open tile for this unit" : !afford ? "Not enough gold" : "Purchase immediately"}"
+              onclick="UI.buyItem(${city.id},'${o.kind}','${o.key}')">💰${price}</button>
+          </div>
         </div>`;
       }
       html += `</div>`;
@@ -859,17 +899,19 @@ const UI = (() => {
     panel.innerHTML = html;
   }
 
+  function setCityFocus(cityId, focus) {
+    if (!myTurn()) return;
+    const city = game.cities.find(c => c.id === cityId);
+    if (!city || !game.setCityFocus(city, focus, game.viewer)) return;
+    SFX.play("click");
+    showCityPanel(city);
+    refreshAll();
+  }
+
   function setProduction(cityId, kind, key) {
     if (!myTurn()) return;
     const city = game.cities.find(c => c.id === cityId);
-    if (!city) return;
-    if (city.producing && city.producing.key !== key) {
-      if (city.queue.length < 6 && !city.queue.some(q => q.key === key)) {
-        city.queue.push({ kind, key });
-      }
-    } else {
-      city.producing = { kind, key };
-    }
+    if (!city || !game.setCityProduction(city, { kind, key }, true, game.viewer)) return;
     SFX.play("click");
     showCityPanel(city);
     refreshAll();
@@ -879,11 +921,7 @@ const UI = (() => {
   function buildNow(cityId, kind, key) {
     if (!myTurn()) return;
     const city = game.cities.find(c => c.id === cityId);
-    if (!city) return;
-    if (city.producing && city.producing.key === key) return;
-    // dropping a half-built wonder shouldn't silently waste all its hammers, but
-    // switching between ordinary items keeps progress (Civ-style)
-    city.producing = { kind, key };
+    if (!city || !game.setCityProduction(city, { kind, key }, false, game.viewer)) return;
     SFX.play("click");
     showCityPanel(city);
     refreshAll();
@@ -893,9 +931,7 @@ const UI = (() => {
   function cancelProduction(cityId) {
     if (!myTurn()) return;
     const city = game.cities.find(c => c.id === cityId);
-    if (!city) return;
-    city.producing = city.queue.length ? city.queue.shift() : null;
-    if (!city.producing) city.prodStored = 0;
+    if (!city || !game.cancelCityProduction(city, game.viewer)) return;
     SFX.play("click");
     showCityPanel(city);
     refreshAll();
@@ -904,8 +940,7 @@ const UI = (() => {
   function unqueue(cityId, i) {
     if (!myTurn()) return;
     const city = game.cities.find(c => c.id === cityId);
-    if (!city) return;
-    city.queue.splice(i, 1);
+    if (!city || !game.removeQueuedProduction(city, i, game.viewer)) return;
     showCityPanel(city);
   }
 
@@ -913,8 +948,7 @@ const UI = (() => {
     if (!myTurn()) return;
     const city = game.cities.find(c => c.id === cityId);
     if (!city) return;
-    const cost = kind === "unit" ? UNITS[key].cost : BUILDINGS[key].cost;
-    if (game.purchase(city, { kind, key, cost })) {
+    if (game.purchase(city, { kind, key }, game.viewer)) {
       SFX.play("coin");
       showCityPanel(city);
       refreshAll();
@@ -2672,7 +2706,7 @@ const UI = (() => {
     })();
   }
 
-  return { init, setProduction, buyItem, closeCity, pickTech, diploAction, newGame,
+  return { init, setCityFocus, setProduction, buyItem, closeCity, pickTech, diploAction, newGame,
     showFoundingModal, confirmFounding, buyMissionary, gift, assignSpy, beginHotseatTurn,
     hostAddSlot, hostConnect, hostStartOnline, joinCreateReply, unqueue,
     saveSlot, loadSlot, exportSave, toMainMenu, toggleGraphics, showSettings: showSettingsModal,

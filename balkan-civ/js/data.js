@@ -43,6 +43,17 @@ const GOLDEN_AGE = {
   bonus: 0.2,          // +20% gold and production
 };
 
+const CITY_FOCUS = {
+  balanced: { name: "Balanced", icon: "⚖️", food: 1.3, prod: 1, gold: 0.5,
+    hint: "Balance growth, production, and income." },
+  growth: { name: "Growth", icon: "🍞", food: 2.4, prod: 0.65, gold: 0.3,
+    hint: "Work the strongest food tiles first." },
+  production: { name: "Production", icon: "⚙️", food: 0.65, prod: 2.4, gold: 0.3,
+    hint: "Work the strongest production tiles first." },
+  gold: { name: "Gold", icon: "💰", food: 0.7, prod: 0.55, gold: 2.5,
+    hint: "Work the strongest income tiles first." },
+};
+
 // ------------------------------------------------------------
 // Technology tree
 // ------------------------------------------------------------

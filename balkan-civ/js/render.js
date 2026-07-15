@@ -154,6 +154,23 @@ class Renderer {
       ctx.restore();
     }
 
+    if (this.selectedCity && this.selectedCity.owner === game.viewer) {
+      ctx.save();
+      for (const t of game.workedTiles(this.selectedCity)) {
+        if (!vis[game.map.idx(t.c, t.r)]) continue;
+        const [sx, sy] = this.worldToScreen(t.c, t.r);
+        if (sx < -2 * s || sy < -2 * s || sx > W + 2 * s || sy > H + 2 * s) continue;
+        this.hexPath(ctx, sx, sy, s * 0.78);
+        ctx.fillStyle = "rgba(240,216,144,0.1)";
+        ctx.fill();
+        ctx.strokeStyle = "rgba(240,216,144,0.86)";
+        ctx.lineWidth = Math.max(1.5, s * 0.055);
+        ctx.setLineDash([Math.max(2, s * 0.08), Math.max(2, s * 0.08)]);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
     // cities
     for (const city of game.cities) {
       const i = game.map.idx(city.c, city.r);

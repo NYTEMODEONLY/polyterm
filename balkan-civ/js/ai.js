@@ -172,7 +172,7 @@ const AI = (() => {
           if (o) { choice = o; break; }
         }
       }
-      if (choice) city.producing = { kind: choice.kind, key: choice.key };
+      if (choice) game.setCityProduction(city, { kind: choice.kind, key: choice.key }, false, p.index);
     }
   }
 
@@ -308,6 +308,11 @@ const AI = (() => {
     const focus = victoryFocus(p);
     const wantCities = 4 + Math.floor(game.map.w / 15);
     const wantMilitary = myCities.length * (focus === "domination" ? 3 : 2) + (atWar ? 4 : 1);
+    for (const city of myCities) {
+      city.focus = atWar || focus === "domination" ? "production"
+        : city.pop < 4 ? "growth" : focus === "diplomacy" ? "gold" : "balanced";
+    }
+    game.assignWorkedTiles(p.index);
 
     for (const city of myCities) {
       if (city.producing) continue;
@@ -382,7 +387,7 @@ const AI = (() => {
         }
       }
       if (!choice) choice = bestMilitary() || opts[0];
-      city.producing = { kind: choice.kind, key: choice.key };
+      game.setCityProduction(city, { kind: choice.kind, key: choice.key }, false, p.index);
     }
   }
 

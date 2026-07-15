@@ -94,8 +94,10 @@ class Renderer3D {
       this._matSite[`${tier}-wait`] = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.3,
         side: THREE.DoubleSide, depthWrite: false });
     }
+    this._matWorked = new THREE.MeshBasicMaterial({ color: 0xf0d890, transparent: true, opacity: 0.62,
+      side: THREE.DoubleSide, depthWrite: false });
     this._hexFillGeo = null;   // shared flat hexagon, built with map
-    this._pool = { move: [], atk: [], site: [], decor: [], fx: [], routes: [], flash: [], rings: [] };
+    this._pool = { move: [], atk: [], site: [], worked: [], decor: [], fx: [], routes: [], flash: [], rings: [] };
     this._units = new Map();   // unit id -> sprite
     this._cities = new Map();  // city object -> group
     this._builtFor = null;     // map object the static geometry was built for
@@ -416,7 +418,7 @@ class Renderer3D {
       }
     }
     this._units.clear(); this._cities.clear();
-    this._pool = { move: [], atk: [], site: [], decor: [], fx: [], routes: [], flash: [], rings: [] };
+    this._pool = { move: [], atk: [], site: [], worked: [], decor: [], fx: [], routes: [], flash: [], rings: [] };
     this._hover = this._selRing = this._citySel = this._preview = null;
     this._visSnap = this._ownSnap = null;
     this._impHash = null;
@@ -873,6 +875,7 @@ class Renderer3D {
     this._hidePool(this._pool.move);
     this._hidePool(this._pool.atk);
     this._hidePool(this._pool.site);
+    this._hidePool(this._pool.worked);
     if (this.selected) {
       for (const [c, r] of this.reachable) {
         const m = this._getPooled(this._pool.move, () => {
@@ -904,6 +907,20 @@ class Renderer3D {
       m.material = this._matSite[site.canFoundThisTurn ? site.tier : `${site.tier}-wait`];
       const [wx, wz] = HEX.toPixel(site.c, site.r, S);
       m.position.set(wx, surfY3D(game.tile(site.c, site.r)) + 0.72, wz);
+    }
+    if (this.selectedCity && this.selectedCity.owner === game.viewer) {
+      for (const t of game.workedTiles(this.selectedCity)) {
+        if (!vis[game.map.idx(t.c, t.r)]) continue;
+        const m = this._getPooled(this._pool.worked, () => {
+          const mesh = new THREE.Mesh(new THREE.RingGeometry(S * 0.69, S * 0.78, 6, 1, Math.PI / 6),
+            this._matWorked);
+          mesh.rotation.x = -Math.PI / 2;
+          mesh.renderOrder = 3;
+          return mesh;
+        });
+        const [wx, wz] = HEX.toPixel(t.c, t.r, S);
+        m.position.set(wx, surfY3D(t) + 0.74, wz);
+      }
     }
 
     // trade routes + path preview are rebuilt every frame (cheap lines)

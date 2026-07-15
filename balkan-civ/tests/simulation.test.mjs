@@ -315,6 +315,148 @@ test("city founding enforces unit, movement, territory, and spacing rules", () =
   assert.equal(result.close.settlerPresent, true);
 });
 
+test("production commands enforce prerequisites, ownership, uniqueness, and spawn space", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    const g = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 61221,
+      mapW: 24, mapH: 18, mapType: "peninsula", noMinors: true, noBarbs: true });
+    const mine = g.units.find(u => u.owner === 0 && u.type === "SETTLER");
+    const theirs = g.units.find(u => u.owner === 1 && u.type === "SETTLER");
+    const city = g.foundCity(mine);
+    const foreignCity = g.foundCity(theirs);
+    const p = g.players[0];
+    p.gold = 10000;
+    const startingGold = p.gold;
+
+    const lockedPurchase = g.purchase(city, { kind: "unit", key: "RIFLEMAN" }, 0);
+    const goldAfterLockedPurchase = p.gold;
+    const foreignCommand = g.setCityProduction(foreignCity,
+      { kind: "unit", key: "WARRIOR" }, false, 0);
+    const firstMonument = g.purchase(city, { kind: "building", key: "MONUMENT" }, 0);
+    const goldAfterMonument = p.gold;
+    const duplicateMonument = g.purchase(city, { kind: "building", key: "MONUMENT" }, 0);
+
+    for (const u of [...g.units]) if (u.owner === 0) g.removeUnit(u);
+    const occupied = [[city.c, city.r], ...HEX.neighbors(city.c, city.r)]
+      .filter(([c, r]) => g.tile(c, r));
+    const blockers = [];
+    for (const [c, r] of occupied) {
+      const tile = g.tile(c, r);
+      tile.terrain = "GRASSLAND";
+      blockers.push(g.addUnit("WARRIOR", 0, c, r));
+    }
+    city.producing = { kind: "unit", key: "WARRIOR" };
+    city.queue = [];
+    city.prodStored = UNITS.WARRIOR.cost;
+    const notificationCount = g.notifications.length;
+    const unitCount = g.units.length;
+    g.processCityTurn(city);
+    const blocked = {
+      producing: city.producing && city.producing.key,
+      stored: city.prodStored,
+      unitsAdded: g.units.length - unitCount,
+      notificationsAdded: g.notifications.length - notificationCount,
+    };
+
+    const released = blockers.find(u => u.c !== city.c || u.r !== city.r);
+    g.removeUnit(released);
+    const beforeRelease = g.units.length;
+    const notificationsBeforeRelease = g.notifications.length;
+    g.processCityTurn(city);
+    const completed = {
+      producing: city.producing,
+      unitsAdded: g.units.length - beforeRelease,
+      notificationsAdded: g.notifications.length - notificationsBeforeRelease,
+      warriorAtReleasedTile: !!g.units.find(u => u.owner === 0 && u.type === "WARRIOR" &&
+        u.c === released.c && u.r === released.r),
+    };
+
+    return JSON.stringify({
+      lockedPurchase, foreignCommand, firstMonument, duplicateMonument,
+      lockedCost: startingGold - goldAfterLockedPurchase,
+      monumentCost: startingGold - goldAfterMonument,
+      monuments: city.buildings.filter(key => key === "MONUMENT").length,
+      blocked, completed,
+    });
+  `));
+
+  assert.equal(result.lockedPurchase, false);
+  assert.equal(result.foreignCommand, false);
+  assert.equal(result.firstMonument, true);
+  assert.equal(result.duplicateMonument, false);
+  assert.equal(result.lockedCost, 0);
+  assert.equal(result.monumentCost, 135);
+  assert.equal(result.monuments, 1);
+  assert.deepEqual(result.blocked,
+    { producing: "WARRIOR", stored: 40, unitsAdded: 0, notificationsAdded: 0 });
+  assert.deepEqual(result.completed,
+    { producing: null, unitsAdded: 1, notificationsAdded: 1, warriorAtReleasedTile: true });
+});
+
+test("city focus assigns strategic yields without double-working shared tiles", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    const g = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 81717,
+      mapW: 24, mapH: 18, mapType: "peninsula", noMinors: true, noBarbs: true });
+    const settler = g.units.find(u => u.owner === 0 && u.type === "SETTLER");
+    const city = g.foundCity(settler);
+    const candidates = HEX.ring(city.c, city.r, 3)
+      .map(([c, r]) => g.tile(c, r))
+      .filter(t => t && !t.city);
+    for (const tile of candidates) {
+      tile.owner = 0;
+      tile.terrain = "MOUNTAIN";
+      tile.feature = null;
+      tile.resource = null;
+      tile.improvement = null;
+    }
+    const featured = candidates.slice(0, 3);
+    Object.assign(featured[0], { terrain: "GRASSLAND", resource: "WHEAT" });
+    Object.assign(featured[1], { terrain: "HILLS", resource: "IRON" });
+    Object.assign(featured[2], { terrain: "PLAINS", resource: "WINE" });
+    city.pop = 1;
+
+    const choose = focus => {
+      g.setCityFocus(city, focus, 0);
+      const tile = g.workedTiles(city)[0];
+      return { focus: city.focus, terrain: tile.terrain, resource: tile.resource,
+        yields: g.cityYields(city) };
+    };
+    const growth = choose("growth");
+    const production = choose("production");
+    const gold = choose("gold");
+
+    const site = candidates.find(t => HEX.distance(city.c, city.r, t.c, t.r) === 3);
+    const second = new City("Nis", 0, site.c, site.r);
+    second.pop = 3;
+    second.focus = "production";
+    city.pop = 3;
+    city.focus = "growth";
+    g.cities.push(second);
+    site.city = second;
+    for (const [c, r] of HEX.ring(second.c, second.r, 3)) {
+      const tile = g.tile(c, r);
+      if (tile) tile.owner = 0;
+    }
+    g.assignWorkedTiles(0);
+    const firstTiles = g.workedTiles(city).map(t => t.c + "," + t.r);
+    const secondTiles = g.workedTiles(second).map(t => t.c + "," + t.r);
+    const overlap = firstTiles.filter(key => secondTiles.includes(key));
+    const restored = Game.deserialize(g.serialize());
+
+    return JSON.stringify({ growth, production, gold,
+      allocation: { first: firstTiles.length, second: secondTiles.length, overlap },
+      savedFocus: restored.cities.find(c => c.id === city.id).focus });
+  `));
+
+  assert.deepEqual([result.growth.terrain, result.growth.resource], ["GRASSLAND", "WHEAT"]);
+  assert.deepEqual([result.production.terrain, result.production.resource], ["HILLS", "IRON"]);
+  assert.deepEqual([result.gold.terrain, result.gold.resource], ["PLAINS", "WINE"]);
+  assert.ok(result.growth.yields.food > result.production.yields.food);
+  assert.ok(result.production.yields.prod > result.growth.yields.prod);
+  assert.ok(result.gold.yields.gold > result.growth.yields.gold);
+  assert.deepEqual(result.allocation, { first: 3, second: 3, overlap: [] });
+  assert.equal(result.savedFocus, "growth");
+});
+
 test("pending-order snapshots track research, production, and unit decisions", () => {
   const result = JSON.parse(evaluate(loadGameContext(), `
     const g = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 9191,
