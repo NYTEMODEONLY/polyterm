@@ -238,8 +238,16 @@ class Game {
       const nLeaders = (CIVS[cid].leaders || [{}]).length;
       if (opts.leaders && opts.leaders[i] != null) p.leaderIdx = opts.leaders[i] % nLeaders;
       else if (i === 0 && opts.playerLeader != null) p.leaderIdx = opts.playerLeader % nLeaders;
-      else if (this.scenario) p.leaderIdx = 0; // scenarios use each civ's canonical leader
-      else p.leaderIdx = Math.floor(this.rng() * nLeaders);
+      else if (this.scenario) {
+        const scenarioLeader = SCENARIOS[this.scenario]?.leaders?.[cid];
+        p.leaderIdx = scenarioLeader == null ? 0 : scenarioLeader % nLeaders;
+      } else {
+        // Scenario additions must not silently rebalance established seeded games.
+        // They remain selectable by humans and explicit online rosters.
+        const randomPool = CIVS[cid].leaders.map((leader, index) => ({ leader, index }))
+          .filter(entry => entry.leader.randomAI !== false);
+        p.leaderIdx = randomPool[Math.floor(this.rng() * randomPool.length)].index;
+      }
       this.players.push(p);
     });
     const nMajors = this.players.length;
@@ -818,6 +826,11 @@ class Game {
         return `🎯 Techs ${this.players[0].techs.size}/${Object.keys(TECHS).length} · ${left} turns left`;
       case "kills":
         return `🎯 ${CIVS[v.target].adj} units slain ${this.scenarioKills}/${v.count} · ${left} turns left`;
+      case "resistance": {
+        const cap = this.cities.find(c => c.id === this.players[0].originalCapitalId);
+        const hold = !cap ? "Found capital" : cap.owner === 0 ? `Hold ${cap.name}` : `${cap.name} fallen`;
+        return `🎯 ${hold} · Kills ${this.scenarioKills}/${v.count} · ${left}t`;
+      }
       case "cities":
         return `🎯 Cities ${this.cities.filter(c => c.owner === 0).length}/${v.count} · ${left} turns left`;
     }
@@ -827,7 +840,7 @@ class Game {
   trackScenarioKill(killerIdx, victimIdx) {
     if (!this.scenario || killerIdx !== 0) return;
     const sc = SCENARIOS[this.scenario];
-    if (sc.victory.type !== "kills") return;
+    if (sc.victory.type !== "kills" && sc.victory.type !== "resistance") return;
     const victim = this.players[victimIdx];
     if (victim && victim.civId === sc.victory.target) {
       this.scenarioKills++;
@@ -3066,6 +3079,13 @@ class Game {
         }
         case "kills": {
           if (this.scenarioKills >= v.count) won = true;
+          else if (timeUp) won = false;
+          break;
+        }
+        case "resistance": {
+          const myCap = this.cities.find(c => c.id === me.originalCapitalId);
+          if (this.turn > 3 && (!myCap || myCap.owner !== 0)) won = false;
+          else if (myCap && myCap.owner === 0 && this.scenarioKills >= v.count) won = true;
           else if (timeUp) won = false;
           break;
         }

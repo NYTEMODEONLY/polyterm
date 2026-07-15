@@ -228,6 +228,7 @@ const CIVS = {
       { leader: "Stefan Dušan", trait: "Tsar of Serbs and Greeks", traitDesc: "+25% production toward buildings in every city.", buildingProdBonus: 0.25 },
       { leader: "Stefan Nemanja", trait: "Founder of the Nemanjić", traitDesc: "+2 culture in every city.", cityCulture: 2 },
       { leader: "Lazar of Kosovo", trait: "Martyr's Resolve", traitDesc: "+25% combat strength when defending.", defendCiv: 0.25 },
+      { leader: "Karađorđe Petrović", trait: "Leader of the Uprising", traitDesc: "+20% combat strength in home territory and +10% production toward units.", homeBonus: 0.2, unitProdBonus: 0.1, randomAI: false },
     ],
   },
   BULGARIA: {
@@ -255,6 +256,7 @@ const CIVS = {
       { leader: "Mehmed II", trait: "Ghazi Warriors", traitDesc: "+20% combat strength when attacking cities.", vsCityBonus: 0.2 },
       { leader: "Suleiman the Magnificent", trait: "The Lawgiver", traitDesc: "+2 gold in every city.", cityGold: 2 },
       { leader: "Osman I", trait: "Founder of the Dynasty", traitDesc: "+25% production toward units.", unitProdBonus: 0.25 },
+      { leader: "Selim III", trait: "The New Order", traitDesc: "+1 science in every city and +15% production toward units.", cityScience: 1, unitProdBonus: 0.15, randomAI: false },
     ],
   },
   ALBANIA: {
@@ -609,6 +611,22 @@ const SCENARIOS = {
       winText: "Twenty-five years, and Krujë never fell. The mountain eagle outlasted the empire.",
       loseText: "Krujë burns. The Albanian highlands fall silent under the crescent." },
   },
+  REVOLUTION_1804: {
+    name: "The Serbian Revolution", year: "1804 AD", icon: "⚑",
+    blurb: "Karađorđe's rebels have driven the dahije from Šumadija, but Selim III's field army is marching north. Hold Beograd and break the imperial offensive: destroy 10 Ottoman units before the capital falls, within 70 turns.",
+    playerCiv: "SERBIA", opponents: ["OTTOMAN", "BULGARIA", "WALLACHIA"],
+    leaders: { SERBIA: 3, OTTOMAN: 3 },
+    seed: 1804001, mapType: "peninsula", difficulty: "hard",
+    techEra: 4, gold: 700,
+    armies: {
+      SERBIA: ["RIFLEMAN", "RIFLEMAN", "RIFLEMAN", "RIFLEMAN", "CANNON", "CAVALRY", "WORKER"],
+      OTTOMAN: ["RIFLEMAN", "RIFLEMAN", "RIFLEMAN", "RIFLEMAN", "CANNON", "CANNON", "CAVALRY", "CAVALRY", "SETTLER"],
+    },
+    warsAtStart: [["SERBIA", "OTTOMAN"]],
+    victory: { type: "resistance", target: "OTTOMAN", count: 10, turns: 70,
+      winText: "Beograd is free and the imperial field army is broken. The uprising has become a nation.",
+      loseText: "Beograd falls and the uprising fragments. The pashalik closes around Šumadija once more." },
+  },
 };
 
 // Barbarian-free game; players fight each other.
@@ -752,16 +770,16 @@ const WCONGRESS = {
 };
 
 // ------------------------------------------------------------
-// Campaign — the nine scenarios strung into one chronological arc
+// Campaign — the ten scenarios strung into one chronological arc
 // through Balkan history, unlocked in sequence, with a running glory
 // score carried across chapters. Progress persists in localStorage.
 // ------------------------------------------------------------
 const CAMPAIGN = {
   title: "A Thousand Years of the Balkans",
-  intro: "From the scriptoria of Preslav to Vlad's midnight raid, relive a thousand years of Balkan glory — nine chapters, nine peoples, one unbroken story. Win each to unlock the next and build your legend.",
-  outro: "Nine crowns, nine ages, one story told. From the First Bulgarian Empire to the walls of Târgoviște, you have carried the Balkans through a thousand years. The chronicle is complete — and it bears your name.",
+  intro: "From the scriptoria of Preslav to Karađorđe's uprising, relive a thousand years of Balkan struggle — ten chapters, nine peoples, one unbroken story. Win each to unlock the next and build your legend.",
+  outro: "Ten chapters, nine peoples, one story told. From the First Bulgarian Empire to the liberation of Beograd, you have carried the Balkans through a thousand years. The chronicle is complete — and it bears your name.",
   chapters: [
     "SIMEON_893", "TOMISLAV_925", "SAMUIL_976", "BASIL_1014", "DUSHAN_1346",
-    "TVRTKO_1377", "SKANDERBEG_1443", "FALL_1453", "VLAD_1462",
+    "TVRTKO_1377", "SKANDERBEG_1443", "FALL_1453", "VLAD_1462", "REVOLUTION_1804",
   ],
 };

@@ -46,7 +46,7 @@ events, or AI choices.
 ## Features
 
 - **Multiple leaders per civilization**: each of the nine civs offers
-  three historical leaders — 27 in all — with distinct traits, chosen on
+  at least three historical leaders — 29 in all — with distinct traits, chosen on
   the start screen. Play Serbia under Stefan Dušan's builders, Stefan
   Nemanja's culture, or Lazar's stubborn defense; the unique unit stays
   the same, the strategy changes
@@ -64,8 +64,8 @@ events, or AI choices.
   Leader. Delegates come from your empire and, above all, your **city-state
   allies**; win a supermajority of the vote to be elected and win. Click the
   score in the top bar or press `V` for a live overview of all six paths
-- **Campaign mode** — *A Thousand Years of the Balkans* strings all nine
-  scenarios into one chronological arc from 893 to 1462 AD. Chapters
+- **Campaign mode** — *A Thousand Years of the Balkans* strings all ten
+  scenarios into one chronological arc from 893 to 1804 AD. Chapters
   unlock in sequence and a running **Glory** score is carried across the
   whole campaign, saved between sessions
 - **Civilopedia** (📖 button or `?`): a searchable in-game reference —
@@ -128,7 +128,7 @@ events, or AI choices.
   after that the connection is direct between browsers. Each player picks
   their civ on their own start screen, sees only their own fog of war, and
   plays in turn while the others watch a waiting banner
-- **Campaign scenarios — one for every civilization**, each with its own
+- **Ten campaign scenarios across all nine civilizations**, each with its own
   victory rule and a live objective tracker in the top bar:
   - *The Rise of Samuil* (Macedonia, 976) — take Constantinople in 150 turns
   - *The Golden Age of Simeon* (Bulgaria, 893) — first to master every
@@ -143,6 +143,8 @@ events, or AI choices.
     Walls in 60 turns
   - *Skanderbeg's Rebellion* (Albania, 1443) — hold Krujë for 100 turns,
     on hard difficulty
+  - *The Serbian Revolution* (Serbia, 1804) — as Karađorđe, hold Beograd
+    and destroy 10 Ottoman units in a fully Industrial opening
 - **Social policies** — four Balkan-flavoured branches you unlock with
   accumulated culture: **Zadruga** (the family homestead — growth and land),
   **Junak** (the hero's path — war and glory), **Čaršija** (the bazaar
@@ -329,5 +331,5 @@ drops mid-game the host can continue against the AI or re-host later.
 
 ## Ideas for future expansion
 
-Longer historical campaign chains, additional Industrial-era scenarios, and
+Longer historical campaign chains, further Industrial-era scenarios, and
 localized interface text.

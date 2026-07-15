@@ -965,6 +965,7 @@ test("scenario openings stay inside their reviewed military balance bands", () =
     SAMUIL_976: [42, 30], FALL_1453: [120, 81], DUSHAN_1346: [76, 42],
     SIMEON_893: [55, 27], BASIL_1014: [67, 42], TOMISLAV_925: [51, 61],
     VLAD_1462: [100, 110], TVRTKO_1377: [52, 8], SKANDERBEG_1443: [84, 74],
+    REVOLUTION_1804: [202, 260],
   };
   for (const metric of metrics) {
     assert.deepEqual([metric.mine, metric.strongestFoe], expected[metric.key], `${metric.key} opening power changed`);
@@ -973,6 +974,83 @@ test("scenario openings stay inside their reviewed military balance bands", () =
     assert.ok(metric.objective || metric.over, `${metric.key} lost its objective tracker`);
     assert.ok(metric.cities >= 1, `${metric.key} failed to establish a player city`);
   }
+});
+
+test("the Industrial resistance scenario assigns its leaders and enforces both objectives", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    const create = () => new Game({ playerCiv: SCENARIOS.REVOLUTION_1804.playerCiv,
+      fixedOpponents: SCENARIOS.REVOLUTION_1804.opponents,
+      numOpponents: SCENARIOS.REVOLUTION_1804.opponents.length,
+      seed: SCENARIOS.REVOLUTION_1804.seed, mapType: SCENARIOS.REVOLUTION_1804.mapType,
+      difficulty: SCENARIOS.REVOLUTION_1804.difficulty, scenario: "REVOLUTION_1804",
+      noMinors: true });
+    const foundCapital = g => {
+      const settler = g.units.find(u => u.owner === 0 && u.type === "SETTLER");
+      if (!settler || !g.foundCity(settler)) throw new Error("scenario capital could not be founded");
+      return g.cities.find(c => c.id === g.players[0].originalCapitalId);
+    };
+
+    const opening = create();
+    const ottoman = opening.players.find(p => p.civId === "OTTOMAN");
+    const premature = create();
+    premature.scenarioKills = SCENARIOS.REVOLUTION_1804.victory.count;
+    premature.checkVictory();
+
+    const win = create();
+    const winCap = foundCapital(win);
+    const winOttoman = win.players.find(p => p.civId === "OTTOMAN");
+    win.scenarioKills = SCENARIOS.REVOLUTION_1804.victory.count - 1;
+    win.trackScenarioKill(0, winOttoman.index);
+
+    const loss = create();
+    const lostCap = foundCapital(loss);
+    const lossOttoman = loss.players.find(p => p.civId === "OTTOMAN");
+    lostCap.owner = lossOttoman.index;
+    loss.turn = 4;
+    loss.checkVictory();
+
+    const saved = Game.deserialize(opening.serialize());
+    const standardLeaders = [];
+    for (let seed = 1; seed <= 16; seed++) {
+      const standard = new Game({ playerCiv: "SERBIA", fixedOpponents: ["OTTOMAN"],
+        numOpponents: 1, seed, mapW: 20, mapH: 16, noMinors: true, noBarbs: true });
+      standardLeaders.push(standard.players.map(p => p.leaderName));
+    }
+    return JSON.stringify({
+      leaders: { player: opening.players[0].leaderName, ottoman: ottoman.leaderName },
+      era: opening.players[0].era(), techs: opening.players[0].techs.size,
+      atWar: opening.players[0].atWarWith.has(ottoman.index),
+      openingStatus: opening.scenarioStatus(),
+      premature: { over: premature.over, winner: premature.winner },
+      win: { cap: winCap.name, kills: win.scenarioKills, over: win.over,
+        winner: win.winner, type: win.victoryType },
+      loss: { over: loss.over, winner: loss.winner, type: loss.victoryType },
+      saved: { scenario: saved.scenario, player: saved.players[0].leaderName,
+        ottoman: saved.players.find(p => p.civId === "OTTOMAN").leaderName },
+      standardLeaders,
+      campaignLast: CAMPAIGN.chapters.at(-1),
+    });
+  `));
+
+  assert.deepEqual(result.leaders,
+    { player: "Karađorđe Petrović", ottoman: "Selim III" });
+  assert.equal(result.era, 4);
+  assert.equal(result.techs, 32);
+  assert.equal(result.atWar, true);
+  assert.match(result.openingStatus, /Found capital/);
+  assert.deepEqual(result.premature, { over: false, winner: null },
+    "the kill target cannot win before Serbia has a capital to defend");
+  assert.deepEqual(result.win,
+    { cap: "Beograd", kills: 10, over: true, winner: 0, type: "Scenario" });
+  assert.equal(result.loss.over, true);
+  assert.notEqual(result.loss.winner, 0);
+  assert.equal(result.loss.type, "Scenario");
+  assert.deepEqual(result.saved,
+    { scenario: "REVOLUTION_1804", player: "Karađorđe Petrović", ottoman: "Selim III" });
+  assert.equal(result.standardLeaders.flat().some(name =>
+    name === "Karađorđe Petrović" || name === "Selim III"), false,
+  "scenario-specific leader additions must not change ordinary seeded AI rosters");
+  assert.equal(result.campaignLast, "REVOLUTION_1804");
 });
 
 test("combat reports preserve damage accounting and notify human defenders", () => {

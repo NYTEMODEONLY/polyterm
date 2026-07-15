@@ -120,9 +120,23 @@ const UI = (() => {
     for (const [key, sc] of Object.entries(SCENARIOS)) {
       const card = document.createElement("div");
       card.className = "scenario-card";
-      card.innerHTML = `<h3>${sc.icon} ${sc.name}</h3><div class="year">${sc.year} ·
-        play as <b style="color:${CIVS[sc.playerCiv].color}">${CIVS[sc.playerCiv].name}</b> ·
-        ${sc.victory.turns} turns</div><p>${sc.blurb}</p>`;
+      const leaderIdx = sc.leaders?.[sc.playerCiv] ?? 0;
+      const leader = CIVS[sc.playerCiv].leaders[leaderIdx] || CIVS[sc.playerCiv].leaders[0];
+      const v = sc.victory;
+      let objective = "Special objective";
+      if (v.type === "capture") objective = "Capture the rival capital";
+      else if (v.type === "survive") objective = "Hold your capital";
+      else if (v.type === "capitals") objective = `Control ${v.count} capitals`;
+      else if (v.type === "research") objective = "Master every technology";
+      else if (v.type === "kills") objective = `Defeat ${v.count} ${CIVS[v.target].adj} units`;
+      else if (v.type === "resistance") objective = `Hold the capital and defeat ${v.count} ${CIVS[v.target].adj} units`;
+      else if (v.type === "cities") objective = `Control ${v.count} cities`;
+      card.innerHTML = `<div class="scenario-card-head"><h3>${sc.icon} ${sc.name}</h3>
+          <span class="scenario-era">${ERAS[sc.techEra ?? 0]}</span></div>
+        <div class="year">${sc.year} · <b style="color:${CIVS[sc.playerCiv].color}">${CIVS[sc.playerCiv].name}</b>
+          under ${leader.leader} · ${sc.victory.turns} turns</div>
+        <div class="scenario-objective">${objective}</div>
+        <p>${sc.blurb}</p>`;
       card.onclick = () => launchScenario(key, null);
       wrap.appendChild(card);
     }
@@ -167,11 +181,13 @@ const UI = (() => {
       const sc = SCENARIOS[key];
       const complete = st.completed.includes(key);
       const unlocked = chapterUnlocked(i, st);
+      const leaderIdx = sc.leaders?.[sc.playerCiv] ?? 0;
+      const leader = CIVS[sc.playerCiv].leaders[leaderIdx] || CIVS[sc.playerCiv].leaders[0];
       const status = complete ? `<span style="color:#2ecc71">✓ complete</span>`
         : unlocked ? `<span class="alert">available</span>` : `🔒 locked`;
       html += `<div class="campaign-chapter ${unlocked ? "" : "locked"}">
         <div><b>${i + 1}. ${sc.icon} ${sc.name}</b> <span class="dim">— ${sc.year}, ${CIVS[sc.playerCiv].name}</span><br>
-          <span class="dim">${status} · ${sc.victory.turns} turns</span></div>
+          <span class="dim">${leader.leader} · ${ERAS[sc.techEra ?? 0]} · ${status} · ${sc.victory.turns} turns</span></div>
         <button ${unlocked ? "" : "disabled"} onclick="UI.playChapter('${key}')">${complete ? "Replay" : "Play"}</button>
       </div>`;
     });
@@ -1520,7 +1536,9 @@ const UI = (() => {
     $("stat-gold").textContent = `💰 ${Math.floor(p.gold)} (${gold >= 0 ? "+" : ""}${gold})`;
     $("stat-sci").innerHTML = tech
       ? `🔬 ${tech.name} ${Math.floor(p.scienceStored)}/${game.techCost(p.researching)} (+${sci})`
-      : `🔬 <b class="alert">choose research!</b> (+${sci})`;
+      : p.techs.size >= Object.keys(TECHS).length
+        ? `🔬 <b>Research complete</b>`
+        : `🔬 <b class="alert">choose research!</b> (+${sci})`;
     // happiness + golden age
     const hap = game.happinessOf(game.viewer);
     const lux = game.luxuryTypesOf(game.viewer);

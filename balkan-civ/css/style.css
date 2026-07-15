@@ -207,8 +207,13 @@ button:disabled { opacity: 0.4; cursor: default; }
 .scenario-card { background: rgba(20,28,42,0.9); border: 2px solid #3a4a63; border-radius: 8px;
   padding: 14px; cursor: pointer; transition: border-color 0.15s; }
 .scenario-card:hover { border-color: #c9a648; }
+.scenario-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .scenario-card h3 { color: #f0d890; margin-bottom: 4px; }
+.scenario-era { flex: 0 0 auto; padding: 2px 6px; border: 1px solid #647984; border-radius: 4px;
+  color: #c6d7de; background: #16252d; font-size: 10px; font-weight: 800; text-transform: uppercase; }
 .scenario-card .year { color: #9a927e; font-size: 12px; }
+.scenario-objective { margin-top: 9px; padding-left: 8px; border-left: 2px solid #c9a648;
+  color: #e7d59d; font-size: 11.5px; font-weight: 700; }
 .scenario-card p { font-size: 12.5px; color: #d8d0bc; margin-top: 6px; }
 #net-banner { position: fixed; top: 52px; left: 50%; transform: translateX(-50%); z-index: 20;
   display: none; background: rgba(15,18,26,0.92); border: 2px solid #c9a648; border-radius: 6px;
@@ -559,6 +564,10 @@ button:disabled { opacity: 0.4; cursor: default; }
   #topbar { height: 48px; padding-inline: 8px; }
   .status-strip { overflow-x: auto; scrollbar-width: none; }
   .status-strip::-webkit-scrollbar { display: none; }
+  .status-strip > span { order: 3; }
+  #stat-turn { order: 0; }
+  #stat-score { order: 1; }
+  #stat-era { order: 2; }
   .command-bar { position: fixed; left: 0; right: 0; bottom: 0; height: 58px; padding: 6px;
     justify-content: space-between; gap: 4px; background: linear-gradient(#272117, #17140f);
     border-top: 2px solid #8a7648; box-shadow: 0 -5px 18px rgba(0,0,0,0.4); }
