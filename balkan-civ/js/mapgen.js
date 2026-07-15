@@ -34,6 +34,119 @@ function makeNoise(rng, w, h, cell) {
   };
 }
 
+function mirrorColumn(w, c, r) {
+  // A pointy-top odd-r grid is shifted half a hex on odd rows. Accounting for
+  // that shift makes reflection preserve real neighbour relationships.
+  return w - 1 - c - (r & 1);
+}
+
+function recomputeCoasts(map) {
+  for (const t of map.tiles) if (t.terrain === "COAST") t.terrain = "OCEAN";
+  for (const t of map.tiles) {
+    if (t.terrain !== "OCEAN") continue;
+    for (const [nc, nr] of HEX.neighbors(t.c, t.r)) {
+      if (nc < 0 || nr < 0 || nc >= map.w || nr >= map.h) continue;
+      const n = map.tiles[map.idx(nc, nr)];
+      if (n.terrain !== "OCEAN" && n.terrain !== "COAST") {
+        t.terrain = "COAST";
+        break;
+      }
+    }
+  }
+}
+
+function riverJitter(seed, c, r) {
+  let h = Math.imul((seed ^ 0x9E3779B9) + c * 374761393, 668265263);
+  h = Math.imul(h ^ (h >>> 13) ^ r * 1274126177, 2246822519);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+function generateRivers(map, seed, mapType) {
+  const mirror = mapType === "mirror";
+  const canonical = (t) => !mirror || t.c <= mirrorColumn(map.w, t.c, t.r);
+  const isLand = (t) => !!t && TERRAIN[t.terrain].passable;
+  const isWater = (t) => !!t && (t.terrain === "OCEAN" || t.terrain === "COAST");
+  for (const t of map.tiles) t.river = false;
+
+  // Distance from salt water supplies a downhill potential. Each river takes
+  // only steps that reduce this value, so every generated corridor reaches a
+  // coast and can never loop.
+  const distance = new Int16Array(map.tiles.length).fill(-1);
+  const queue = [];
+  for (let i = 0; i < map.tiles.length; i++) {
+    if (isWater(map.tiles[i])) {
+      distance[i] = 0;
+      queue.push(i);
+    }
+  }
+  for (let head = 0; head < queue.length; head++) {
+    const current = map.tiles[queue[head]];
+    for (const [nc, nr] of HEX.neighbors(current.c, current.r)) {
+      if (nc < 0 || nr < 0 || nc >= map.w || nr >= map.h) continue;
+      const ni = map.idx(nc, nr), n = map.tiles[ni];
+      if (distance[ni] !== -1 || !isLand(n) || !canonical(n)) continue;
+      distance[ni] = distance[queue[head]] + 1;
+      queue.push(ni);
+    }
+  }
+
+  const land = map.tiles.filter(t => isLand(t) && canonical(t));
+  const candidates = land
+    .filter(t => distance[map.idx(t.c, t.r)] >= RIVERS.minLength)
+    .map(t => ({ t, score: distance[map.idx(t.c, t.r)] * 100 +
+      (t.terrain === "HILLS" ? 36 : 0) + riverJitter(seed, t.c, t.r) * 24 }))
+    .sort((a, b) => b.score - a.score || a.t.r - b.t.r || a.t.c - b.t.c);
+  const target = land.length < 45 ? 0 : Math.max(1, Math.round(land.length / RIVERS.tilesPerSource));
+  const riverTiles = new Set();
+  let sources = 0;
+
+  for (const entry of candidates) {
+    if (sources >= target) break;
+    const source = entry.t;
+    const nearExisting = [...riverTiles].some(i => {
+      const t = map.tiles[i];
+      return HEX.distance(source.c, source.r, t.c, t.r) < RIVERS.sourceSpacing;
+    });
+    if (nearExisting) continue;
+
+    const path = [];
+    let current = source, joined = false, reachedCoast = false;
+    while (current) {
+      const ci = map.idx(current.c, current.r);
+      if (riverTiles.has(ci)) { joined = true; break; }
+      path.push(ci);
+      const d = distance[ci];
+      if (d <= 1) { reachedCoast = true; break; }
+      const next = HEX.neighbors(current.c, current.r)
+        .map(([c, r]) => (c < 0 || r < 0 || c >= map.w || r >= map.h) ? null : map.tiles[map.idx(c, r)])
+        .filter(t => t && isLand(t) && canonical(t) && distance[map.idx(t.c, t.r)] < d)
+        .sort((a, b) => {
+          const ai = map.idx(a.c, a.r), bi = map.idx(b.c, b.r);
+          const as = distance[ai] * 100 + (riverTiles.has(ai) ? -1000 : 0) +
+            (a.terrain === "HILLS" ? 8 : 0) + riverJitter(seed, a.c, a.r) * 30;
+          const bs = distance[bi] * 100 + (riverTiles.has(bi) ? -1000 : 0) +
+            (b.terrain === "HILLS" ? 8 : 0) + riverJitter(seed, b.c, b.r) * 30;
+          return as - bs || a.r - b.r || a.c - b.c;
+        })[0];
+      current = next || null;
+    }
+    if (!reachedCoast && !joined) continue;
+    for (const i of path) {
+      riverTiles.add(i);
+      map.tiles[i].river = true;
+    }
+    sources++;
+  }
+
+  if (mirror) {
+    for (const t of map.tiles) {
+      const mc = mirrorColumn(map.w, t.c, t.r);
+      if (mc < 0 || mc >= map.w) t.river = false;
+      else if (t.c > mc) t.river = !!map.tiles[map.idx(mc, t.r)].river;
+    }
+  }
+}
+
 function generateMap(w, h, seed, mapType = "peninsula") {
   const rng = mulberry32(seed);
   const arch = mapType === "archipelago";
@@ -75,6 +188,7 @@ function generateMap(w, h, seed, mapType = "peninsula") {
         c, r, terrain, feature, resource: null, ruin: false,
         improvement: null,           // FARM / MINE
         road: false,                 // roads coexist with productive improvements
+        river: false,                // generated fresh-water corridor
         owner: -1, city: null,       // city object occupying this tile
         workedBy: null,              // city id working this tile
       };
@@ -145,34 +259,38 @@ function generateMap(w, h, seed, mapType = "peninsula") {
     if (TERRAIN[t.terrain].passable && !t.resource && rng() < 0.015) t.ruin = true;
   }
 
-  // Mirror worlds: the right half reflects the left, for fair multiplayer
+  const map = { w, h, tiles, idx, seed };
+
+  // Mirror worlds: the right half reflects the left, for fair multiplayer.
+  // Odd rows need a one-column correction to preserve hex adjacency.
   if (mapType === "mirror") {
     for (let r = 0; r < h; r++) {
-      for (let c = Math.ceil(w / 2); c < w; c++) {
-        const s = tiles[idx(w - 1 - c, r)];
+      for (let c = 0; c < w; c++) {
+        const mc = mirrorColumn(w, c, r);
         const t = tiles[idx(c, r)];
+        if (mc < 0 || mc >= w) {
+          t.terrain = "OCEAN";
+          t.feature = null;
+          t.resource = null;
+          t.ruin = false;
+          continue;
+        }
+        if (c <= mc) continue;
+        const s = tiles[idx(mc, r)];
         t.terrain = s.terrain === "COAST" ? "OCEAN" : s.terrain;
         t.feature = s.feature;
         t.resource = s.resource;
         t.ruin = s.ruin;
       }
     }
-    // recompute coast across the seam
-    for (const t of tiles) if (t.terrain === "COAST") t.terrain = "OCEAN";
-    for (let r = 0; r < h; r++) {
-      for (let c = 0; c < w; c++) {
-        const t = tiles[idx(c, r)];
-        if (t.terrain !== "OCEAN") continue;
-        for (const [nc, nr] of HEX.neighbors(c, r)) {
-          if (nc < 0 || nr < 0 || nc >= w || nr >= h) continue;
-          const n = tiles[idx(nc, nr)];
-          if (n.terrain !== "OCEAN" && n.terrain !== "COAST") { t.terrain = "COAST"; break; }
-        }
-      }
+    recomputeCoasts(map);
+    for (const t of tiles) {
+      if (t.resource && !RESOURCE[t.resource].terrains.includes(t.terrain)) t.resource = null;
     }
   }
 
-  return { w, h, tiles, idx, seed };
+  generateRivers(map, seed, mapType);
+  return map;
 }
 
 // Score a tile as a city site (used for start positions and AI settling)
@@ -185,6 +303,7 @@ function siteScore(map, c, r) {
     const n = map.tiles[map.idx(nc, nr)];
     const terr = TERRAIN[n.terrain];
     let y = terr.food * 1.4 + terr.prod + terr.gold * 0.6;
+    if (n.river) y += RIVERS.tileGold * 0.6;
     if (n.feature) y += FEATURE[n.feature].prod;
     if (n.resource) { const rs = RESOURCE[n.resource]; y += rs.food * 1.4 + rs.prod + rs.gold * 0.6 + 2; }
     if (n.terrain === "COAST") coastal = true;
@@ -193,6 +312,7 @@ function siteScore(map, c, r) {
   }
   if (coastal) score += 3;
   if (t.terrain === "HILLS") score += 2; // defensible
+  if (t.river) score += RIVERS.cityFood * 1.4;
   return score;
 }
 

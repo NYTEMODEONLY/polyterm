@@ -445,6 +445,16 @@ const INFRASTRUCTURE = {
   populationPerGold: 2,
 };
 
+// River corridors are permanent terrain. They enrich worked tiles and make
+// fresh-water city sites stronger without blocking improvements or roads.
+const RIVERS = {
+  tileGold: 1,
+  cityFood: 1,
+  tilesPerSource: 130,
+  minLength: 3,
+  sourceSpacing: 5,
+};
+
 // ------------------------------------------------------------
 // Great People
 // ------------------------------------------------------------

@@ -200,7 +200,8 @@ class Game {
       this.map = { w: cm.w, h: cm.h, idx: (c, r) => r * cm.w + c, seed: this.seed,
         tiles: cm.tiles.map((t, i) => ({ c: i % cm.w, r: Math.floor(i / cm.w),
           terrain: t.terrain, feature: t.feature || null, resource: t.resource || null,
-          improvement: null, road: false, owner: -1, city: null, workedBy: null })) };
+          improvement: null, road: false, river: !!t.river,
+          owner: -1, city: null, workedBy: null })) };
     } else {
       this.map = generateMap(opts.mapW || GAME_DEFAULTS.mapW, opts.mapH || GAME_DEFAULTS.mapH, this.seed, this.mapType);
     }
@@ -1758,6 +1759,7 @@ class Game {
       const imp = IMPROVEMENT[t.improvement];
       food += imp.food || 0; prod += imp.prod || 0; gold += imp.gold || 0;
     }
+    if (t.river) gold += RIVERS.tileGold;
     return { food, prod, gold };
   }
 
@@ -1767,6 +1769,7 @@ class Game {
     // centre tile minimum yield
     const centre = this.tileYield(this.tile(city.c, city.r));
     let food = Math.max(2, centre.food), prod = Math.max(2, centre.prod), gold = Math.max(1, centre.gold);
+    if (this.tile(city.c, city.r).river) food += RIVERS.cityFood;
     for (const t of this.workedTiles(city)) {
       const y = this.tileYield(t);
       food += y.food; prod += y.prod; gold += y.gold;
@@ -3318,7 +3321,7 @@ class Game {
   // ---------- save / load ----------
   serialize() {
     return JSON.stringify({
-      v: 3, turn: this.turn, seed: this.seed,
+      v: 4, turn: this.turn, seed: this.seed,
       rngState: typeof this.rng.getState === "function" ? this.rng.getState() : null,
       mapType: this.mapType,
       difficulty: this.difficulty, humans: this.humans, activeHuman: this.activeHuman,
@@ -3331,7 +3334,7 @@ class Game {
       religions: this.religions, stats: this.stats,
       map: { w: this.map.w, h: this.map.h, tiles: this.map.tiles.map(t => ({
         c: t.c, r: t.r, terrain: t.terrain, feature: t.feature, resource: t.resource,
-        improvement: t.improvement, road: !!t.road, ruin: t.ruin || false,
+        improvement: t.improvement, road: !!t.road, river: !!t.river, ruin: t.ruin || false,
         owner: t.owner, cityId: t.city ? t.city.id : null })) },
       players: this.players.map(p => ({
         index: p.index, civId: p.civId, isHuman: p.isHuman, alive: p.alive,
@@ -3399,7 +3402,7 @@ class Game {
       const legacyRoad = td.improvement === "ROAD";
       g.map.tiles.push({ c: td.c, r: td.r, terrain: td.terrain, feature: td.feature,
         resource: td.resource, improvement: legacyRoad ? null : (td.improvement ?? null),
-        road: !!td.road || legacyRoad, ruin: td.ruin || false,
+        road: !!td.road || legacyRoad, river: !!td.river, ruin: td.ruin || false,
         owner: td.owner, city: null, workedBy: null, _cityId: td.cityId });
     }
     g.cities = d.cities.map(cd => Object.assign(new City(cd.name, cd.owner, cd.c, cd.r), cd));

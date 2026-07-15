@@ -32,6 +32,14 @@ function loadCityRenderContext() {
   return context;
 }
 
+function loadRiverRenderContext() {
+  const context = vm.createContext({ console, Math, Date, Uint8Array, Set, Map, JSON });
+  for (const file of ["data.js", "hex.js", "riverart.js", "vendor/three.min.js", "render.js", "render3d.js"]) {
+    vm.runInContext(fs.readFileSync(path.join(gameRoot, "js", file), "utf8"), context, { filename: file });
+  }
+  return context;
+}
+
 function evaluate(context, source) {
   return vm.runInContext(`(() => { ${source} })()`, context);
 }
@@ -68,7 +76,8 @@ const controlledWorldSource = `
     g._hap = {}; g._aiLandmassMap = null;
     for (const tile of g.map.tiles) {
       tile.terrain = "PLAINS"; tile.feature = null; tile.resource = null;
-      tile.improvement = null; tile.road = false; tile.owner = -1; tile.city = null; tile.workedBy = null;
+      tile.improvement = null; tile.road = false; tile.river = false;
+      tile.owner = -1; tile.city = null; tile.workedBy = null;
     }
     for (const p of g.players) {
       p.atWarWith.clear(); p.pacts.clear(); p.met.clear();
@@ -693,6 +702,174 @@ test("city visual profiles produce deterministic 2D operations and valid 3D geom
   assert.equal(result.combined.draw, result.combined.repeat);
   assert.equal(result.combined.model.invalid, 0);
   assert.ok(result.combined.model.meshes > result.eras.at(-1).model.meshes);
+});
+
+test("seeded rivers reach the coast deterministically and mirror the real hex graph", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    const audit = (type, seed) => {
+      const first = generateMap(44, 34, seed, type);
+      const second = generateMap(44, 34, seed, type);
+      const signature = map => map.tiles.filter(t => t.river).map(t => t.c + "," + t.r).join("|");
+      const riverTiles = first.tiles.filter(t => t.river);
+      const reachesCoast = start => {
+        const seen = new Set(), stack = [start];
+        while (stack.length) {
+          const t = stack.pop(), key = t.c + "," + t.r;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          for (const [c, r] of HEX.neighbors(t.c, t.r)) {
+            const n = c < 0 || r < 0 || c >= first.w || r >= first.h ? null : first.tiles[first.idx(c, r)];
+            if (n && (n.terrain === "OCEAN" || n.terrain === "COAST")) return true;
+            if (n && n.river && !seen.has(c + "," + r)) stack.push(n);
+          }
+        }
+        return false;
+      };
+      let reflected = true, fields = true;
+      if (type === "mirror") {
+        for (const t of first.tiles) {
+          const mc = mirrorColumn(first.w, t.c, t.r);
+          if (mc < 0 || mc >= first.w) {
+            if (TERRAIN[t.terrain].passable || t.river) reflected = false;
+            continue;
+          }
+          const n = first.tiles[first.idx(mc, t.r)];
+          if (!!t.river !== !!n.river) reflected = false;
+          if (t.terrain !== n.terrain || t.feature !== n.feature || t.resource !== n.resource ||
+              !!t.ruin !== !!n.ruin) fields = false;
+        }
+      }
+      const mouths = riverTiles.filter(t => HEX.neighbors(t.c, t.r).some(([c, r]) => {
+        const n = c < 0 || r < 0 || c >= first.w || r >= first.h ? null : first.tiles[first.idx(c, r)];
+        return n && (n.terrain === "OCEAN" || n.terrain === "COAST");
+      })).length;
+      return { type, deterministic: signature(first) === signature(second), rivers: riverTiles.length,
+        mouths, allReachCoast: riverTiles.every(reachesCoast), reflected, fields,
+        validResources: first.tiles.every(t => !t.resource || RESOURCE[t.resource].terrains.includes(t.terrain)) };
+    };
+    return JSON.stringify([audit("peninsula", 65007), audit("archipelago", 65008), audit("mirror", 65009)]);
+  `));
+
+  for (const audit of result) {
+    assert.equal(audit.deterministic, true, audit.type + " river layout changed for the same seed");
+    assert.ok(audit.rivers >= 3, audit.type + " should generate a visible river system");
+    assert.ok(audit.mouths >= 1, audit.type + " rivers need at least one mouth");
+    assert.equal(audit.allReachCoast, true, audit.type + " contains a landlocked river component");
+    assert.equal(audit.validResources, true, audit.type + " contains a resource on invalid terrain");
+  }
+  assert.deepEqual({ reflected: result[2].reflected, fields: result[2].fields },
+    { reflected: true, fields: true });
+});
+
+test("river corridors affect yields and survive saves and custom-map loading", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    ${controlledWorldSource}
+    const g = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 65010,
+      mapW: 24, mapH: 18, mapType: "peninsula", noMinors: true, noBarbs: true });
+    resetWorld(g);
+    const worked = g.tile(6, 8);
+    const dryTile = g.tileYield(worked);
+    worked.river = true;
+    const wetTile = g.tileYield(worked);
+
+    const city = addCity(g, 0, 4, 8, "Belgrade", true);
+    city.pop = 1;
+    const dryCity = g.cityYields(city);
+    g.tile(city.c, city.r).river = true;
+    const wetCity = g.cityYields(city);
+
+    const site = g.tile(12, 8);
+    const dryScore = siteScore(g.map, site.c, site.r);
+    site.river = true;
+    const wetScore = siteScore(g.map, site.c, site.r);
+
+    const restored = Game.deserialize(g.serialize());
+    const legacy = JSON.parse(g.serialize());
+    const legacyTile = legacy.map.tiles.find(t => t.c === worked.c && t.r === worked.r);
+    delete legacyTile.river;
+    legacy.v = 3;
+    const migrated = Game.deserialize(JSON.stringify(legacy));
+
+    const customTiles = Array.from({ length: 20 * 16 }, (_, i) => ({
+      terrain: "PLAINS", feature: null, resource: null, river: i === 5 * 20 + 5,
+    }));
+    const custom = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 65011,
+      mapType: "custom", customMap: { w: 20, h: 16, tiles: customTiles },
+      noMinors: true, noBarbs: true });
+    return JSON.stringify({ dryTile, wetTile, dryCity, wetCity, dryScore, wetScore,
+      restored: restored.tile(worked.c, worked.r).river,
+      migrated: migrated.tile(worked.c, worked.r).river,
+      custom: custom.tile(5, 5).river });
+  `));
+
+  assert.deepEqual(result.dryTile, { food: 1, prod: 1, gold: 0 });
+  assert.deepEqual(result.wetTile, { food: 1, prod: 1, gold: 1 });
+  assert.equal(result.wetCity.food, result.dryCity.food + 1);
+  assert.equal(result.wetScore > result.dryScore, true);
+  assert.deepEqual({ restored: result.restored, migrated: result.migrated, custom: result.custom },
+    { restored: true, migrated: false, custom: true });
+});
+
+test("shared river art is fog-safe and produces deterministic 2D and 3D paths", () => {
+  const result = JSON.parse(evaluate(loadRiverRenderContext(), `
+    const w = 4, h = 3;
+    const tiles = [];
+    for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) tiles.push({
+      c, r, terrain: "PLAINS", feature: null, resource: null,
+      improvement: null, road: false, river: false, owner: -1, city: null,
+    });
+    const map = { w, h, tiles, idx: (c, r) => r * w + c };
+    const visible = new Uint8Array(w * h).fill(2);
+    const game = { map, viewer: 0, players: [{ visible }],
+      tile: (c, r) => c < 0 || r < 0 || c >= w || r >= h ? null : tiles[map.idx(c, r)] };
+    const centre = game.tile(1, 1);
+    centre.river = true;
+    const connected = game.tile(2, 1);
+    connected.river = true;
+    const mouth = game.tile(2, 0);
+    mouth.terrain = "COAST";
+    visible[map.idx(mouth.c, mouth.r)] = 0;
+
+    const makeContext = () => ({ ops: [], save() {}, restore() {}, beginPath() {}, stroke() { this.ops.push("stroke"); },
+      moveTo(x, y) { this.ops.push("M" + x.toFixed(2) + "," + y.toFixed(2)); },
+      quadraticCurveTo(cx, cy, x, y) { this.ops.push("Q" + [cx, cy, x, y].map(v => v.toFixed(2)).join(",")); } });
+    const canvasRenderer = Object.create(Renderer.prototype);
+    canvasRenderer.worldToScreen = (c, r) => HEX.toPixel(c, r, 34);
+    const [sx, sy] = canvasRenderer.worldToScreen(centre.c, centre.r);
+    const hiddenBranches = RIVER_ART.branches(game, centre);
+    const hiddenCtx = makeContext();
+    canvasRenderer.drawRiver(hiddenCtx, game, centre, sx, sy, 34, 2);
+    visible[map.idx(mouth.c, mouth.r)] = 2;
+    const revealedBranches = RIVER_ART.branches(game, centre);
+    const firstCtx = makeContext(), secondCtx = makeContext();
+    canvasRenderer.drawRiver(firstCtx, game, centre, sx, sy, 34, 2);
+    canvasRenderer.drawRiver(secondCtx, game, centre, sx, sy, 34, 2);
+
+    const renderer3d = Object.create(Renderer3D.prototype);
+    renderer3d.hexSize = 34;
+    renderer3d.gImprov = new THREE.Group();
+    renderer3d._rebuildImprovements(game);
+    const riverPos = renderer3d.gImprov.children[0].geometry.getAttribute("position");
+    const riverY = Array.from(riverPos.array).filter((_, i) => i % 3 === 1);
+    centre.road = true;
+    renderer3d._rebuildImprovements(game);
+    const bridgePos = renderer3d.gImprov.children[0].geometry.getAttribute("position");
+    const bridgeY = Array.from(bridgePos.array).filter((_, i) => i % 3 === 1);
+    return JSON.stringify({ branches: [hiddenBranches.length, revealedBranches.length],
+      hiddenOps: hiddenCtx.ops, draw: firstCtx.ops.join("|"), repeat: secondCtx.ops.join("|"),
+      riverVertices: riverPos.count, bridgeVertices: bridgePos.count,
+      finite: [...riverPos.array, ...bridgePos.array].every(Number.isFinite),
+      riverMaxY: Math.max(...riverY), bridgeMaxY: Math.max(...bridgeY) });
+  `));
+
+  assert.deepEqual(result.branches, [1, 2]);
+  assert.equal(result.hiddenOps.filter(op => op[0] === "Q").length, 3,
+    "an unseen mouth must not add a river branch");
+  assert.equal(result.draw, result.repeat);
+  assert.ok(result.riverVertices > 0);
+  assert.ok(result.bridgeVertices > result.riverVertices);
+  assert.equal(result.finite, true);
+  assert.ok(result.bridgeMaxY > result.riverMaxY, "road geometry must sit above river water");
 });
 
 test("Amphibious Assault enables forecasted shore attacks with a controlled penalty", () => {
@@ -1909,7 +2086,7 @@ test("save round-trips preserve the exact deterministic future", () => {
     });
   `));
 
-  assert.equal(result.version, 3);
+  assert.equal(result.version, 4);
   assert.ok(Number.isInteger(result.rngState));
   assert.equal(result.stats.routes, 3);
   assert.equal(result.exact, true);

@@ -433,6 +433,7 @@ const UI = (() => {
     value *= tiles.length / surveyed.length;
     if (coastal) value += 3;
     if (game.tile(c, r).terrain === "HILLS") value += 2;
+    if (game.tile(c, r).river) value += RIVERS.cityFood * 1.4;
     return { score: Math.round(value), coverage: Math.round(surveyed.length / tiles.length * 100) };
   }
 
@@ -2206,6 +2207,8 @@ const UI = (() => {
       html: `<p>Build a Caravan and send it from one of your cities to a peaceful city within ${TRADE.maxDist} hexes. A route lasts ${TRADE.duration} turns and earns more gold over longer distances, with a bonus for foreign trade.</p><p class="dim">Hostile units can plunder the route path for ${TRADE.plunderGold} gold. A blockade at either endpoint suspends its income without destroying it.</p>` });
     E.push({ cat: "Mechanics", name: "Road Networks", icon: "🛤️", tags: "road capital connection infrastructure worker movement gold",
       html: `<p>Roads coexist with Farms and Mines and reduce movement through their hex to one. A continuous road corridor through owned or neutral land connects another city to your capital.</p><p>Each connected city earns <b>${INFRASTRUCTURE.connectionBaseGold} base gold plus 1 gold per ${INFRASTRUCTURE.populationPerGold} population</b> every turn. Connected segments are drawn in ochre; disconnected roads remain brown. A foreign border severs the link even when the road remains.</p>` });
+    E.push({ cat: "Mechanics", name: "River Corridors", icon: "💧", tags: "river fresh water city settlement tile yield gold food map",
+      html: `<p>Seeded rivers descend from inland highlands, may merge into tributaries, and always reach the coast. A river tile earns <b>+${RIVERS.tileGold} gold</b> when worked, while a city founded directly on a river gains <b>+${RIVERS.cityFood} food</b> every turn.</p><p class="dim">Farms, Mines, and Roads can coexist with a river. Roads are drawn above the water as bridges. The map editor can paint or clear river corridors on any passable land tile.</p>` });
     E.push({ cat: "Mechanics", name: "City Development", icon: "🏙️", tags: "city skyline era population walls religion factory wonder architecture",
       html: `<p>City architecture advances through the <b>${CITY_ART.STAGES.map(stage => stage.name).join(", ")}</b> eras. A denser skyline represents population growth, while Walls and Castles add fortifications, religious buildings add a dome, industrial buildings add factories and chimneys, and a completed wonder adds a gold landmark.</p><p class="dim">A rival city outside current vision uses a redacted settlement silhouette and hides live population, religion, damage, and construction until it is seen again.</p>` });
     E.push({ cat: "Mechanics", name: "Naval Blockades", icon: "⚓", tags: "naval blockade port pressure trade repair coastal gold",
@@ -3047,6 +3050,7 @@ const UI = (() => {
       html += `<br><b class="war">⚔ Click to declare war on ${game.players[warTargetOwner(sel0, c, r)].civ.name}</b>`;
     }
     if (t.resource) html += ` · ${RESOURCE[t.resource].icon} ${RESOURCE[t.resource].name}${RESOURCE[t.resource].luxury ? " (luxury)" : ""}`;
+    if (t.river) html += ` · 💧 River (+${RIVERS.tileGold} gold; river city +${RIVERS.cityFood} food)`;
     if (t.improvement) html += ` · ${IMPROVEMENT[t.improvement].icon} ${IMPROVEMENT[t.improvement].name}`;
     if (t.road) {
       const connected = game.roadNetwork(game.viewer).tiles.has(game.map.idx(c, r));

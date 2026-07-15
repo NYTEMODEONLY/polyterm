@@ -437,7 +437,9 @@ class Renderer3D {
       for (const ch of [...g.children]) {
         g.remove(ch);
         if (ch.geometry) ch.geometry.dispose();
-        if (ch.material && g === this.gYields) ch.material.dispose();
+        if (ch.material && g !== this.gDyn) {
+          for (const material of Array.isArray(ch.material) ? ch.material : [ch.material]) material.dispose();
+        }
       }
     }
     this._units.clear(); this._cities.clear();
@@ -598,7 +600,9 @@ class Renderer3D {
 
   // opaque dark prisms over unexplored tiles
   _rebuildShroud(game) {
-    for (const ch of [...this.gShroud.children]) { this.gShroud.remove(ch); ch.geometry.dispose(); }
+    for (const ch of [...this.gShroud.children]) {
+      this.gShroud.remove(ch); ch.geometry.dispose(); ch.material.dispose();
+    }
     const vis = game.players[game.viewer].visible;
     const S = this.hexSize;
     const pos = [], col = [];
@@ -620,7 +624,9 @@ class Renderer3D {
   }
 
   _rebuildBorders(game) {
-    for (const ch of [...this.gBorders.children]) { this.gBorders.remove(ch); ch.geometry.dispose(); }
+    for (const ch of [...this.gBorders.children]) {
+      this.gBorders.remove(ch); ch.geometry.dispose(); ch.material.dispose();
+    }
     const vis = game.players[game.viewer].visible;
     const S = this.hexSize;
     const pos = [], col = [];
@@ -655,31 +661,62 @@ class Renderer3D {
   }
 
   _rebuildImprovements(game) {
-    for (const ch of [...this.gImprov.children]) { this.gImprov.remove(ch); ch.geometry.dispose(); }
+    for (const ch of [...this.gImprov.children]) {
+      this.gImprov.remove(ch); ch.geometry.dispose(); ch.material.dispose();
+    }
     const vis = game.players[game.viewer].visible;
     const S = this.hexSize;
     const pos = [], col = [];
     const road = new THREE.Color("#5a3c1e"), connectedRoad = new THREE.Color("#b57d37");
     const farm = new THREE.Color("#f0dc78");
+    const riverBank = new THREE.Color("#173d48"), riverWater = new THREE.Color("#4aaec9");
     const connected = game.roadNetwork ? game.roadNetwork(game.viewer).tiles : new Set();
-    const quad = (x1, z1, x2, z2, w, y, c) => {
-      // strip of width w from (x1,z1) to (x2,z2) at height y
+    const quad = (x1, z1, x2, z2, w, y1, c, y2 = y1) => {
+      // strip of width w from (x1,z1) to (x2,z2), optionally sloped
       let px = -(z2 - z1), pz = x2 - x1;
       const l = Math.hypot(px, pz) || 1;
       px = px / l * w / 2; pz = pz / l * w / 2;
-      this._pushTri(pos, col, [x1 - px, y, z1 - pz], [x2 - px, y, z2 - pz], [x2 + px, y, z2 + pz], c);
-      this._pushTri(pos, col, [x1 - px, y, z1 - pz], [x2 + px, y, z2 + pz], [x1 + px, y, z1 + pz], c);
+      this._pushTri(pos, col, [x1 - px, y1, z1 - pz], [x2 - px, y2, z2 - pz], [x2 + px, y2, z2 + pz], c);
+      this._pushTri(pos, col, [x1 - px, y1, z1 - pz], [x2 + px, y2, z2 + pz], [x1 + px, y1, z1 + pz], c);
+    };
+    const riverStrip = (x1, z1, y1, x2, z2, y2, bend, bank, water) => {
+      const dx = x2 - x1, dz = z2 - z1, len = Math.hypot(dx, dz) || 1;
+      const mx = (x1 + x2) / 2 - dz / len * bend * S;
+      const mz = (z1 + z2) / 2 + dx / len * bend * S;
+      const my = (y1 + y2) / 2;
+      quad(x1, z1, mx, mz, S * 0.23, y1 + 0.008, bank, my + 0.008);
+      quad(mx, mz, x2, z2, S * 0.23, my + 0.008, bank, y2 + 0.008);
+      quad(x1, z1, mx, mz, S * 0.13, y1 + 0.022, water, my + 0.022);
+      quad(mx, mz, x2, z2, S * 0.13, my + 0.022, water, y2 + 0.022);
     };
     for (const t of game.map.tiles) {
-      if (!t.improvement && !t.road) continue;
+      if (!t.improvement && !t.road && !t.river) continue;
       const v = vis[game.map.idx(t.c, t.r)];
       if (v === 0) continue;
       const [wx, wz] = HEX.toPixel(t.c, t.r, S);
       const y = ELEV3D[t.terrain] + 0.3;
+      if (t.river) {
+        const bank = v === 1 ? riverBank.clone().multiplyScalar(0.58) : riverBank;
+        const water = v === 1 ? riverWater.clone().multiplyScalar(0.58) : riverWater;
+        const branches = RIVER_ART.branches(game, t);
+        if (branches.length) {
+          for (const branch of branches) {
+            const n = branch.tile;
+            const [nx, nz] = HEX.toPixel(n.c, n.r, S);
+            const ny = surfY3D(n) + 0.3;
+            riverStrip(wx, wz, y, (wx + nx) / 2, (wz + nz) / 2,
+              (y + ny) / 2, branch.bend, bank, water);
+          }
+        } else {
+          const [dx, dz] = RIVER_ART.stubVector(t);
+          riverStrip(wx - dx * S * 0.24, wz - dz * S * 0.24, y,
+            wx + dx * S * 0.24, wz + dz * S * 0.24, y, 0.05, bank, water);
+        }
+      }
       if (t.road) {
         const base = connected.has(game.map.idx(t.c, t.r)) ? connectedRoad : road;
         const c = v === 1 ? base.clone().multiplyScalar(0.6) : base;
-        const roadY = y + 0.025;
+        const roadY = y + 0.06;
         let any = false;
         for (const [nc, nr] of HEX.neighbors(t.c, t.r)) {
           const n = game.tile(nc, nr);
@@ -1232,8 +1269,8 @@ class Renderer3D {
     let impHash = 0;
     for (let i = 0; i < game.map.tiles.length; i++) {
       const t = game.map.tiles[i];
-      impHash = (impHash * 31 + (t.road ? 1 : 0) +
-        (t.improvement === "FARM" ? 2 : t.improvement === "MINE" ? 3 : 0)) >>> 0;
+      impHash = (impHash * 31 + (t.road ? 1 : 0) + (t.river ? 8 : 0) +
+        (t.improvement === "FARM" ? 2 : t.improvement === "MINE" ? 4 : 0)) >>> 0;
     }
     if (visChanged || ownChanged) {
       this._recolor(game);

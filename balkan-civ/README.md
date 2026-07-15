@@ -97,6 +97,11 @@ events, or AI choices.
   population and advance through five architectural eras. Constructed walls,
   religious landmarks, factories, and world wonders visibly change the map,
   while cities outside current vision use a fog-safe redacted silhouette
+- **Seeded river systems** in both renderers: inland headwaters follow
+  connected corridors to the coast and merge into tributaries. Worked river
+  tiles earn +1 gold, river cities gain +1 food, roads cross above the water as
+  bridges, and mirror worlds reflect the actual hex graph for symmetric terrain
+  and river economies
 - **Strategic tile-yield lens** in both renderers: press `Y` or use the
   wheat control to reveal food, production, and gold directly on every
   currently visible hex. The setting persists between sessions and uses
@@ -123,7 +128,7 @@ events, or AI choices.
 - Procedurally generated hex maps with smooth coastlines, different every
   game — choose a rugged **Peninsula**, an island-dotted **Archipelago**,
   or a **custom map** you painted yourself in the built-in **Map Editor**
-  (terrain, forests, and resources, saved locally)
+  (terrain, rivers, forests, and resources, saved locally)
 - **Hotseat multiplayer**: 2–3 humans share the device — each gets their
   own fog of war, notifications, and a pass-the-device screen between turns
 - **Online multiplayer** (up to 4 humans, each with their own civilization):
@@ -232,6 +237,9 @@ events, or AI choices.
   productive improvements, cut movement cost to 1, and form visible capital
   networks; each linked city earns population-scaled connection gold. AI
   Workers coordinate deterministic intercity corridors before routine tile jobs
+- Permanent river corridors enrich worked tiles and fresh-water city sites;
+  procedural systems are deterministic, coast-connected, save-safe, fog-safe,
+  and paintable in the map editor
 - Strategic resources (horses, iron) gating unit types; luxury resources
   feeding happiness
 - 3–8 AI opponents that scout, settle (across the sea, too), improve their
@@ -302,6 +310,7 @@ js/data.js        civs, units, buildings, techs, terrain tables
 js/cityart.js     shared era, population, and landmark city visuals
 js/sound.js       procedural WebAudio sound effects
 js/hex.js         hex-grid math (odd-r offset, cube distance, pixel transforms)
+js/riverart.js    shared fog-safe river topology for both renderers
 js/mapgen.js      seeded value-noise map generation + start placement
 js/model.js       game engine: cities, units, combat, research, turns, save/load
 js/ai.js          AI: settling, production, research, diplomacy, tactics

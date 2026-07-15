@@ -377,6 +377,43 @@ class Renderer {
     ctx.closePath();
   }
 
+  drawRiver(ctx, game, t, sx, sy, s, v) {
+    const branches = RIVER_ART.branches(game, t);
+    const paths = branches.map(branch => {
+      const [nx, ny] = this.worldToScreen(branch.tile.c, branch.tile.r);
+      const ex = (sx + nx) / 2, ey = (sy + ny) / 2;
+      const dx = ex - sx, dy = ey - sy, len = Math.hypot(dx, dy) || 1;
+      return { x1: sx, y1: sy, x2: ex, y2: ey,
+        cx: (sx + ex) / 2 - dy / len * branch.bend * s,
+        cy: (sy + ey) / 2 + dx / len * branch.bend * s };
+    });
+    if (!paths.length) {
+      const [dx, dy] = RIVER_ART.stubVector(t);
+      paths.push({ x1: sx - dx * s * 0.24, y1: sy - dy * s * 0.24,
+        x2: sx + dx * s * 0.24, y2: sy + dy * s * 0.24,
+        cx: sx - dy * s * 0.05, cy: sy + dx * s * 0.05 });
+    }
+
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (const [width, color] of [
+      [0.22, v === 1 ? "rgba(19,48,55,0.62)" : "rgba(20,57,67,0.92)"],
+      [0.125, v === 1 ? "rgba(46,112,128,0.68)" : "rgba(71,174,202,0.98)"],
+      [0.035, v === 1 ? "rgba(146,188,193,0.3)" : "rgba(197,239,241,0.62)"],
+    ]) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(1, s * width);
+      for (const path of paths) {
+        ctx.beginPath();
+        ctx.moveTo(path.x1, path.y1);
+        ctx.quadraticCurveTo(path.cx, path.cy, path.x2, path.y2);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
   drawTile(ctx, game, t, sx, sy, s, v) {
     const water = t.terrain === "OCEAN" || t.terrain === "COAST";
     // round the corners of land tiles that touch the sea
@@ -472,6 +509,7 @@ class Renderer {
         ctx.closePath(); ctx.fill();
       }
     }
+    if (t.river) this.drawRiver(ctx, game, t, sx, sy, s, v);
     if (t.road) {
       // connect toward neighbouring roads/cities
       const connected = this.connectedRoads.has(game.map.idx(t.c, t.r));

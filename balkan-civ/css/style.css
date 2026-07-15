@@ -229,12 +229,15 @@ button:disabled { opacity: 0.4; cursor: default; }
 /* ---------- map editor ---------- */
 #editor-screen { position: fixed; inset: 0; z-index: 45; display: none; flex-direction: column;
   background: #0d1b2a; }
-#editor-toolbar { height: 60px; display: flex; align-items: center; gap: 8px; padding: 0 12px;
+#editor-toolbar { height: 60px; flex: 0 0 60px; display: grid; align-items: center;
+  grid-template-columns: auto minmax(0, 1fr) repeat(4, auto); gap: 8px; padding: 0 12px;
   background: linear-gradient(#2a2318, #1c1810); border-bottom: 2px solid #8a7648;
-  flex-wrap: wrap; overflow-x: auto; }
-#editor-toolbar .spacer { flex: 1; }
-#editor-palette { display: flex; gap: 4px; flex-wrap: wrap; }
-.pal-btn { padding: 3px 8px; font-size: 12px; }
+  overflow: hidden; }
+#editor-toolbar > b, #editor-toolbar > button { white-space: nowrap; }
+#editor-toolbar .spacer { display: none; }
+#editor-palette { display: flex; min-width: 0; gap: 4px; flex-wrap: nowrap; overflow-x: auto;
+  padding-block: 4px; scrollbar-width: thin; scrollbar-color: #8a7648 #17140f; }
+.pal-btn { flex: 0 0 auto; padding: 3px 8px; font-size: 12px; }
 .pal-btn.sel { background: #86682a; border-color: #f0d890; }
 #editor-canvas { flex: 1; cursor: crosshair; touch-action: none; }
 #editor-minimap-wrap { position: fixed; right: 10px; bottom: 40px; z-index: 46;
@@ -629,6 +632,14 @@ button:disabled { opacity: 0.4; cursor: default; }
   #scenario-cards { display: grid; grid-template-columns: none; grid-auto-flow: column;
     grid-auto-columns: min(86vw, 340px); overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 7px; }
   .scenario-card { scroll-snap-align: center; }
+
+  #editor-toolbar { height: 98px; flex-basis: 98px;
+    grid-template-columns: minmax(112px, 1fr) repeat(4, 36px);
+    grid-template-rows: 38px 48px; gap: 4px; padding: 4px 8px 6px; }
+  #editor-toolbar > b { grid-column: 1; grid-row: 1; }
+  #editor-toolbar > button { grid-row: 1; width: 36px; height: 32px; padding: 3px; font-size: 15px; }
+  #editor-toolbar > button span { display: none; }
+  #editor-palette { grid-column: 1 / -1; grid-row: 2; align-self: stretch; }
 
   .status-strip { gap: 14px; font-size: 12px; }
   .command-bar { overflow-x: auto; }

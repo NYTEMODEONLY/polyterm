@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Balkan Civilizations</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>⚔️</text></svg>">
-<link rel="stylesheet" href="css/style.css?v=21">
+<link rel="stylesheet" href="css/style.css?v=22">
 </head>
 <body>
 
@@ -224,10 +224,10 @@
     <b>🖌️ Map Editor</b>
     <span id="editor-palette"></span>
     <span class="spacer"></span>
-    <button id="ed-random">🎲 Randomize</button>
-    <button id="ed-clear">🌊 All Sea</button>
-    <button id="ed-save">💾 Save &amp; Use</button>
-    <button id="ed-exit">✕ Exit</button>
+    <button id="ed-random" title="Generate a random map">🎲 <span>Randomize</span></button>
+    <button id="ed-clear" title="Clear the map to sea">🌊 <span>All Sea</span></button>
+    <button id="ed-save" title="Save and use this map">💾 <span>Save &amp; Use</span></button>
+    <button id="ed-exit" title="Exit the map editor">✕ <span>Exit</span></button>
   </div>
   <canvas id="editor-canvas"></canvas>
   <div id="editor-minimap-wrap"><canvas id="editor-minimap" width="200" height="150"></canvas></div>
@@ -238,21 +238,22 @@
   <div class="modal-box" id="victory-body"></div>
 </div>
 
-<script src="js/data.js?v=9"></script>
+<script src="js/data.js?v=10"></script>
 <script src="js/cityart.js?v=1"></script>
 <script src="js/sound.js"></script>
 <script src="js/hex.js"></script>
-<script src="js/mapgen.js?v=3"></script>
-<script src="js/model.js?v=14"></script>
+<script src="js/riverart.js?v=1"></script>
+<script src="js/mapgen.js?v=4"></script>
+<script src="js/model.js?v=15"></script>
 <script src="js/ai.js?v=8"></script>
 <script src="js/vendor/three.min.js"></script>
 <script src="js/unitart.js?v=2"></script>
 <script src="js/worldart.js?v=2"></script>
-<script src="js/render.js?v=16"></script>
-<script src="js/render3d.js?v=17"></script>
+<script src="js/render.js?v=17"></script>
+<script src="js/render3d.js?v=18"></script>
 <script src="js/net.js"></script>
-<script src="js/editor.js"></script>
-<script src="js/ui.js?v=22"></script>
+<script src="js/editor.js?v=1"></script>
+<script src="js/ui.js?v=23"></script>
 <script>
   window.addEventListener("DOMContentLoaded", () => UI.init());
 </script>
