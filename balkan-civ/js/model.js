@@ -122,6 +122,8 @@ class Player {
     this.culture = 0;            // stored culture toward the next policy
     this.policies = new Set();   // adopted policy keys
     this.attitude = {};          // other player index -> -100..100
+    this.attitudeReasons = {};   // other player index -> explainable score components
+    this.truces = {};            // other player index -> first turn war is legal again
     this.pacts = new Set();      // defensive-pact partner indexes
     this.deals = [];             // luxury deals: {give, get, other, ends}
     this.quest = null;           // minors: the active quest they offer
@@ -1672,6 +1674,8 @@ class Game {
       p.deals = p.deals.filter(d => d.other !== playerIdx);
       delete p.warWeariness[playerIdx];
       delete p.attitude[playerIdx];
+      delete p.attitudeReasons[playerIdx];
+      delete p.truces[playerIdx];
       delete p.influence[playerIdx];
     }
     retired.atWarWith.clear();
@@ -1679,6 +1683,8 @@ class Game {
     retired.deals = [];
     retired.warWeariness = {};
     retired.attitude = {};
+    retired.attitudeReasons = {};
+    retired.truces = {};
     retired.influence = {};
     for (const tile of this.map.tiles) {
       if (tile.owner !== playerIdx) continue;
@@ -2092,13 +2098,36 @@ class Game {
   }
 
   // ---------- diplomacy ----------
-  declareWar(a, b) {
+  truceTurnsRemaining(a, b) {
     const pa = this.players[a], pb = this.players[b];
-    if (pa.atWarWith.has(b)) return;
+    if (!pa || !pb) return 0;
+    return Math.max(0, Math.max(pa.truces[b] || 0, pb.truces[a] || 0) - this.turn);
+  }
+
+  canDeclareWar(a, b, { ignoreTruce = false } = {}) {
+    const pa = this.players[a], pb = this.players[b];
+    if (!pa || !pb || a === b || !pa.alive || !pb.alive || pa.atWarWith.has(b)) return false;
+    if (!pa.met.has(b) || !pb.met.has(a) || pa.pacts.has(b) || pb.pacts.has(a)) return false;
+    if (!ignoreTruce && this.truceTurnsRemaining(a, b) > 0) return false;
+    return true;
+  }
+
+  declareWar(a, b, { force = false, cause = "aggression" } = {}) {
+    const pa = this.players[a], pb = this.players[b];
+    if (!pa || !pb || a === b || !pa.alive || !pb.alive || pa.atWarWith.has(b)) return false;
+    if (!force && !this.canDeclareWar(a, b)) return false;
+    this.meet(a, b);
+    delete pa.truces[b]; delete pb.truces[a];
     pa.atWarWith.add(b); pb.atWarWith.add(a);
     pa.warWeariness[b] = 0; pb.warWeariness[a] = 0;
     this.notify(`⚔️ ${pa.civ.name} declares war on ${pb.civ.name}!`, -1);
-    this.changeAttitude(a, b, -40); this.changeAttitude(b, a, -40);
+    if (cause === "pact") {
+      this.changeAttitude(a, b, -40, { key: "PACT_WAR", label: "Honouring a defensive pact" });
+      this.changeAttitude(b, a, -40, { key: "ALLY_JOINED", label: "They joined an ally's war" });
+    } else {
+      this.changeAttitude(a, b, -40, { key: "WAR", label: "War against them" });
+      this.changeAttitude(b, a, -40, { key: "DECLARED_ON_US", label: "They declared war on us" });
+    }
     // war dissolves any pact between the two, and cancels their deals
     pa.pacts.delete(b); pb.pacts.delete(a);
     pa.deals = pa.deals.filter(d => d.other !== b);
@@ -2108,31 +2137,36 @@ class Game {
       if (!q.alive || q.isMinor || q.isBarb) continue;
       if (q.index !== a && q.index !== b && q.pacts.has(b) && !q.atWarWith.has(a)) {
         this.notify(`🤝 ${q.civ.name} honours its defensive pact with ${pb.civ.name}!`, -1);
-        this.declareWar(q.index, a);
+        this.declareWar(q.index, a, { force: true, cause: "pact" });
       }
     }
+    return true;
   }
 
   makePeace(a, b) {
     const pa = this.players[a], pb = this.players[b];
-    if (pa.isBarb || pb.isBarb) return; // no peace with the horde
-    if (!pa.atWarWith.has(b)) return;
+    if (!pa || !pb || pa.isBarb || pb.isBarb || !pa.atWarWith.has(b)) return false;
     pa.atWarWith.delete(b); pb.atWarWith.delete(a);
     delete pa.warWeariness[b]; delete pb.warWeariness[a];
+    const truceEnds = this.turn + DIPLO.truceTurns;
+    pa.truces[b] = truceEnds; pb.truces[a] = truceEnds;
     this.peaceOffers = this.peaceOffers.filter(o =>
       !((o.from === a && o.to === b) || (o.from === b && o.to === a)));
     this.notify(`☮️ Peace between ${pa.civ.name} and ${pb.civ.name}.`, -1);
-    this.changeAttitude(a, b, 10); this.changeAttitude(b, a, 10);
+    this.changeAttitude(a, b, 10, { key: "PEACE", label: "Peace treaty" });
+    this.changeAttitude(b, a, 10, { key: "PEACE", label: "Peace treaty" });
+    return true;
   }
 
-  // An AI proposes peace to a human. It doesn't take effect until the player
-  // accepts, so a war can never end without the human's say-so.
+  // A peace proposal to a human waits for an explicit decision, so hotseat and
+  // network wars can never end without the responding player's say-so.
   offerPeace(from, to) {
     const pf = this.players[from], pt = this.players[to];
-    if (!pf || !pt || pf.isBarb || pt.isBarb || !pf.atWarWith.has(to)) return;
-    if (this.peaceOffers.some(o => o.from === from && o.to === to)) return;
+    if (!pf || !pt || pf.isBarb || pt.isBarb || !pf.atWarWith.has(to)) return false;
+    if (this.peaceOffers.some(o => o.from === from && o.to === to)) return false;
     this.peaceOffers.push({ from, to });
     this.notify(`☮️ ${pf.civ.name} proposes peace.`, to);
+    return true;
   }
   pendingPeaceOffers(to) {
     return this.peaceOffers.filter(o => o.to === to &&
@@ -2140,22 +2174,73 @@ class Game {
   }
   acceptPeaceOffer(to, from) {
     if (!this.peaceOffers.some(o => o.from === from && o.to === to)) return false;
-    this.makePeace(from, to); // also prunes the offer
-    return true;
+    return this.makePeace(from, to); // also prunes the offer
   }
   declinePeaceOffer(to, from) {
+    if (!this.peaceOffers.some(o => o.from === from && o.to === to)) return false;
     this.peaceOffers = this.peaceOffers.filter(o => !(o.from === from && o.to === to));
     // spurning peace sours them a little
-    this.changeAttitude(from, to, -4);
+    this.changeAttitude(from, to, -4, { key: "PEACE_REFUSED", label: "Peace offer refused" });
+    return true;
+  }
+
+  peaceAcceptance(from, to) {
+    const requester = this.players[from], responder = this.players[to];
+    if (!requester || !responder || !requester.atWarWith.has(to))
+      return { accepted: false, weary: false, losing: false, humanDecision: false };
+    if (responder.isHuman)
+      return { accepted: false, weary: false, losing: false, humanDecision: true };
+    const weary = (responder.warWeariness[from] || 0) > 12;
+    const losing = this.militaryPower(to) < this.militaryPower(from) * 0.8;
+    return { accepted: weary || losing, weary, losing, humanDecision: false };
   }
 
   // ---------- attitude, deals & pacts ----------
   attitudeOf(a, b) { return Math.round(this.players[a].attitude[b] || 0); }
 
-  changeAttitude(a, b, delta) {
+  _attitudeReasonList(p, b) {
+    if (!p.attitudeReasons) p.attitudeReasons = {};
+    if (!Array.isArray(p.attitudeReasons[b])) p.attitudeReasons[b] = [];
+    const list = p.attitudeReasons[b];
+    const score = p.attitude[b] || 0;
+    const explained = list.reduce((sum, reason) => sum + reason.value, 0);
+    const gap = score - explained;
+    if (Math.abs(gap) > 0.001) {
+      list.push({ key: "HISTORY", label: "Prior diplomatic history", value: gap, turn: this.turn });
+    }
+    return list;
+  }
+
+  changeAttitude(a, b, delta, reason = null) {
     const p = this.players[a];
-    if (p.isMinor || p.isBarb) return;
-    p.attitude[b] = Math.max(-100, Math.min(100, (p.attitude[b] || 0) + delta));
+    if (!p || p.isMinor || p.isBarb || !this.players[b]) return 0;
+    const list = this._attitudeReasonList(p, b);
+    const old = p.attitude[b] || 0;
+    const next = Math.max(-100, Math.min(100, old + delta));
+    const applied = next - old;
+    p.attitude[b] = next;
+    if (!applied) return 0;
+    const detail = reason || { key: "HISTORY", label: "Diplomatic history" };
+    const existing = list.find(entry => entry.key === detail.key);
+    if (existing) {
+      existing.value += applied;
+      existing.label = detail.label;
+      existing.turn = this.turn;
+    } else {
+      list.push({ key: detail.key, label: detail.label, value: applied, turn: this.turn });
+    }
+    p.attitudeReasons[b] = list.filter(entry => Math.abs(entry.value) > 0.001);
+    return applied;
+  }
+
+  attitudeBreakdown(a, b) {
+    const p = this.players[a];
+    if (!p) return { value: 0, label: "Neutral", components: [] };
+    const components = this._attitudeReasonList(p, b)
+      .filter(reason => Math.abs(reason.value) >= 0.05)
+      .map(reason => ({ ...reason }))
+      .sort((x, y) => Math.abs(y.value) - Math.abs(x.value) || y.turn - x.turn || x.key.localeCompare(y.key));
+    return { value: this.attitudeOf(a, b), label: this.attitudeLabel(a, b), components };
   }
 
   attitudeLabel(a, b) {
@@ -2177,7 +2262,7 @@ class Game {
 
   canLuxuryDeal(a, b) {
     const pa = this.players[a], pb = this.players[b];
-    if (pa.isMinor || pb.isMinor || pa.isBarb || pb.isBarb) return false;
+    if (!pa || !pb || a === b || pa.isMinor || pb.isMinor || pa.isBarb || pb.isBarb) return false;
     if (!pa.alive || !pb.alive || pa.atWarWith.has(b) || !pa.met.has(b)) return false;
     if (this.activeDealBetween(a, b)) return false;
     return this.tradableLuxes(a, b).length > 0 && this.tradableLuxes(b, a).length > 0;
@@ -2189,26 +2274,34 @@ class Game {
     const ends = this.turn + DIPLO.luxuryDealTurns;
     this.players[a].deals.push({ give, get, other: b, ends });
     this.players[b].deals.push({ give: get, get: give, other: a, ends });
-    this.changeAttitude(a, b, 10); this.changeAttitude(b, a, 10);
+    this.changeAttitude(a, b, 10, { key: "TRADE", label: "Luxury trade" });
+    this.changeAttitude(b, a, 10, { key: "TRADE", label: "Luxury trade" });
     this.dirtyHappiness();
     this.notify(`🤝 ${this.players[a].civ.name} and ${this.players[b].civ.name} trade ` +
       `${RESOURCE[give].name} for ${RESOURCE[get].name} (${DIPLO.luxuryDealTurns} turns).`, -1);
     return true;
   }
 
+  canGiftGold(a, b) {
+    const pa = this.players[a], pb = this.players[b];
+    if (!pa || !pb || a === b || !pa.alive || !pb.alive || pa.isMinor || pb.isMinor || pa.isBarb || pb.isBarb)
+      return false;
+    return pa.gold >= DIPLO.giftGold && pa.met.has(b) && !pa.atWarWith.has(b);
+  }
+
   giftGold(a, b) {
+    if (!this.canGiftGold(a, b)) return false;
     const pa = this.players[a];
-    if (pa.gold < DIPLO.giftGold || pa.atWarWith.has(b)) return false;
     pa.gold -= DIPLO.giftGold;
     this.players[b].gold += DIPLO.giftGold;
-    this.changeAttitude(b, a, DIPLO.giftAttitude);
+    this.changeAttitude(b, a, DIPLO.giftAttitude, { key: "GIFT", label: "Gold gifts" });
     this.notify(`🎁 ${pa.civ.name} sends ${DIPLO.giftGold} gold to ${this.players[b].civ.name}.`, -1);
     return true;
   }
 
   canPact(a, b) {
     const pa = this.players[a], pb = this.players[b];
-    if (pa.isMinor || pb.isMinor || pa.isBarb || pb.isBarb) return false;
+    if (!pa || !pb || a === b || pa.isMinor || pb.isMinor || pa.isBarb || pb.isBarb) return false;
     if (!pa.alive || !pb.alive || pa.atWarWith.has(b) || !pa.met.has(b)) return false;
     if (pa.pacts.has(b)) return false;
     return this.attitudeOf(a, b) >= DIPLO.pactThreshold && this.attitudeOf(b, a) >= DIPLO.pactThreshold;
@@ -2218,7 +2311,8 @@ class Game {
     if (!this.canPact(a, b)) return false;
     this.players[a].pacts.add(b);
     this.players[b].pacts.add(a);
-    this.changeAttitude(a, b, 15); this.changeAttitude(b, a, 15);
+    this.changeAttitude(a, b, 15, { key: "PACT", label: "Defensive pact" });
+    this.changeAttitude(b, a, 15, { key: "PACT", label: "Defensive pact" });
     this.notify(`🛡️ Defensive pact: ${this.players[a].civ.name} and ${this.players[b].civ.name}!`, -1);
     return true;
   }
@@ -2227,10 +2321,18 @@ class Game {
     for (const p of this.players) {
       if (p.isMinor || p.isBarb || !p.alive) continue;
       for (const k of Object.keys(p.attitude)) {
-        const v = p.attitude[k];
-        p.attitude[k] = Math.abs(v) <= DIPLO.attitudeDecay ? 0
-          : v - Math.sign(v) * DIPLO.attitudeDecay;
+        const old = p.attitude[k];
+        const list = this._attitudeReasonList(p, k);
+        const next = Math.abs(old) <= DIPLO.attitudeDecay ? 0
+          : old - Math.sign(old) * DIPLO.attitudeDecay;
+        p.attitude[k] = next;
+        if (!next || !old) p.attitudeReasons[k] = [];
+        else {
+          const scale = next / old;
+          for (const reason of list) reason.value *= scale;
+        }
       }
+      for (const k of Object.keys(p.truces || {})) if (p.truces[k] <= this.turn) delete p.truces[k];
       const before = p.deals.length;
       p.deals = p.deals.filter(d => d.ends > this.turn);
       if (p.deals.length < before) this.dirtyHappiness();
@@ -3372,7 +3474,7 @@ class Game {
   // ---------- save / load ----------
   serialize() {
     return JSON.stringify({
-      v: 4, turn: this.turn, seed: this.seed,
+      v: 5, turn: this.turn, seed: this.seed,
       rngState: typeof this.rng.getState === "function" ? this.rng.getState() : null,
       mapType: this.mapType,
       difficulty: this.difficulty, humans: this.humans, activeHuman: this.activeHuman,
@@ -3397,6 +3499,7 @@ class Game {
         gaMeter: p.gaMeter, goldenAgeTurns: p.goldenAgeTurns, gaCount: p.gaCount,
         spies: p.spies, gpPoints: p.gpPoints, gpBorn: p.gpBorn,
         culture: p.culture, policies: [...p.policies], attitude: p.attitude,
+        attitudeReasons: p.attitudeReasons, truces: p.truces,
         pacts: [...p.pacts], deals: p.deals, quest: p.quest,
         moodTurns: p.moodTurns, moodDelta: p.moodDelta, lastEventTurn: p.lastEventTurn,
         leaderIdx: p.leaderIdx, congressVote: p.congressVote, congressVoteTurn: p.congressVoteTurn,
@@ -3485,6 +3588,8 @@ class Game {
       p.culture = pd.culture || 0;
       p.policies = new Set(pd.policies || []);
       p.attitude = pd.attitude || {};
+      p.attitudeReasons = pd.attitudeReasons || {};
+      p.truces = pd.truces || {};
       p.pacts = new Set(pd.pacts || []);
       p.deals = pd.deals || [];
       p.quest = pd.quest || null;

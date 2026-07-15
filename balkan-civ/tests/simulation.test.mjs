@@ -81,7 +81,7 @@ const controlledWorldSource = `
     }
     for (const p of g.players) {
       p.atWarWith.clear(); p.pacts.clear(); p.met.clear();
-      p.attitude = {}; p.warWeariness = {}; p.deals = [];
+      p.attitude = {}; p.attitudeReasons = {}; p.truces = {}; p.warWeariness = {}; p.deals = [];
     }
   };
   const addCity = (g, owner, c, r, name, capital = false) => {
@@ -170,6 +170,117 @@ test("AI war planning chooses one viable target and will not open a second front
   assert.equal(result.plan.player, 1, "target scoring should beat met-player insertion order");
   assert.ok(result.plan.score > 0);
   assert.deepEqual(result.wars, [1], "an active campaign must block another opportunistic declaration");
+});
+
+test("diplomacy contracts explain attitudes, enforce truces, and preserve human peace decisions", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    ${controlledWorldSource}
+    const g = new Game({ playerCiv: "SERBIA", numOpponents: 2, numHumans: 2, seed: 61101,
+      mapW: 24, mapH: 18, mapType: "peninsula", noMinors: true, noBarbs: true });
+    resetWorld(g);
+    addCity(g, 0, 4, 8, "Home", true);
+    addCity(g, 1, 10, 8, "Rival", true);
+    addCity(g, 2, 17, 8, "AI Capital", true);
+    addUnit(g, "WARRIOR", 0, 4, 8);
+    addUnit(g, "WARRIOR", 1, 10, 8);
+    addUnit(g, "WARRIOR", 2, 17, 8);
+    g.players[0].gold = 500; g.players[1].gold = 500;
+
+    const invalid = {
+      self: g.giftGold(0, 0),
+      unmet: g.giftGold(0, 2),
+      gold: g.players[0].gold,
+    };
+    for (const [a, b] of [[0, 1], [0, 2], [1, 2]]) g.meet(a, b);
+    g.tile(5, 8).owner = 0; g.tile(5, 8).resource = "WINE";
+    g.tile(11, 8).owner = 1; g.tile(11, 8).resource = "OLIVES";
+
+    const exchanges = [g.giftGold(0, 1), g.giftGold(1, 0), g.makeLuxuryDeal(0, 1)];
+    const exchangedScores = [g.attitudeOf(0, 1), g.attitudeOf(1, 0)];
+    const pactMade = g.makePact(0, 1);
+    const pact = {
+      made: pactMade,
+      scores: [g.attitudeOf(0, 1), g.attitudeOf(1, 0)],
+      warAllowed: g.canDeclareWar(0, 1),
+    };
+
+    g.players[0].pacts.delete(1); g.players[1].pacts.delete(0);
+    const warDeclared = g.declareWar(0, 1);
+    const ourWarView = g.attitudeBreakdown(0, 1);
+    const theirWarView = g.attitudeBreakdown(1, 0);
+    const war = {
+      declared: warDeclared,
+      scores: [g.players[0].attitude[1], g.players[1].attitude[0]],
+      ourReasons: ourWarView.components.map(reason => reason.label),
+      theirReasons: theirWarView.components.map(reason => reason.label),
+      sums: [ourWarView.components.reduce((sum, reason) => sum + reason.value, 0),
+        theirWarView.components.reduce((sum, reason) => sum + reason.value, 0)],
+    };
+
+    const peaceMade = g.makePeace(0, 1);
+    const peace = { made: peaceMade, remaining: g.truceTurnsRemaining(0, 1),
+      warAllowed: g.canDeclareWar(0, 1), redeclared: g.declareWar(0, 1) };
+    g.turn += DIPLO.truceTurns;
+    g.processDiplomacy();
+    const expired = { remaining: g.truceTurnsRemaining(0, 1), warAllowed: g.canDeclareWar(0, 1) };
+
+    g.declareWar(0, 1);
+    const humanDecision = g.peaceAcceptance(0, 1);
+    const offered = g.offerPeace(0, 1);
+    const human = { decision: humanDecision, offered, pending: g.pendingPeaceOffers(1).length,
+      stillAtWar: g.players[0].atWarWith.has(1) };
+
+    const aiWarDeclared = g.declareWar(1, 2);
+    g.players[2].warWeariness[1] = 13;
+    const ai = { declared: aiWarDeclared, decision: g.peaceAcceptance(1, 2) };
+
+    g.makePeace(0, 1);
+    const savedBreakdown = g.attitudeBreakdown(1, 0);
+    const saveData = JSON.parse(g.serialize());
+    const restored = Game.deserialize(JSON.stringify(saveData));
+    const roundTrip = {
+      version: saveData.v,
+      remaining: restored.truceTurnsRemaining(0, 1),
+      sameBreakdown: JSON.stringify(restored.attitudeBreakdown(1, 0)) === JSON.stringify(savedBreakdown),
+    };
+
+    const legacyData = JSON.parse(JSON.stringify(saveData));
+    legacyData.v = 4;
+    for (const player of legacyData.players) {
+      delete player.attitudeReasons;
+      delete player.truces;
+    }
+    const legacy = Game.deserialize(JSON.stringify(legacyData));
+    const legacyBreakdown = legacy.attitudeBreakdown(1, 0);
+    return JSON.stringify({ invalid, exchanges, exchangedScores, pact, war, peace, expired, human, ai,
+      roundTrip, legacy: { remaining: legacy.truceTurnsRemaining(0, 1), value: legacyBreakdown.value,
+        reasons: legacyBreakdown.components.map(reason => reason.label),
+        explained: legacyBreakdown.components.reduce((sum, reason) => sum + reason.value, 0),
+        raw: legacy.players[1].attitude[0] } });
+  `));
+
+  assert.deepEqual(result.invalid, { self: false, unmet: false, gold: 500 });
+  assert.deepEqual(result.exchanges, [true, true, true]);
+  assert.deepEqual(result.exchangedScores, [25, 25]);
+  assert.deepEqual(result.pact, { made: true, scores: [40, 40], warAllowed: false });
+  assert.equal(result.war.declared, true);
+  assert.deepEqual(result.war.scores, [0, 0]);
+  assert.ok(result.war.ourReasons.includes("War against them"));
+  assert.ok(result.war.theirReasons.includes("They declared war on us"));
+  assert.deepEqual(result.war.sums, [0, 0], "every attitude component must reconcile to the score");
+  assert.deepEqual(result.peace, { made: true, remaining: 15, warAllowed: false, redeclared: false });
+  assert.deepEqual(result.expired, { remaining: 0, warAllowed: true });
+  assert.deepEqual(result.human, {
+    decision: { accepted: false, weary: false, losing: false, humanDecision: true },
+    offered: true, pending: 1, stillAtWar: true,
+  });
+  assert.equal(result.ai.declared, true);
+  assert.deepEqual(result.ai.decision,
+    { accepted: true, weary: true, losing: false, humanDecision: false });
+  assert.deepEqual(result.roundTrip, { version: 5, remaining: 15, sameBreakdown: true });
+  assert.equal(result.legacy.remaining, 0);
+  assert.ok(result.legacy.reasons.includes("Prior diplomatic history"));
+  assert.equal(result.legacy.explained, result.legacy.raw);
 });
 
 test("AI production plans support arms, reserves, and only one expansion unit", () => {
@@ -2202,7 +2313,7 @@ test("save round-trips preserve the exact deterministic future", () => {
     });
   `));
 
-  assert.equal(result.version, 4);
+  assert.equal(result.version, 5);
   assert.ok(Number.isInteger(result.rngState));
   assert.equal(result.stats.routes, 3);
   assert.equal(result.exact, true);

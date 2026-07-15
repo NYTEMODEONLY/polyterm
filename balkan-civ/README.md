@@ -164,8 +164,10 @@ events, or AI choices.
 - **Deeper diplomacy** between major civs: swap surplus **luxuries** for a
   fixed term (both sides gain happiness), send **gold gifts** to warm a
   rival's attitude, and sign **defensive pacts** with friends — if either
-  signatory is attacked, the other joins the war. Every rival tracks an
-  attitude toward you, shown on the diplomacy screen
+  signatory is attacked, the other joins the war. The diplomacy screen shows
+  each side's exact attitude ledger, active agreements, war state, and
+  peace-treaty truce. AI leaders respect those truces, while hotseat and
+  network peace proposals always wait for the responding player's decision
 - **Role-aware unit promotions**: every veteran can specialize in attack,
   defense, or field medicine; land troops add Pathfinder and Amphibious
   Assault options, while fleets unlock Boarding Parties, Bombardment, and

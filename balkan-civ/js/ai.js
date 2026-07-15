@@ -161,7 +161,7 @@ const AI = (() => {
 
   function warTargetPlan(game, p, other) {
     if (!other || !other.alive || other.isBarb || other.index === p.index ||
-        p.atWarWith.has(other.index) || p.pacts.has(other.index)) return null;
+        !game.canDeclareWar(p.index, other.index)) return null;
     const focus = victoryFocus(p);
     if (other.isMinor && focus !== "domination") return null;
     const ours = game.cities.filter(c => c.owner === p.index);

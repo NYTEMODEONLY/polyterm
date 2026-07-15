@@ -495,7 +495,7 @@ const UI = (() => {
     if (owner < 0 || owner === game.viewer) return -1;
     const op = game.players[owner];
     // barbarians are already at war; skip our own pact partners and unmet powers
-    if (!op || op.isBarb || p.atWarWith.has(owner) || p.pacts.has(owner) || !p.met.has(owner)) return -1;
+    if (!op || op.isBarb || !game.canDeclareWar(game.viewer, owner)) return -1;
     return owner;
   }
 
@@ -503,8 +503,6 @@ const UI = (() => {
     const owner = warTargetOwner(unit, c, r);
     if (owner < 0) return false;
     const civ = game.players[owner].civ;
-    const pactAllies = [...game.players[game.viewer].pacts].filter(a =>
-      game.players[a] && game.players[a].alive && game.players[a].pacts.has(owner));
     $("war-body").innerHTML = `
       <div class="diplo-row" style="border-left:6px solid ${civ.color}">
         <div>Attack <b>${civ.name}</b> <span class="dim">— ${civ.leader}</span>?</div>
@@ -526,7 +524,7 @@ const UI = (() => {
     const sel = rend.selected;
     const owner = warTargetOwner(sel, c, r);
     if (owner < 0) return;
-    game.declareWar(game.viewer, owner);
+    if (!game.declareWar(game.viewer, owner)) return;
     executePlayerAttack(sel, c, r);
   }
 
@@ -1379,6 +1377,46 @@ const UI = (() => {
   }
 
   // ---------------- diplomacy screen ----------------
+  function attitudeTone(value) {
+    return value >= 10 ? "positive" : value <= -10 ? "negative" : "neutral";
+  }
+
+  function signedAttitude(value, precision = 0) {
+    const rounded = precision ? Math.round(value * 10) / 10 : Math.round(value);
+    return `${rounded >= 0 ? "+" : "−"}${Math.abs(rounded).toFixed(precision)}`;
+  }
+
+  function attitudeMeter(title, breakdown) {
+    const position = Math.max(0, Math.min(100, (breakdown.value + 100) / 2));
+    const tone = attitudeTone(breakdown.value);
+    return `<div class="diplo-attitude">
+      <div><span>${title}</span><b class="${tone}">${breakdown.label} ${signedAttitude(breakdown.value)}</b></div>
+      <span class="diplo-attitude-track" aria-label="${title}: ${breakdown.label} ${signedAttitude(breakdown.value)}">
+        <i class="${tone}" style="left:${position}%"></i>
+      </span>
+    </div>`;
+  }
+
+  function attitudeReasonColumn(title, breakdown) {
+    const rows = breakdown.components.length ? breakdown.components.map(reason => {
+      const precision = Math.abs(reason.value) < 1 ? 1 : 0;
+      return `<div class="diplo-memory-row"><span>${reason.label}</span>
+        <b class="${attitudeTone(reason.value)}">${signedAttitude(reason.value, precision)}</b></div>`;
+    }).join("") : `<div class="diplo-memory-empty">No lasting diplomatic history</div>`;
+    return `<section class="diplo-memory-column"><header><span>${title}</span>
+      <strong class="${attitudeTone(breakdown.value)}">${breakdown.label} ${signedAttitude(breakdown.value)}</strong></header>${rows}</section>`;
+  }
+
+  function relationshipHistory(theirs, ours) {
+    return `<details class="diplo-memory">
+      <summary><span>Relationship history</span><b>They ${signedAttitude(theirs.value)} · You ${signedAttitude(ours.value)}</b></summary>
+      <div class="diplo-memory-grid">
+        ${attitudeReasonColumn("Their reasons", theirs)}
+        ${attitudeReasonColumn("Your reasons", ours)}
+      </div>
+    </details>`;
+  }
+
   function showDiploScreen() {
     const p = game.players[game.viewer];
     const modal = $("diplo-modal");
@@ -1386,37 +1424,56 @@ const UI = (() => {
     const body = $("diplo-body");
     let html = "";
     for (const p2 of game.players) {
-      if (p2.index === game.viewer || p2.isMinor) continue;
+      if (p2.index === game.viewer || p2.isMinor || p2.isBarb) continue;
       const met = p.met.has(p2.index);
       const civ = p2.civ;
-      html += `<div class="diplo-row" style="border-left:6px solid ${met ? civ.color : "#555"}">
-        <div><b>${met ? civ.name : "Unknown Civilization"}</b>
-          ${met ? `<span class="dim"> — ${civ.leader}</span>` : ""}
-          ${!p2.alive ? " <span class='dead'>☠️ destroyed</span>" : ""}</div>`;
+      if (!met || !p2.alive) {
+        html += `<div class="diplo-row" style="border-left:6px solid ${met ? civ.color : "#555"}">
+          <div><b>${met ? civ.name : "Unknown Civilization"}</b>
+            ${met ? `<span class="dim"> — ${civ.leader}</span>` : ""}
+            ${!p2.alive ? " <span class='dead'>☠️ destroyed</span>" : ""}</div></div>`;
+        continue;
+      }
       if (met && p2.alive) {
         const atWar = p.atWarWith.has(p2.index);
-        const att = game.attitudeOf(p2.index, game.viewer);
-        const attColor = att >= 10 ? "#2ecc71" : att <= -10 ? "#e74c3c" : "#aaa";
+        const theirs = game.attitudeBreakdown(p2.index, game.viewer);
+        const ours = game.attitudeBreakdown(game.viewer, p2.index);
         const deal = p.deals.find(d => d.other === p2.index && d.ends > game.turn);
         const pact = p.pacts.has(p2.index);
-        html += `<div class="dim">Score ${game.score(p2.index)} · Military ${Math.floor(game.militaryPower(p2.index))} ·
-          ${atWar ? "<b class='war'>AT WAR</b>" : "at peace"} ·
-          feels <b style="color:${attColor}">${game.attitudeLabel(p2.index, game.viewer)}</b> (${att >= 0 ? "+" : ""}${att})</div>`;
-        if (deal) html += `<div class="dim">🤝 Trading your ${RESOURCE[deal.give].icon}${RESOURCE[deal.give].name} for their ${RESOURCE[deal.get].icon}${RESOURCE[deal.get].name} (until turn ${deal.ends})</div>`;
-        if (pact) html += `<div class="dim">🛡️ Defensive pact — an attack on one is an attack on both</div>`;
-        html += `<button onclick="UI.diploAction(${p2.index})">${atWar ? "☮️ Propose Peace" : "⚔️ Declare War"}</button>`;
+        const truce = game.truceTurnsRemaining(game.viewer, p2.index);
+        const warTurns = p.warWeariness[p2.index] || 0;
+        const canWar = game.canDeclareWar(game.viewer, p2.index);
+        const state = atWar ? `<span class="diplo-state war">At war · ${warTurns}t</span>`
+          : truce ? `<span class="diplo-state truce">Truce · ${truce}t</span>`
+          : pact ? `<span class="diplo-state allied">Defensive pact</span>`
+          : `<span class="diplo-state peace">At peace</span>`;
+        const treaties = [
+          deal ? `<span>🤝 ${RESOURCE[deal.give].icon}${RESOURCE[deal.give].name} for ${RESOURCE[deal.get].icon}${RESOURCE[deal.get].name} · ${deal.ends - game.turn}t</span>` : "",
+          pact ? `<span>🛡️ Mutual defense</span>` : "",
+          truce ? `<span>☮️ War barred until turn ${game.turn + truce}</span>` : "",
+        ].filter(Boolean).join("");
+        html += `<article class="diplo-row diplo-major" style="--civ:${civ.color}">
+          <header class="diplo-header"><i></i><div class="diplo-identity"><b>${civ.name}</b><span>${civ.leader}</span></div>${state}</header>
+          <div class="diplo-stats"><span>Score <b>${game.score(p2.index)}</b></span><span>Military <b>${Math.floor(game.militaryPower(p2.index))}</b></span></div>
+          ${attitudeMeter("Their view of you", theirs)}
+          ${treaties ? `<div class="diplo-treaties">${treaties}</div>` : ""}
+          ${relationshipHistory(theirs, ours)}
+          <div class="diplo-actions">
+            <button ${!atWar && !canWar ? "disabled" : ""}
+              title="${atWar ? "Ask this civilization to end the war" : truce ? `${truce} turns remain in the peace treaty` : pact ? "A defensive pact prevents a declaration" : "Declare war"}"
+              onclick="UI.diploAction(${p2.index})">${atWar ? "☮️ Propose Peace" : truce ? `☮️ Truce (${truce}t)` : "⚔️ Declare War"}</button>`;
         if (!atWar) {
           const canDeal = game.canLuxuryDeal(game.viewer, p2.index);
           const dealHint = canDeal ? `${RESOURCE[game.tradableLuxes(game.viewer, p2.index)[0]].icon} for ${RESOURCE[game.tradableLuxes(p2.index, game.viewer)[0]].icon}` : "";
           html += `<button ${canDeal ? "" : "disabled"} title="Swap surplus luxuries for ${DIPLO.luxuryDealTurns} turns — both sides gain happiness"
               onclick="UI.diploTrade(${p2.index})">🤝 Trade Luxuries ${dealHint}</button>
-            <button ${p.gold >= DIPLO.giftGold ? "" : "disabled"} title="Improves their attitude toward you"
+            <button ${game.canGiftGold(game.viewer, p2.index) ? "" : "disabled"} title="Improves their attitude toward you"
               onclick="UI.diploGift(${p2.index})">🎁 Gift ${DIPLO.giftGold}💰</button>
-            <button ${game.canPact(game.viewer, p2.index) ? "" : "disabled"} title="Both sides must feel Friendly (attitude ${DIPLO.pactThreshold}+). If either is attacked, the other joins the war."
+            <button ${game.canPact(game.viewer, p2.index) ? "" : "disabled"} title="Both views must reach ${DIPLO.pactThreshold}+. Current: they ${signedAttitude(theirs.value)}, you ${signedAttitude(ours.value)}."
               onclick="UI.diploPact(${p2.index})">🛡️ Defensive Pact</button>`;
         }
+        html += `</div></article>`;
       }
-      html += `</div>`;
     }
     const minors = game.players.filter(p2 => p2.isMinor && p.met.has(p2.index));
     if (minors.length) {
@@ -1499,13 +1556,14 @@ const UI = (() => {
     if (!myTurn()) return;
     const p = game.players[game.viewer];
     if (p.atWarWith.has(idx)) {
-      // AI accepts peace if weary or losing
-      const weary = (game.players[idx].warWeariness[0] || 0) > 12;
-      const losing = game.militaryPower(idx) < game.militaryPower(game.viewer) * 0.8;
-      if (weary || losing) game.makePeace(game.viewer, idx);
-      else game.notify(`${game.players[idx].civ.name} refuses to make peace!`);
+      const response = game.peaceAcceptance(game.viewer, idx);
+      if (response.humanDecision) {
+        if (game.offerPeace(game.viewer, idx)) game.notify("Peace proposal sent.", game.viewer);
+      } else if (response.accepted) game.makePeace(game.viewer, idx);
+      else game.notify(`${game.players[idx].civ.name} refuses to make peace!`, game.viewer);
     } else {
-      game.declareWar(game.viewer, idx);
+      if (!game.declareWar(game.viewer, idx))
+        game.notify("War cannot be declared while a pact or peace treaty is active.", game.viewer);
     }
     showDiploScreen();
     refreshAll();

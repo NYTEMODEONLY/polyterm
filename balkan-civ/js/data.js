@@ -742,6 +742,7 @@ const DIPLO = {
   giftAttitude: 15,      // attitude gained by the recipient
   pactThreshold: 25,     // attitude needed for a defensive pact
   attitudeDecay: 0.5,    // per-turn drift toward neutral
+  truceTurns: 15,        // peace treaty blocks a fresh declaration
 };
 
 // ------------------------------------------------------------
