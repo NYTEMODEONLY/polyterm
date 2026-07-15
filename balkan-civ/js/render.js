@@ -43,6 +43,7 @@ class Renderer {
     this.selected = null;        // selected unit
     this.selectedCity = null;
     this.reachable = [];         // [[c,r],...] move highlights
+    this.controlled = [];        // reachable tiles inside visible enemy ZOC
     this.attackable = [];        // [[c,r],...] attack highlights
     this.settlementSites = [];   // surveyed one-turn sites for a selected Settler
     this.hoverTile = null;   // [c, r] under the cursor
@@ -123,6 +124,15 @@ class Renderer {
         ctx.fillStyle = "rgba(255,255,255,0.16)";
         ctx.fill();
       }
+      for (const [c, r] of this.controlled) {
+        const [sx, sy] = this.worldToScreen(c, r);
+        this.hexPath(ctx, sx, sy, s * 0.76);
+        ctx.strokeStyle = "rgba(241,196,15,0.95)";
+        ctx.lineWidth = Math.max(2, s * 0.07);
+        ctx.setLineDash([Math.max(3, s * 0.12), Math.max(2, s * 0.08)]);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
       for (const [c, r] of this.attackable) {
         const [sx, sy] = this.worldToScreen(c, r);
         this.hexPath(ctx, sx, sy, s * 0.92);

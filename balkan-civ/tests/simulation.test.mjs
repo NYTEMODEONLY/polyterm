@@ -605,6 +605,116 @@ test("Amphibious Assault enables forecasted shore attacks with a controlled pena
   assert.ok(result.attackerHp > 0);
 });
 
+test("enemy melee formations halt land movement without leaking hidden controllers", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    ${controlledWorldSource}
+    const g = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 640071,
+      mapW: 24, mapH: 18, mapType: "peninsula", noMinors: true, noBarbs: true });
+    resetWorld(g);
+    for (const tile of g.map.tiles) tile.terrain = "MOUNTAIN";
+    const start = [8, 9], controlled = [9, 10], beyond = [8, 11], enemyPos = [10, 10];
+    for (const [c, r] of [start, controlled, beyond, enemyPos]) g.tile(c, r).terrain = "PLAINS";
+    const mover = addUnit(g, "HORSEMAN", 0, start[0], start[1]);
+    const controller = addUnit(g, "WARRIOR", 1, enemyPos[0], enemyPos[1]);
+    g.players[0].atWarWith.add(1); g.players[1].atWarWith.add(0);
+    const key = ([c, r]) => c + "," + r;
+    const resetMover = () => {
+      mover.c = start[0]; mover.r = start[1]; mover.moves = mover.maxMoves;
+      mover.path = [controlled.slice(), beyond.slice()];
+    };
+
+    g.players[0].visible.fill(0);
+    g.players[0].visible[g.map.idx(controller.c, controller.r)] = 2;
+    const visibleReach = g.reachableTiles(mover).map(key);
+    const visibleControllers = g.knownEnemyZoneOfControl(mover, controlled[0], controlled[1]).length;
+    resetMover(); g.stepAlongPath(mover);
+    const visibleStop = { at: [mover.c, mover.r], moves: mover.moves,
+      remaining: mover.path && mover.path.map(key) };
+
+    resetMover();
+    g.players[0].visible[g.map.idx(controller.c, controller.r)] = 1;
+    const hiddenReach = g.reachableTiles(mover).map(key);
+    const hiddenControllers = g.knownEnemyZoneOfControl(mover, controlled[0], controlled[1]).length;
+    g.stepAlongPath(mover);
+    const hiddenStop = { at: [mover.c, mover.r], moves: mover.moves,
+      remaining: mover.path && mover.path.map(key) };
+
+    resetMover();
+    controller.type = "ARCHER";
+    g.players[0].visible[g.map.idx(controller.c, controller.r)] = 2;
+    const rangedControllers = g.enemyZoneOfControl(mover, controlled[0], controlled[1]).length;
+    g.stepAlongPath(mover);
+    return JSON.stringify({ visibleReach, visibleControllers, visibleStop,
+      hiddenReach, hiddenControllers, hiddenStop, rangedControllers,
+      rangedPass: { at: [mover.c, mover.r], moves: mover.moves, path: mover.path } });
+  `));
+
+  assert.ok(result.visibleReach.includes("9,10"), "a controlled hex remains a legal destination");
+  assert.ok(!result.visibleReach.includes("8,11"), "known control must stop reachability expansion");
+  assert.equal(result.visibleControllers, 1);
+  assert.deepEqual(result.visibleStop, { at: [9, 10], moves: 0, remaining: ["8,11"] });
+  assert.ok(result.hiddenReach.includes("8,11"), "hidden formations must not leak through movement hints");
+  assert.equal(result.hiddenControllers, 0);
+  assert.deepEqual(result.hiddenStop, { at: [9, 10], moves: 0, remaining: ["8,11"] },
+    "revealing a hidden formation on entry must still end movement");
+  assert.equal(result.rangedControllers, 0);
+  assert.deepEqual(result.rangedPass, { at: [8, 11], moves: 2, path: null });
+});
+
+test("land melee flanking is capped, excludes support arms, and survives forecast resolution", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    ${controlledWorldSource}
+    const g = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 640072,
+      mapW: 24, mapH: 18, mapType: "peninsula", noMinors: true, noBarbs: true });
+    resetWorld(g);
+    const target = g.tile(10, 10);
+    const attacker = addUnit(g, "WARRIOR", 0, 11, 10);
+    addUnit(g, "WARRIOR", 1, 10, 10);
+    g.players[0].atWarWith.add(1); g.players[1].atWarWith.add(0);
+    const attackStrength = () => g.strengthOf(attacker,
+      { attacking: true, targetTile: target, ranged: attacker.isRanged });
+    const baseline = attackStrength();
+    const first = addUnit(g, "WARRIOR", 0, 10, 9);
+    const one = attackStrength();
+    const second = addUnit(g, "SPEARMAN", 0, 9, 9);
+    const two = attackStrength();
+    const third = addUnit(g, "SWORDSMAN", 0, 9, 10);
+    const capped = attackStrength();
+
+    third.type = "ARCHER";
+    const rangedSupportBonus = g.flankingBonus(attacker, target);
+    g.players[0].techs.add("SAILING");
+    g.tile(second.c, second.r).terrain = "COAST";
+    const embarkedSupportBonus = g.flankingBonus(attacker, target);
+    g.tile(second.c, second.r).terrain = "PLAINS";
+    attacker.type = "ARCHER";
+    const rangedAttackerBonus = g.flankingBonus(attacker, target);
+    attacker.type = "WARRIOR";
+
+    const forecast = g.predictAttack(attacker, target.c, target.r);
+    g.rng = () => 0.5;
+    const attacked = g.attack(attacker, target.c, target.r);
+    return JSON.stringify({ baseline, one, two, capped, rangedSupportBonus,
+      embarkedSupportBonus, rangedAttackerBonus, forecast, attacked, report: g.lastCombat,
+      supportIds: g.flankingSupport(attacker, target).map(unit => unit.id),
+      expectedIds: [first.id, second.id] });
+  `));
+
+  assert.ok(Math.abs(result.one / result.baseline - 1.1) < 1e-9);
+  assert.ok(Math.abs(result.two / result.baseline - 1.2) < 1e-9);
+  assert.ok(Math.abs(result.capped / result.baseline - 1.2) < 1e-9,
+    "three supporters must not exceed the 20% cap");
+  assert.equal(result.rangedSupportBonus, 0.2);
+  assert.equal(result.embarkedSupportBonus, 0.1);
+  assert.equal(result.rangedAttackerBonus, 0);
+  assert.deepEqual(result.supportIds, result.expectedIds);
+  assert.equal(result.forecast.flankSupport, 2);
+  assert.equal(result.forecast.flankBonus, 0.2);
+  assert.equal(result.attacked, true);
+  assert.equal(result.report.flankSupport, 2);
+  assert.equal(result.report.flankBonus, 0.2);
+});
+
 test("naval promotions affect combat and AI specialization deterministically", () => {
   const result = JSON.parse(evaluate(loadGameContext(), `
     ${controlledWorldSource}
@@ -1051,6 +1161,36 @@ test("the Industrial resistance scenario assigns its leaders and enforces both o
     name === "Karađorđe Petrović" || name === "Selim III"), false,
   "scenario-specific leader additions must not change ordinary seeded AI rosters");
   assert.equal(result.campaignLast, "REVOLUTION_1804");
+});
+
+test("resistance AI holds a defensive formation and survives the reviewed opening", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    const sc = SCENARIOS.REVOLUTION_1804;
+    const g = new Game({ playerCiv: sc.playerCiv, fixedOpponents: sc.opponents,
+      numOpponents: sc.opponents.length, seed: sc.seed, mapType: sc.mapType,
+      difficulty: sc.difficulty, scenario: "REVOLUTION_1804", noMinors: true });
+    AI.takeTurn(g, g.players[0]);
+    const capital = g.cities.find(c => c.owner === 0 && c.isCapital);
+    const formation = g.units.filter(u => u.owner === 0 && !u.isCivilian).map(u => ({
+      distance: HEX.distance(u.c, u.r, capital.c, capital.r), fortified: u.fortified,
+    }));
+    g.endTurn();
+    for (let i = 1; i < 20 && !g.over; i++) {
+      AI.takeTurn(g, g.players[0]);
+      g.endTurn();
+    }
+    return JSON.stringify({ formation, turn: g.turn, over: g.over, winner: g.winner,
+      capitalOwner: capital.owner, capitalHp: capital.hp, kills: g.scenarioKills });
+  `));
+
+  assert.ok(result.formation.every(unit => unit.distance <= 2 && unit.fortified),
+    "the opening army should fortify around Beograd instead of marching away");
+  assert.equal(result.turn, 21);
+  assert.equal(result.over, false);
+  assert.equal(result.winner, null);
+  assert.equal(result.capitalOwner, 0);
+  assert.ok(result.capitalHp > 0);
+  assert.ok(result.kills >= 1, "the defensive posture must still contest the kill objective");
 });
 
 test("combat reports preserve damage accounting and notify human defenders", () => {

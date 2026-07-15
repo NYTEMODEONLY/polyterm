@@ -2,7 +2,7 @@
 // Three.js renderer: extruded hex terrain, sprite units, fog
 // Implements the same interface as the 2D Renderer so ui.js
 // can drive either one: cam {x,y,zoom}, size, selected,
-// selectedCity, reachable, attackable, hoverTile, previewPath,
+// selectedCity, reachable, controlled, attackable, hoverTile, previewPath,
 // dirty, centerOn(), screenToHex(), draw().
 // ============================================================
 "use strict";
@@ -34,6 +34,7 @@ class Renderer3D {
     this.selected = null;
     this.selectedCity = null;
     this.reachable = [];
+    this.controlled = [];
     this.attackable = [];
     this.settlementSites = [];
     this.hoverTile = null;
@@ -87,6 +88,8 @@ class Renderer3D {
       move: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.22, depthWrite: false }),
       atk: new THREE.MeshBasicMaterial({ color: 0xe74c3c, transparent: true, opacity: 0.4, depthWrite: false }),
     };
+    this._matZoc = new THREE.MeshBasicMaterial({ color: 0xf1c40f, transparent: true, opacity: 0.82,
+      side: THREE.DoubleSide, depthWrite: false });
     this._matSite = {};
     for (const [tier, color] of Object.entries({ excellent: 0x8fd18a, good: 0xe0c77d, marginal: 0xa8b1ad })) {
       this._matSite[tier] = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.72,
@@ -97,7 +100,7 @@ class Renderer3D {
     this._matWorked = new THREE.MeshBasicMaterial({ color: 0xf0d890, transparent: true, opacity: 0.62,
       side: THREE.DoubleSide, depthWrite: false });
     this._hexFillGeo = null;   // shared flat hexagon, built with map
-    this._pool = { move: [], atk: [], site: [], worked: [], decor: [], fx: [], routes: [], flash: [], rings: [] };
+    this._pool = { move: [], zoc: [], atk: [], site: [], worked: [], decor: [], fx: [], routes: [], flash: [], rings: [] };
     this._units = new Map();   // unit id -> sprite
     this._cities = new Map();  // city object -> group
     this._builtFor = null;     // map object the static geometry was built for
@@ -435,7 +438,7 @@ class Renderer3D {
       }
     }
     this._units.clear(); this._cities.clear();
-    this._pool = { move: [], atk: [], site: [], worked: [], decor: [], fx: [], routes: [], flash: [], rings: [] };
+    this._pool = { move: [], zoc: [], atk: [], site: [], worked: [], decor: [], fx: [], routes: [], flash: [], rings: [] };
     this._hover = this._selRing = this._citySel = this._preview = null;
     this._visSnap = this._ownSnap = null;
     this._impHash = null;
@@ -890,6 +893,7 @@ class Renderer3D {
     const vis = game.players[game.viewer].visible;
     // move / attack highlights
     this._hidePool(this._pool.move);
+    this._hidePool(this._pool.zoc);
     this._hidePool(this._pool.atk);
     this._hidePool(this._pool.site);
     this._hidePool(this._pool.worked);
@@ -902,6 +906,17 @@ class Renderer3D {
         });
         const [wx, wz] = HEX.toPixel(c, r, S);
         m.position.set(wx, surfY3D(game.tile(c, r)) + 0.5, wz);
+      }
+      for (const [c, r] of this.controlled) {
+        const m = this._getPooled(this._pool.zoc, () => {
+          const mesh = new THREE.Mesh(new THREE.RingGeometry(S * 0.66, S * 0.78, 6, 1, Math.PI / 6),
+            this._matZoc);
+          mesh.rotation.x = -Math.PI / 2;
+          mesh.renderOrder = 3;
+          return mesh;
+        });
+        const [wx, wz] = HEX.toPixel(c, r, S);
+        m.position.set(wx, surfY3D(game.tile(c, r)) + 0.72, wz);
       }
       for (const [c, r] of this.attackable) {
         const m = this._getPooled(this._pool.atk, () => {

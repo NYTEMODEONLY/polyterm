@@ -620,7 +620,7 @@ const AI = (() => {
     const target = campaignTarget(game, p);
     const campaign = { target, overseas: campaignIsOverseas(game, p, target),
       approaches: new Set(), navalApproaches: new Set(), escortAssigned: false,
-      blockaderAssigned: false };
+      blockaderAssigned: false, defenseApproaches: new Set() };
     for (const u of myUnits) {
       if (!game.units.includes(u)) continue; // died mid-loop
       if (u.type === "SETTLER") runSettler(game, p, u);
@@ -1037,6 +1037,11 @@ const AI = (() => {
     if (tryAttack(game, p, u)) return;
 
     if (enemies.length) {
+      // Survival and resistance chapters are positional battles. Keep the
+      // defending army around its objective instead of launching a normal
+      // cross-map city campaign, then intercept formations that enter the
+      // capital's defensive perimeter.
+      if (runScenarioDefense(game, p, u, campaign, enemies)) return;
       // 2. Concentrate the land army on a shared campaign objective. If a
       // unit captures it mid-loop, refresh the objective for the next unit.
       if (campaign && (!campaign.target || !game.cities.includes(campaign.target) ||
@@ -1117,6 +1122,61 @@ const AI = (() => {
         game.moveUnitTo(u, c, r);
       }
     }
+  }
+
+  function runScenarioDefense(game, p, u, campaign, enemies) {
+    const objective = game.scenario && SCENARIOS[game.scenario] && SCENARIOS[game.scenario].victory;
+    if (p.index !== 0 || !objective || !["survive", "resistance"].includes(objective.type)) return false;
+    const home = game.cities.find(c => c.id === p.originalCapitalId && c.owner === p.index) ||
+      game.cities.find(c => c.owner === p.index && c.isCapital);
+    if (!home) return false;
+
+    const threats = game.units.filter(enemy => enemies.includes(enemy.owner) && !enemy.isCivilian &&
+      HEX.distance(enemy.c, enemy.r, home.c, home.r) <= 7).sort((a, b) =>
+      HEX.distance(a.c, a.r, home.c, home.r) - HEX.distance(b.c, b.r, home.c, home.r) ||
+      HEX.distance(u.c, u.r, a.c, a.r) - HEX.distance(u.c, u.r, b.c, b.r) || a.id - b.id);
+    if (threats.length) {
+      const target = threats[0];
+      const targetD = HEX.distance(u.c, u.r, target.c, target.r);
+      if (u.hp < 40 && targetD > 2) { u.fortified = true; return true; }
+      const attackRange = u.isRanged ? u.def.range : 1;
+      const dest = HEX.ring(target.c, target.r, attackRange).filter(([c, r]) =>
+        HEX.distance(c, r, target.c, target.r) === attackRange &&
+        HEX.distance(c, r, home.c, home.r) <= 7).sort((a, b) =>
+        HEX.distance(u.c, u.r, a[0], a[1]) - HEX.distance(u.c, u.r, b[0], b[1]) ||
+        a[1] - b[1] || a[0] - b[0]).find(([c, r]) => {
+          const tile = game.tile(c, r);
+          const occupant = game.combatUnitAt(c, r);
+          return tile && !game.isWater(tile) && game.unitPassable(u, tile) &&
+            (!occupant || occupant.id === u.id) && game.findPath(u, c, r);
+        });
+      if (dest)
+        game.moveUnitTo(u, dest[0], dest[1]);
+      if (!tryAttack(game, p, u)) u.fortified = true;
+      return true;
+    }
+
+    if (HEX.distance(u.c, u.r, home.c, home.r) <= 3) {
+      u.path = null;
+      u.fortified = true;
+      return true;
+    }
+    const radius = u.isRanged ? 2 : 1;
+    const reserved = campaign ? campaign.defenseApproaches : new Set();
+    const positions = HEX.ring(home.c, home.r, radius).sort((a, b) =>
+      HEX.distance(u.c, u.r, a[0], a[1]) - HEX.distance(u.c, u.r, b[0], b[1]) ||
+      a[1] - b[1] || a[0] - b[0]);
+    for (const [c, r] of positions) {
+      const key = c + "," + r;
+      const tile = game.tile(c, r);
+      if (reserved.has(key) || !tile || game.isWater(tile) || !game.unitPassable(u, tile) ||
+          game.combatUnitAt(c, r) || !game.findPath(u, c, r)) continue;
+      reserved.add(key);
+      game.moveUnitTo(u, c, r);
+      return true;
+    }
+    u.fortified = true;
+    return true;
   }
 
   function tryAttack(game, p, u, excludeCity = false) {

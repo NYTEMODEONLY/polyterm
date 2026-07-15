@@ -189,7 +189,10 @@ events, or AI choices.
   besieger every turn, so bring catapults. Select a target for a **combat
   forecast** with damage ranges and a risk verdict before confirming the
   strike; a battle report records the outcome, and attacks suffered during
-  the AI turn appear in the defender's turn recap
+  the AI turn appear in the defender's turn recap. Enemy land melee formations
+  control adjacent ground and end movement on entry; visible controlled hexes
+  are outlined in amber. Surround a land target with up to two additional
+  melee units for a capped **+20% flanking bonus**
 - **Barbarians** (optional toggle): camps seed the wilds and spawn raiders
   that scale with the era; burn a camp for a 40-gold bounty. **Ancient
   ruins** reward explorers with gold, faith, science, veteran experience,

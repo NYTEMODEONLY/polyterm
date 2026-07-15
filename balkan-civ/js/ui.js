@@ -464,10 +464,12 @@ const UI = (() => {
   function refreshSelectionOverlays() {
     const unit = rend.selected;
     if (!unit) {
-      rend.reachable = []; rend.attackable = []; rend.settlementSites = [];
+      rend.reachable = []; rend.controlled = []; rend.attackable = []; rend.settlementSites = [];
       return;
     }
     rend.reachable = game.reachableTiles(unit);
+    rend.controlled = rend.reachable.filter(([c, r]) =>
+      game.knownEnemyZoneOfControl(unit, c, r).length);
     rend.attackable = computeAttackable(unit);
     rend.settlementSites = computeSettlementSites(unit);
   }
@@ -586,6 +588,7 @@ const UI = (() => {
         <span>${forecast.back ? `Take <b>${forecast.back[0]}–${forecast.back[1]}</b>` : "No retaliation"}</span>
         <strong class="${verdictClass}">${verdict}</strong>
       </div>
+      ${forecast.flankBonus ? `<div class="combat-tactic">Formation bonus · ${forecast.flankSupport} supporting unit${forecast.flankSupport === 1 ? "" : "s"} · +${Math.round(forecast.flankBonus * 100)}% strength</div>` : ""}
       <div class="combat-actions"><button class="combat-confirm">⚔ Attack</button><button class="combat-cancel">Cancel</button></div>`;
     panel.style.display = "block";
     panel.querySelector(".combat-close").onclick = hideCombatPreview;
@@ -614,6 +617,7 @@ const UI = (() => {
         <b>dealt ${report.damage}</b>
         ${report.counterDamage ? `<span>· took ${report.counterDamage}</span>` : `<span>· no retaliation</span>`}
       </div>
+      ${report.flankBonus ? `<div class="combat-tactic">Formation bonus · ${report.flankSupport} supporting unit${report.flankSupport === 1 ? "" : "s"} · +${Math.round(report.flankBonus * 100)}% strength</div>` : ""}
       <div class="combat-survivors">
         <span>${report.attackerDestroyed ? "Defeated" : `${report.attackerHpAfter} HP`} · ${report.attackerName}</span>
         <span>${report.targetDestroyed ? "Defeated" : `${report.targetHpAfter} HP`} · <span style="color:${defender.civ.color}">${report.targetName}</span></span>
@@ -639,7 +643,7 @@ const UI = (() => {
   function selectCity(city) {
     hideCombatPreview();
     rend.selected = null;
-    rend.reachable = []; rend.attackable = []; rend.settlementSites = [];
+    rend.reachable = []; rend.controlled = []; rend.attackable = []; rend.settlementSites = [];
     rend.selectedCity = city;
     rend.dirty = true;
     $("unit-panel").style.display = "none";
@@ -672,6 +676,8 @@ const UI = (() => {
     else if (supply)
       states.push(supply.graceLeft > 0 ? `⚠ Beyond supply · ${supply.graceLeft}t grace`
         : "⚠ Beyond supply · attrition next turn");
+    if (game.knownEnemyZoneOfControl(u, u.c, u.r).length)
+      states.push("⚠ Inside enemy control");
     $("unit-info").innerHTML = `
       <canvas class="unit-icon unit-art-icon" width="42" height="42" role="img" aria-label="${def.name} silhouette"></canvas>
       <div class="unit-details">
@@ -2188,6 +2194,8 @@ const UI = (() => {
       html: `<p>Warships within ${BLOCKADE.radius} hex of an enemy coastal city exert pressure based on combat strength, health, and level. If hostile pressure exceeds the nearby defending fleet, the port is blockaded.</p><p><b>Effects:</b> city gold is reduced by ${Math.round((1 - BLOCKADE.cityGoldMultiplier) * 100)}%, endpoint trade routes are suspended, and city repairs stop. The city can still bombard attackers; move enough friendly naval strength beside it to break the blockade immediately.</p>` });
     E.push({ cat: "Mechanics", name: "Fleet Logistics", icon: "⚓", tags: "naval fleet supply port logistics attrition range repair",
       html: `<p>Owned coastal cities project supply through connected water: ${NAVAL_SUPPLY.baseRange} hexes initially, ${NAVAL_SUPPLY.compassRange} with Compass, and ${NAVAL_SUPPLY.steamRange} with Steam Power. Land barriers block this coverage, making forward ports strategically important.</p><p>Warships may operate beyond supply for ${NAVAL_SUPPLY.graceTurns} turns. After that they suffer <b>${NAVAL_SUPPLY.attritionDamage} damage per turn</b>, fight ${Math.round((1 - NAVAL_SUPPLY.combatMultiplier) * 100)}% weaker, exert less blockade pressure, and cannot repair until they return to supply. AI fleets retreat to a friendly port and recover before resuming operations.</p>` });
+    E.push({ cat: "Mechanics", name: "Tactical Formations", icon: "⚔️", tags: "combat tactics zone control zoc flank support formation surround",
+      html: `<p>Land melee units at war control every adjacent land hex. Entering controlled ground ends the moving unit's remaining movement; reachable controlled hexes are outlined in amber when the controlling formation is visible. A hidden formation can still halt an advance when it is revealed.</p><p>Land melee attacks gain <b>+${Math.round(TACTICS.flankPerSupport * 100)}% strength</b> for each other friendly land melee unit adjacent to the target, capped at <b>+${Math.round(TACTICS.maxFlank * 100)}%</b>. Ranged, naval, and embarked units neither exert land control nor provide flanking support.</p>` });
     // Civilizations (with all their leaders)
     for (const id of CIV_IDS) {
       const civ = CIVS[id];
@@ -3005,6 +3013,8 @@ const UI = (() => {
     if (game.campAt && game.campAt(c, r)) html += ` · 🏕️ Barbarian Camp`;
     // combat forecast when hovering a legal target of the selected unit
     const sel0 = rend.selected;
+    if (sel0 && sel0.owner === game.viewer && game.knownEnemyZoneOfControl(sel0, c, r).length)
+      html += `<br><b class="tactical-warning">Enemy zone of control · movement ends here</b>`;
     if (sel0 && sel0.owner === game.viewer && rend.attackable.some(([ac, ar]) => ac === c && ar === r)) {
       const f = game.predictAttack(sel0, c, r);
       if (f) {
@@ -3012,6 +3022,8 @@ const UI = (() => {
         html += `<br><b class="war">⚔ vs ${f.target}</b> (${f.targetHp} HP)<br>` +
           `You deal <b>${f.out[0]}–${f.out[1]}</b>${kills ? " — <b class='alert'>lethal!</b>" : ""}` +
           (f.back ? `<br>You take <b>${f.back[0]}–${f.back[1]}</b>` : "<br><span class='dim'>no counterattack</span>");
+        if (f.flankBonus)
+          html += `<br><b class="tactical-warning">Flanking support ${f.flankSupport} · +${Math.round(f.flankBonus * 100)}% strength</b>`;
       }
     } else if (sel0 && warTargetOwner(sel0, c, r) >= 0) {
       html += `<br><b class="war">⚔ Click to declare war on ${game.players[warTargetOwner(sel0, c, r)].civ.name}</b>`;

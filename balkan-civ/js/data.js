@@ -431,6 +431,13 @@ const NAVAL_SUPPLY = {
   recoverHp: 75,
 };
 
+// Land tactics: enemy land melee formations control adjacent ground;
+// coordinated melee attacks gain a capped bonus from adjacent supporters.
+const TACTICS = {
+  flankPerSupport: 0.10,
+  maxFlank: 0.20,
+};
+
 // ------------------------------------------------------------
 // Great People
 // ------------------------------------------------------------

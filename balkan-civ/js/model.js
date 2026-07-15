@@ -724,6 +724,8 @@ class Game {
     if (this.isEmbarked(unit) && !this.canAttackFromEmbarked(unit, t)) return null;
     const ranged = unit.isRanged;
     const attStr = this.strengthOf(unit, { attacking: true, targetTile: t, ranged });
+    const flankSupport = this.flankingSupport(unit, t).length;
+    const flankBonus = Math.min(TACTICS.maxFlank, flankSupport * TACTICS.flankPerSupport);
     const span = (att, def) => {
       const base = 30 * Math.pow(att / Math.max(def, 0.5), 1.25);
       return [Math.max(1, Math.round(base * 0.85)), Math.max(1, Math.round(base * 1.15))];
@@ -735,12 +737,12 @@ class Game {
     })();
     if (enemyCity && (!enemyUnit || !ranged)) {
       const defStr = this.cityStrength(enemyCity);
-      return { target: enemyCity.name, targetHp: enemyCity.hp, city: true,
+      return { target: enemyCity.name, targetHp: enemyCity.hp, city: true, flankSupport, flankBonus,
         out: span(attStr, defStr), back: ranged ? null : span(defStr, attStr) };
     }
     if (enemyUnit) {
       const defStr = this.strengthOf(enemyUnit, { attacking: false });
-      return { target: enemyUnit.def.name, targetHp: enemyUnit.hp, city: false,
+      return { target: enemyUnit.def.name, targetHp: enemyUnit.hp, city: false, flankSupport, flankBonus,
         out: span(attStr, defStr), back: ranged ? null : span(defStr, attStr) };
     }
     return null;
@@ -1037,6 +1039,24 @@ class Game {
     return cost;
   }
 
+  // Land melee units control adjacent land while at war. Hidden controllers
+  // still stop movement, but path and UI hints expose only currently seen ones.
+  enemyZoneOfControl(unit, c, r) {
+    const tile = this.tile(c, r);
+    const owner = unit && this.players[unit.owner];
+    if (!unit || !owner || unit.def.naval || this.isEmbarked(unit) || !tile || this.isWater(tile)) return [];
+    return HEX.neighbors(c, r).map(([nc, nr]) => this.combatUnitAt(nc, nr)).filter(controller =>
+      controller && controller.owner !== unit.owner && owner.atWarWith.has(controller.owner) &&
+      !controller.def.naval && !controller.isRanged && !this.isEmbarked(controller));
+  }
+
+  knownEnemyZoneOfControl(unit, c, r) {
+    const p = unit && this.players[unit.owner];
+    if (!p || !p.visible) return [];
+    return this.enemyZoneOfControl(unit, c, r).filter(controller =>
+      p.visible[this.map.idx(controller.c, controller.r)] === 2);
+  }
+
   // ---------- workers ----------
   canBuildImprovement(unit, type) {
     if (!unit.def.worker) return false;
@@ -1122,7 +1142,8 @@ class Game {
         // block tiles occupied by other units except at the goal
         if (nk !== goal && this.combatUnitAt(nc, nr) && !unit.isCivilian) continue;
         if (nk !== goal && t.city && t.city.owner !== unit.owner) continue;
-        const g = gScore.get(cur) + this.moveCost(unit, nc, nr);
+        const zocPenalty = this.knownEnemyZoneOfControl(unit, nc, nr).length ? unit.maxMoves : 0;
+        const g = gScore.get(cur) + this.moveCost(unit, nc, nr) + zocPenalty;
         if (g < (gScore.get(nk) ?? Infinity)) {
           gScore.set(nk, g);
           came.set(nk, cur);
@@ -1161,6 +1182,7 @@ class Game {
         this.removeUnit(civ);
         this.notify(`${CIVS[this.players[unit.owner].civId].adj} forces captured a ${civ.def.name}!`, -1);
       }
+      if (this.enemyZoneOfControl(unit, nc, nr).length) unit.moves = 0;
     }
     if (unit.path && !unit.path.length) unit.path = null;
     this.addMoveAnim(unit, hops);
@@ -1183,10 +1205,10 @@ class Game {
         const nd = d + cost;
         if (nd > unit.moves) continue;
         const nk = key(nc, nr);
-        if (nd < (dist.get(nk) ?? Infinity)) {
+        if (nd < (dist.get(nk) ?? Infinity) && this.canEnter(unit, nc, nr)) {
           dist.set(nk, nd);
-          if (this.canEnter(unit, nc, nr)) out.push([nc, nr]);
-          frontier.push([nc, nr]);
+          out.push([nc, nr]);
+          if (!this.knownEnemyZoneOfControl(unit, nc, nr).length) frontier.push([nc, nr]);
         }
       }
     }
@@ -1194,6 +1216,20 @@ class Game {
   }
 
   // ---------- combat ----------
+  flankingSupport(unit, targetTile) {
+    if (!unit || !targetTile || unit.isRanged || unit.def.naval || this.isEmbarked(unit) || this.isWater(targetTile)) return [];
+    return HEX.neighbors(targetTile.c, targetTile.r)
+      .map(([c, r]) => this.combatUnitAt(c, r))
+      .filter(support => support && support.id !== unit.id && support.owner === unit.owner &&
+        !support.isCivilian && !support.isRanged && !support.def.naval && !this.isEmbarked(support))
+      .sort((a, b) => a.id - b.id);
+  }
+
+  flankingBonus(unit, targetTile) {
+    return Math.min(TACTICS.maxFlank,
+      this.flankingSupport(unit, targetTile).length * TACTICS.flankPerSupport);
+  }
+
   strengthOf(unit, { attacking, targetTile, ranged } = {}) {
     const p = this.players[unit.owner];
     let str = ranged ? (unit.def.rs || 0) : unit.def.cs;
@@ -1206,6 +1242,7 @@ class Game {
     mod += unit.level * 0.05; // seasoning on top of chosen promotions
     if (attacking && unit.promos.includes("MIGHT")) mod += 0.15;
     if (!attacking && unit.promos.includes("BULWARK")) mod += 0.15;
+    if (attacking && !ranged && targetTile) mod += this.flankingBonus(unit, targetTile);
     if (amphibiousAttack) mod -= 0.15;
     if (attacking && unit.def.naval && unit.promos.includes("BOARDING") && targetTile) {
       const foe = this.combatUnitAt(targetTile.c, targetTile.r);
@@ -1306,6 +1343,8 @@ class Game {
     }
 
     const attStr = this.strengthOf(unit, { attacking: true, targetTile: t, ranged });
+    const flankSupport = this.flankingSupport(unit, t).length;
+    const flankBonus = Math.min(TACTICS.maxFlank, flankSupport * TACTICS.flankPerSupport);
     const hitsCity = !!(targetCity && (!targetUnit || !ranged));
     const defender = hitsCity ? targetCity : targetUnit;
     const report = {
@@ -1329,6 +1368,8 @@ class Game {
       cityCaptured: false,
       damage: 0,
       counterDamage: 0,
+      flankSupport,
+      flankBonus,
       ranged,
       c, r,
       ts: Date.now(),

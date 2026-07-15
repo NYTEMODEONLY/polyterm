@@ -535,6 +535,9 @@ button:disabled { opacity: 0.4; cursor: default; }
 .combat-odds .good { color: #8fd18a; }
 .combat-odds .even { color: #e0c77d; }
 .combat-odds .bad { color: #ef8c78; }
+.combat-tactic { color: #e0c77d; padding: 5px 0; border-bottom: 1px solid rgba(183,155,87,0.28);
+  font-size: 11px; font-weight: 700; text-align: center; }
+.tactical-warning { color: #e7c34c; }
 .combat-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
 .combat-confirm { background: linear-gradient(#8a4936, #5e2b25); border-color: #de8b66; font-weight: 800; }
 .combat-result-title { color: #fff0c4; font-size: 18px; font-weight: 800; margin: 4px 0 7px; }
