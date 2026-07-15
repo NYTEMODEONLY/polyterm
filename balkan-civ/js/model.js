@@ -1221,6 +1221,11 @@ class Game {
     retired.warWeariness = {};
     retired.attitude = {};
     retired.influence = {};
+    for (const tile of this.map.tiles) {
+      if (tile.owner !== playerIdx) continue;
+      tile.owner = -1;
+      tile.workedBy = null;
+    }
     this.routes = this.routes.filter(r => r.owner !== playerIdx);
     this.peaceOffers = this.peaceOffers.filter(o => o.from !== playerIdx && o.to !== playerIdx);
     this.dirtyHappiness();
@@ -1236,14 +1241,35 @@ class Game {
   }
 
   // ---------- cities ----------
-  foundCity(settler) {
-    const t = this.tile(settler.c, settler.r);
-    if (!t || t.city || !TERRAIN[t.terrain].passable) return null;
-    // not adjacent to another city
-    for (const [nc, nr] of HEX.ring(settler.c, settler.r, 2)) {
-      const nt = this.tile(nc, nr);
-      if (nt && nt.city) return null;
+  citySiteStatus(c, r, owner) {
+    const t = this.tile(c, r);
+    if (!t) return { ok: false, code: "OFF_MAP", reason: "Outside the map." };
+    if (!TERRAIN[t.terrain].passable)
+      return { ok: false, code: "IMPASSABLE", reason: "Cities require passable land." };
+    if (t.city)
+      return { ok: false, code: "OCCUPIED", reason: `${t.city.name} already occupies this tile.` };
+    const claimant = this.players[owner];
+    if (!claimant || !claimant.alive)
+      return { ok: false, code: "INVALID_OWNER", reason: "No civilization can claim this site." };
+    if (t.owner !== -1 && t.owner !== owner) {
+      const foreign = this.players[t.owner];
+      if (!foreign || foreign.alive)
+        return { ok: false, code: "FOREIGN_TERRITORY",
+          reason: `${foreign ? foreign.civ.name : "Another civilization"} controls this territory.` };
     }
+    const nearby = this.cities.find(city => HEX.distance(c, r, city.c, city.r) <= 2);
+    if (nearby)
+      return { ok: false, code: "TOO_CLOSE", blockingCityId: nearby.id,
+        reason: `Too close to ${nearby.name}; city centres must be at least three hexes apart.` };
+    return { ok: true, code: "OK", reason: "A city can be founded here." };
+  }
+
+  foundCity(settler) {
+    if (!settler || settler.type !== "SETTLER" || !this.units.includes(settler) || settler.moves <= 0)
+      return null;
+    const status = this.citySiteStatus(settler.c, settler.r, settler.owner);
+    if (!status.ok) return null;
+    const t = this.tile(settler.c, settler.r);
     const p = this.players[settler.owner];
     const city = new City(p.nextCityName(), settler.owner, settler.c, settler.r);
     const isFirst = !this.cities.some(c => c.owner === settler.owner);

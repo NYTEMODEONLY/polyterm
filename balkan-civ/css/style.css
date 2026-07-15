@@ -140,6 +140,9 @@ button:disabled { opacity: 0.4; cursor: default; }
 #tooltip { position: fixed; z-index: 30; display: none; background: rgba(11,21,22,0.96);
   border: 1px solid #b79b57; border-radius: 3px; padding: 7px 10px; font-size: 12.5px;
   pointer-events: none; max-width: 220px; }
+.site-rating.excellent { color: #8fd18a; }
+.site-rating.good { color: #e0c77d; }
+.site-rating.marginal { color: #bac1bd; }
 
 /* ---------- scenarios & network ---------- */
 #scenario-strip { max-width: 1240px; width: 100%; margin-top: 34px; padding-top: 22px; border-top: 1px solid rgba(201,166,72,0.25); }

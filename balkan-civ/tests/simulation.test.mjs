@@ -249,6 +249,7 @@ test("capturing the last city resets production and retires defeated-player stat
         deal: g.players[2].deals.some(d => d.other === 1) },
       routes: g.routes.map(r => ({ owner: r.owner, fromId: r.fromId, toId: r.toId })),
       staleOffers: g.peaceOffers.filter(o => o.from === 1 || o.to === 1).length,
+      orphanedTiles: g.map.tiles.filter(t => t.owner === 1).length,
       capturedId: captured.id, survivorId: survivor.id,
     });
   `));
@@ -260,6 +261,58 @@ test("capturing the last city resets production and retires defeated-player stat
   assert.deepEqual(result.routes, [{ owner: 2,
     fromId: result.survivorId, toId: result.capturedId }]);
   assert.equal(result.staleOffers, 0);
+  assert.equal(result.orphanedTiles, 0);
+});
+
+test("city founding enforces unit, movement, territory, and spacing rules", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    const g = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 49117,
+      mapW: 24, mapH: 18, mapType: "peninsula", noMinors: true, noBarbs: true });
+    const settler = g.units.find(u => u.owner === 0 && u.type === "SETTLER");
+    const warrior = g.units.find(u => u.owner === 0 && u.type === "WARRIOR");
+    const start = g.tile(settler.c, settler.r);
+    const originalOwner = start.owner;
+
+    start.owner = 1;
+    g.players[1].alive = false;
+    const retiredStatus = g.citySiteStatus(settler.c, settler.r, settler.owner);
+    g.players[1].alive = true;
+    const foreignStatus = g.citySiteStatus(settler.c, settler.r, settler.owner);
+    const foreignFound = g.foundCity(settler);
+    start.owner = originalOwner;
+
+    settler.moves = 0;
+    const spentFound = g.foundCity(settler);
+    settler.moves = settler.def.moves;
+    const imposterFound = g.foundCity(warrior);
+    const city = g.foundCity(settler);
+
+    const closeTile = HEX.ring(city.c, city.r, 2)
+      .map(([c, r]) => g.tile(c, r))
+      .find(t => t && !t.city && TERRAIN[t.terrain].passable);
+    const second = g.addUnit("SETTLER", 0, closeTile.c, closeTile.r);
+    const closeStatus = g.citySiteStatus(second.c, second.r, second.owner);
+    const closeFound = g.foundCity(second);
+
+    return JSON.stringify({
+      foreign: { retiredClaimable: retiredStatus.ok, code: foreignStatus.code, found: !!foreignFound },
+      spentFound: !!spentFound, imposterFound: !!imposterFound,
+      first: { founded: !!city, owner: city && city.owner,
+        settlerRemoved: !g.units.includes(settler) },
+      close: { code: closeStatus.code, blockingCityId: closeStatus.blockingCityId,
+        found: !!closeFound, settlerPresent: g.units.includes(second) },
+    });
+  `));
+
+  assert.deepEqual(result.foreign,
+    { retiredClaimable: true, code: "FOREIGN_TERRITORY", found: false });
+  assert.equal(result.spentFound, false);
+  assert.equal(result.imposterFound, false);
+  assert.deepEqual(result.first, { founded: true, owner: 0, settlerRemoved: true });
+  assert.equal(result.close.code, "TOO_CLOSE");
+  assert.ok(result.close.blockingCityId);
+  assert.equal(result.close.found, false);
+  assert.equal(result.close.settlerPresent, true);
 });
 
 test("pending-order snapshots track research, production, and unit decisions", () => {

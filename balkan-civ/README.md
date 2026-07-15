@@ -97,6 +97,10 @@ events, or AI choices.
   wheat control to reveal food, production, and gold directly on every
   currently visible hex. The setting persists between sessions and uses
   distinct circle, square, and diamond markers for colour-independent reading
+- **Surveyed Settler guidance**: selecting a Settler compares every visible
+  site it can reach this turn, marks excellent, promising, and marginal city
+  locations, and distinguishes sites that require waiting until next turn to
+  found. Hovering a candidate reports its potential and survey coverage
 - Procedurally generated hex maps with smooth coastlines, different every
   game — choose a rugged **Peninsula**, an island-dotted **Archipelago**,
   or a **custom map** you painted yourself in the built-in **Map Editor**

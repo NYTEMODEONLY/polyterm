@@ -14,6 +14,11 @@ function tileJitter(c, r) {
 }
 
 const _shadeCache = {};
+const SETTLEMENT_COLORS_2D = {
+  excellent: ["#8fd18a", "rgba(92,162,92,0.2)"],
+  good: ["#e0c77d", "rgba(190,156,68,0.18)"],
+  marginal: ["#a8b1ad", "rgba(125,139,134,0.14)"],
+};
 function shade(color, f) {
   const key = color + "|" + f.toFixed(2);
   if (_shadeCache[key]) return _shadeCache[key];
@@ -39,6 +44,7 @@ class Renderer {
     this.selectedCity = null;
     this.reachable = [];         // [[c,r],...] move highlights
     this.attackable = [];        // [[c,r],...] attack highlights
+    this.settlementSites = [];   // surveyed one-turn sites for a selected Settler
     this.hoverTile = null;   // [c, r] under the cursor
     this.previewPath = null; // path preview for the selected unit
     this.showYields = false;
@@ -124,6 +130,25 @@ class Renderer {
         ctx.fill();
         ctx.strokeStyle = "rgba(231,76,60,0.9)";
         ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // Surveyed city sites sit above movement fills but below pieces and cities.
+    if (this.settlementSites.length) {
+      ctx.save();
+      for (const site of this.settlementSites) {
+        const [sx, sy] = this.worldToScreen(site.c, site.r);
+        if (sx < -2 * s || sy < -2 * s || sx > W + 2 * s || sy > H + 2 * s) continue;
+        const [stroke, fill] = SETTLEMENT_COLORS_2D[site.tier];
+        ctx.globalAlpha = site.canFoundThisTurn ? 1 : 0.62;
+        this.hexPath(ctx, sx, sy, s * 0.72);
+        ctx.fillStyle = fill;
+        ctx.fill();
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = Math.max(2, s * 0.075);
+        ctx.setLineDash(site.canFoundThisTurn ? [] : [Math.max(3, s * 0.13), Math.max(2, s * 0.09)]);
         ctx.stroke();
       }
       ctx.restore();

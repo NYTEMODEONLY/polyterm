@@ -372,12 +372,7 @@ const UI = (() => {
     rend.previewPath = null;
     rend.selected = u;
     rend.selectedCity = null;
-    if (u) {
-      rend.reachable = game.reachableTiles(u);
-      rend.attackable = computeAttackable(u);
-    } else {
-      rend.reachable = []; rend.attackable = [];
-    }
+    refreshSelectionOverlays();
     rend.dirty = true;
     refreshUnitPanel();
     $("city-panel").style.display = "none";
@@ -402,6 +397,60 @@ const UI = (() => {
       }
     }
     return out;
+  }
+
+  function surveyedSitePotential(unit, c, r) {
+    const vis = game.players[game.viewer].visible;
+    const tiles = HEX.ring(c, r, 2).map(([tc, tr]) => game.tile(tc, tr)).filter(Boolean);
+    const surveyed = tiles.filter(t => vis[game.map.idx(t.c, t.r)] > 0);
+    if (!surveyed.length) return { score: 0, coverage: 0 };
+    let value = 0, coastal = false;
+    for (const t of surveyed) {
+      if (t.owner !== -1 && t.owner !== unit.owner && game.players[t.owner]?.alive) continue;
+      const y = game.tileYield(t);
+      value += y.food * 1.4 + y.prod + y.gold * 0.6 + (t.resource ? 2 : 0);
+      if (t.terrain === "COAST") coastal = true;
+    }
+    value *= tiles.length / surveyed.length;
+    if (coastal) value += 3;
+    if (game.tile(c, r).terrain === "HILLS") value += 2;
+    return { score: Math.round(value), coverage: Math.round(surveyed.length / tiles.length * 100) };
+  }
+
+  function computeSettlementSites(unit) {
+    if (!unit || unit.type !== "SETTLER" || unit.owner !== game.viewer) return [];
+    const vis = game.players[game.viewer].visible;
+    const candidates = [[unit.c, unit.r], ...rend.reachable];
+    const seen = new Set(), sites = [];
+    for (const [c, r] of candidates) {
+      const key = `${c},${r}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const t = game.tile(c, r);
+      if (!t || vis[game.map.idx(c, r)] !== 2) continue;
+      if (!game.citySiteStatus(c, r, unit.owner).ok) continue;
+      const survey = surveyedSitePotential(unit, c, r);
+      let tier = survey.score >= 68 ? "excellent" : survey.score >= 56 ? "good" : "marginal";
+      if (survey.coverage < 55 && tier === "excellent") tier = "good";
+      if (survey.coverage < 35) tier = "marginal";
+      const label = tier === "excellent" ? "Excellent" : tier === "good" ? "Promising" : "Marginal";
+      const path = c === unit.c && r === unit.r ? [] : game.findPath(unit, c, r);
+      const moveCost = path ? path.reduce((sum, [pc, pr]) => sum + game.moveCost(unit, pc, pr), 0) : Infinity;
+      sites.push({ c, r, score: survey.score, coverage: survey.coverage, tier, label,
+        canFoundThisTurn: myTurn() && unit.moves > moveCost });
+    }
+    return sites;
+  }
+
+  function refreshSelectionOverlays() {
+    const unit = rend.selected;
+    if (!unit) {
+      rend.reachable = []; rend.attackable = []; rend.settlementSites = [];
+      return;
+    }
+    rend.reachable = game.reachableTiles(unit);
+    rend.attackable = computeAttackable(unit);
+    rend.settlementSites = computeSettlementSites(unit);
   }
 
   // Is the clicked tile a legal *war* target — an at-peace rival's unit or city
@@ -569,7 +618,7 @@ const UI = (() => {
   function selectCity(city) {
     hideCombatPreview();
     rend.selected = null;
-    rend.reachable = []; rend.attackable = [];
+    rend.reachable = []; rend.attackable = []; rend.settlementSites = [];
     rend.selectedCity = city;
     rend.dirty = true;
     $("unit-panel").style.display = "none";
@@ -598,6 +647,7 @@ const UI = (() => {
       b.disabled = !enabled;
       b.onclick = fn;
       actions.appendChild(b);
+      return b;
     };
     if (u.promoPts > 0 && u.owner === game.viewer && !u.isCivilian) {
       for (const key of Object.keys(PROMOS)) {
@@ -612,15 +662,15 @@ const UI = (() => {
       }
     }
     if (u.type === "SETTLER") {
-      const t = game.tile(u.c, u.r);
-      const canFound = t && TERRAIN[t.terrain].passable && !t.city &&
-        ![...HEX.ring(u.c, u.r, 2)].some(([c, r]) => {
-          const n = game.tile(c, r); return n && n.city;
-        });
-      btn("🏛️ Found City", () => {
+      const status = game.citySiteStatus(u.c, u.r, u.owner);
+      const ready = status.ok && u.moves > 0 && myTurn();
+      const foundButton = btn("🏛️ Found City", () => {
         const city = game.foundCity(u);
         if (city) { SFX.play("found"); selectCity(city); refreshAll(); }
-      }, canFound && u.moves > 0);
+      }, ready);
+      foundButton.title = ready ? "Found a city on this tile"
+        : !myTurn() ? "Wait for this civilization's turn."
+        : status.ok ? "No movement points remaining; found next turn." : status.reason;
     }
     if (u.def.caravan) {
       const dests = game.tradeDestinations(u);
@@ -1831,10 +1881,8 @@ const UI = (() => {
     refreshNotifications();
     refreshUnitPanel();
     if (rend.selectedCity) showCityPanel(rend.selectedCity);
-    if (rend.selected) {
-      rend.reachable = game.reachableTiles(rend.selected);
-      rend.attackable = computeAttackable(rend.selected);
-    }
+    if (rend.selected && !game.units.includes(rend.selected)) rend.selected = null;
+    refreshSelectionOverlays();
     rend.dirty = true;
     refreshAttention();
     maybeAdvise();
@@ -2519,6 +2567,12 @@ const UI = (() => {
     if (!t || !game.players[game.viewer].visible[game.map.idx(c, r)]) { tip.style.display = "none"; return; }
     const y = game.tileYield(t);
     let html = `<b>${TERRAIN[t.terrain].name}</b>${t.feature ? " / " + FEATURE[t.feature].name : ""}`;
+    const site = (rend.settlementSites || []).find(s => s.c === c && s.r === r);
+    if (site) {
+      html += `<br><b class="site-rating ${site.tier}">${site.label} city site</b> · potential ${site.score}`;
+      if (site.coverage < 100) html += ` <span class="dim">(${site.coverage}% surveyed)</span>`;
+      if (!site.canFoundThisTurn) html += `<br><span class="dim">Movement uses the remaining action; settle next turn.</span>`;
+    }
     if (t.ruin) html += ` · 🏺 Ancient Ruins`;
     if (game.campAt && game.campAt(c, r)) html += ` · 🏕️ Barbarian Camp`;
     // combat forecast when hovering a legal target of the selected unit
