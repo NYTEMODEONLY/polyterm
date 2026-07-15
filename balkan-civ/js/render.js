@@ -435,28 +435,16 @@ class Renderer {
         ctx.stroke();
       }
     } else if (t.improvement === "MINE" && s > 14) {
-      ctx.font = `${Math.floor(s * 0.45)}px serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("⛏️", sx + s * 0.45, sy + s * 0.4);
+      WORLD_ART.site(ctx, "MINE", sx + s * 0.42, sy + s * 0.34, s * 0.62);
     }
     if (t.ruin && s > 12) {
-      ctx.font = `${Math.floor(s * 0.6)}px serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("🏺", sx, sy + s * 0.05);
+      WORLD_ART.site(ctx, "RUIN", sx, sy + s * 0.06, s * 0.72);
     }
     if (game.campAt && game.campAt(t.c, t.r) && s > 12) {
-      ctx.font = `${Math.floor(s * 0.7)}px serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("🏕️", sx, sy + s * 0.05);
+      WORLD_ART.site(ctx, "CAMP", sx, sy + s * 0.05, s * 0.76);
     }
     if (t.resource && s > 14) {
-      ctx.font = `${Math.floor(s * 0.55)}px serif`;
-      ctx.textAlign = "left";
-      ctx.textBaseline = "middle";
-      ctx.fillText(RESOURCE[t.resource].icon, sx - s * 0.75, sy - s * 0.45);
+      WORLD_ART.resource(ctx, t.resource, sx - s * 0.53, sy - s * 0.4, s * 0.58);
     }
 
     // fog: explored but not visible
