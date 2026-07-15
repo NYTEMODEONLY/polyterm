@@ -102,6 +102,30 @@ test("fixed-seed AI simulations produce an identical strategic fingerprint", () 
   assert.equal(second, first);
 });
 
+test("game seeds honor the full unsigned 32-bit contract", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    const fingerprint = game => game.map.tiles.map(tile =>
+      [tile.terrain, tile.feature || "", tile.resource || ""].join(":")).join("|");
+    const make = seed => new Game({ playerCiv: "SERBIA", numOpponents: 1, seed,
+      mapW: 24, mapH: 18, mapType: "peninsula", noMinors: true, noBarbs: true });
+    const zero = make(0);
+    const maxA = make(0xffffffff);
+    const maxB = make(0xffffffff);
+    const restored = Game.deserialize(maxA.serialize());
+    const invalid = [-1, 0x100000000, 1.5, "12", NaN].map(seed => make(seed).seed);
+    return JSON.stringify({ zero: zero.seed, max: maxA.seed,
+      deterministic: fingerprint(maxA) === fingerprint(maxB), restored: restored.seed, invalid });
+  `));
+  assert.equal(result.zero, 0);
+  assert.equal(result.max, 4294967295);
+  assert.equal(result.deterministic, true);
+  assert.equal(result.restored, 4294967295);
+  for (const seed of result.invalid) {
+    assert.equal(Number.isInteger(seed), true);
+    assert.ok(seed >= 0 && seed <= 0xffffffff);
+  }
+});
+
 test("content schemas require an explicit engine contract for every field and keyed effect", () => {
   const schemas = JSON.parse(evaluate(loadGameContext(), `
     const fields = values => [...new Set(values.flatMap(value => Object.keys(value)))].sort();

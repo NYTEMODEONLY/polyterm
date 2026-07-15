@@ -29,10 +29,12 @@ button:disabled { opacity: 0.4; cursor: default; }
 .start-main { min-width: 0; }
 .section-heading { display: flex; justify-content: space-between; align-items: end; gap: 18px; margin-bottom: 10px; }
 .section-heading h2 { color: #eee4cf; font-size: 20px; margin-top: 3px; }
-#civ-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; width: 100%; }
+.realm-tools { display: flex; align-items: center; justify-content: flex-end; gap: 8px; text-align: right; }
+.icon-command { width: 34px; height: 32px; flex: 0 0 34px; padding: 0; font-size: 17px; line-height: 1; }
+#civ-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; width: 100%; }
 .civ-card { display: grid; grid-template-columns: 54px minmax(0, 1fr); align-content: start;
   background: rgba(18,27,32,0.94); border: 1px solid #40515a; border-radius: 6px;
-  min-height: 176px; padding: 12px; cursor: pointer; transition: border-color 0.15s, transform 0.1s; }
+  min-height: 204px; padding: 10px; cursor: pointer; transition: border-color 0.15s, transform 0.1s; }
 .civ-card:hover { border-color: #8a7648; transform: translateY(-2px); }
 .civ-card.sel { border-color: #f0d890; box-shadow: inset 4px 0 0 #d66a55, 0 5px 18px rgba(0,0,0,0.28); }
 .civ-card h3 { color: #f0d890; margin: 3px 0 2px; font-size: 18px; }
@@ -59,8 +61,11 @@ button:disabled { opacity: 0.4; cursor: default; }
 #start-options { display: block; margin: 0; }
 .option-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .option-grid label { display: flex; flex-direction: column; gap: 4px; color: #aeb4ad; font-size: 11px; font-weight: 700; text-transform: uppercase; }
-#start-options select { width: 100%; min-width: 0; background: #10191d; color: #ece4d3; border: 1px solid #46565d;
+#start-options select, #inp-seed { width: 100%; min-width: 0; background: #10191d; color: #ece4d3; border: 1px solid #46565d;
   padding: 8px; border-radius: 4px; font-size: 13px; }
+.seed-option { grid-column: 1 / -1; min-width: 0; }
+.seed-control { display: grid; grid-template-columns: minmax(0, 1fr) 36px; gap: 5px; margin-top: 4px; }
+.seed-control button { width: 36px; height: 34px; padding: 0; font-size: 18px; line-height: 1; }
 .toggle-row { display: flex; align-items: center; gap: 8px; padding: 10px 0; color: #d5ccba; font-size: 13px; cursor: pointer; }
 #btn-start, #btn-continue { width: 100%; font-size: 16px; padding: 11px 18px; background: #765722;
   border-color: #d6b14d; margin-top: 6px; }
@@ -190,8 +195,12 @@ button:disabled { opacity: 0.4; cursor: default; }
   background: rgba(130,143,134,0.14); border: 1px solid #4b5b55; font-size: 11px; }
 .queue-entry button { width: 20px; height: 20px; padding: 0; font-size: 10px; }
 .prod-list { display: flex; flex-direction: column; gap: 4px; }
+.game-seed { display: grid; grid-template-columns: auto minmax(0, 1fr) 34px; align-items: center; gap: 9px;
+  margin-top: 12px; padding: 9px 10px; color: #bfc6c2; background: #101820; border: 1px solid #3d4c53; border-radius: 4px; }
+.game-seed code { min-width: 0; color: #f0d890; font-size: 14px; font-weight: 800; text-align: right; overflow-wrap: anywhere; }
 .prod-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; align-items: center;
   font-size: 13px; padding: 7px; border-radius: 4px; background: rgba(255,255,255,0.04); }
+.prod-item.menu-slot { grid-template-columns: minmax(0, 1fr) auto auto; }
 .prod-item.wonder { background: rgba(240,216,144,0.12); }
 .prod-name { min-width: 0; font-weight: 700; }
 .prod-meta { color: #9f9a8c; font-size: 10.5px; white-space: nowrap; }
@@ -688,6 +697,11 @@ button:disabled { opacity: 0.4; cursor: default; }
 @media (max-width: 1260px) {
   .start-layout { grid-template-columns: minmax(0, 1fr) 320px; }
   .start-header, .start-layout, #scenario-strip { max-width: 100%; }
+}
+
+@media (max-width: 1150px) {
+  #civ-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .civ-card { min-height: 176px; padding: 12px; }
 }
 
 @media (max-width: 1380px) {

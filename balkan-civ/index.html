@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Balkan Civilizations</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>⚔️</text></svg>">
-<link rel="stylesheet" href="css/style.css?v=27">
+<link rel="stylesheet" href="css/style.css?v=28">
 </head>
 <body>
 
@@ -20,7 +20,9 @@
     <main class="start-main">
       <div class="section-heading">
         <div><span class="eyebrow">Choose your realm</span><h2>Nine civilizations. Twenty-nine leaders.</h2></div>
-        <span class="dim">Select a leader to change your starting trait.</span>
+        <div class="realm-tools"><span class="dim">Select a leader to change your starting trait.</span>
+          <button id="btn-random-realm" class="icon-command" title="Choose a random civilization and leader"
+            aria-label="Choose a random civilization and leader">🎲</button></div>
       </div>
       <div id="civ-cards" aria-label="Choose a civilization"></div>
     </main>
@@ -74,6 +76,15 @@
               <option value="hard">Emperor</option>
             </select>
           </label>
+          <div class="seed-option">
+            <label for="inp-seed">Map seed</label>
+            <div class="seed-control">
+              <input id="inp-seed" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="10"
+                placeholder="Random" autocomplete="off" spellcheck="false"
+                title="Enter a whole number from 0 to 4294967295, or leave blank for a random map">
+              <button id="btn-random-seed" type="button" title="Generate a new map seed" aria-label="Generate a new map seed">↻</button>
+            </div>
+          </div>
         </div>
         <label class="toggle-row" title="Barbarian camps spawn raiders in the wilds">
           <input type="checkbox" id="chk-barbs" checked> <span>Barbarian clans</span>
@@ -248,7 +259,7 @@
 <script src="js/hex.js"></script>
 <script src="js/riverart.js?v=1"></script>
 <script src="js/mapgen.js?v=4"></script>
-<script src="js/model.js?v=18"></script>
+<script src="js/model.js?v=19"></script>
 <script src="js/ai.js?v=10"></script>
 <script src="js/vendor/three.min.js"></script>
 <script src="js/unitart.js?v=2"></script>
@@ -257,7 +268,7 @@
 <script src="js/render3d.js?v=19"></script>
 <script src="js/net.js?v=2"></script>
 <script src="js/editor.js?v=1"></script>
-<script src="js/ui.js?v=29"></script>
+<script src="js/ui.js?v=30"></script>
 <script>
   window.addEventListener("DOMContentLoaded", () => UI.init());
 </script>

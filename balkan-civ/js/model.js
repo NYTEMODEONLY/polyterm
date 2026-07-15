@@ -179,7 +179,9 @@ class Game {
     // opts: {playerCiv, numOpponents, seed, mapW, mapH}
     this.turn = 1;
     this.maxTurns = SPEEDS[SPEEDS[opts.speed] ? opts.speed : "standard"].turns;
-    this.seed = opts.seed ?? Math.floor(Math.random() * 1e9);
+    this.seed = Number.isInteger(opts.seed) && opts.seed >= 0 && opts.seed <= 0xffffffff
+      ? opts.seed >>> 0
+      : Math.floor(Math.random() * 0x100000000) >>> 0;
     this.rng = mulberry32(this.seed);
     this.mapType = opts.mapType || "peninsula";
     this.humans = Math.max(1, opts.numHumans || 1);

@@ -29,6 +29,11 @@ Game* on the title screen to pick up where you left off. Saves preserve the
 exact deterministic random stream, so reloading does not reroll future combat,
 events, or AI choices.
 
+The skirmish screen remembers the selected realm, leader, and game options. Set
+an unsigned 32-bit **map seed** to reproduce the same world and AI roster, or
+leave it blank for a fresh random seed. The active seed is available from the
+in-game menu for sharing and rematches.
+
 ## Development checks
 
 The deterministic engine suite runs with `npm test`. The browser contract uses

@@ -10,6 +10,101 @@ const UI = (() => {
   let pendingAttack = null, combatPanelTimer = null;
   let empireTab = "cities", empireCitySort = "capital", empireUnitSort = "readiness";
   const $ = (id) => document.getElementById(id);
+  const SETUP_KEY = "balkan-civ-setup-v1";
+  const SETUP_SELECTS = {
+    humans: "sel-humans",
+    opponents: "sel-opponents",
+    mapSize: "sel-mapsize",
+    mapType: "sel-maptype",
+    speed: "sel-speed",
+    difficulty: "sel-difficulty",
+  };
+
+  function randomSeed() {
+    const values = new Uint32Array(1);
+    if (globalThis.crypto && typeof globalThis.crypto.getRandomValues === "function") {
+      globalThis.crypto.getRandomValues(values);
+      return values[0];
+    }
+    return Math.floor(Math.random() * 0x100000000) >>> 0;
+  }
+
+  function validSeedText(value) {
+    const raw = String(value ?? "").trim();
+    return raw === "" || (/^\d{1,10}$/.test(raw) && Number(raw) <= 0xffffffff);
+  }
+
+  function readSeedInput(report = false) {
+    const input = $("inp-seed");
+    const raw = input.value.trim();
+    const valid = validSeedText(raw);
+    input.setCustomValidity(valid ? "" : "Enter a whole number from 0 to 4294967295.");
+    if (!valid) {
+      if (report) input.reportValidity();
+      return { ok: false, seed: null };
+    }
+    return { ok: true, seed: raw === "" ? randomSeed() : Number(raw) >>> 0 };
+  }
+
+  function readStoredSetup() {
+    try {
+      const setup = JSON.parse(localStorage.getItem(SETUP_KEY) || "null");
+      return setup && typeof setup === "object" ? setup : null;
+    } catch (e) { return null; }
+  }
+
+  function restoreSetup() {
+    const setup = readStoredSetup();
+    if (!setup) return;
+    if (CIVS[setup.civ]) {
+      chosenCiv = setup.civ;
+      const leader = Number(setup.leader);
+      chosenLeader = Number.isInteger(leader) && leader >= 0 && leader < CIVS[chosenCiv].leaders.length
+        ? leader : 0;
+    }
+    for (const [key, id] of Object.entries(SETUP_SELECTS)) {
+      const select = $(id);
+      const value = setup[key];
+      const option = [...select.options].find(o => o.value === value && !o.disabled);
+      if (option && (key !== "mapType" || value !== "custom" || localStorage.getItem("balkan-civ-custommap"))) {
+        select.value = value;
+      }
+    }
+    if (typeof setup.barbarians === "boolean") $("chk-barbs").checked = setup.barbarians;
+    if (validSeedText(setup.seed)) $("inp-seed").value = String(setup.seed ?? "").trim();
+  }
+
+  function persistSetup() {
+    const seed = $("inp-seed").value.trim();
+    if (!validSeedText(seed)) return;
+    const setup = { civ: chosenCiv, leader: chosenLeader, barbarians: $("chk-barbs").checked, seed };
+    for (const [key, id] of Object.entries(SETUP_SELECTS)) setup[key] = $(id).value;
+    try { localStorage.setItem(SETUP_KEY, JSON.stringify(setup)); } catch (e) { /* storage unavailable */ }
+  }
+
+  function bindSetupControls() {
+    for (const id of Object.values(SETUP_SELECTS)) $(id).onchange = persistSetup;
+    $("chk-barbs").onchange = persistSetup;
+    $("inp-seed").oninput = () => {
+      $("inp-seed").setCustomValidity("");
+      persistSetup();
+    };
+    $("btn-random-seed").onclick = () => {
+      $("inp-seed").value = String(randomSeed());
+      $("inp-seed").setCustomValidity("");
+      persistSetup();
+    };
+  }
+
+  function shuffledWithSeed(values, seed) {
+    const result = [...values];
+    const rng = mulberry32((seed ^ 0xa5a5a5a5) >>> 0);
+    for (let i = result.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [result[i], result[j]] = [result[j], result[i]];
+    }
+    return result;
+  }
 
   function unitArtCanvas(unitKey, className = "unit-art-inline") {
     const def = UNITS[unitKey];
@@ -53,6 +148,7 @@ const UI = (() => {
   // ---------------- start screen ----------------
   function showStartScreen() {
     campaignChapter = null; // leaving to the menu ends any campaign context
+    restoreSetup();
     const wrap = $("civ-cards");
     wrap.innerHTML = "";
     const repaintAll = () => wrap.querySelectorAll(".civ-card").forEach(c => c._paint && c._paint());
@@ -62,6 +158,7 @@ const UI = (() => {
       const uu = UNITS[civ.uu];
       const card = document.createElement("div");
       card.className = "civ-card";
+      card.dataset.civ = id;
       card.setAttribute("role", "group");
       card.setAttribute("aria-labelledby", `civ-${id.toLowerCase()}-name`);
       const selectCard = (leaderIdx = chosenCiv === id ? chosenLeader : 0) => {
@@ -69,6 +166,7 @@ const UI = (() => {
         chosenLeader = leaderIdx;
         repaintAll();
         refreshStartSummary();
+        persistSetup();
       };
       const renderLeaders = (sel) => civ.leaders.map((L, li) =>
         `<button class="leader-chip${id === chosenCiv && li === sel ? " sel" : ""}" data-li="${li}"
@@ -111,6 +209,17 @@ const UI = (() => {
     refreshStartSummary();
     buildScenarioCards();
     $("opt-custom").disabled = !localStorage.getItem("balkan-civ-custommap");
+    bindSetupControls();
+    $("btn-random-realm").onclick = () => {
+      const current = Math.max(0, CIV_IDS.indexOf(chosenCiv));
+      const offset = 1 + randomSeed() % (CIV_IDS.length - 1);
+      chosenCiv = CIV_IDS[(current + offset) % CIV_IDS.length];
+      chosenLeader = randomSeed() % CIVS[chosenCiv].leaders.length;
+      repaintAll();
+      refreshStartSummary();
+      persistSetup();
+      wrap.querySelector(`[data-civ="${chosenCiv}"]`)?.scrollIntoView({ block: "nearest", inline: "center" });
+    };
     $("btn-host").onclick = showHostModal;
     $("btn-join").onclick = showJoinModal;
     $("btn-campaign").onclick = showCampaignScreen;
@@ -128,6 +237,8 @@ const UI = (() => {
       }
     };
     $("btn-start").onclick = () => {
+      const seedInfo = readSeedInput(true);
+      if (!seedInfo.ok) return;
       const numOpp = parseInt($("sel-opponents").value, 10);
       const size = $("sel-mapsize").value;
       const dims = { small: [36, 28], standard: [44, 34], large: [54, 42] }[size];
@@ -138,10 +249,12 @@ const UI = (() => {
         try { customMap = JSON.parse(localStorage.getItem("balkan-civ-custommap")); } catch (e) { /* fall through */ }
         if (!customMap) { alert("No custom map saved — open the Map Editor first."); return; }
       }
+      persistSetup();
       game = new Game({ playerCiv: chosenCiv, playerLeader: chosenLeader,
         numOpponents: numOpp, mapW: dims[0], mapH: dims[1],
         mapType, customMap, numHumans, difficulty: $("sel-difficulty").value,
-        noBarbs: !$("chk-barbs").checked, speed: $("sel-speed").value });
+        noBarbs: !$("chk-barbs").checked, speed: $("sel-speed").value,
+        seed: seedInfo.seed });
       startPlaying();
     };
     $("start-screen").style.display = "flex";
@@ -410,6 +523,11 @@ const UI = (() => {
   function hostStartOnline() {
     const ready = NET.peers.filter(p => p.open && p.compatible);
     if (!ready.length) return;
+    const seedInfo = readSeedInput(false);
+    if (!seedInfo.ok) {
+      $("net-status").innerHTML = `<span class="war">Enter a map seed from 0 to 4294967295, or leave it blank.</span>`;
+      return;
+    }
     const taken = new Set([chosenCiv]);
     for (const p of ready) {
       let c = (p.civ && CIVS[p.civ] && !taken.has(p.civ)) ? p.civ
@@ -418,7 +536,7 @@ const UI = (() => {
       p.assignedCiv = c;
     }
     const aiCount = parseInt($("sel-opponents").value, 10);
-    const rest = CIV_IDS.filter(c => !taken.has(c)).sort(() => Math.random() - 0.5);
+    const rest = shuffledWithSeed(CIV_IDS.filter(c => !taken.has(c)), seedInfo.seed);
     const dims = { small: [36, 28], standard: [44, 34], large: [54, 42] }[$("sel-mapsize").value];
     const mapType = $("sel-maptype").value === "custom" ? "peninsula" : $("sel-maptype").value;
     game = new Game({ playerCiv: chosenCiv,
@@ -426,7 +544,9 @@ const UI = (() => {
       numOpponents: ready.length + Math.min(aiCount, rest.length),
       numHumans: 1 + ready.length,
       mapW: dims[0], mapH: dims[1], mapType, difficulty: $("sel-difficulty").value,
-      noBarbs: !$("chk-barbs").checked, speed: $("sel-speed").value });
+      noBarbs: !$("chk-barbs").checked, speed: $("sel-speed").value,
+      seed: seedInfo.seed });
+    persistSetup();
     game._viewer = 0;
     if (!NET.hostStart(game, ready.length)) {
       game = null;
@@ -2254,15 +2374,19 @@ const UI = (() => {
     let html = `<h2>☰ Menu</h2><div class="prod-list">`;
     for (let i = 1; i <= 3; i++) {
       const meta = slotMeta(i);
-      html += `<div class="prod-item">
+      html += `<div class="prod-item menu-slot">
         <span>💾 Slot ${i}${meta ? ` <span class="dim">— ${meta.label}</span>` : ` <span class="dim">— empty</span>`}</span>
         <button onclick="UI.saveSlot(${i})">Save</button>
         <button ${meta ? "" : "disabled"} onclick="UI.loadSlot(${i})">Load</button>
-        <span></span>
       </div>`;
     }
     const is3d = !!rend.three;
     html += `</div>
+      <div class="game-seed">
+        <span>Map seed</span><code id="menu-seed">${game.seed >>> 0}</code>
+        <button id="btn-copy-seed" class="icon-command" onclick="UI.copyGameSeed()"
+          title="Copy map seed" aria-label="Copy map seed">⧉</button>
+      </div>
       <div style="margin-top:12px">
         <button onclick="UI.exportSave()">📤 Export save file</button>
         <button onclick="document.getElementById('file-import').click()">📥 Import save file</button>
@@ -2274,6 +2398,27 @@ const UI = (() => {
       <p class="dim" style="margin-top:8px">The game also auto-saves every turn. Exported files can be
       shared to continue a game on another machine.${is3d ? " In 3D mode, rotate the camera with Q / W." : ""}</p>`;
     $("menu-body").innerHTML = html;
+  }
+
+  async function copyGameSeed() {
+    const value = String(game.seed >>> 0);
+    const button = $("btn-copy-seed");
+    try {
+      await navigator.clipboard.writeText(value);
+      if (button) {
+        button.textContent = "✓";
+        setTimeout(() => { if (button.isConnected) button.textContent = "⧉"; }, 1200);
+      }
+      SFX.play("click");
+    } catch (e) {
+      const code = $("menu-seed");
+      if (!code) return;
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(code);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
   }
 
   function saveSlot(i) {
@@ -3597,7 +3742,7 @@ const UI = (() => {
   return { init, setCityFocus, setProduction, buyItem, closeCity, pickTech, diploAction, newGame,
     showFoundingModal, confirmFounding, buyMissionary, gift, assignSpy, beginHotseatTurn,
     hostAddSlot, hostConnect, hostStartOnline, joinCreateReply, cancelNetworkLobby, unqueue,
-    saveSlot, loadSlot, exportSave, toMainMenu, toggleGraphics, showSettings: showSettingsModal,
+    saveSlot, loadSlot, exportSave, copyGameSeed, toMainMenu, toggleGraphics, showSettings: showSettingsModal,
     diploTrade, diploGift, diploPact, adoptPolicy, congressVote, congressAbstain,
     playChapter, resetCampaign, openCampaign, answerPeace, answerEvent, cancelProduction, buildNow,
     declareWarAndAttack, setEmpireTab, setEmpireCitySort, setEmpireUnitSort, empireSetFocus,

@@ -79,6 +79,8 @@ async function networkSnapshot(page) {
     humans: UI.game.humans,
     seed: UI.game.seed,
     civs: UI.game.players.map(player => player.civId),
+    majorCivs: UI.game.players.filter(player => !player.isMinor && !player.isBarb)
+      .map(player => player.civId),
     gold: UI.game.players.map(player => player.gold),
   }));
 }
@@ -222,6 +224,77 @@ test("launch selection and campaign dialogs are keyboard and screen-reader compl
   await expect(campaign).toBeHidden();
   await expect(page.locator("#btn-campaign")).toBeFocused();
   await expectNoAxeViolations(page, "#start-screen");
+  await expectNoViewportOverflow(page);
+  expect(errors).toEqual([]);
+});
+
+test("skirmish setup persists and launches the exact shared map seed", async ({ page }, testInfo) => {
+  const errors = monitorRuntime(page);
+  await page.goto("/index.html");
+  await page.evaluate(() => {
+    localStorage.clear();
+    localStorage.setItem("balkan-civ-gfx", "2d");
+    localStorage.setItem("balkan-civ-reduce-motion", "1");
+    localStorage.setItem("balkan-civ-tips-off", "1");
+  });
+  await page.reload();
+
+  const initialRealm = await page.locator(".civ-card.sel").getAttribute("data-civ");
+  await page.locator("#btn-random-realm").click();
+  await expect.poll(() => page.locator(".civ-card.sel").getAttribute("data-civ")).not.toBe(initialRealm);
+
+  const bulgaria = page.locator('.civ-card[data-civ="BULGARIA"]');
+  await bulgaria.locator(".civ-select").click();
+  await bulgaria.locator(".leader-chip").nth(1).click();
+  await page.locator("#sel-humans").selectOption("2");
+  await page.locator("#sel-opponents").selectOption("3");
+  await page.locator("#sel-mapsize").selectOption("small");
+  await page.locator("#sel-maptype").selectOption("mirror");
+  await page.locator("#sel-speed").selectOption("quick");
+  await page.locator("#sel-difficulty").selectOption("hard");
+  await page.locator("#chk-barbs").uncheck();
+  await page.locator("#inp-seed").fill("4294967295");
+
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("balkan-civ-setup-v1")));
+  expect(saved).toMatchObject({ civ: "BULGARIA", leader: 1, humans: "2", opponents: "3",
+    mapSize: "small", mapType: "mirror", speed: "quick", difficulty: "hard",
+    barbarians: false, seed: "4294967295" });
+
+  await page.reload();
+  await expect(bulgaria).toHaveClass(/sel/);
+  await expect(bulgaria.locator(".leader-chip").nth(1)).toHaveClass(/sel/);
+  await expect(page.locator("#sel-humans")).toHaveValue("2");
+  await expect(page.locator("#sel-maptype")).toHaveValue("mirror");
+  await expect(page.locator("#sel-speed")).toHaveValue("quick");
+  await expect(page.locator("#sel-difficulty")).toHaveValue("hard");
+  await expect(page.locator("#chk-barbs")).not.toBeChecked();
+  await expect(page.locator("#inp-seed")).toHaveValue("4294967295");
+
+  if (testInfo.project.name === "chromium-desktop") {
+    const layout = await page.locator(".civ-card").evaluateAll(cards => {
+      const rects = cards.map(card => card.getBoundingClientRect());
+      return { columns: new Set(rects.map(rect => Math.round(rect.left))).size,
+        lastBottom: Math.round(rects.at(-1).bottom), viewport: window.innerHeight };
+    });
+    expect(layout.columns).toBe(3);
+    expect(layout.lastBottom).toBeLessThan(layout.viewport);
+  }
+
+  await page.locator("#inp-seed").fill("4294967296");
+  await page.locator("#btn-start").click();
+  await expect(page.locator("#start-screen")).toBeVisible();
+  await expect.poll(() => page.locator("#inp-seed").evaluate(input => input.validationMessage)).not.toBe("");
+  await page.locator("#inp-seed").fill("4294967295");
+  await page.locator("#btn-start").click();
+  await expect(page.locator("#start-screen")).toBeHidden();
+  await expect.poll(() => page.evaluate(() => ({ seed: UI.game.seed, humans: UI.game.humans,
+    mapType: UI.game.mapType, speed: UI.game.speed, noBarbs: UI.game.noBarbs,
+    leader: UI.game.players[0].leaderIdx }))).toEqual({ seed: 4294967295, humans: 2,
+      mapType: "mirror", speed: "quick", noBarbs: true, leader: 1 });
+
+  await page.locator("#btn-menu").click();
+  await expect(page.locator("#menu-seed")).toHaveText("4294967295");
+  await expectNoAxeViolations(page, "#menu-modal");
   await expectNoViewportOverflow(page);
   expect(errors).toEqual([]);
 });
@@ -415,6 +488,7 @@ test("online host authority synchronizes turns, rejects stale guests, and pauses
     await host.locator("#sel-mapsize").selectOption("small");
     await host.locator("#sel-opponents").selectOption("3");
     await host.locator("#chk-barbs").uncheck();
+    await host.locator("#inp-seed").fill("3141592653");
     await guest.locator(".civ-select").nth(1).click();
 
     await host.locator("#btn-host").click();
@@ -452,7 +526,9 @@ test("online host authority synchronizes turns, rejects stale guests, and pauses
       index: 1, revision: 0, turn: 1, activeHuman: 0, viewer: 1, humans: 2 });
     expect(openingGuest.session).toBe(openingHost.session);
     expect(openingGuest.seed).toBe(openingHost.seed);
+    expect(openingHost.seed).toBe(3141592653);
     expect(openingGuest.civs).toEqual(openingHost.civs);
+    expect(openingHost.majorCivs).toEqual(["SERBIA", "BULGARIA", "CROATIA", "OTTOMAN", "BOSNIA"]);
 
     await finishCurrentOpeningTurn(host);
     await expect.poll(() => networkSnapshot(guest)).toMatchObject({ revision: 1, turn: 1,
