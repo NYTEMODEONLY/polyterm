@@ -416,6 +416,9 @@ button:disabled { opacity: 0.4; cursor: default; }
 #pedia-body h3 { color: #c9a648; margin: 14px 0 6px; position: sticky; top: 0; background: #141c2a; padding: 4px 0; }
 .pedia-entry { background: #0f1725; border: 1px solid #26324a; border-radius: 6px;
   padding: 8px 11px; margin: 6px 0; }
+.pedia-entry.unit { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 10px; align-items: center; }
+.pedia-entry-main { min-width: 0; }
+.pedia-unit-art { width: 58px; height: 58px; display: block; }
 .pedia-name { font-size: 15px; margin-bottom: 2px; }
 .pedia-entry p { margin: 4px 0; font-size: 13px; }
 

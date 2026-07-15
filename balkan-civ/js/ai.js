@@ -257,17 +257,24 @@ const AI = (() => {
 
   // ---------- promotions ----------
   function autoPromote(game, p) {
+    const campaign = realWars(game, p).length ? campaignTarget(game, p) : null;
+    const amphibiousNeed = game.mapType === "archipelago" || hasOverseasRival(game, p) ||
+      campaignIsOverseas(game, p, campaign);
     for (const u of game.units) {
       if (u.owner !== p.index || u.isCivilian) continue;
       while (u.promoPts > 0) {
-        const open = Object.keys(PROMOS).filter(k => !u.promos.includes(k));
+        const open = promotionChoices(u).filter(k => !u.promos.includes(k));
         if (!open.length) { u.promoPts = 0; break; }
         let pick;
-        if (u.isRanged && open.includes("MIGHT")) pick = "MIGHT";
+        if (u.def.naval && u.isRanged && open.includes("BOMBARDMENT")) pick = "BOMBARDMENT";
+        else if (u.def.naval && !u.isRanged && open.includes("BOARDING")) pick = "BOARDING";
+        else if (u.def.naval && open.includes("NAVIGATION")) pick = "NAVIGATION";
+        else if (!u.isRanged && amphibiousNeed && open.includes("AMPHIBIOUS")) pick = "AMPHIBIOUS";
+        else if (u.isRanged && open.includes("MIGHT")) pick = "MIGHT";
         else if (u.def.defendBonus && open.includes("BULWARK")) pick = "BULWARK";
         else if (open.includes("MIGHT")) pick = "MIGHT";
         else pick = open[0];
-        u.promos.push(pick);
+        u.addPromotion(pick);
         u.promoPts--;
       }
     }
@@ -1003,12 +1010,14 @@ const AI = (() => {
   }
 
   function tryAttack(game, p, u, excludeCity = false) {
-    if (u.attacked || u.moves <= 0 || game.isEmbarked(u)) return false;
+    if (u.attacked || u.moves <= 0 ||
+        (game.isEmbarked(u) && !u.promos.includes("AMPHIBIOUS"))) return false;
     const range = u.isRanged ? u.def.range : 1;
     let best = null, bestValue = -Infinity;
     for (const [c, r] of HEX.ring(u.c, u.r, range)) {
       const t = game.tile(c, r);
       if (!t) continue;
+      if (game.isEmbarked(u) && !game.canAttackFromEmbarked(u, t)) continue;
       // melee reach restrictions across the shoreline
       if (!u.isRanged && !u.def.naval && game.isWater(t)) continue;
       if (!u.isRanged && u.def.naval && !game.isWater(t) && !t.city) continue;

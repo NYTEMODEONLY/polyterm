@@ -16,6 +16,14 @@ function loadGameContext() {
   return context;
 }
 
+function loadUnitArtContext() {
+  const context = vm.createContext({ console, Math, Set, Map, JSON });
+  for (const file of ["data.js", "unitart.js"]) {
+    vm.runInContext(fs.readFileSync(path.join(gameRoot, "js", file), "utf8"), context, { filename: file });
+  }
+  return context;
+}
+
 function evaluate(context, source) {
   return vm.runInContext(`(() => { ${source} })()`, context);
 }
@@ -282,6 +290,160 @@ test("AI ships upgrade, explore in peace, and reserve distinct bombardment posit
     "a peacetime ship should leave port to chart unseen reachable water");
   assert.deepEqual([...result.distances].sort((a, b) => a - b), [2, 2]);
   assert.equal(new Set(result.endpoints.map(([c, r]) => c + "," + r)).size, 2);
+});
+
+test("naval progression and promotion choices remain role-specific across upgrades", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    ${controlledWorldSource}
+    const g = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 64006,
+      mapW: 24, mapH: 18, mapType: "archipelago", noMinors: true, noBarbs: true });
+    resetWorld(g);
+    const port = addCity(g, 0, 7, 8, "Port", true); port.coastal = true;
+    g.tile(8, 8).terrain = "COAST"; g.tile(8, 8).owner = 0;
+    g.players[0].techs = new Set(Object.keys(TECHS)); g.players[0].gold = 10000;
+    const ship = addUnit(g, "GALLEY", 0, 8, 8); ship.promoPts = 1;
+    const navigated = g.issueUnitOrder(ship, "promote", 0, "NAVIGATION");
+    const immediateMoves = ship.moves;
+    const upgrades = [];
+    while (true) {
+      const next = g.canUpgrade(ship, 0);
+      if (!next) break;
+      upgrades.push(next.to);
+      g.upgradeUnit(ship, 0);
+      ship.moves = ship.maxMoves;
+    }
+
+    const warrior = addUnit(g, "WARRIOR", 0, 6, 8);
+    const archer = addUnit(g, "ARCHER", 0, 6, 9);
+    const galley = addUnit(g, "GALLEY", 0, 8, 9);
+    galley.promoPts = 1;
+    const invalidNaval = g.issueUnitOrder(galley, "promote", 0, "PATHFINDER");
+    const validNaval = g.issueUnitOrder(galley, "promote", 0, "BOARDING");
+    const spentShip = addUnit(g, "GALLEY", 0, 9, 9);
+    spentShip.promoPts = 1; spentShip.attacked = true; spentShip.moves = 0;
+    const spentNavigation = g.issueUnitOrder(spentShip, "promote", 0, "NAVIGATION");
+    warrior.promoPts = 1;
+    const invalidLand = g.issueUnitOrder(warrior, "promote", 0, "BOARDING");
+    return JSON.stringify({ upgrades, finalType: ship.type, finalMoves: ship.maxMoves,
+      navigated, immediateMoves,
+      warrior: promotionChoices(warrior), archer: promotionChoices(archer),
+      naval: promotionChoices(galley), invalidNaval, validNaval, invalidLand,
+      spentNavigation, spentMoves: spentShip.moves,
+      frigate: { tech: UNITS.FRIGATE.tech, ranged: UNITS.FRIGATE.rs, moves: UNITS.FRIGATE.moves } });
+  `));
+
+  assert.deepEqual(result.upgrades, ["GALLEASS", "FRIGATE", "IRONCLAD"]);
+  assert.equal(result.finalType, "IRONCLAD");
+  assert.equal(result.finalMoves, 6, "Navigation should survive upgrades and raise maximum movement");
+  assert.deepEqual({ navigated: result.navigated, immediateMoves: result.immediateMoves },
+    { navigated: true, immediateMoves: 5 });
+  assert.deepEqual(result.warrior, ["MIGHT", "BULWARK", "MEDIC", "PATHFINDER", "AMPHIBIOUS"]);
+  assert.deepEqual(result.archer, ["MIGHT", "BULWARK", "MEDIC", "PATHFINDER"]);
+  assert.deepEqual(result.naval, ["MIGHT", "BULWARK", "MEDIC", "BOARDING", "BOMBARDMENT", "NAVIGATION"]);
+  assert.deepEqual({ invalidNaval: result.invalidNaval, validNaval: result.validNaval,
+    invalidLand: result.invalidLand, spentNavigation: result.spentNavigation,
+    spentMoves: result.spentMoves }, { invalidNaval: false, validNaval: true, invalidLand: false,
+    spentNavigation: true, spentMoves: 0 });
+  assert.deepEqual(result.frigate, { tech: "GUNPOWDER", ranged: 24, moves: 6 });
+});
+
+test("shared naval unit art assigns every upgrade era a distinct silhouette", () => {
+  const profiles = JSON.parse(evaluate(loadUnitArtContext(), `
+    return JSON.stringify(Object.fromEntries(["GALLEY", "GALLEASS", "FRIGATE", "IRONCLAD"]
+      .map(key => [key, UNIT_ART.kind(UNITS[key])])));
+  `));
+
+  assert.deepEqual(profiles,
+    { GALLEY: "galley", GALLEASS: "galleass", FRIGATE: "frigate", IRONCLAD: "steamship" });
+  assert.equal(new Set(Object.values(profiles)).size, 4);
+});
+
+test("Amphibious Assault enables forecasted shore attacks with a controlled penalty", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    ${controlledWorldSource}
+    const g = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 64007,
+      mapW: 24, mapH: 18, mapType: "archipelago", noMinors: true, noBarbs: true });
+    resetWorld(g);
+    addCity(g, 0, 5, 8, "Home", true);
+    addCity(g, 1, 12, 8, "Enemy", true);
+    g.tile(8, 8).terrain = "COAST";
+    const attacker = addUnit(g, "RIFLEMAN", 0, 8, 8);
+    const defender = addUnit(g, "WARRIOR", 1, 9, 8);
+    g.players[0].techs.add("SAILING");
+    g.players[0].met.add(1); g.players[1].met.add(0); g.declareWar(0, 1);
+    const target = g.tile(9, 8);
+    const embarkedStrength = g.strengthOf(attacker, { attacking: true, targetTile: target, ranged: false });
+    const blockedForecast = g.predictAttack(attacker, 9, 8);
+    const blockedAttack = g.attack(attacker, 9, 8);
+    attacker.promoPts = 1;
+    const promoted = g.issueUnitOrder(attacker, "promote", 0, "AMPHIBIOUS");
+    const assaultStrength = g.strengthOf(attacker, { attacking: true, targetTile: target, ranged: false });
+    const forecast = g.predictAttack(attacker, 9, 8);
+    g.rng = () => 0.5;
+    const attacked = g.attack(attacker, 9, 8);
+    return JSON.stringify({ embarkedStrength, blockedForecast, blockedAttack, promoted,
+      assaultStrength, forecast, attacked, landed: [attacker.c, attacker.r],
+      defenderAlive: g.units.includes(defender), attackerHp: attacker.hp });
+  `));
+
+  assert.equal(result.embarkedStrength, 2);
+  assert.equal(result.blockedForecast, null);
+  assert.equal(result.blockedAttack, false);
+  assert.equal(result.promoted, true);
+  assert.ok(Math.abs(result.assaultStrength - 28.9) < 0.001);
+  assert.ok(result.forecast && result.forecast.out[0] > 100);
+  assert.equal(result.attacked, true);
+  assert.deepEqual(result.landed, [9, 8]);
+  assert.equal(result.defenderAlive, false);
+  assert.ok(result.attackerHp > 0);
+});
+
+test("naval promotions affect combat and AI specialization deterministically", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    ${controlledWorldSource}
+    const combat = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 64008,
+      mapW: 24, mapH: 18, mapType: "archipelago", noMinors: true, noBarbs: true });
+    resetWorld(combat);
+    addCity(combat, 0, 5, 8, "Home", true);
+    const enemyCity = addCity(combat, 1, 10, 10, "Enemy Port", true); enemyCity.coastal = true;
+    for (const [c, r] of [[6, 8], [7, 8], [8, 10]]) combat.tile(c, r).terrain = "COAST";
+    const boarder = addUnit(combat, "GALLEY", 0, 6, 8);
+    addUnit(combat, "GALLEY", 1, 7, 8);
+    const bomber = addUnit(combat, "GALLEASS", 0, 8, 10);
+    combat.players[0].met.add(1); combat.players[1].met.add(0); combat.declareWar(0, 1);
+    const boardingBase = combat.strengthOf(boarder,
+      { attacking: true, targetTile: combat.tile(7, 8), ranged: false });
+    boarder.promos.push("BOARDING");
+    const boardingBoost = combat.strengthOf(boarder,
+      { attacking: true, targetTile: combat.tile(7, 8), ranged: false });
+    const bombardBase = combat.strengthOf(bomber,
+      { attacking: true, targetTile: combat.tile(10, 10), ranged: true });
+    bomber.promos.push("BOMBARDMENT");
+    const bombardBoost = combat.strengthOf(bomber,
+      { attacking: true, targetTile: combat.tile(10, 10), ranged: true });
+    const navigator = addUnit(combat, "FRIGATE", 0, 8, 11);
+    navigator.promos.push("NAVIGATION"); navigator.moves = 0; navigator.resetTurn();
+
+    const strategy = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 64009,
+      mapW: 24, mapH: 18, mapType: "archipelago", noMinors: true, noBarbs: true });
+    resetWorld(strategy);
+    const port = addCity(strategy, 0, 5, 8, "Port", true); port.coastal = true;
+    strategy.tile(6, 8).terrain = "COAST"; strategy.tile(6, 9).terrain = "COAST";
+    const meleeShip = addUnit(strategy, "GALLEY", 0, 6, 8);
+    const rangedShip = addUnit(strategy, "GALLEASS", 0, 6, 9);
+    const marine = addUnit(strategy, "WARRIOR", 0, 5, 8);
+    meleeShip.promoPts = 1; rangedShip.promoPts = 1; marine.promoPts = 1;
+    strategy.rng = () => 0.5; AI.takeTurn(strategy, strategy.players[0]);
+    return JSON.stringify({ boardingBase, boardingBoost, bombardBase, bombardBoost,
+      navigation: { moves: navigator.moves, max: navigator.maxMoves },
+      choices: { melee: meleeShip.promos, ranged: rangedShip.promos, marine: marine.promos } });
+  `));
+
+  assert.equal(result.boardingBoost / result.boardingBase, 1.2);
+  assert.equal(result.bombardBoost / result.bombardBase, 1.2);
+  assert.deepEqual(result.navigation, { moves: 7, max: 7 });
+  assert.deepEqual(result.choices,
+    { melee: ["BOARDING"], ranged: ["BOMBARDMENT"], marine: ["AMPHIBIOUS"] });
 });
 
 test("seeded AI campaigns sustain support arms without opportunistic extra fronts", () => {

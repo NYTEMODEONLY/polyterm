@@ -32,7 +32,15 @@ class Unit {
   get def() { return UNITS[this.type]; }
   get isCivilian() { return !!this.def.civilian; }
   get isRanged() { return !!this.def.rs; }
-  resetTurn() { this.moves = this.building ? 0 : this.def.moves; this.attacked = false; }
+  get maxMoves() { return this.def.moves + (this.promos.includes("NAVIGATION") ? 1 : 0); }
+  resetTurn() { this.moves = this.building ? 0 : this.maxMoves; this.attacked = false; }
+
+  addPromotion(key) {
+    if (this.promos.includes(key)) return false;
+    this.promos.push(key);
+    if (key === "NAVIGATION" && !this.attacked && this.moves > 0) this.moves++;
+    return true;
+  }
 
   gainXp(amount) {
     if (this.isCivilian) return;
@@ -583,9 +591,10 @@ class Game {
 
   // ---------- combat forecast (mirrors damageRoll's 0.85..1.15 spread) ----------
   predictAttack(unit, c, r) {
-    if (!unit || unit.isCivilian || this.isEmbarked(unit)) return null;
+    if (!unit || unit.isCivilian) return null;
     const t = this.tile(c, r);
     if (!t) return null;
+    if (this.isEmbarked(unit) && !this.canAttackFromEmbarked(unit, t)) return null;
     const ranged = unit.isRanged;
     const attStr = this.strengthOf(unit, { attacking: true, targetTile: t, ranged });
     const span = (att, def) => {
@@ -737,6 +746,13 @@ class Game {
     return !unit.def.naval && t && this.isWater(t);
   }
 
+  canAttackFromEmbarked(unit, targetTile) {
+    return !!(unit && targetTile && this.isEmbarked(unit) &&
+      unit.promos.includes("AMPHIBIOUS") && !unit.isRanged && !unit.def.naval &&
+      !this.isWater(targetTile) &&
+      HEX.distance(unit.c, unit.r, targetTile.c, targetTile.r) === 1);
+  }
+
   // Can this unit's type ever stand on tile t (given its owner's techs)?
   unitPassable(unit, t) {
     if (!t) return false;
@@ -806,7 +822,7 @@ class Game {
     const fail = (code, reason) => ({ ok: false, code, reason });
     if (order === "promote") {
       if (unit.isCivilian || unit.promoPts <= 0) return fail("NO_PROMOTION", "No promotion is available.");
-      if (!PROMOS[detail] || unit.promos.includes(detail))
+      if (!promotionAvailable(unit, detail) || unit.promos.includes(detail))
         return fail("INVALID_PROMOTION", "This promotion cannot be selected.");
     } else if (order === "cancel_job") {
       if (!unit.def.worker || !unit.building) return fail("NO_JOB", "This Worker has no job to cancel.");
@@ -844,7 +860,7 @@ class Game {
   issueUnitOrder(unit, order, actorIdx, detail = null) {
     if (!this.unitOrderStatus(unit, order, actorIdx, detail).ok) return false;
     if (order === "promote") {
-      unit.promos.push(detail);
+      unit.addPromotion(detail);
       unit.promoPts--;
     } else if (order === "cancel_job") {
       unit.building = null;
@@ -1049,7 +1065,8 @@ class Game {
   strengthOf(unit, { attacking, targetTile, ranged } = {}) {
     const p = this.players[unit.owner];
     let str = ranged ? (unit.def.rs || 0) : unit.def.cs;
-    if (this.isEmbarked(unit)) str = 2; // helpless at sea
+    const amphibiousAttack = attacking && targetTile && this.canAttackFromEmbarked(unit, targetTile);
+    if (this.isEmbarked(unit) && !amphibiousAttack) str = 2; // helpless at sea
     let mod = 1;
     const here = this.tile(unit.c, unit.r);
     // wounded units fight at 50–100%
@@ -1057,6 +1074,13 @@ class Game {
     mod += unit.level * 0.05; // seasoning on top of chosen promotions
     if (attacking && unit.promos.includes("MIGHT")) mod += 0.15;
     if (!attacking && unit.promos.includes("BULWARK")) mod += 0.15;
+    if (amphibiousAttack) mod -= 0.15;
+    if (attacking && unit.def.naval && unit.promos.includes("BOARDING") && targetTile) {
+      const foe = this.combatUnitAt(targetTile.c, targetTile.r);
+      if (foe && (foe.def.naval || this.isEmbarked(foe))) mod += 0.20;
+    }
+    if (attacking && unit.def.naval && unit.promos.includes("BOMBARDMENT") &&
+        targetTile && targetTile.city) mod += 0.20;
     if (!p.isMinor && !p.isBarb) {
       if (attacking && p.policies.has("WARRIOR_CULT")) mod += 0.10;
       if (attacking && p.policies.has("GUSLARS") && targetTile) {
@@ -1119,9 +1143,9 @@ class Game {
   // unit attacks tile (c,r): enemy unit or city
   attack(unit, c, r) {
     if (unit.attacked || unit.moves <= 0 || unit.isCivilian) return false;
-    if (this.isEmbarked(unit)) return false; // no fighting from transports
     const t = this.tile(c, r);
     if (!t) return false;
+    if (this.isEmbarked(unit) && !this.canAttackFromEmbarked(unit, t)) return false;
     const dist = HEX.distance(unit.c, unit.r, c, r);
     const ranged = unit.isRanged;
     const range = ranged ? unit.def.range : 1;
@@ -2523,7 +2547,7 @@ class Game {
     for (const u of this.units) {
       if (u.owner !== p.index || u.hp >= 100) continue;
       const t = this.tile(u.c, u.r);
-      const moved = u.moves < u.def.moves || u.attacked;
+      const moved = u.moves < u.maxMoves || u.attacked;
       if (moved) continue;
       let heal = 5;
       if (this.isWater(t)) heal = u.def.naval && t.owner === p.index ? 10 : 0; // ships mend in home waters

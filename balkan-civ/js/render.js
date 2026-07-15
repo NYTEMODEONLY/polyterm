@@ -271,7 +271,7 @@ class Renderer {
       ctx.beginPath();
       ctx.arc(px, py, Math.max(3, s * 0.12), 0, Math.PI * 2);
       ctx.fill();
-      const turns = Math.max(1, Math.ceil(this.previewPath.length / Math.max(1, this.selected.def.moves)));
+      const turns = Math.max(1, Math.ceil(this.previewPath.length / Math.max(1, this.selected.maxMoves)));
       if (turns > 1) {
         ctx.fillStyle = "#fff";
         ctx.font = `bold ${Math.max(11, Math.floor(s * 0.35))}px sans-serif`;

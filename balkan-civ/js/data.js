@@ -121,8 +121,9 @@ const UNITS = {
   CAVALRY:    { name: "Cavalry",       icon: "🐎", cost: 200, cs: 30, moves: 5, tech: "MILITARY_SCIENCE", needs: "HORSES" },
   // ---- Naval units (built in coastal cities only) ----
   GALLEY:     { name: "Galley",        icon: "⛵", cost: 60,  cs: 10, moves: 4, tech: "SAILING", naval: true, coastOnly: true, upgrade: "GALLEASS", },
-  GALLEASS:   { name: "War Galleass",  icon: "🚢", cost: 110, cs: 12, rs: 17, range: 2, moves: 5, tech: "COMPASS", naval: true, upgrade: "IRONCLAD", },
-  IRONCLAD:   { name: "Ironclad",      icon: "🛳️", cost: 200, cs: 24, rs: 30, range: 2, moves: 5, tech: "STEAM_POWER", naval: true },
+  GALLEASS:   { name: "War Galleass",  icon: "🚢", cost: 110, cs: 12, rs: 17, range: 2, moves: 5, tech: "COMPASS", naval: true, upgrade: "FRIGATE", },
+  FRIGATE:    { name: "Frigate",       icon: "⛵", cost: 170, cs: 18, rs: 24, range: 2, moves: 6, tech: "GUNPOWDER", naval: true, upgrade: "IRONCLAD", },
+  IRONCLAD:   { name: "Ironclad",      icon: "🛳️", cost: 220, cs: 28, rs: 32, range: 2, moves: 5, tech: "STEAM_POWER", naval: true },
   // ---- Trade ----
   CARAVAN:    { name: "Caravan",       icon: "🐫", cost: 70, cs: 0, moves: 2, civilian: true, caravan: true, tech: "CURRENCY" },
   // ---- Religious units (purchased with faith, not production) ----
@@ -649,8 +650,25 @@ const PROMOS = {
   MIGHT:      { name: "Might",       icon: "⚔️", desc: "+15% strength when attacking" },
   BULWARK:    { name: "Bulwark",     icon: "🛡️", desc: "+15% strength when defending" },
   MEDIC:      { name: "Field Medic", icon: "💊", desc: "Heals +5 HP per turn, nearby friends +3" },
-  PATHFINDER: { name: "Pathfinder",  icon: "🥾", desc: "Moves through forest and hills without slowing" },
+  PATHFINDER: { name: "Pathfinder",  icon: "🥾", desc: "Moves through forest and hills without slowing", domain: "land" },
+  AMPHIBIOUS: { name: "Amphibious Assault", icon: "⚓", desc: "Melee units can attack directly from embarked transport at -15% strength", domain: "land", melee: true },
+  BOARDING:   { name: "Boarding Parties", icon: "🪝", desc: "+20% strength against ships and embarked units", domain: "naval" },
+  BOMBARDMENT:{ name: "Bombardment", icon: "💣", desc: "+20% strength when attacking cities", domain: "naval" },
+  NAVIGATION: { name: "Navigation",  icon: "🧭", desc: "+1 movement", domain: "naval" },
 };
+
+function promotionAvailable(unit, key) {
+  const promo = PROMOS[key];
+  if (!promo || !unit || unit.isCivilian) return false;
+  if (promo.domain === "naval" && !unit.def.naval) return false;
+  if (promo.domain === "land" && unit.def.naval) return false;
+  if (promo.melee && unit.isRanged) return false;
+  return true;
+}
+
+function promotionChoices(unit) {
+  return Object.keys(PROMOS).filter(key => promotionAvailable(unit, key));
+}
 
 // ------------------------------------------------------------
 // Diplomacy deals

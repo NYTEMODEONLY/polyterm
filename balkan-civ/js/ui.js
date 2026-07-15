@@ -380,13 +380,15 @@ const UI = (() => {
   }
 
   function computeAttackable(u) {
-    if (u.isCivilian || u.attacked || u.moves <= 0 || game.isEmbarked(u)) return [];
+    if (u.isCivilian || u.attacked || u.moves <= 0 ||
+        (game.isEmbarked(u) && !u.promos.includes("AMPHIBIOUS"))) return [];
     const p = game.players[game.viewer];
     const range = u.isRanged ? u.def.range : 1;
     const out = [];
     for (const [c, r] of HEX.ring(u.c, u.r, range)) {
       const t = game.tile(c, r);
       if (!t || !p.visible[game.map.idx(c, r)]) continue;
+      if (game.isEmbarked(u) && !game.canAttackFromEmbarked(u, t)) continue;
       if (!u.isRanged && !u.def.naval && game.isWater(t)) continue;      // no melee out to sea
       if (!u.isRanged && u.def.naval && !game.isWater(t) && !t.city) continue; // ships raid coasts only
       const cu = game.combatUnitAt(c, r);
@@ -458,12 +460,14 @@ const UI = (() => {
   // in this unit's strike range? Returns the owner index, or -1 if none.
   // Lets a player start a war the intuitive way: by attacking.
   function warTargetOwner(u, c, r) {
-    if (!u || u.owner !== game.viewer || u.isCivilian || u.attacked || u.moves <= 0 || game.isEmbarked(u)) return -1;
+    if (!u || u.owner !== game.viewer || u.isCivilian || u.attacked || u.moves <= 0 ||
+        (game.isEmbarked(u) && !u.promos.includes("AMPHIBIOUS"))) return -1;
     const p = game.players[game.viewer];
     const range = u.isRanged ? u.def.range : 1;
     if (HEX.distance(u.c, u.r, c, r) > range) return -1;
     const t = game.tile(c, r);
     if (!t || !p.visible[game.map.idx(c, r)]) return -1;
+    if (game.isEmbarked(u) && !game.canAttackFromEmbarked(u, t)) return -1;
     if (!u.isRanged && !u.def.naval && game.isWater(t)) return -1;
     if (!u.isRanged && u.def.naval && !game.isWater(t) && !t.city) return -1;
     const cu = game.combatUnitAt(c, r);
@@ -635,7 +639,7 @@ const UI = (() => {
     const def = u.def;
     const hpPct = Math.max(0, Math.min(100, u.hp));
     const hpTone = u.hp > 65 ? "healthy" : u.hp > 30 ? "wounded" : "critical";
-    const movePips = Array.from({ length: def.moves }, (_, i) =>
+    const movePips = Array.from({ length: u.maxMoves }, (_, i) =>
       `<i class="${i < u.moves ? "ready" : ""}"></i>`).join("");
     const states = [];
     if (game.isEmbarked(u)) states.push("⛵ Embarked");
@@ -650,7 +654,7 @@ const UI = (() => {
           <span>${u.level ? "⭐".repeat(u.level) : ""}${u.promos.map(k => PROMOS[k].icon).join("")}</span></div>
         <div class="unit-readout">
           <span>HP <b>${u.hp}</b></span><span class="unit-health ${hpTone}"><i style="width:${hpPct}%"></i></span>
-          <span class="move-label">Move <b>${u.moves}/${def.moves}</b></span><span class="move-pips">${movePips}</span>
+          <span class="move-label">Move <b>${u.moves}/${u.maxMoves}</b></span><span class="move-pips">${movePips}</span>
         </div>
         <div class="unit-badges">
           ${def.cs ? `<span>⚔ ${def.cs}</span>` : ""}${def.rs ? `<span>➶ ${def.rs} · r${def.range}</span>` : ""}
@@ -696,10 +700,11 @@ const UI = (() => {
     };
     if (u.promoPts > 0 && u.owner === game.viewer && !u.isCivilian) {
       startGroup("Promotions");
-      for (const key of Object.keys(PROMOS)) {
+      for (const key of promotionChoices(u)) {
         if (u.promos.includes(key)) continue;
         const pr = PROMOS[key];
-        commandBtn(`⭐ ${pr.icon} ${pr.name}`, "promote", key, null, "build");
+        const promotionButton = commandBtn(`⭐ ${pr.icon} ${pr.name}`, "promote", key, null, "build");
+        promotionButton.title = pr.desc;
       }
     }
     startGroup("Abilities");
@@ -1684,7 +1689,7 @@ const UI = (() => {
         <div class="empire-primary"><strong>${unit.def.icon} ${unit.gpName || unit.def.name}</strong>
           <span class="dim">${unit.gpName ? unit.def.name + " · " : ""}Level ${unit.level} · ${unit.xp} XP</span></div>
         <div class="empire-health"><span><b>${unit.hp}</b> HP</span><i><b style="width:${unit.hp}%"></b></i></div>
-        <div class="empire-moves"><b>${unit.moves}/${unit.def.moves}</b><span class="dim">Movement</span></div>
+        <div class="empire-moves"><b>${unit.moves}/${unit.maxMoves}</b><span class="dim">Movement</span></div>
         <div class="empire-strength"><b>${power}</b><span class="dim">${unit.promos.length ? unit.promos.map(key => PROMOS[key].name).join(", ") : "No promotions"}</span></div>
         <div class="empire-order"><b>${order[0]}</b><span class="dim">${location}</span></div>
       </div>`;
@@ -2083,7 +2088,8 @@ const UI = (() => {
       if (u.siege) notes.push("Siege: +100% vs cities");
       if (u.naval) notes.push("Naval unit — built in coastal cities");
       if (u.great) notes.push("Great Person — earned, not built");
-      E.push({ cat: "Units", name: u.name, icon: u.icon, tags: key.toLowerCase(),
+      E.push({ cat: "Units", name: u.name, icon: u.icon, unitKey: key,
+        tags: key.toLowerCase() + (u.naval ? " naval ship fleet" : ""),
         html: `<div class="dim">${stats.join(" · ")}</div>${u.blurb ? `<p>${u.blurb}</p>` : ""}${notes.length ? `<p class="dim">${notes.join(" · ")}</p>` : ""}` });
     }
     // Buildings & wonders
@@ -2112,8 +2118,11 @@ const UI = (() => {
     }
     // Promotions
     for (const [pk, pr] of Object.entries(PROMOS)) {
-      E.push({ cat: "Policies", name: pr.name + " (promotion)", icon: pr.icon, tags: "promotion " + pk.toLowerCase(),
-        html: `<p>${pr.desc}</p><p class="dim">Chosen when a unit gains a level.</p>` });
+      const scope = pr.domain === "naval" ? "Naval units only."
+        : pr.domain === "land" ? (pr.melee ? "Land melee units only." : "Land units only.")
+        : "Available to all military units.";
+      E.push({ cat: "Promotions", name: pr.name, icon: pr.icon, tags: "promotion " + pk.toLowerCase(),
+        html: `<p>${pr.desc}</p><p class="dim">${scope} Chosen when a unit gains a level.</p>` });
     }
     // Religion
     for (const [bk, bl] of Object.entries(BELIEFS)) {
@@ -2152,7 +2161,7 @@ const UI = (() => {
   function showPediaScreen(initialQuery) {
     if (!pediaEntries) pediaEntries = buildPediaEntries();
     $("pedia-modal").style.display = "flex";
-    const cats = ["All", "Units", "Buildings", "Wonders", "Techs", "Policies", "Religion", "Civilizations", "Victory"];
+    const cats = ["All", "Units", "Buildings", "Wonders", "Techs", "Policies", "Promotions", "Religion", "Civilizations", "Victory"];
     $("pedia-tabs").innerHTML = cats.map(c =>
       `<button class="pedia-tab${c === pediaCat ? " active" : ""}" data-cat="${c}">${c}</button>`).join("");
     $("pedia-tabs").querySelectorAll("button").forEach(b => b.onclick = () => { pediaCat = b.dataset.cat; renderPedia(); });
@@ -2175,9 +2184,21 @@ const UI = (() => {
     let lastCat = null;
     for (const e of list) {
       if (pediaCat === "All" && e.cat !== lastCat) { html += `<h3>${e.cat}</h3>`; lastCat = e.cat; }
-      html += `<div class="pedia-entry"><div class="pedia-name">${e.icon} <b>${e.name}</b></div>${e.html}</div>`;
+      const art = e.unitKey ? `<canvas class="pedia-unit-art" data-unit-art="${e.unitKey}"
+        width="128" height="128" role="img" aria-label="${e.name} silhouette"></canvas>` : "";
+      html += `<div class="pedia-entry ${e.unitKey ? "unit" : ""}">${art}<div class="pedia-entry-main">
+        <div class="pedia-name">${e.icon} <b>${e.name}</b></div>${e.html}</div></div>`;
     }
     body.innerHTML = html;
+    body.querySelectorAll(".pedia-unit-art").forEach(canvas => {
+      const def = UNITS[canvas.dataset.unitArt];
+      const ctx = canvas.getContext("2d");
+      const ring = def.uu ? CIVS[def.uu].color : def.naval ? "#4fa3c7" : "#c9a648";
+      ctx.fillStyle = "#172235";
+      ctx.beginPath(); ctx.arc(64, 64, 55, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = ring; ctx.lineWidth = 5; ctx.stroke();
+      UNIT_ART.draw(ctx, def, 64, 64, 86, "#f4ead3");
+    });
   }
 
   // Notifications surface as transient toasts that fade after a few seconds so
@@ -2322,7 +2343,7 @@ const UI = (() => {
     { key: "religion", title: "Found a religion", when: () => game.canFoundReligion(game.viewer),
       body: "You have enough <b>faith</b> to found a religion — click the faith readout or press <b>R</b>. Pick a belief that suits your strategy, then spread it with Missionaries." },
     { key: "promote", title: "Promote your veteran", when: () => game.units.some(u => u.owner === game.viewer && u.promoPts > 0),
-      body: "A unit has earned a <b>promotion</b>. Select it and choose an upgrade — Might, Bulwark, Field Medic, or Pathfinder. Promotions stack, so seasoned units become formidable." },
+      body: "A unit has earned a <b>promotion</b>. Select it to choose a role-specific upgrade: land troops can prepare amphibious assaults, while fleets can specialize in boarding, bombardment, or navigation." },
     { key: "cityState", title: "City-states", when: () => [...game.players[game.viewer].met].some(i => game.players[i].isMinor),
       body: "You've met a <b>city-state</b>. Win its friendship with gold gifts or by completing its <b>quests</b> (open Diplomacy to see them) for bonuses to your empire." },
   ];

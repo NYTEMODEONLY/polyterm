@@ -155,15 +155,17 @@ events, or AI choices.
   rival's attitude, and sign **defensive pacts** with friends — if either
   signatory is attacked, the other joins the war. Every rival tracks an
   attitude toward you, shown on the diplomacy screen
-- **Unit promotions**: veterans that earn a level let you *choose* an
-  upgrade — **Might** (+attack), **Bulwark** (+defense), **Field Medic**
-  (heals itself and nearby units), or **Pathfinder** (ignores rough terrain)
+- **Role-aware unit promotions**: every veteran can specialize in attack,
+  defense, or field medicine; land troops add Pathfinder and Amphibious
+  Assault options, while fleets unlock Boarding Parties, Bombardment, and
+  Navigation. Promoted melee troops can attack directly from transports
 - **City-state quests**: minors periodically ask a favour — burn a specific
   barbarian camp, slay raiders, or be first to a technology — and reward the
   civ that delivers with a burst of influence
 - Naval warfare: research Sailing to embark land units onto the coast and
-  build Galleys; Compass opens the deep sea and the ranged War Galleass.
-  Ships hunt transports, bombard shores, and can capture coastal cities;
+  build Galleys; Compass opens the deep sea and the ranged War Galleass,
+  followed by Gunpowder Frigates and Steam-powered Ironclads. Ships hunt
+  transports, bombard shores, and can capture coastal cities;
   embarked units are nearly defenseless — escort them. AI fleets chart unknown
   seas, modernize in home waters, screen transports, and coordinate bombardment
 - Fog of war with explored/visible states
@@ -186,7 +188,7 @@ events, or AI choices.
   their line (Warrior → Swordsman → Longswordsman → Musketman, and so on),
   keeping their promotions — unique units included
 - Unit promotions: combat earns XP; veterans gain up to three ⭐ levels,
-  each worth +10% strength (and a morale heal on promotion)
+  each worth +5% strength (and a morale heal plus a specialization pick)
 - **Religion**: Shrines, Temples and monasteries generate faith. Found one
   of six historical faiths — Orthodoxy, Catholicism, Islam, Bogomilism,
   Tengrism, Hellenism — pick a founder belief (food, science, gold tithe,
@@ -283,6 +285,7 @@ js/hex.js         hex-grid math (odd-r offset, cube distance, pixel transforms)
 js/mapgen.js      seeded value-noise map generation + start placement
 js/model.js       game engine: cities, units, combat, research, turns, save/load
 js/ai.js          AI: settling, production, research, diplomacy, tactics
+js/unitart.js     shared code-native unit silhouettes for both map renderers
 js/render.js      classic 2D canvas renderer + minimap
 js/render3d.js    3D WebGL renderer (extruded hex terrain, sprite units)
 js/vendor/        three.min.js (r147, vendored so the game works offline)
@@ -318,5 +321,5 @@ drops mid-game the host can continue against the AI or re-host later.
 
 ## Ideas for future expansion
 
-More naval unit classes and amphibious promotions, longer historical campaign
-chains, additional Industrial-era scenarios, and localized interface text.
+Naval blockades and fleet logistics, longer historical campaign chains,
+additional Industrial-era scenarios, and localized interface text.

@@ -945,7 +945,7 @@ class Renderer3D {
       const l = this._lineOf(pts, 0xffffff, true);
       this.gDyn.add(l);
       this._pool.routes.push(l);
-      const turns = Math.max(1, Math.ceil(this.previewPath.length / Math.max(1, this.selected.def.moves)));
+      const turns = Math.max(1, Math.ceil(this.previewPath.length / Math.max(1, this.selected.maxMoves)));
       if (turns > 1) {
         const last = pts[pts.length - 1];
         this._spriteAt(this._pool.fx, this._textTex(String(turns), "#ffffff"), last[0], last[1] + S * 0.55, last[2], S * 0.9, S * 0.34);
