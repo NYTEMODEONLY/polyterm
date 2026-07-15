@@ -93,6 +93,10 @@ events, or AI choices.
   any time from the ☰ Menu — the game autosaves and resumes seamlessly,
   and both styles show the exact same match (Three.js is vendored locally,
   so the game still works fully offline)
+- **Living city skylines** in both renderers: settlements grow denser with
+  population and advance through five architectural eras. Constructed walls,
+  religious landmarks, factories, and world wonders visibly change the map,
+  while cities outside current vision use a fog-safe redacted silhouette
 - **Strategic tile-yield lens** in both renderers: press `Y` or use the
   wheat control to reveal food, production, and gold directly on every
   currently visible hex. The setting persists between sessions and uses
@@ -295,6 +299,7 @@ Plain HTML/CSS/JavaScript — no frameworks, no build step.
 index.html        page shell
 css/style.css     all styling
 js/data.js        civs, units, buildings, techs, terrain tables
+js/cityart.js     shared era, population, and landmark city visuals
 js/sound.js       procedural WebAudio sound effects
 js/hex.js         hex-grid math (odd-r offset, cube distance, pixel transforms)
 js/mapgen.js      seeded value-noise map generation + start placement

@@ -549,31 +549,26 @@ class Renderer {
   }
 
   drawCity(ctx, game, city, sx, sy, s) {
-    const civ = CIVS[game.players[city.owner].civId];
+    const player = game.players[city.owner];
+    const civ = CIVS[player.civId];
+    const visibility = game.players[game.viewer].visible[game.map.idx(city.c, city.r)];
+    const seenNow = visibility === 2;
+    const obscured = !seenNow && city.owner !== game.viewer;
+    const appearance = CITY_ART.profile(city, player, obscured);
     // city hex base
+    ctx.save();
     this.hexPath(ctx, sx, sy, s * 0.8);
-    ctx.fillStyle = "#3a3530";
+    ctx.fillStyle = appearance.palette.ground;
+    if (obscured) ctx.globalAlpha *= 0.58;
     ctx.fill();
-    // buildings silhouette
-    ctx.fillStyle = "#d8cbb0";
-    const bw = s * 0.22;
-    for (const [dx, hMul] of [[-1.3, 0.5], [-0.4, 0.85], [0.5, 0.6]]) {
-      ctx.fillRect(sx + dx * bw, sy - s * 0.35 * hMul, bw * 0.8, s * 0.35 * hMul + s * 0.25);
-    }
-    ctx.fillStyle = "#8a2f20";
-    for (const [dx, hMul] of [[-1.3, 0.5], [-0.4, 0.85], [0.5, 0.6]]) {
-      ctx.beginPath();
-      ctx.moveTo(sx + dx * bw - bw * 0.15, sy - s * 0.35 * hMul);
-      ctx.lineTo(sx + dx * bw + bw * 0.4, sy - s * 0.35 * hMul - s * 0.18);
-      ctx.lineTo(sx + dx * bw + bw * 0.95, sy - s * 0.35 * hMul);
-      ctx.closePath(); ctx.fill();
-    }
+    ctx.restore();
+    CITY_ART.draw(ctx, appearance, sx, sy, s);
 
     // banner
-    const rel = city.religion !== null && game.religions[city.religion];
-    const seenNow = game.players[game.viewer].visible[game.map.idx(city.c, city.r)] === 2;
+    const reportDetails = city.owner === game.viewer || seenNow;
+    const rel = reportDetails && city.religion !== null && game.religions[city.religion];
     const blockaded = (city.owner === game.viewer || seenNow) && game.cityBlockade(city).active;
-    const label = `${blockaded ? "⚓ " : ""}${city.pop}  ${rel ? rel.icon + " " : ""}${city.name}${city.isCapital ? " ★" : ""}`;
+    const label = `${blockaded ? "⚓ " : ""}${reportDetails ? city.pop : "?"}  ${rel ? rel.icon + " " : ""}${city.name}${city.isCapital ? " ★" : ""}`;
     ctx.font = `bold ${Math.max(11, Math.floor(s * 0.34))}px 'Segoe UI', sans-serif`;
     const tw = ctx.measureText(label).width;
     const bx = sx - tw / 2 - 8, by = sy - s * 1.05, bh = Math.max(16, s * 0.46);
@@ -592,7 +587,7 @@ class Renderer {
     ctx.fillText(label, sx + 2, by + 1);
 
     // HP bar when damaged
-    if (city.hp < city.maxHp) {
+    if (reportDetails && city.hp < city.maxHp) {
       const w = s * 1.4;
       ctx.fillStyle = "#222";
       ctx.fillRect(sx - w / 2, by + bh / 2 + 2, w, 4);

@@ -329,12 +329,14 @@ class Renderer3D {
 
   _bannerTex(city, game) {
     const civ = CIVS[game.players[city.owner].civId];
-    const rel = city.religion !== null && game.religions[city.religion];
     const seenNow = game.players[game.viewer].visible[game.map.idx(city.c, city.r)] === 2;
+    const reportDetails = city.owner === game.viewer || seenNow;
+    const rel = reportDetails && city.religion !== null && game.religions[city.religion];
     const blockaded = (city.owner === game.viewer || seenNow) && game.cityBlockade(city).active;
     const label = `${blockaded ? "⚓ " : ""}${rel ? rel.icon + " " : ""}${city.name}${city.isCapital ? " ★" : ""}`;
-    const hpB = city.hp >= city.maxHp ? 100 : Math.ceil(city.hp / city.maxHp * 20) * 5;
-    const key = `b|${label}|${city.pop}|${civ.color}|${hpB}|${blockaded ? 1 : 0}`;
+    const population = reportDetails ? city.pop : "?";
+    const hpB = reportDetails ? (city.hp >= city.maxHp ? 100 : Math.ceil(city.hp / city.maxHp * 20) * 5) : 100;
+    const key = `b|${label}|${population}|${civ.color}|${hpB}|${blockaded ? 1 : 0}`;
     let t = this._texCache.get(key);
     if (t) return t;
     const meas = document.createElement("canvas").getContext("2d");
@@ -361,7 +363,7 @@ class Renderer3D {
       ctx.font = "bold 24px 'Segoe UI', sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(String(city.pop), 25, 32);
+      ctx.fillText(String(population), 25, 32);
       ctx.fillStyle = "#fff6df";
       ctx.font = "bold 30px 'Segoe UI', sans-serif";
       ctx.textAlign = "center";
@@ -430,6 +432,7 @@ class Renderer3D {
 
   _buildStatic(game) {
     // wipe everything tied to the previous map
+    for (const group of this._cities.values()) this._disposeCityGroup(group);
     for (const g of [this.gTerrain, this.gShroud, this.gBorders, this.gImprov, this.gYields, this.gDyn]) {
       for (const ch of [...g.children]) {
         g.remove(ch);
@@ -747,11 +750,140 @@ class Renderer3D {
     return s;
   }
 
+  _disposeCityModel(model) {
+    if (!model) return;
+    const materials = new Set();
+    model.traverse(object => {
+      if (object.geometry) object.geometry.dispose();
+      if (Array.isArray(object.material)) object.material.forEach(material => materials.add(material));
+      else if (object.material) materials.add(object.material);
+    });
+    materials.forEach(material => material.dispose());
+  }
+
+  _disposeCityGroup(group) {
+    if (!group) return;
+    this._disposeCityModel(group.getObjectByName("model"));
+    const banner = group.getObjectByName("banner");
+    if (banner && banner.material) banner.material.dispose();
+  }
+
+  _buildCityModel(appearance, S) {
+    const model = new THREE.Group();
+    model.name = "model";
+    const p = appearance.palette;
+    const material = (color, roughness = 0.92, metalness = 0) =>
+      new THREE.MeshStandardMaterial({ color, roughness, metalness, transparent: true });
+    const groundMat = material(p.ground, 1);
+    const facadeMat = material(p.facade);
+    const stoneMat = material(p.stone, 1);
+    const roofMat = material(p.roof, 0.86);
+    const accentMat = material(p.accent, 0.7, appearance.era >= 4 ? 0.18 : 0);
+    const civMat = material(appearance.capital ? p.accent : appearance.civColor, 0.72);
+    const addMesh = (geometry, mat, x, y, z, receive = true) => {
+      const mesh = new THREE.Mesh(geometry, mat);
+      mesh.position.set(x, y, z);
+      mesh.castShadow = true;
+      mesh.receiveShadow = receive;
+      model.add(mesh);
+      return mesh;
+    };
+
+    addMesh(new THREE.CylinderGeometry(S * 0.57, S * 0.62, S * 0.13, 6),
+      groundMat, 0, S * 0.065, 0);
+
+    if (appearance.fortified) {
+      const wall = addMesh(new THREE.TorusGeometry(S * 0.48, S * 0.047, 4, 6),
+        stoneMat, 0, S * 0.22, 0);
+      wall.rotation.x = Math.PI / 2;
+      for (const [x, z] of [[-0.39, -0.18], [0.39, -0.18], [-0.27, 0.34], [0.27, 0.34]])
+        addMesh(new THREE.CylinderGeometry(S * 0.075, S * 0.085, S * 0.28, 6),
+          stoneMat, x * S, S * 0.18, z * S);
+    }
+
+    const layout = [
+      [-0.30, 0.10, 0.21, 0.35], [0.03, -0.16, 0.25, 0.48], [0.31, 0.12, 0.18, 0.31],
+      [-0.06, 0.27, 0.20, 0.29], [-0.34, -0.20, 0.17, 0.28], [0.34, -0.18, 0.16, 0.25],
+    ];
+    for (let i = 0; i < appearance.density; i++) {
+      const [x, z, width, height] = layout[i];
+      const bw = width * S;
+      const bh = height * S * (1 + appearance.era * 0.035);
+      const body = addMesh(new THREE.BoxGeometry(bw, bh, bw), i % 3 === 0 ? stoneMat : facadeMat,
+        x * S, bh / 2 + S * 0.12, z * S);
+      body.rotation.y = (i % 2 ? 0.09 : -0.08);
+      if (appearance.era >= 4 && i % 2 === 0) {
+        addMesh(new THREE.BoxGeometry(bw * 1.10, bw * 0.12, bw * 1.10), roofMat,
+          x * S, bh + S * 0.12, z * S);
+      } else {
+        const roof = addMesh(new THREE.ConeGeometry(bw * 0.78, bw * 0.55, 4), roofMat,
+          x * S, bh + S * 0.12 + bw * 0.27, z * S, false);
+        roof.rotation.y = Math.PI / 4 + body.rotation.y;
+      }
+    }
+
+    if (appearance.industry) {
+      addMesh(new THREE.BoxGeometry(S * 0.36, S * 0.34, S * 0.31), facadeMat,
+        0, S * 0.29, -S * 0.02);
+      addMesh(new THREE.BoxGeometry(S * 0.42, S * 0.07, S * 0.35), roofMat,
+        0, S * 0.495, -S * 0.02);
+      for (const x of [-0.10, 0.11]) {
+        addMesh(new THREE.CylinderGeometry(S * 0.036, S * 0.048, S * 0.48, 8),
+          material("#6a5140", 1), x * S, S * 0.62, -S * 0.03);
+      }
+      if (appearance.faith) {
+        addMesh(new THREE.CylinderGeometry(S * 0.085, S * 0.10, S * 0.27, 9),
+          stoneMat, -S * 0.29, S * 0.255, S * 0.10);
+        addMesh(new THREE.SphereGeometry(S * 0.105, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2),
+          roofMat, -S * 0.29, S * 0.40, S * 0.10, false);
+      }
+    } else if (appearance.era === 3 || appearance.faith) {
+      addMesh(new THREE.CylinderGeometry(S * 0.14, S * 0.16, S * 0.43, 10),
+        stoneMat, 0, S * 0.335, -S * 0.02);
+      addMesh(new THREE.SphereGeometry(S * 0.17, 12, 7, 0, Math.PI * 2, 0, Math.PI / 2),
+        roofMat, 0, S * 0.56, -S * 0.02, false);
+      addMesh(new THREE.CylinderGeometry(S * 0.018, S * 0.018, S * 0.17, 6),
+        accentMat, 0, S * 0.76, -S * 0.02, false);
+    } else if (appearance.era >= 2) {
+      addMesh(new THREE.CylinderGeometry(S * 0.13, S * 0.15, S * 0.82, 8),
+        stoneMat, S * 0.04, S * 0.53, -S * 0.02);
+      addMesh(new THREE.ConeGeometry(S * 0.19, S * 0.22, 8), roofMat,
+        S * 0.04, S * 1.05, -S * 0.02, false);
+    } else if (appearance.era === 1) {
+      addMesh(new THREE.BoxGeometry(S * 0.39, S * 0.12, S * 0.28), facadeMat,
+        0, S * 0.41, -S * 0.02);
+      for (const x of [-0.14, -0.047, 0.047, 0.14])
+        addMesh(new THREE.CylinderGeometry(S * 0.022, S * 0.025, S * 0.35, 7),
+          stoneMat, x * S, S * 0.245, S * 0.11);
+      const hallRoof = addMesh(new THREE.ConeGeometry(S * 0.30, S * 0.16, 4), roofMat,
+        0, S * 0.55, -S * 0.02, false);
+      hallRoof.rotation.y = Math.PI / 4;
+    }
+
+    if (appearance.wonder) {
+      addMesh(new THREE.ConeGeometry(S * 0.055, S * 0.40, 7), accentMat,
+        -S * 0.22, S * 0.62, -S * 0.14, false);
+      const halo = addMesh(new THREE.TorusGeometry(S * 0.12, S * 0.018, 5, 18), accentMat,
+        -S * 0.22, S * 0.92, -S * 0.14, false);
+      halo.rotation.x = Math.PI / 2;
+    }
+
+    addMesh(new THREE.CylinderGeometry(S * 0.013, S * 0.013, S * 0.43, 6),
+      accentMat, S * 0.29, S * 0.78, S * 0.03, false);
+    addMesh(new THREE.BoxGeometry(S * 0.20, S * 0.11, S * 0.018),
+      civMat, S * 0.39, S * 0.90, S * 0.03, false);
+    return model;
+  }
+
   _syncCities(game) {
     const vis = game.players[game.viewer].visible;
     const S = this.hexSize;
     for (const [c, gr] of this._cities) {
-      if (!game.cities.includes(c)) { this.gDyn.remove(gr); this._cities.delete(c); }
+      if (!game.cities.includes(c)) {
+        this._disposeCityGroup(gr);
+        this.gDyn.remove(gr);
+        this._cities.delete(c);
+      }
     }
     for (const city of game.cities) {
       const v = vis[game.map.idx(city.c, city.r)];
@@ -759,49 +891,35 @@ class Renderer3D {
       if (v === 0) { if (gr) gr.visible = false; continue; }
       if (!gr) {
         gr = new THREE.Group();
-        // A compact walled settlement with a central keep and roofscape.
-        const wallMat = new THREE.MeshStandardMaterial({ color: 0xd2c3a2, roughness: 0.95 });
-        const stoneMat = new THREE.MeshStandardMaterial({ color: 0xa89a7d, roughness: 1 });
-        const roofMat = new THREE.MeshStandardMaterial({ color: 0x87382b, roughness: 0.88 });
-        const foundation = new THREE.Mesh(new THREE.CylinderGeometry(S * 0.57, S * 0.62, S * 0.13, 6), stoneMat);
-        foundation.position.y = S * 0.065;
-        foundation.receiveShadow = true;
-        gr.add(foundation);
-        const wallRing = new THREE.Mesh(new THREE.TorusGeometry(S * 0.47, S * 0.045, 4, 6), stoneMat);
-        wallRing.rotation.x = Math.PI / 2;
-        wallRing.position.y = S * 0.22;
-        wallRing.castShadow = wallRing.receiveShadow = true;
-        gr.add(wallRing);
-        for (const [dx, dz, w, hgt] of [[-0.3, 0.05, 0.28, 0.4], [0.08, -0.2, 0.34, 0.66], [0.32, 0.2, 0.25, 0.35], [-0.05, 0.3, 0.23, 0.31]]) {
-          const bw = w * S, bh = hgt * S;
-          const box = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bw), wallMat);
-          box.position.set(dx * S, bh / 2, dz * S);
-          box.castShadow = box.receiveShadow = true;
-          gr.add(box);
-          const roof = new THREE.Mesh(new THREE.ConeGeometry(bw * 0.78, bw * 0.55, 4), roofMat);
-          roof.position.set(dx * S, bh + bw * 0.27, dz * S);
-          roof.rotation.y = Math.PI / 4;
-          roof.castShadow = true;
-          gr.add(roof);
-        }
-        const keep = new THREE.Mesh(new THREE.CylinderGeometry(S * 0.13, S * 0.15, S * 0.82, 8), stoneMat);
-        keep.position.set(S * 0.07, S * 0.41, -S * 0.02);
-        keep.castShadow = keep.receiveShadow = true;
-        gr.add(keep);
-        const keepRoof = new THREE.Mesh(new THREE.ConeGeometry(S * 0.19, S * 0.22, 8), roofMat);
-        keepRoof.position.set(S * 0.07, S * 0.93, -S * 0.02);
-        keepRoof.castShadow = true;
-        gr.add(keepRoof);
         const banner = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false }));
         banner.name = "banner";
         gr.add(banner);
         this._cities.set(city, gr);
         this.gDyn.add(gr);
       }
+      const player = game.players[city.owner];
+      const obscured = v !== 2 && city.owner !== game.viewer;
+      const appearance = CITY_ART.profile(city, player, obscured);
+      if (gr.userData.appearance !== appearance.signature) {
+        const prior = gr.getObjectByName("model");
+        if (prior) { gr.remove(prior); this._disposeCityModel(prior); }
+        gr.add(this._buildCityModel(appearance, S));
+        gr.userData.appearance = appearance.signature;
+      }
       gr.visible = true;
       const [wx, wz] = HEX.toPixel(city.c, city.r, S);
       const top = ELEV3D[game.tile(city.c, city.r).terrain];
       gr.position.set(wx, top, wz);
+      const model = gr.getObjectByName("model");
+      const opacity = v === 1 ? 0.52 : 1;
+      if (model) model.traverse(object => {
+        if (!object.isMesh) return;
+        const materials = Array.isArray(object.material) ? object.material : [object.material];
+        for (const material of materials) {
+          material.opacity = opacity;
+          material.depthWrite = opacity === 1;
+        }
+      });
       const banner = gr.getObjectByName("banner");
       const tex = this._bannerTex(city, game);
       banner.material.map = tex;
@@ -810,7 +928,6 @@ class Renderer3D {
       banner.scale.set(bw, bh, 1);
       banner.position.set(0, S * 1.72, 0);
       banner.renderOrder = 6;
-      gr.traverse(o => { if (o.isMesh) { o.material.opacity = 1; } });
     }
   }
 

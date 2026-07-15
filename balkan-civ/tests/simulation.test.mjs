@@ -10,7 +10,7 @@ const gameRoot = path.resolve(here, "..");
 
 function loadGameContext() {
   const context = vm.createContext({ console, Math, Date, Uint8Array, Set, Map, JSON });
-  for (const file of ["data.js", "hex.js", "mapgen.js", "model.js", "ai.js"]) {
+  for (const file of ["data.js", "cityart.js", "hex.js", "mapgen.js", "model.js", "ai.js"]) {
     vm.runInContext(fs.readFileSync(path.join(gameRoot, "js", file), "utf8"), context, { filename: file });
   }
   return context;
@@ -19,6 +19,14 @@ function loadGameContext() {
 function loadUnitArtContext() {
   const context = vm.createContext({ console, Math, Set, Map, JSON });
   for (const file of ["data.js", "unitart.js"]) {
+    vm.runInContext(fs.readFileSync(path.join(gameRoot, "js", file), "utf8"), context, { filename: file });
+  }
+  return context;
+}
+
+function loadCityRenderContext() {
+  const context = vm.createContext({ console, Math, Date, Uint8Array, Set, Map, JSON });
+  for (const file of ["data.js", "cityart.js", "vendor/three.min.js", "render3d.js"]) {
     vm.runInContext(fs.readFileSync(path.join(gameRoot, "js", file), "utf8"), context, { filename: file });
   }
   return context;
@@ -563,6 +571,128 @@ test("shared naval unit art assigns every upgrade era a distinct silhouette", ()
   assert.deepEqual(profiles,
     { GALLEY: "galley", GALLEASS: "galleass", FRIGATE: "frigate", IRONCLAD: "steamship" });
   assert.equal(new Set(Object.values(profiles)).size, 4);
+});
+
+test("shared city art advances through five eras and redacts unseen development", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    const g = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 64006,
+      mapW: 24, mapH: 18, mapType: "peninsula", noMinors: true, noBarbs: true });
+    const p = g.players[0];
+    const city = new City("Belgrade", 0, 5, 5);
+    city.isCapital = true;
+    const eras = [];
+    for (let era = 0; era < ERAS.length; era++) {
+      p.techs = new Set(Object.keys(TECHS).filter(key => TECHS[key].era <= era));
+      city.pop = 1 + era * 2;
+      const visual = CITY_ART.profile(city, p);
+      eras.push({ era: visual.era, stage: visual.stage, density: visual.density,
+        signature: visual.signature, palette: visual.palette });
+    }
+
+    p.techs = new Set(Object.keys(TECHS).filter(key => TECHS[key].era <= 3));
+    city.pop = 9;
+    city.buildings.length = 0;
+    const baseline = CITY_ART.profile(city, p);
+    city.buildings.push("WALLS");
+    const fortified = CITY_ART.profile(city, p);
+    city.buildings.push("SHRINE");
+    const religious = CITY_ART.profile(city, p);
+    city.buildings.push("FACTORY");
+    const industrial = CITY_ART.profile(city, p);
+    city.buildings.push("DIOCLETIAN");
+    const wondrous = CITY_ART.profile(city, p);
+
+    const hiddenBefore = CITY_ART.profile(city, p, true);
+    city.pop = 20;
+    city.buildings.push("KALEMEGDAN", "HAGIA_SOPHIA");
+    const hiddenAfter = CITY_ART.profile(city, p, true);
+    return JSON.stringify({ eras, transitions: [baseline, fortified, religious, industrial, wondrous]
+      .map(v => ({ signature: v.signature, fortified: v.fortified, faith: v.faith,
+        industry: v.industry, wonder: v.wonder })), hiddenBefore, hiddenAfter });
+  `));
+
+  assert.deepEqual(result.eras.map(v => v.stage),
+    ["Ancient", "Classical", "Medieval", "Renaissance", "Industrial"]);
+  assert.deepEqual(result.eras.map(v => v.era), [0, 1, 2, 3, 4]);
+  assert.deepEqual(result.eras.map(v => v.density), [2, 3, 4, 5, 6]);
+  assert.equal(new Set(result.eras.map(v => v.signature)).size, 5);
+  assert.equal(new Set(result.eras.map(v => JSON.stringify(v.palette))).size, 5);
+  assert.deepEqual(result.transitions.map(v => [v.fortified, v.faith, v.industry, v.wonder]), [
+    [false, false, false, false],
+    [true, false, false, false],
+    [true, true, false, false],
+    [true, true, true, false],
+    [true, true, true, true],
+  ]);
+  assert.equal(new Set(result.transitions.map(v => v.signature)).size, 5);
+  assert.equal(result.hiddenBefore.signature, result.hiddenAfter.signature,
+    "population and construction changes in fog must not alter the redacted silhouette");
+  assert.deepEqual({ era: result.hiddenAfter.era, density: result.hiddenAfter.density,
+    fortified: result.hiddenAfter.fortified, faith: result.hiddenAfter.faith,
+    industry: result.hiddenAfter.industry, wonder: result.hiddenAfter.wonder, obscured: result.hiddenAfter.obscured },
+  { era: 0, density: 2, fortified: false, faith: false,
+    industry: false, wonder: false, obscured: true });
+});
+
+test("city visual profiles produce deterministic 2D operations and valid 3D geometry", () => {
+  const result = JSON.parse(evaluate(loadCityRenderContext(), `
+    const renderer = Object.create(Renderer3D.prototype);
+    const makeContext = () => {
+      const ctx = { globalAlpha: 1, ops: [],
+        save() { this.ops.push("save"); }, restore() { this.ops.push("restore"); },
+        beginPath() { this.ops.push("begin"); }, closePath() { this.ops.push("close"); },
+        fill() { this.ops.push("fill"); }, stroke() { this.ops.push("stroke"); },
+        fillRect(...args) { this.ops.push("rect:" + args.map(n => Number(n).toFixed(2)).join(",")); },
+        moveTo(...args) { this.ops.push("move:" + args.map(n => Number(n).toFixed(2)).join(",")); },
+        lineTo(...args) { this.ops.push("line:" + args.map(n => Number(n).toFixed(2)).join(",")); },
+        arc(...args) { this.ops.push("arc:" + args.map(n => Number(n).toFixed(2)).join(",")); },
+        ellipse(...args) { this.ops.push("ellipse:" + args.map(n => Number(n).toFixed(2)).join(",")); },
+      };
+      for (const prop of ["fillStyle", "strokeStyle", "lineWidth"])
+        Object.defineProperty(ctx, prop, { set(value) { ctx.ops.push(prop + ":" + value); } });
+      return ctx;
+    };
+    const modelFingerprint = appearance => {
+      const model = renderer._buildCityModel(appearance, 34);
+      let meshes = 0, vertices = 0, invalid = 0;
+      model.traverse(object => {
+        if (!object.isMesh) return;
+        meshes++;
+        const position = object.geometry && object.geometry.getAttribute("position");
+        if (!position || !Number.isFinite(position.count) || position.count <= 0) invalid++;
+        else vertices += position.count;
+      });
+      renderer._disposeCityModel(model);
+      return { meshes, vertices, invalid };
+    };
+    const eras = [];
+    for (let era = 0; era < 5; era++) {
+      const city = { pop: 1 + era * 2, buildings: [], isCapital: era === 0 };
+      const player = { civId: "SERBIA", era: () => era };
+      const appearance = CITY_ART.profile(city, player);
+      const ctx = makeContext();
+      CITY_ART.draw(ctx, appearance, 0, 0, 34);
+      eras.push({ stage: appearance.stage, draw: ctx.ops.join("|"), model: modelFingerprint(appearance) });
+    }
+    const city = { pop: 11,
+      buildings: ["WALLS", "CASTLE", "TEMPLE", "FACTORY", "DIOCLETIAN"], isCapital: true };
+    const player = { civId: "SERBIA", era: () => 4 };
+    const combined = CITY_ART.profile(city, player);
+    const firstCtx = makeContext(), secondCtx = makeContext();
+    CITY_ART.draw(firstCtx, combined, 0, 0, 34);
+    CITY_ART.draw(secondCtx, combined, 0, 0, 34);
+    return JSON.stringify({ eras, combined: { flags: [combined.fortified, combined.faith,
+      combined.industry, combined.wonder], draw: firstCtx.ops.join("|"),
+      repeat: secondCtx.ops.join("|"), model: modelFingerprint(combined) } });
+  `));
+
+  assert.equal(new Set(result.eras.map(stage => stage.draw)).size, 5);
+  assert.equal(new Set(result.eras.map(stage => `${stage.model.meshes}:${stage.model.vertices}`)).size, 5);
+  assert.ok(result.eras.every(stage => stage.model.meshes > 0 && stage.model.vertices > 0 && stage.model.invalid === 0));
+  assert.deepEqual(result.combined.flags, [true, true, true, true]);
+  assert.equal(result.combined.draw, result.combined.repeat);
+  assert.equal(result.combined.model.invalid, 0);
+  assert.ok(result.combined.model.meshes > result.eras.at(-1).model.meshes);
 });
 
 test("Amphibious Assault enables forecasted shore attacks with a controlled penalty", () => {
