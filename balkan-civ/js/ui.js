@@ -8,6 +8,7 @@ const UI = (() => {
   let chosenCiv = CIV_IDS[0];
   let chosenLeader = 0;
   let pendingAttack = null, combatPanelTimer = null;
+  let empireTab = "cities", empireCitySort = "capital", empireUnitSort = "readiness";
   const $ = (id) => document.getElementById(id);
 
   // In a network game only the client whose turn it is may act.
@@ -1484,17 +1485,8 @@ const UI = (() => {
   // ---------------- top bar / notifications ----------------
   function refreshTopBar() {
     const p = game.players[game.viewer];
-    let gold = 0, sci = 0, faith = 0;
-    for (const c of game.cities) {
-      if (c.owner !== game.viewer) continue;
-      const y = game.cityYields(c);
-      gold += y.gold; sci += y.sci; faith += y.faith;
-    }
-    gold -= Math.max(0, game.units.filter(u => u.owner === game.viewer).length - 4);
-    gold += game.minorBonuses(game.viewer).gold;
-    if (p.religionId !== null && game.religions[p.religionId].belief === "TITHE") {
-      gold += game.religionFollowers(p.religionId);
-    }
+    const economy = game.empireEconomy(game.viewer);
+    const gold = economy.netGold, sci = economy.science, faith = economy.faith;
     const tech = p.researching ? TECHS[p.researching] : null;
     $("stat-turn").textContent = `Turn ${game.turn}/${game.maxTurns}`;
     const era = p.era();
@@ -1525,7 +1517,7 @@ const UI = (() => {
       happyEl.title = `Happiness: ${HAPPINESS.base} base + ${lux.length * HAPPINESS.perLuxury} luxuries (${lux.map(l => RESOURCE[l].icon).join("") || "none"}) + buildings − ${nCities * HAPPINESS.perCity} cities − ${Math.floor(popTotal * HAPPINESS.perPop)} population` +
         `\nGolden Age: ${Math.floor(p.gaMeter)}/${GOLDEN_AGE.threshold(p.gaCount)} (surplus happiness fills the meter)`;
     }
-    const cpt = Math.floor(p._cpt || 0);
+    const cpt = Math.floor(economy.culture);
     $("stat-culture").innerHTML = game.canAdoptPolicy(game.viewer)
       ? `🎭 <b class="alert">new policy!</b>`
       : `🎭 ${Math.floor(p.culture)}/${game.nextPolicyCost(game.viewer)} (+${cpt})`;
@@ -1535,6 +1527,244 @@ const UI = (() => {
       : `${relIcon} ${Math.floor(p.faith)} (+${faith})`;
     $("stat-score").textContent = game.scenario ? game.scenarioStatus() : `🏆 ${game.score(game.viewer)}`;
     refreshEndTurnButton();
+  }
+
+  // ---------------- empire overview ----------------
+  const signed = value => {
+    const n = Math.floor(value);
+    return `${n > 0 ? "+" : ""}${n}`;
+  };
+
+  function showEmpireScreen(tab = empireTab) {
+    if (!game) return;
+    if (["cities", "military", "economy"].includes(tab)) empireTab = tab;
+    renderEmpireScreen();
+    $("empire-modal").style.display = "flex";
+  }
+
+  function setEmpireTab(tab) {
+    if (!["cities", "military", "economy"].includes(tab)) return;
+    empireTab = tab;
+    renderEmpireScreen();
+  }
+
+  function renderEmpireScreen() {
+    const p = game.players[game.viewer];
+    const e = game.empireEconomy(game.viewer);
+    const happiness = game.happinessOf(game.viewer);
+    const tabs = [
+      ["cities", "🏙️", "Cities"], ["military", "⚔️", "Military"], ["economy", "💰", "Economy"],
+    ].map(([key, icon, label]) => `<button role="tab" aria-selected="${empireTab === key}"
+      class="${empireTab === key ? "active" : ""}" onclick="UI.setEmpireTab('${key}')">${icon} ${label}</button>`).join("");
+    const summary = [
+      ["🏙️", "Cities", e.cities, ""],
+      ["👥", "Population", e.population, ""],
+      ["⚔️", "Units", e.units, ""],
+      ["💰", "Gold / turn", signed(e.netGold), e.netGold < 0 ? "negative" : "positive"],
+      ["🔬", "Science / turn", `+${e.science}`, ""],
+      [happiness >= 0 ? "😊" : "😞", "Happiness", signed(happiness), happiness < 0 ? "negative" : "positive"],
+    ].map(([icon, label, value, tone]) => `<div class="empire-stat ${tone}"><span>${icon}</span>
+      <div><b>${value}</b><small>${label}</small></div></div>`).join("");
+    const view = empireTab === "cities" ? renderEmpireCities()
+      : empireTab === "military" ? renderEmpireMilitary() : renderEmpireEconomy(e);
+    $("empire-body").innerHTML = `<div class="empire-banner" style="--civ:${p.civ.color}">
+        <div class="empire-identity"><i></i><div><strong>${p.civ.name}</strong><span>${p.leaderName}</span></div></div>
+        <div class="empire-summary">${summary}</div>
+      </div>
+      <div class="empire-tabs" role="tablist" aria-label="Empire overview">${tabs}</div>
+      <div class="empire-view" role="tabpanel">${view}</div>`;
+  }
+
+  function renderEmpireCities() {
+    const rows = game.cities.filter(c => c.owner === game.viewer).map(city => {
+      const y = game.cityYields(city);
+      const surplus = game.cityFoodSurplus(city, y);
+      const growthTurns = surplus > 0
+        ? Math.max(1, Math.ceil((city.foodNeeded() - city.food) / surplus)) : Infinity;
+      const current = city.producing;
+      const def = current ? (current.kind === "unit" ? UNITS[current.key] : BUILDINGS[current.key]) : null;
+      const rate = current ? game.cityProductionRate(city, current, y) : y.prod;
+      const blocked = !!(current && current.kind === "unit" && city.prodStored >= def.cost &&
+        !game.productionUnitSpot(city, current.key));
+      const productionTurns = current && !blocked
+        ? Math.max(1, Math.ceil(Math.max(0, def.cost - city.prodStored) / Math.max(1, rate))) : Infinity;
+      return { city, y, surplus, growthTurns, current, def, rate, blocked, productionTurns };
+    });
+    rows.sort((a, b) => {
+      if (empireCitySort === "population") return b.city.pop - a.city.pop || a.city.name.localeCompare(b.city.name);
+      if (empireCitySort === "growth") return a.growthTurns - b.growthTurns || b.surplus - a.surplus;
+      if (empireCitySort === "production") return b.rate - a.rate || a.productionTurns - b.productionTurns;
+      return Number(b.city.isCapital) - Number(a.city.isCapital) || a.city.name.localeCompare(b.city.name);
+    });
+    const sortOptions = [["capital", "Capital first"], ["population", "Population"],
+      ["growth", "Growth forecast"], ["production", "Production output"]]
+      .map(([key, label]) => `<option value="${key}" ${empireCitySort === key ? "selected" : ""}>${label}</option>`).join("");
+    const cityRows = rows.map(({ city, y, surplus, growthTurns, current, def, rate, blocked, productionTurns }) => {
+      const growth = surplus > 0 ? `+${surplus} food · ${growthTurns}t`
+        : surplus < 0 ? `${surplus} food · starving` : "Growth stalled";
+      const production = current
+        ? `<strong>${def.icon} ${def.name}</strong><span class="${blocked ? "alert" : "dim"}">${blocked ? "Waiting for unit space" : `${rate} ⚙️/turn · ${productionTurns}t`}${city.queue.length ? ` · ${city.queue.length} queued` : ""}</span>`
+        : `<strong class="alert">Production needed</strong><span class="dim">No current project</span>`;
+      const focusOptions = Object.entries(CITY_FOCUS).map(([key, focus]) =>
+        `<option value="${key}" ${city.focus === key ? "selected" : ""}>${focus.icon} ${focus.name}</option>`).join("");
+      return `<div class="empire-row empire-city-row${current ? "" : " needs-order"}">
+        <button class="empire-jump" title="Center map on ${city.name}" aria-label="Center map on ${city.name}"
+          onclick="UI.empireJumpCity(${city.id})">⌖</button>
+        <div class="empire-primary"><strong>${city.name}${city.isCapital ? " ★" : ""}</strong>
+          <span class="dim">${city.buildings.length} building${city.buildings.length === 1 ? "" : "s"} · ${city.hp}/${city.maxHp} HP</span></div>
+        <div class="empire-pop"><b>👥 ${city.pop}</b><span class="${surplus < 0 ? "alert" : "dim"}">${growth}</span></div>
+        <div class="empire-yields" aria-label="City yields"><span>🍞 ${y.food}</span><span>⚙️ ${y.prod}</span>
+          <span>💰 ${y.gold}</span><span>🔬 ${y.sci}</span><span>🎭 ${Math.floor(y.culture)}</span><span>☦️ ${y.faith}</span></div>
+        <label class="empire-focus"><span>Citizen focus</span><select name="city-focus-${city.id}" aria-label="Citizen focus for ${city.name}"
+          ${myTurn() ? "" : "disabled"} onchange="UI.empireSetFocus(${city.id},this.value)">${focusOptions}</select></label>
+        <div class="empire-production">${production}</div>
+      </div>`;
+    }).join("");
+    return `<div class="empire-toolbar"><div><strong>City administration</strong><span>${rows.length} settlement${rows.length === 1 ? "" : "s"}</span></div>
+        <label>Sort <select name="empire-city-sort" onchange="UI.setEmpireCitySort(this.value)">${sortOptions}</select></label></div>
+      <div class="empire-table empire-city-table">
+        <div class="empire-row empire-head"><span></span><span>City</span><span>Population</span><span>Yields</span><span>Focus</span><span>Production</span></div>
+        ${cityRows || `<div class="empire-empty">No cities under your control.</div>`}
+      </div>`;
+  }
+
+  function setEmpireCitySort(sort) {
+    if (!["capital", "population", "growth", "production"].includes(sort)) return;
+    empireCitySort = sort;
+    renderEmpireScreen();
+  }
+
+  function empireSetFocus(cityId, focus) {
+    if (!myTurn()) return;
+    const city = game.cities.find(c => c.id === cityId && c.owner === game.viewer);
+    if (!city || !game.setCityFocus(city, focus, game.viewer)) return;
+    SFX.play("click");
+    refreshTopBar();
+    rend.dirty = true;
+    renderEmpireScreen();
+  }
+
+  function empireUnitOrder(unit) {
+    if (unit.promoPts > 0 && !unit.isCivilian) return ["Promotion ready", "attention"];
+    if (unit.building) return [`Building ${IMPROVEMENT[unit.building.type].name} · ${unit.building.turnsLeft}t`, "working"];
+    if (unit.healFortify) return ["Fortified until healed", "working"];
+    if (unit.fortified) return ["Fortified", "working"];
+    if (unit.autoExplore) return ["Auto-exploring", "working"];
+    if (unit.path && unit.path.length) return [`Moving · ${unit.path.length} hex${unit.path.length === 1 ? "" : "es"}`, "working"];
+    if (unit.moves > 0 && !unit.attacked) return ["Ready for orders", "ready"];
+    return ["Orders complete", "spent"];
+  }
+
+  function renderEmpireMilitary() {
+    const units = game.units.filter(u => u.owner === game.viewer).map(unit => {
+      const order = empireUnitOrder(unit);
+      const strength = Math.max(unit.def.cs || 0, unit.def.rs || 0);
+      return { unit, order, strength };
+    });
+    const rank = { attention: 0, ready: 1, working: 2, spent: 3 };
+    units.sort((a, b) => {
+      if (empireUnitSort === "type") return a.unit.def.name.localeCompare(b.unit.def.name) || a.unit.id - b.unit.id;
+      if (empireUnitSort === "strength") return b.strength - a.strength || a.unit.def.name.localeCompare(b.unit.def.name);
+      if (empireUnitSort === "health") return a.unit.hp - b.unit.hp || b.strength - a.strength;
+      return rank[a.order[1]] - rank[b.order[1]] || Number(a.unit.isCivilian) - Number(b.unit.isCivilian) || b.strength - a.strength;
+    });
+    const combat = units.filter(x => !x.unit.isCivilian).length;
+    const ready = units.filter(x => x.order[1] === "ready" || x.order[1] === "attention").length;
+    const economy = game.empireEconomy(game.viewer);
+    const sortOptions = [["readiness", "Readiness"], ["type", "Unit type"], ["strength", "Strength"], ["health", "Lowest health"]]
+      .map(([key, label]) => `<option value="${key}" ${empireUnitSort === key ? "selected" : ""}>${label}</option>`).join("");
+    const unitRows = units.map(({ unit, order }) => {
+      const city = game.cityAt(unit.c, unit.r);
+      const tile = game.tile(unit.c, unit.r);
+      const location = city ? city.name : `${TERRAIN[tile.terrain].name} · ${unit.c + 1},${unit.r + 1}`;
+      const power = [unit.def.cs ? `⚔ ${unit.def.cs}` : "", unit.def.rs ? `➶ ${unit.def.rs}` : ""].filter(Boolean).join(" · ") || "Civilian";
+      return `<div class="empire-row empire-unit-row ${order[1]}">
+        <button class="empire-jump" title="Center map on ${unit.def.name}" aria-label="Center map on ${unit.def.name}"
+          onclick="UI.empireJumpUnit(${unit.id})">⌖</button>
+        <div class="empire-primary"><strong>${unit.def.icon} ${unit.gpName || unit.def.name}</strong>
+          <span class="dim">${unit.gpName ? unit.def.name + " · " : ""}Level ${unit.level} · ${unit.xp} XP</span></div>
+        <div class="empire-health"><span><b>${unit.hp}</b> HP</span><i><b style="width:${unit.hp}%"></b></i></div>
+        <div class="empire-moves"><b>${unit.moves}/${unit.def.moves}</b><span class="dim">Movement</span></div>
+        <div class="empire-strength"><b>${power}</b><span class="dim">${unit.promos.length ? unit.promos.map(key => PROMOS[key].name).join(", ") : "No promotions"}</span></div>
+        <div class="empire-order"><b>${order[0]}</b><span class="dim">${location}</span></div>
+      </div>`;
+    }).join("");
+    return `<div class="empire-toolbar"><div><strong>Armed forces</strong><span>${combat} combat · ${units.length - combat} civilian · ${ready} awaiting orders · ${economy.maintenance} upkeep</span></div>
+        <label>Sort <select name="empire-unit-sort" onchange="UI.setEmpireUnitSort(this.value)">${sortOptions}</select></label></div>
+      <div class="empire-table empire-unit-table">
+        <div class="empire-row empire-head"><span></span><span>Unit</span><span>Health</span><span>Moves</span><span>Strength</span><span>Orders / location</span></div>
+        ${unitRows || `<div class="empire-empty">No units under your command.</div>`}
+      </div>`;
+  }
+
+  function setEmpireUnitSort(sort) {
+    if (!["readiness", "type", "strength", "health"].includes(sort)) return;
+    empireUnitSort = sort;
+    renderEmpireScreen();
+  }
+
+  function renderEmpireEconomy(e) {
+    const p = game.players[game.viewer];
+    const luxuries = game.luxuryTypesOf(game.viewer);
+    const ledger = [
+      ["City income", e.cityGold, `${e.cities} cit${e.cities === 1 ? "y" : "ies"}`],
+      ["Golden Age", e.goldenAgeGold, p.goldenAgeTurns > 0 ? `${p.goldenAgeTurns} turns remaining` : "Inactive"],
+      ["Trade routes", e.tradeGold, `${game.routes.filter(r => r.owner === game.viewer).length} outbound`],
+      ["Guilds", e.guildGold, p.policies.has("GUILDS")
+        ? `${luxuries.length} controlled luxur${luxuries.length === 1 ? "y" : "ies"}` : "Policy not adopted"],
+      ["Čaršija finisher", e.carsijaGold, game.policyBranchDone(game.viewer, "CARSIJA")
+        ? `${e.cities} cit${e.cities === 1 ? "y" : "ies"}` : "Branch incomplete"],
+      ["City-state relations", e.cityStateGold, "Mercantile friends and allies"],
+      ["Tithe", e.titheGold, e.titheGold ? `${e.titheGold} follower cit${e.titheGold === 1 ? "y" : "ies"}` : "No active tithe"],
+      ["Unit upkeep", -e.maintenance, `${e.units} unit${e.units === 1 ? "" : "s"} · ${e.freeUnits} maintenance-free`],
+    ].map(([label, value, detail]) => `<div class="ledger-row ${value > 0 ? "positive" : value < 0 ? "negative" : "zero"}">
+      <span><b>${label}</b><small>${detail}</small></span><strong>${signed(value)}</strong></div>`).join("");
+    const routes = game.routes.map(route => {
+      const from = game.cities.find(c => c.id === route.fromId);
+      const to = game.cities.find(c => c.id === route.toId);
+      if (!from || !to || (route.owner !== game.viewer && to.owner !== game.viewer)) return null;
+      const income = route.owner === game.viewer ? game.routeIncome(from, to) : 1;
+      const kind = route.owner === game.viewer ? "Outbound" : "Destination share";
+      return `<div class="empire-route"><span>🐫 <b>${from.name} → ${to.name}</b><small>${kind}</small></span>
+        <span><b>+${income} 💰</b><small>${Math.max(0, route.ends - game.turn)} turns</small></span></div>`;
+    }).filter(Boolean).join("");
+    const routeCap = TRADE.maxRoutes + (p.policies.has("CARAVANSERAI") ? 1 : 0);
+    const outbound = game.routes.filter(r => r.owner === game.viewer).length;
+    const happiness = game.happinessOf(game.viewer);
+    const outputs = [["🍞", "Food", e.food], ["⚙️", "Production", e.production], ["🔬", "Science", e.science],
+      ["🎭", "Culture", Math.floor(e.culture)], ["☦️", "Faith", e.faith]]
+      .map(([icon, label, value]) => `<div><span>${icon}</span><b>${value}</b><small>${label} / turn</small></div>`).join("");
+    return `<div class="empire-economy-grid">
+      <section class="empire-ledger"><h3>Gold ledger</h3>${ledger}
+        <div class="ledger-total"><span><b>Net income</b><small>Treasury ${Math.floor(p.gold)} 💰</small></span>
+          <strong class="${e.netGold < 0 ? "negative" : "positive"}">${signed(e.netGold)}</strong></div>
+      </section>
+      <section class="empire-economic-status"><h3>Empire output</h3><div class="empire-output">${outputs}</div>
+        <div class="empire-wellbeing"><div><span>Happiness</span><b class="${happiness < 0 ? "negative" : "positive"}">${signed(happiness)}</b></div>
+          <div><span>Luxuries</span><b>${luxuries.length}</b></div>
+          <div><span>Golden Age</span><b>${p.goldenAgeTurns > 0 ? `${p.goldenAgeTurns}t` : `${Math.floor(p.gaMeter)}/${GOLDEN_AGE.threshold(p.gaCount)}`}</b></div></div>
+        <div class="empire-luxuries">${luxuries.length ? luxuries.map(key => `<span title="${RESOURCE[key].name}">${RESOURCE[key].icon} ${RESOURCE[key].name}</span>`).join("") : `<span class="dim">No controlled luxury resources</span>`}</div>
+      </section>
+      <section class="empire-trade"><h3>Trade routes <span>${outbound}/${routeCap} outbound</span></h3>
+        ${routes || `<div class="empire-empty">No active trade routes.</div>`}
+      </section>
+    </div>`;
+  }
+
+  function empireJumpCity(cityId) {
+    const city = game.cities.find(c => c.id === cityId && c.owner === game.viewer);
+    if (!city) return;
+    $("empire-modal").style.display = "none";
+    selectCity(city);
+    rend.centerOn(game, city.c, city.r);
+  }
+
+  function empireJumpUnit(unitId) {
+    const unit = game.units.find(u => u.id === unitId && u.owner === game.viewer);
+    if (!unit) return;
+    $("empire-modal").style.display = "none";
+    selectUnit(unit);
+    rend.centerOn(game, unit.c, unit.r);
   }
 
   // ---------------- victory progress ----------------
@@ -2558,7 +2788,7 @@ const UI = (() => {
       if ($("start-screen").style.display !== "none") return;
       // don't hijack keys while typing in a text field (search, net codes)
       const tag = (e.target.tagName || "").toLowerCase();
-      if (tag === "input" || tag === "textarea") {
+      if (tag === "input" || tag === "textarea" || tag === "select") {
         if (e.key === "Escape") e.target.blur();
         return;
       }
@@ -2571,6 +2801,7 @@ const UI = (() => {
         }
       }
       else if (e.key === "Escape") {
+        $("empire-modal").style.display = "none";
         $("tech-modal").style.display = "none";
         $("diplo-modal").style.display = "none";
         $("religion-modal").style.display = "none";
@@ -2586,7 +2817,8 @@ const UI = (() => {
         $("menu-modal").style.display = "none";
         closeCity();
         selectUnit(null);
-      } else if (e.key === "t") showTechScreen();
+      } else if (e.key === "o") showEmpireScreen();
+      else if (e.key === "t") showTechScreen();
       else if (e.key === "p") showPolicyScreen();
       else if (e.key === "?" || e.key === "/") { e.preventDefault(); showPediaScreen(); }
       else if (e.key === "d") showDiploScreen();
@@ -2598,6 +2830,8 @@ const UI = (() => {
     });
 
     $("btn-endturn").onclick = endTurn;
+    $("btn-empire").onclick = () => showEmpireScreen();
+    $("stat-gold").onclick = () => showEmpireScreen("economy");
     $("btn-tech").onclick = showTechScreen;
     $("stat-sci").onclick = showTechScreen;
     $("btn-diplo").onclick = showDiploScreen;
@@ -2789,6 +3023,7 @@ const UI = (() => {
     saveSlot, loadSlot, exportSave, toMainMenu, toggleGraphics, showSettings: showSettingsModal,
     diploTrade, diploGift, diploPact, adoptPolicy, congressVote, congressAbstain,
     playChapter, resetCampaign, openCampaign, answerPeace, cancelProduction, buildNow,
-    declareWarAndAttack,
+    declareWarAndAttack, setEmpireTab, setEmpireCitySort, setEmpireUnitSort, empireSetFocus,
+    empireJumpCity, empireJumpUnit,
     get game() { return game; }, get renderer() { return rend; } };
 })();

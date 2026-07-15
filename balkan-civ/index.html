@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Balkan Civilizations</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>⚔️</text></svg>">
-<link rel="stylesheet" href="css/style.css?v=14">
+<link rel="stylesheet" href="css/style.css?v=15">
 </head>
 <body>
 
@@ -95,7 +95,7 @@
   </div>
   <div class="dim" style="margin-top:14px">
     Controls: click to select · click a highlighted hex to move/attack · drag to pan · wheel to zoom ·
-    Enter = end turn · T = tech · D = diplomacy · F = fortify · N = next unit<br>
+    Enter = end turn · O = empire overview · T = tech · D = diplomacy · F = fortify · N = next unit<br>
     Research <b>Sailing</b> to embark onto coast and build Galleys; <b>Compass</b> opens the deep sea and the War Galleass.
   </div>
 </div>
@@ -106,7 +106,7 @@
     <div class="status-strip">
       <span id="stat-turn"></span>
       <span id="stat-era"></span>
-      <span id="stat-gold"></span>
+      <span id="stat-gold" style="cursor:pointer" title="Open economy ledger (O)"></span>
       <span id="stat-happy"></span>
       <span id="stat-sci" style="cursor:pointer" title="Open tech tree"></span>
       <span id="stat-faith" style="cursor:pointer" title="Open religion overview"></span>
@@ -114,6 +114,7 @@
       <span id="stat-score" style="cursor:pointer" title="Open victory progress (V)"></span>
     </div>
     <div class="command-bar">
+      <button id="btn-empire" title="Empire overview (O)"><span class="cmd-icon">🏛️</span><span class="cmd-label">Empire</span></button>
       <button id="btn-tech" title="Technology (T)"><span class="cmd-icon">🔬</span><span class="cmd-label">Tech</span></button>
       <button id="btn-religion" title="Religion (R)"><span class="cmd-icon">☦️</span><span class="cmd-label">Religion</span></button>
       <button id="btn-diplo" title="Diplomacy (D)"><span class="cmd-icon">🤝</span><span class="cmd-label">Diplomacy</span></button>
@@ -156,6 +157,9 @@
 </div>
 
 <!-- ============ modals ============ -->
+<div id="empire-modal" class="modal">
+  <div class="modal-box wide empire-box"><h2>🏛️ Empire Overview</h2><div id="empire-body"></div></div>
+</div>
 <div id="tech-modal" class="modal">
   <div class="modal-box"><h2>🔬 Technology</h2><div id="tech-body"></div></div>
 </div>
@@ -238,7 +242,7 @@
 <script src="js/sound.js"></script>
 <script src="js/hex.js"></script>
 <script src="js/mapgen.js?v=2"></script>
-<script src="js/model.js?v=7"></script>
+<script src="js/model.js?v=8"></script>
 <script src="js/ai.js?v=3"></script>
 <script src="js/vendor/three.min.js"></script>
 <script src="js/unitart.js?v=1"></script>
@@ -247,7 +251,7 @@
 <script src="js/render3d.js?v=11"></script>
 <script src="js/net.js"></script>
 <script src="js/editor.js"></script>
-<script src="js/ui.js?v=13"></script>
+<script src="js/ui.js?v=14"></script>
 <script>
   window.addEventListener("DOMContentLoaded", () => UI.init());
 </script>

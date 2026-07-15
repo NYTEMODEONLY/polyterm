@@ -106,6 +106,11 @@ events, or AI choices.
   highlighted on the map in both graphics modes, while the city panel shows
   exact growth and production forecasts. Purchases and queued projects enforce
   technology, resource, ownership, wonder, and unit-placement rules
+- **Empire overview** (`O` or the 🏛️ command): sortable city administration,
+  a complete military roster, direct map-jump actions, and an auditable gold
+  ledger in one compact screen. City focus can be changed in place, while the
+  ledger exposes Golden Age, trade, policy, city-state, tithe, and maintenance
+  modifiers from the same forecast used by the turn engine
 - **Guarded unit orders**: a tactical unit panel combines health, movement,
   strength, veteran status, and current orders with grouped commands. Every
   player action is checked against ownership and the active turn; cancelling a
@@ -252,6 +257,7 @@ events, or AI choices.
 | `Enter` | End turn |
 | `N` / `.` | Next idle unit |
 | `F` | Fortify selected unit |
+| `O` | Empire overview: cities, military, and economy |
 | `T` | Technology tree |
 | `P` | Social policies |
 | `?` | Civilopedia (searchable reference) |

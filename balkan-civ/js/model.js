@@ -2368,29 +2368,73 @@ class Game {
     return best;
   }
 
+  // One authoritative forecast for the economy UI and end-of-turn accounting.
+  // A turn may pass already-resolved city yields so growth and production are
+  // processed only once while every gold modifier still uses the same rules.
+  empireEconomy(playerIdx, yieldsByCity = null) {
+    const p = this.players[playerIdx];
+    if (!p || p.isBarb) return null;
+    const out = {
+      cities: 0, population: 0, units: 0, freeUnits: 0,
+      food: 0, production: 0, science: 0, culture: 0, faith: 0,
+      cityGold: 0, goldenAgeGold: 0, tradeGold: 0, guildGold: 0,
+      carsijaGold: 0, cityStateGold: 0, titheGold: 0,
+      maintenance: 0, grossGold: 0, netGold: 0,
+    };
+    for (const city of this.cities) {
+      if (city.owner !== playerIdx) continue;
+      const supplied = yieldsByCity instanceof Map ? yieldsByCity.get(city.id) : null;
+      const y = supplied || this.cityYields(city);
+      out.cities++;
+      out.population += city.pop;
+      out.food += y.food;
+      out.production += y.prod;
+      out.cityGold += y.gold;
+      out.science += y.sci;
+      out.culture += y.culture || 0;
+      out.faith += y.faith;
+    }
+    if (p.goldenAgeTurns > 0 && out.cityGold > 0) {
+      out.goldenAgeGold = Math.floor(out.cityGold * (1 + GOLDEN_AGE.bonus)) - out.cityGold;
+    }
+    out.units = this.units.filter(u => u.owner === playerIdx).length;
+    out.freeUnits = 4 + (p.policies.has("FRONTIERSMEN") ? 4 : 0);
+    out.maintenance = Math.max(0, out.units - out.freeUnits);
+    if (!p.isMinor) {
+      out.tradeGold = this.tradeIncome(playerIdx);
+      if (p.policies.has("GUILDS")) out.guildGold = this.luxuryTypesOf(playerIdx).length;
+      if (this.policyBranchDone(playerIdx, "CARSIJA")) out.carsijaGold = 2 * out.cities;
+      out.cityStateGold = this.minorBonuses(playerIdx).gold;
+      const religion = p.religionId !== null ? this.religions[p.religionId] : null;
+      if (religion && religion.belief === "TITHE") {
+        out.titheGold = this.religionFollowers(p.religionId);
+      }
+    }
+    out.grossGold = out.cityGold + out.goldenAgeGold + out.tradeGold + out.guildGold +
+      out.carsijaGold + out.cityStateGold + out.titheGold;
+    out.netGold = out.grossGold - out.maintenance;
+    return out;
+  }
+
   processPlayerEconomy(p) {
     if (!p.alive || p.isBarb) return;
     this.dirtyHappiness(); // borders/pop may have changed since last compute
-    let gold = 0, sci = 0, faith = 0, cult = 0;
+    const yieldsByCity = new Map();
     for (const city of this.cities) {
       if (city.owner !== p.index) continue;
       const y = this.processCityTurn(city);
-      gold += y.gold; sci += y.sci; faith += y.faith; cult += y.culture || 0;
+      yieldsByCity.set(city.id, y);
     }
+    const economy = this.empireEconomy(p.index, yieldsByCity);
     if (!p.isMinor) {
-      p.culture += cult;
-      p._cpt = cult; // shown in the top bar
+      p.culture += economy.culture;
+      p._cpt = economy.culture;
       const can = this.canAdoptPolicy(p.index);
       if (can && !p._couldAdopt && p.isHuman) {
         this.notify(`📜 Enough culture for a social policy — open the Policies screen!`, p.index);
       }
       p._couldAdopt = can;
     }
-    if (p.goldenAgeTurns > 0 && gold > 0) gold = Math.floor(gold * (1 + GOLDEN_AGE.bonus));
-    // unit maintenance: first 4 free (Frontiersmen raises that to 8)
-    const freeUnits = 4 + (p.policies.has("FRONTIERSMEN") ? 4 : 0);
-    const nUnits = this.units.filter(u => u.owner === p.index).length;
-    gold -= Math.max(0, nUnits - freeUnits);
     if (!p.isMinor) {
       // golden age bookkeeping: surplus happiness fills the meter
       const hap = this.happinessOf(p.index);
@@ -2415,18 +2459,10 @@ class Game {
       p._lastHap = hap;
     }
     if (!p.isMinor) {
-      gold += this.tradeIncome(p.index);
-      if (p.policies.has("GUILDS")) gold += this.luxuryTypesOf(p.index).length;
-      if (this.policyBranchDone(p.index, "CARSIJA")) gold += 2 * this.cities.filter(c => c.owner === p.index).length;
       this.accrueGreatPeople(p);
-      gold += this.minorBonuses(p.index).gold;
-      // Tithe: gold from every follower city in the world
-      if (p.religionId !== null && this.religions[p.religionId].belief === "TITHE") {
-        gold += this.religionFollowers(p.religionId);
-      }
-      p.faith += faith;
+      p.faith += economy.faith;
     }
-    p.gold += gold;
+    p.gold += economy.netGold;
     if (p.gold < 0) {
       p.gold = 0;
       const armies = this.units.filter(u => u.owner === p.index && !u.isCivilian);
@@ -2444,7 +2480,7 @@ class Game {
       if (av.length && !p.isHuman) p.researching = av.sort((x, y2) => TECHS[x].cost - TECHS[y2].cost)[0];
     }
     if (p.researching) {
-      p.scienceStored += sci;
+      p.scienceStored += economy.science;
       const t = TECHS[p.researching];
       if (p.scienceStored >= this.techCost(p.researching)) {
         const done = p.researching;
@@ -2455,7 +2491,7 @@ class Game {
         this.questEvent("FIRST_TECH", p.index, { tech: done });
       }
     } else if (p.isHuman) {
-      p.scienceStored += sci; // banks until a tech is chosen
+      p.scienceStored += economy.science; // banks until a tech is chosen
     }
   }
 

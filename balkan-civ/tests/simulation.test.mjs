@@ -52,6 +52,71 @@ test("fixed-seed AI simulations produce an identical strategic fingerprint", () 
   assert.equal(second, first);
 });
 
+test("empire economy forecasts every modifier and matches the applied turn", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    const g = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 43021,
+      mapW: 28, mapH: 22, mapType: "peninsula", noMinors: true, noBarbs: true });
+    const p = g.players[0];
+    const capital = g.foundCity(g.units.find(u => u.owner === 0 && u.type === "SETTLER"));
+    const rivalCity = g.foundCity(g.units.find(u => u.owner === 1 && u.type === "SETTLER"));
+
+    for (const key of Object.keys(POLICY_BRANCHES.CARSIJA.policies)) p.policies.add(key);
+    p.policies.add("FRONTIERSMEN");
+    p.goldenAgeTurns = 3;
+    for (const tile of g.map.tiles) {
+      if (tile.owner === 0 && tile.resource && RESOURCE[tile.resource].luxury) tile.resource = null;
+    }
+    const luxuryTile = g.map.tiles.find(tile => tile.owner === 0 && !tile.city);
+    luxuryTile.resource = "WINE";
+
+    while (g.units.filter(u => u.owner === 0).length < 11) {
+      g.units.push(new Unit("WORKER", 0, capital.c, capital.r));
+    }
+    g.routes.push({ owner: 0, fromId: capital.id, toId: rivalCity.id,
+      path: [[capital.c, capital.r]], ends: g.turn + 10 });
+
+    const minor = new Player(g.players.length, "RAGUSA", false);
+    minor.visible = new Uint8Array(g.map.w * g.map.h);
+    g.players.push(minor);
+    p.influence[minor.index] = 100;
+
+    p.faith = 1000;
+    const religion = g.availableReligionNames()[0];
+    g.foundReligion(0, religion.name, religion.icon, "TITHE");
+    rivalCity.religion = p.religionId;
+    p.gold = 10000;
+    p.scienceStored = 0;
+    p.culture = 0;
+
+    const forecast = g.empireEconomy(0);
+    const routeGold = g.routeIncome(capital, rivalCity);
+    const before = { gold: p.gold, science: p.scienceStored, faith: p.faith, culture: p.culture };
+    g.processPlayerEconomy(p);
+    return JSON.stringify({
+      forecast, routeGold,
+      delta: { gold: p.gold - before.gold, science: p.scienceStored - before.science,
+        faith: p.faith - before.faith, culture: p.culture - before.culture },
+    });
+  `));
+
+  const e = result.forecast;
+  assert.equal(e.cities, 1);
+  assert.equal(e.units, 11);
+  assert.equal(e.freeUnits, 8);
+  assert.equal(e.maintenance, 3);
+  assert.equal(e.goldenAgeGold, Math.floor(e.cityGold * 1.2) - e.cityGold);
+  assert.equal(e.tradeGold, result.routeGold);
+  assert.equal(e.guildGold, 1);
+  assert.equal(e.carsijaGold, 2);
+  assert.equal(e.cityStateGold, 4);
+  assert.equal(e.titheGold, 2);
+  assert.equal(e.grossGold, e.cityGold + e.goldenAgeGold + e.tradeGold + e.guildGold +
+    e.carsijaGold + e.cityStateGold + e.titheGold);
+  assert.equal(e.netGold, e.grossGold - e.maintenance);
+  assert.deepEqual(result.delta,
+    { gold: e.netGold, science: e.science, faith: e.faith, culture: e.culture });
+});
+
 test("long AI simulations preserve core state invariants", () => {
   const result = evaluate(loadGameContext(), `
     const failures = [];
@@ -250,6 +315,7 @@ test("capturing the last city resets production and retires defeated-player stat
       routes: g.routes.map(r => ({ owner: r.owner, fromId: r.fromId, toId: r.toId })),
       staleOffers: g.peaceOffers.filter(o => o.from === 1 || o.to === 1).length,
       orphanedTiles: g.map.tiles.filter(t => t.owner === 1).length,
+      defeatedEconomy: g.empireEconomy(1),
       capturedId: captured.id, survivorId: survivor.id,
     });
   `));
@@ -262,6 +328,13 @@ test("capturing the last city resets production and retires defeated-player stat
     fromId: result.survivorId, toId: result.capturedId }]);
   assert.equal(result.staleOffers, 0);
   assert.equal(result.orphanedTiles, 0);
+  assert.deepEqual(result.defeatedEconomy, {
+    cities: 0, population: 0, units: 0, freeUnits: 4,
+    food: 0, production: 0, science: 0, culture: 0, faith: 0,
+    cityGold: 0, goldenAgeGold: 0, tradeGold: 0, guildGold: 0,
+    carsijaGold: 0, cityStateGold: 0, titheGold: 0,
+    maintenance: 0, grossGold: 0, netGold: 0,
+  });
 });
 
 test("city founding enforces unit, movement, territory, and spacing rules", () => {
