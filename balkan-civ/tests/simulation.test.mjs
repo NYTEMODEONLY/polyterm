@@ -49,7 +49,7 @@ const simulationSource = `
 const controlledWorldSource = `
   const resetWorld = (g) => {
     g.units = []; g.cities = []; g.camps = []; g.routes = []; g.peaceOffers = [];
-    g._hap = {};
+    g._hap = {}; g._aiLandmassMap = null;
     for (const tile of g.map.tiles) {
       tile.terrain = "PLAINS"; tile.feature = null; tile.resource = null;
       tile.improvement = null; tile.owner = -1; tile.city = null; tile.workedBy = null;
@@ -178,6 +178,112 @@ test("AI land campaigns reserve coordinated frontline and ranged approach positi
     "units should not reserve the same final approach tile");
 });
 
+test("AI overseas war plans require transport technology and an existing fleet", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    ${controlledWorldSource}
+    const g = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 64001,
+      mapW: 24, mapH: 18, mapType: "archipelago", noMinors: true, noBarbs: true });
+    resetWorld(g);
+    for (const tile of g.map.tiles) if (tile.c >= 8 && tile.c <= 15) tile.terrain =
+      tile.c === 8 || tile.c === 15 ? "COAST" : "OCEAN";
+    const home = addCity(g, 0, 7, 8, "Home", true); home.coastal = true;
+    const target = addCity(g, 1, 16, 8, "Other Shore", true); target.coastal = true;
+    [[5, 6], [5, 7], [5, 8], [5, 9], [5, 10], [6, 8]].forEach(([c, r]) =>
+      addUnit(g, "WARRIOR", 0, c, r));
+    addUnit(g, "WARRIOR", 1, 17, 8);
+    addUnit(g, "GALLEY", 0, 8, 8);
+    g.players[0].met.add(1); g.players[1].met.add(0);
+    g.players[0].attitude[1] = -60; g.players[1].attitude[0] = -60;
+
+    const beforeCompass = AI.chooseWarTarget(g, g.players[0]);
+    g.players[0].techs.add("COMPASS");
+    const ready = AI.chooseWarTarget(g, g.players[0]);
+    return JSON.stringify({ beforeCompass, ready,
+      overseas: AI.campaignIsOverseas(g, g.players[0], target),
+      rival: AI.hasOverseasRival(g, g.players[0]) });
+  `));
+
+  assert.equal(result.beforeCompass, null);
+  assert.equal(result.ready.player, 1);
+  assert.equal(result.ready.overseas, true);
+  assert.equal(result.overseas, true);
+  assert.equal(result.rival, true);
+});
+
+test("imposed overseas wars prioritize Compass research and queue a fleet reserve", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    ${controlledWorldSource}
+    const g = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 64002,
+      mapW: 24, mapH: 18, mapType: "archipelago", noMinors: true, noBarbs: true });
+    resetWorld(g);
+    for (const tile of g.map.tiles) if (tile.c >= 8 && tile.c <= 15) tile.terrain =
+      tile.c === 8 || tile.c === 15 ? "COAST" : "OCEAN";
+    const home = addCity(g, 0, 7, 8, "Home", true); home.coastal = true;
+    home.producing = { kind: "building", key: "MONUMENT" };
+    const target = addCity(g, 1, 16, 8, "Invader", true); target.coastal = true;
+    addUnit(g, "WARRIOR", 0, 6, 8); addUnit(g, "WARRIOR", 1, 17, 8);
+    g.players[0].techs = new Set(["AGRICULTURE", "POTTERY", "SAILING", "ANIMAL_HUSBANDRY",
+      "THE_WHEEL", "ARCHERY", "MINING", "BRONZE_WORKING", "MASONRY", "WRITING"]);
+    g.players[0].met.add(1); g.players[1].met.add(0);
+    g.declareWar(0, 1); g.rng = () => 0.5;
+    AI.takeTurn(g, g.players[0]);
+    return JSON.stringify({ research: g.players[0].researching, queue: home.queue,
+      overseas: AI.campaignIsOverseas(g, g.players[0], target) });
+  `));
+
+  assert.equal(result.overseas, true);
+  assert.equal(result.research, "MATHEMATICS", "the next available Compass prerequisite should outrank land techs");
+  assert.ok(result.queue.some(item => item.kind === "unit" && item.key === "GALLEY"),
+    "a busy coastal city should queue the available fleet unit");
+});
+
+test("AI ships upgrade, explore in peace, and reserve distinct bombardment positions", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    ${controlledWorldSource}
+    const upgradeGame = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 64003,
+      mapW: 24, mapH: 18, mapType: "archipelago", noMinors: true, noBarbs: true });
+    resetWorld(upgradeGame);
+    const port = addCity(upgradeGame, 0, 7, 8, "Port", true); port.coastal = true;
+    upgradeGame.tile(8, 8).terrain = "COAST"; upgradeGame.tile(8, 8).owner = 0;
+    const oldShip = addUnit(upgradeGame, "GALLEY", 0, 8, 8);
+    upgradeGame.players[0].techs.add("COMPASS"); upgradeGame.players[0].gold = 1000;
+    upgradeGame.rng = () => 0.5; AI.takeTurn(upgradeGame, upgradeGame.players[0]);
+
+    const exploreGame = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 64004,
+      mapW: 24, mapH: 18, mapType: "archipelago", noMinors: true, noBarbs: true });
+    resetWorld(exploreGame);
+    const explorePort = addCity(exploreGame, 0, 7, 8, "Port", true); explorePort.coastal = true;
+    for (const tile of exploreGame.map.tiles) if (tile.c >= 8) tile.terrain = "COAST";
+    const explorer = addUnit(exploreGame, "GALLEY", 0, 8, 8);
+    exploreGame.players[0].visible.fill(0); exploreGame.updateVisibility(exploreGame.players[0]);
+    const start = [explorer.c, explorer.r]; exploreGame.rng = () => 0.5;
+    AI.takeTurn(exploreGame, exploreGame.players[0]);
+
+    const battle = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 64005,
+      mapW: 24, mapH: 18, mapType: "archipelago", noMinors: true, noBarbs: true });
+    resetWorld(battle);
+    for (const tile of battle.map.tiles) if (tile.c >= 8 && tile.c <= 15) tile.terrain =
+      tile.c === 8 || tile.c === 15 ? "COAST" : "OCEAN";
+    const battlePort = addCity(battle, 0, 7, 8, "Port", true); battlePort.coastal = true;
+    const enemy = addCity(battle, 1, 16, 8, "Enemy Port", true); enemy.coastal = true;
+    const fleet = [addUnit(battle, "GALLEASS", 0, 8, 7), addUnit(battle, "GALLEASS", 0, 8, 9)];
+    battle.players[0].techs.add("COMPASS"); battle.players[0].met.add(1); battle.players[1].met.add(0);
+    battle.declareWar(0, 1); battle.rng = () => 0.5;
+    AI.takeTurn(battle, battle.players[0]);
+    const endpoints = fleet.map(ship => ship.path && ship.path.length
+      ? ship.path[ship.path.length - 1] : [ship.c, ship.r]);
+    return JSON.stringify({ upgraded: oldShip.type, start, explored: [explorer.c, explorer.r],
+      explorePath: explorer.path, endpoints,
+      distances: endpoints.map(([c, r]) => HEX.distance(c, r, enemy.c, enemy.r)) });
+  `));
+
+  assert.equal(result.upgraded, "GALLEASS");
+  assert.ok(result.explored[0] !== result.start[0] || result.explored[1] !== result.start[1] || result.explorePath,
+    "a peacetime ship should leave port to chart unseen reachable water");
+  assert.deepEqual([...result.distances].sort((a, b) => a - b), [2, 2]);
+  assert.equal(new Set(result.endpoints.map(([c, r]) => c + "," + r)).size, 2);
+});
+
 test("seeded AI campaigns sustain support arms without opportunistic extra fronts", () => {
   const metrics = JSON.parse(evaluate(loadGameContext(), `
     const metrics = { extraFronts: 0, doubleDeclarations: 0, captures: 0,
@@ -247,6 +353,69 @@ test("seeded AI campaigns sustain support arms without opportunistic extra front
   assert.ok(metrics.siegeReadyTurns > 0 &&
     metrics.siegeCoveredTurns / metrics.siegeReadyTurns >= 0.75,
     "siege-capable wartime empires should usually field or queue siege");
+});
+
+test("seeded archipelago campaigns build active fleets and resolve overseas objectives", () => {
+  const metrics = JSON.parse(evaluate(loadGameContext(), `
+    const metrics = { warTurns: 0, quietWarTurns: 0, attacks: 0, navalAttacks: 0,
+      captures: 0, shipsBuilt: 0, overseasTurns: 0, preparedOverseasTurns: 0 };
+    for (let seed = 1; seed <= 5; seed++) {
+      const g = new Game({ playerCiv: CIV_IDS[seed % CIV_IDS.length], numOpponents: 5,
+        seed: seed * 7919, mapW: 38, mapH: 28, mapType: "archipelago", difficulty: "normal" });
+      let gameAttacks = 0;
+      const originalAddUnit = g.addUnit.bind(g);
+      g.addUnit = (type, ...args) => {
+        if (g.turn > 1 && UNITS[type].naval) metrics.shipsBuilt++;
+        return originalAddUnit(type, ...args);
+      };
+      const originalCapture = g.captureCity.bind(g);
+      g.captureCity = (...args) => { metrics.captures++; return originalCapture(...args); };
+      const originalAttack = g.attack.bind(g);
+      g.attack = (unit, c, r) => {
+        const tile = g.tile(c, r);
+        const targetUnit = g.combatUnitAt(c, r);
+        const majorTarget = tile && tile.city && !g.players[tile.city.owner].isMinor &&
+          !g.players[tile.city.owner].isBarb || targetUnit &&
+          !g.players[targetUnit.owner].isMinor && !g.players[targetUnit.owner].isBarb;
+        const attacked = originalAttack(unit, c, r);
+        if (attacked && majorTarget && !g.players[unit.owner].isMinor && !g.players[unit.owner].isBarb) {
+          metrics.attacks++; gameAttacks++;
+          if (unit.def.naval) metrics.navalAttacks++;
+        }
+        return attacked;
+      };
+
+      for (let step = 0; step < 150 && !g.over; step++) {
+        const attacksBefore = gameAttacks;
+        AI.takeTurn(g, g.players[0]); g.endTurn();
+        const majors = g.players.filter(p => p.alive && !p.isMinor && !p.isBarb);
+        const anyWar = majors.some(p => [...p.atWarWith].some(i => g.players[i].alive &&
+          !g.players[i].isMinor && !g.players[i].isBarb));
+        if (anyWar) {
+          metrics.warTurns++;
+          if (gameAttacks === attacksBefore) metrics.quietWarTurns++;
+        }
+        for (const p of majors) {
+          const target = AI.campaignTarget(g, p);
+          if (!AI.campaignIsOverseas(g, p, target)) continue;
+          metrics.overseasTurns++;
+          if (p.hasTech("COMPASS") && g.units.some(u => u.owner === p.index && u.def.naval)) {
+            metrics.preparedOverseasTurns++;
+          }
+        }
+      }
+    }
+    return JSON.stringify(metrics);
+  `));
+
+  assert.ok(metrics.shipsBuilt >= 30, "island civilizations should establish expedition fleets");
+  assert.ok(metrics.navalAttacks >= 20, "fleets should participate directly in major wars");
+  assert.ok(metrics.captures >= 3, "island campaigns should convert pressure into captures");
+  assert.ok(metrics.overseasTurns > 0, "the sample should exercise genuine cross-landmass campaigns");
+  assert.ok(metrics.preparedOverseasTurns / metrics.overseasTurns >= 0.5,
+    "most active overseas campaigns should have Compass and a fleet");
+  assert.ok(metrics.quietWarTurns / metrics.warTurns <= 0.4,
+    "archipelago wars should not spend most turns completely stalled");
 });
 
 test("empire economy forecasts every modifier and matches the applied turn", () => {

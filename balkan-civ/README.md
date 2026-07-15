@@ -164,7 +164,8 @@ events, or AI choices.
 - Naval warfare: research Sailing to embark land units onto the coast and
   build Galleys; Compass opens the deep sea and the ranged War Galleass.
   Ships hunt transports, bombard shores, and can capture coastal cities;
-  embarked units are nearly defenseless — escort them
+  embarked units are nearly defenseless — escort them. AI fleets chart unknown
+  seas, modernize in home waters, screen transports, and coordinate bombardment
 - Fog of war with explored/visible states
 - Cities: population growth, worked tiles, culture-driven border expansion,
   production queues, gold purchasing, 16 buildings and 10 world wonders
@@ -231,7 +232,8 @@ events, or AI choices.
   targets are scored by distance, attitude, allied fronts, and relative power;
   armies share a campaign objective, reserve separate assault positions, and
   maintain frontline, ranged, and siege support. Settlers get escorts, melee
-  waits for bombardment to breach walls, and gold modernizes veterans
+  waits for bombardment to breach walls, and gold modernizes veterans. Island
+  empires prepare Compass and an expedition fleet before opening overseas wars
 - Cities support a **production queue** (queue up to 6 items) and a full
   clickable **message log**; wounded units can fortify until healed
 - **Undo** a simple move (before anything eventful happens); **3 manual
@@ -316,5 +318,5 @@ drops mid-game the host can continue against the AI or re-host later.
 
 ## Ideas for future expansion
 
-Deeper naval invasion planning, longer historical campaign chains, additional
-Industrial-era scenarios, and localized interface text.
+More naval unit classes and amphibious promotions, longer historical campaign
+chains, additional Industrial-era scenarios, and localized interface text.

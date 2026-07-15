@@ -79,6 +79,16 @@ const AI = (() => {
     return choices[0];
   }
 
+  function bestNavalOption(opts, excluded = new Set()) {
+    const choices = opts.filter(o => o.kind === "unit" && UNITS[o.key].naval).sort((a, b) =>
+      Math.max(UNITS[b.key].cs, UNITS[b.key].rs || 0) -
+      Math.max(UNITS[a.key].cs, UNITS[a.key].rs || 0) ||
+      Number(!!UNITS[b.key].rs) - Number(!!UNITS[a.key].rs) ||
+      UNITS[b.key].moves - UNITS[a.key].moves || a.key.localeCompare(b.key));
+    if (!choices.length || excluded.has(choices[0].key)) return null;
+    return choices[0];
+  }
+
   function neededArmyRole(opts, counts, targets) {
     const available = ARMY_ROLE_ORDER.filter(role =>
       opts.some(o => o.kind === "unit" && armyRole(o.key) === role));
@@ -97,6 +107,58 @@ const AI = (() => {
     return distance;
   }
 
+  function landmassMap(game) {
+    if (game._aiLandmassMap && game._aiLandmassMap.length === game.map.tiles.length) {
+      return game._aiLandmassMap;
+    }
+    const ids = Array(game.map.tiles.length).fill(-1);
+    let nextId = 0;
+    for (const start of game.map.tiles) {
+      const startIdx = game.map.idx(start.c, start.r);
+      if (ids[startIdx] !== -1 || game.isWater(start)) continue;
+      ids[startIdx] = nextId;
+      const frontier = [start];
+      for (let cursor = 0; cursor < frontier.length; cursor++) {
+        const tile = frontier[cursor];
+        for (const [c, r] of HEX.neighbors(tile.c, tile.r)) {
+          const neighbor = game.tile(c, r);
+          if (!neighbor || game.isWater(neighbor)) continue;
+          const idx = game.map.idx(c, r);
+          if (ids[idx] !== -1) continue;
+          ids[idx] = nextId;
+          frontier.push(neighbor);
+        }
+      }
+      nextId++;
+    }
+    game._aiLandmassMap = ids;
+    return ids;
+  }
+
+  function sameLandmass(game, a, b) {
+    if (!a || !b) return false;
+    const ids = landmassMap(game);
+    const first = ids[game.map.idx(a.c, a.r)];
+    return first >= 0 && first === ids[game.map.idx(b.c, b.r)];
+  }
+
+  function campaignIsOverseas(game, p, target) {
+    if (!target) return false;
+    const homes = game.cities.filter(c => c.owner === p.index);
+    return homes.length > 0 && homes.every(home => !sameLandmass(game, home, target));
+  }
+
+  function hasOverseasRival(game, p) {
+    const homes = game.cities.filter(c => c.owner === p.index);
+    if (!homes.length) return false;
+    return [...p.met].some(i => {
+      const rival = game.players[i];
+      if (!rival || !rival.alive || rival.isMinor || rival.isBarb) return false;
+      const cities = game.cities.filter(c => c.owner === rival.index);
+      return cities.length > 0 && homes.every(home => cities.every(city => !sameLandmass(game, home, city)));
+    });
+  }
+
   function warTargetPlan(game, p, other) {
     if (!other || !other.alive || other.isBarb || other.index === p.index ||
         p.atWarWith.has(other.index) || p.pacts.has(other.index)) return null;
@@ -108,12 +170,16 @@ const AI = (() => {
 
     const allyAtWar = [...p.pacts].some(a => game.players[a].alive &&
       game.players[a].atWarWith.has(other.index));
+    const overseas = ours.every(own => theirs.every(target => !sameLandmass(game, own, target)));
     const distance = closestCityDistance(ours, theirs);
-    const maxDistance = allyAtWar ? 12 : 9;
+    const maxDistance = allyAtWar || overseas ? 12 : 9;
     const myPower = game.militaryPower(p.index);
     const theirPower = game.militaryPower(other.index);
     const ratio = myPower / Math.max(1, theirPower);
-    const powerNeeded = allyAtWar ? 1.0 : other.isMinor ? 2.0 : focus === "domination" ? 1.35 : 1.6;
+    const fleet = game.units.filter(u => u.owner === p.index && u.def.naval);
+    if (overseas && (!p.hasTech("COMPASS") || !fleet.length)) return null;
+    const powerNeeded = allyAtWar ? 1.0 : other.isMinor ? 2.0
+      : (focus === "domination" ? 1.35 : 1.6) + (overseas ? 0.1 : 0);
     if (distance > maxDistance || myPower <= 40 || ratio <= powerNeeded) return null;
 
     const attitude = game.attitudeOf(p.index, other.index);
@@ -122,8 +188,8 @@ const AI = (() => {
       : focus === "domination" ? (friendly ? 0.025 : 0.1) : (friendly ? 0.012 : 0.055);
     const score = (maxDistance - distance) * 12 + (Math.min(ratio, 4) - powerNeeded) * 30 -
       attitude * 0.3 + (allyAtWar ? 45 : 0) - (other.isMinor ? 20 : 0) +
-      Math.max(0, 3 - theirs.length) * 3;
-    return { player: other.index, score, chance, distance, ratio, allyAtWar };
+      Math.max(0, 3 - theirs.length) * 3 - (overseas ? 15 : 0);
+    return { player: other.index, score, chance, distance, ratio, allyAtWar, overseas };
   }
 
   function chooseWarTarget(game, p) {
@@ -140,7 +206,8 @@ const AI = (() => {
       const distance = Math.min(...homes.map(home => HEX.distance(home.c, home.r, city.c, city.r)));
       return distance * 10 + (city.hp / Math.max(1, city.maxHp)) * 6 +
         game.cityStrength(city) * 0.2 + game.militaryPower(city.owner) * 0.02 -
-        (city.isCapital ? 8 : 0);
+        (city.isCapital ? 8 : 0) + (campaignIsOverseas(game, p, city) ?
+          (p.hasTech("COMPASS") ? 8 : 40) : 0);
     };
     return targets.sort((a, b) => targetCost(a) - targetCost(b) || a.owner - b.owner || a.id - b.id)[0] || null;
   }
@@ -374,6 +441,10 @@ const AI = (() => {
     const av = p.availableTechs();
     if (!av.length) return;
     const atWar = realWars(game, p).length > 0;
+    const objective = atWar ? campaignTarget(game, p) : null;
+    const overseas = !p.isMinor && campaignIsOverseas(game, p, objective);
+    const maritimeNeed = !p.isMinor && (overseas || game.mapType === "archipelago" ||
+      hasOverseasRival(game, p));
     const milTechs = ["ARCHERY", "BRONZE_WORKING", "IRON_WORKING", "HORSEBACK_RIDING",
       "CHIVALRY", "STEEL", "MACHINERY", "GUNPOWDER", "MASONRY", "CONSTRUCTION", "PHYSICS", "MATHEMATICS",
       "SAILING", "COMPASS", "METALLURGY", "RIFLING", "MILITARY_SCIENCE", "STEAM_POWER"];
@@ -388,6 +459,9 @@ const AI = (() => {
       let value = TECHS[key].cost;
       if (goals.some(target => !p.hasTech(target) && techOnPath(key, target))) value *= 0.55;
       if (atWar && milTechs.includes(key)) value *= 0.5;
+      if (maritimeNeed && !p.hasTech("COMPASS") && techOnPath(key, "COMPASS")) {
+        value *= overseas ? 0.22 : 0.42;
+      }
       return value;
     };
     const ranked = av.sort((a, b) => {
@@ -402,6 +476,10 @@ const AI = (() => {
     const myUnits = game.units.filter(u => u.owner === p.index);
     const atWar = realWars(game, p).length > 0;
     const focus = victoryFocus(p);
+    const objective = atWar ? campaignTarget(game, p) : null;
+    const overseasWar = campaignIsOverseas(game, p, objective);
+    const fleetPriority = overseasWar || (p.hasTech("SAILING") &&
+      (game.mapType === "archipelago" || hasOverseasRival(game, p)));
     const wantCities = 4 + Math.floor(game.map.w / 15);
     const wantMilitary = myCities.length * (focus === "domination" ? 3 : 2) + (atWar ? 4 : 1);
     for (const city of myCities) {
@@ -424,6 +502,10 @@ const AI = (() => {
     }
     const plannedUnitTotal = (pred) => [...plannedByType].reduce((sum, [key, count]) =>
       sum + (UNITS[key] && pred(UNITS[key], key) ? count : 0), 0);
+    const plannedNavySize = () => plannedUnitTotal(def => def.naval);
+    const navyTarget = overseasWar ? Math.max(2, Math.ceil(myCities.length / 2))
+      : fleetPriority ? Math.max(1, Math.ceil(myCities.length / 3))
+      : Math.max(1, Math.floor(myCities.length / 2));
     const plannedArmySize = () => roleCounts.frontline + roleCounts.ranged + roleCounts.siege;
     const registerUnitPlan = (choice) => {
       if (!choice || choice.kind !== "unit") return;
@@ -434,13 +516,20 @@ const AI = (() => {
 
     // Keep one reserve order behind current wartime production. This lets an
     // empire react to a new front without cancelling accumulated production.
-    if (atWar && plannedArmySize() < wantMilitary) {
+    if (atWar && (plannedArmySize() < wantMilitary ||
+        (overseasWar && plannedNavySize() < navyTarget))) {
       for (const city of myCities) {
-        if (!city.producing || city.queue.length || plannedArmySize() >= wantMilitary) continue;
+        const needsReserve = plannedArmySize() < wantMilitary ||
+          (overseasWar && plannedNavySize() < navyTarget);
+        if (!city.producing || city.queue.length || !needsReserve) continue;
         const opts = optionsByCity.get(city);
         const excluded = new Set([city.producing.key, ...city.queue.map(item => item.key)]);
-        const role = neededArmyRole(opts, roleCounts, roleTargets);
-        const reserve = bestMilitaryOption(opts, role, excluded);
+        let reserve = overseasWar && city.coastal && plannedNavySize() < navyTarget
+          ? bestNavalOption(opts, excluded) : null;
+        if (!reserve) {
+          const role = neededArmyRole(opts, roleCounts, roleTargets);
+          reserve = bestMilitaryOption(opts, role, excluded);
+        }
         if (reserve && game.setCityProduction(city,
             { kind: reserve.kind, key: reserve.key }, true, p.index)) registerUnitPlan(reserve);
       }
@@ -455,13 +544,6 @@ const AI = (() => {
         const c = opts.filter(pred);
         return c.length ? c[Math.floor(game.rng() * c.length)] : null;
       };
-      const bestShip = () => {
-        const ships = opts.filter(o => o.kind === "unit" && UNITS[o.key].naval);
-        if (!ships.length) return null;
-        ships.sort((a, b) => Math.max(UNITS[b.key].cs, UNITS[b.key].rs || 0) - Math.max(UNITS[a.key].cs, UNITS[a.key].rs || 0));
-        return ships[0];
-      };
-
       let choice = null;
       const garrison = game.combatUnitAt(city.c, city.r);
       if (!garrison && plannedArmySize() < myCities.length) {
@@ -472,6 +554,9 @@ const AI = (() => {
       if (!choice && happiness < 0) {
         // unhappy: happiness buildings before anything else
         choice = opts.find(o => o.kind === "building" && (o.key === "TAVERN" || o.key === "HAMMAM")) || null;
+      }
+      if (!choice && fleetPriority && city.coastal && plannedNavySize() < navyTarget) {
+        choice = bestNavalOption(opts);
       }
       const settlers = plannedByType.get("SETTLER") || 0;
       if (!choice && !atWar && happiness >= 2 && myCities.length + settlers < wantCities &&
@@ -489,10 +574,9 @@ const AI = (() => {
           game.rng() < (focus === "diplomacy" ? 0.65 : 0.35)) {
         choice = pick(o => o.key === "CARAVAN");
       }
-      const navy = plannedUnitTotal(def => def.naval);
-      if (!choice && city.coastal && navy < Math.max(1, Math.floor(myCities.length / 2)) &&
+      if (!choice && !fleetPriority && city.coastal && plannedNavySize() < navyTarget &&
           game.rng() < (atWar ? 0.3 : 0.12)) {
-        choice = bestShip();
+        choice = bestNavalOption(opts);
       }
       if (!choice && plannedArmySize() < wantMilitary &&
           game.rng() < (atWar ? 0.85 : focus === "domination" ? 0.6 : 0.35)) {
@@ -526,7 +610,9 @@ const AI = (() => {
   // ---------- unit control ----------
   function runUnits(game, p) {
     const myUnits = game.units.filter(u => u.owner === p.index);
-    const campaign = { target: campaignTarget(game, p), approaches: new Set() };
+    const target = campaignTarget(game, p);
+    const campaign = { target, overseas: campaignIsOverseas(game, p, target),
+      approaches: new Set(), navalApproaches: new Set(), escortAssigned: false };
     for (const u of myUnits) {
       if (!game.units.includes(u)) continue; // died mid-loop
       if (u.type === "SETTLER") runSettler(game, p, u);
@@ -535,7 +621,7 @@ const AI = (() => {
       else if (u.def.great) runGreatPerson(game, p, u);
       else if (u.type === "MISSIONARY") runMissionary(game, p, u);
       else if (u.type === "SCOUT") runScout(game, p, u);
-      else if (u.def.naval) runShip(game, p, u);
+      else if (u.def.naval) runShip(game, p, u, campaign);
       else if (!u.isCivilian) runMilitary(game, p, u, campaign);
     }
   }
@@ -694,34 +780,73 @@ const AI = (() => {
     }
   }
 
-  function runShip(game, p, u) {
+  function navalExploreTarget(game, p, u) {
+    const targets = game.map.tiles.filter(tile => p.visible[game.map.idx(tile.c, tile.r)] === 0 &&
+      game.isWater(tile) && game.unitPassable(u, tile)).sort((a, b) =>
+      HEX.distance(u.c, u.r, a.c, a.r) - HEX.distance(u.c, u.r, b.c, b.r) ||
+      a.r - b.r || a.c - b.c);
+    for (const tile of targets) if (game.findPath(u, tile.c, tile.r)) return tile;
+    return null;
+  }
+
+  function runShip(game, p, u, campaign = null) {
     const enemies = realWars(game, p);
+    if (!p.isMinor) {
+      const upgrade = game.canUpgrade(u);
+      const reserve = campaign && campaign.overseas ? 80 : 200;
+      if (upgrade && p.gold > upgrade.cost + reserve && game.upgradeUnit(u)) return;
+    }
     if (tryAttack(game, p, u)) return;
     if (enemies.length) {
-      // hunt enemy ships and embarked units, then coastal cities
-      let target = null, bestD = Infinity;
+      // Clear nearby hostile ships and transports before the fleet escorts its
+      // own invasion force or converges on the shared coastal objective.
+      let waterEnemy = null, waterEnemyD = Infinity;
       for (const e of game.units) {
         if (!enemies.includes(e.owner)) continue;
         const t = game.tile(e.c, e.r);
-        if (!game.isWater(t)) continue;
+        if (!game.isWater(t) || (u.isRanged && e.isCivilian)) continue;
         const d = HEX.distance(u.c, u.r, e.c, e.r);
-        if (d < bestD) { bestD = d; target = e; }
+        if (d < waterEnemyD) { waterEnemyD = d; waterEnemy = e; }
       }
-      for (const c of game.cities) {
-        if (!enemies.includes(c.owner) || !c.coastal) continue;
-        const d = HEX.distance(u.c, u.r, c.c, c.r) + 3; // prefer ships
-        if (d < bestD) { bestD = d; target = c; }
+      const strategicCity = campaign && campaign.target && campaign.target.coastal &&
+        enemies.includes(campaign.target.owner) ? campaign.target : null;
+      let escort = null, escortD = Infinity;
+      if (campaign && campaign.overseas && !campaign.escortAssigned) {
+        for (const friendly of game.units) {
+          if (friendly.owner !== p.index || friendly.isCivilian || friendly.def.naval ||
+              !game.isEmbarked(friendly)) continue;
+          const d = HEX.distance(u.c, u.r, friendly.c, friendly.r);
+          if (d < escortD) { escortD = d; escort = friendly; }
+        }
+        if (escort) campaign.escortAssigned = true;
       }
+      let target = waterEnemyD <= 6 ? waterEnemy : null;
+      if (!target && escort) {
+        if (escortD > 2) target = escort;
+        else { u.fortified = true; return; }
+      }
+      if (!target && strategicCity) target = strategicCity;
+      if (!target && waterEnemy) target = waterEnemy;
+      if (!target) target = game.cities.filter(c => enemies.includes(c.owner) && c.coastal)
+        .sort((a, b) => HEX.distance(u.c, u.r, a.c, a.r) -
+          HEX.distance(u.c, u.r, b.c, b.r) || a.id - b.id)[0] || null;
       if (target) {
+        const bestD = HEX.distance(u.c, u.r, target.c, target.r);
         if (u.hp < 40 && bestD > 2) { u.fortified = true; return; }
         if (u.isRanged && bestD <= u.def.range) { tryAttack(game, p, u); return; }
-        const dest = nearestApproach(game, u, target.c, target.r);
+        const targetCity = target.name !== undefined ? target : null;
+        const dest = targetCity && campaign
+          ? navalCampaignApproach(game, u, targetCity, campaign)
+          : nearestApproach(game, u, target.c, target.r);
         if (dest) game.moveUnitTo(u, dest[0], dest[1]);
         tryAttack(game, p, u);
       }
       return;
     }
-    // peacetime: loiter in home waters near a coastal city
+    // Peacetime fleets chart reachable seas and reveal foreign shores. Once
+    // their sailing range is explored, they return to defended home waters.
+    const explore = navalExploreTarget(game, p, u);
+    if (explore && game.moveUnitTo(u, explore.c, explore.r)) return;
     const home = game.cities.filter(c => c.owner === p.index && c.coastal)
       .sort((a, b) => HEX.distance(u.c, u.r, a.c, a.r) - HEX.distance(u.c, u.r, b.c, b.r))[0];
     if (home && HEX.distance(u.c, u.r, home.c, home.r) > 3) {
@@ -937,6 +1062,24 @@ const AI = (() => {
     return nearestApproach(game, u, target.c, target.r);
   }
 
+  function navalCampaignApproach(game, u, target, campaign) {
+    const range = u.isRanged ? u.def.range : 1;
+    const candidates = HEX.ring(target.c, target.r, range).filter(([c, r]) =>
+      HEX.distance(c, r, target.c, target.r) === range).sort((a, b) =>
+      HEX.distance(u.c, u.r, a[0], a[1]) - HEX.distance(u.c, u.r, b[0], b[1]) ||
+      a[1] - b[1] || a[0] - b[0]);
+    for (const [c, r] of candidates) {
+      const key = c + "," + r;
+      if (campaign.navalApproaches.has(key)) continue;
+      const tile = game.tile(c, r);
+      if (!tile || !game.isWater(tile) || !game.unitPassable(u, tile) || game.combatUnitAt(c, r)) continue;
+      if (!game.findPath(u, c, r)) continue;
+      campaign.navalApproaches.add(key);
+      return [c, r];
+    }
+    return nearestApproach(game, u, target.c, target.r);
+  }
+
   // find a tile this unit can stand on, adjacent to (tc,tr), to path to
   function nearestApproach(game, u, tc, tr) {
     const t = game.tile(tc, tr);
@@ -953,5 +1096,5 @@ const AI = (() => {
   }
 
   return { takeTurn, autoExplore, victoryFocus, chooseWarTarget, campaignTarget,
-    armyRole, desiredArmyRoles };
+    campaignIsOverseas, hasOverseasRival, armyRole, desiredArmyRoles };
 })();
