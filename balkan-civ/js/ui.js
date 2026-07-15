@@ -13,7 +13,8 @@ const UI = (() => {
 
   // In a network game only the client whose turn it is may act.
   function myTurn() {
-    return !NET.active || game.activeHuman === NET.myIndex;
+    if (!NET.active) return true;
+    return !!game && NET.connected && !NET.syncing && game.activeHuman === NET.myIndex;
   }
 
   // ---------------- start screen ----------------
@@ -257,7 +258,11 @@ const UI = (() => {
     const b = $("net-banner");
     if (!NET.active || !game || game.over) { b.style.display = "none"; return; }
     b.style.display = "block";
-    if (myTurn()) {
+    if (!NET.connected) {
+      b.innerHTML = `🌐 <b class="war">Connection lost.</b> Turns are paused; a local recovery save is ready.`;
+    } else if (NET.syncing) {
+      b.innerHTML = `🌐 <b class="alert">Synchronizing turn…</b>`;
+    } else if (myTurn()) {
       b.innerHTML = `🌐 <b class="alert">Your turn</b> — you are ${CIVS[game.players[NET.myIndex].civId].name}`;
     } else {
       const p = game.players[game.activeHuman];
@@ -278,6 +283,37 @@ const UI = (() => {
     }
   }
 
+  function compatibleNetworkSnapshot(snapshot) {
+    if (!game || !snapshot || !Array.isArray(snapshot.players) || !snapshot.map) return false;
+    return snapshot.seed === game.seed && snapshot.humans === game.humans &&
+      (snapshot.scenario || null) === game.scenario && (snapshot.speed || "standard") === game.speed &&
+      snapshot.players.length === game.players.length && snapshot.map.w === game.map.w && snapshot.map.h === game.map.h &&
+      snapshot.players.every((p, i) => p.civId === game.players[i].civId && p.isHuman === game.players[i].isHuman);
+  }
+
+  function applyNetworkState(state, meta = {}) {
+    if (NET.isHost && meta.remote && meta.fromIndex !== game.activeHuman) return false;
+    let snapshot;
+    try { snapshot = JSON.parse(state); } catch (e) { return false; }
+    if (!compatibleNetworkSnapshot(snapshot)) return false;
+    if (NET.isHost && meta.remote) {
+      if (snapshot.turn < game.turn || snapshot.turn > game.turn + 1) return false;
+      if (snapshot.activeHuman < 0 || snapshot.activeHuman >= game.humans) return false;
+    }
+    const allocatorRecovery = game.serialize();
+    let next;
+    try { next = Game.deserialize(state); } catch (e) {
+      try { Game.deserialize(allocatorRecovery); } catch (ignored) { /* current state was already valid */ }
+      return false;
+    }
+    const cam = rend ? { ...rend.cam } : null;
+    game = next;
+    game._viewer = NET.myIndex;
+    if (cam) rend.cam = cam;
+    netAfterLoad();
+    return true;
+  }
+
   async function showHostModal() {
     NET.reset();
     $("net-modal").style.display = "flex";
@@ -289,20 +325,25 @@ const UI = (() => {
       <div id="net-slots"></div>
       <button onclick="UI.hostAddSlot()">➕ Invite a friend</button>
       <button id="net-start-btn" disabled onclick="UI.hostStartOnline()">🚀 Start Online Game</button>
+      <button onclick="UI.cancelNetworkLobby()">Cancel</button>
       <span class="dim" id="net-status"></span>`;
     hostAddSlot();
   }
 
   async function hostAddSlot() {
     if (NET.peers.length >= 3) return;
-    const entry = await NET.hostInvite();
+    let entry;
+    try { entry = await NET.hostInvite(); } catch (e) {
+      $("net-status").innerHTML = `<span class="war">Could not create an invite. Check browser WebRTC access and try again.</span>`;
+      return;
+    }
     const i = NET.peers.length - 1;
     const div = document.createElement("div");
     div.className = "net-slot";
     div.innerHTML = `<b>Friend ${i + 1}</b> — <span id="net-st-${i}">waiting for reply…</span><br>
-      <span class="dim">Send this invite code:</span>
-      <textarea class="net-code" readonly onclick="this.select()">${entry.inviteCode}</textarea>
-      <span class="dim">Paste their reply code:</span>
+      <label class="dim" for="net-invite-${i}">Send this invite code:</label>
+      <textarea class="net-code" id="net-invite-${i}" readonly onclick="this.select()">${entry.inviteCode}</textarea>
+      <label class="dim" for="net-reply-${i}">Paste their reply code:</label>
       <textarea class="net-code" id="net-reply-${i}"></textarea>
       <button onclick="UI.hostConnect(${i})">🔗 Connect</button>`;
     $("net-slots").appendChild(div);
@@ -320,15 +361,20 @@ const UI = (() => {
   function refreshHostStatus() {
     NET.peers.forEach((p, i) => {
       const el = $(`net-st-${i}`);
-      if (el && p.open) el.innerHTML = `<b style="color:#2ecc71">connected</b>` +
+      if (!el) return;
+      if (p.open && p.compatible) el.innerHTML = `<b style="color:#2ecc71">connected</b>` +
         (p.civ ? ` — wants ${CIVS[p.civ] ? CIVS[p.civ].name : "random"}` : "");
+      else if (p.open && p.compatible === false) el.innerHTML = `<b class="war">version mismatch — both players must refresh</b>`;
+      else if (p.open) el.textContent = "verifying game version…";
+      else if (p.connectionState === "failed" || p.connectionState === "closed")
+        el.innerHTML = `<b class="war">connection failed — create a new invite</b>`;
     });
     const btn = $("net-start-btn");
-    if (btn) btn.disabled = !NET.peers.some(p => p.open);
+    if (btn) btn.disabled = !NET.peers.some(p => p.open && p.compatible);
   }
 
   function hostStartOnline() {
-    const ready = NET.peers.filter(p => p.open);
+    const ready = NET.peers.filter(p => p.open && p.compatible);
     if (!ready.length) return;
     const taken = new Set([chosenCiv]);
     for (const p of ready) {
@@ -348,7 +394,12 @@ const UI = (() => {
       mapW: dims[0], mapH: dims[1], mapType, difficulty: $("sel-difficulty").value,
       noBarbs: !$("chk-barbs").checked, speed: $("sel-speed").value });
     game._viewer = 0;
-    NET.hostStart(game);
+    if (!NET.hostStart(game, ready.length)) {
+      game = null;
+      $("net-status").innerHTML = `<span class="war">The connected roster changed. Verify each friend and start again.</span>`;
+      refreshHostStatus();
+      return;
+    }
     $("net-modal").style.display = "none";
     startPlaying();
     netUpdateBanner();
@@ -360,19 +411,27 @@ const UI = (() => {
     $("net-body").innerHTML = `<h2>🌐 Join Online Game</h2>
       <p class="dim">You will play as <b>${CIVS[chosenCiv].name}</b> (close this and pick another civ card to change).
       Paste the host's invite code:</p>
+      <label class="dim" for="net-invite">Invite code</label>
       <textarea class="net-code" id="net-invite"></textarea>
       <button onclick="UI.joinCreateReply()">🔗 Create Reply</button>
+      <button onclick="UI.cancelNetworkLobby()">Cancel</button>
       <div id="net-join-out"></div>`;
+  }
+
+  function cancelNetworkLobby() {
+    NET.reset();
+    $("net-modal").style.display = "none";
   }
 
   async function joinCreateReply() {
     try {
       const reply = await NET.joinWithInvite($("net-invite").value, chosenCiv);
-      $("net-join-out").innerHTML = `<span class="dim">Send this reply code back to the host,
-        then wait — the game starts automatically:</span>
-        <textarea class="net-code" readonly onclick="this.select()">${reply}</textarea>
+      $("net-join-out").innerHTML = `<label class="dim" for="net-join-reply">Send this reply code back to the host,
+        then wait — the game starts automatically:</label>
+        <textarea class="net-code" id="net-join-reply" readonly onclick="this.select()">${reply}</textarea>
         <span class="alert">⏳ Waiting for the host to start…</span>`;
     } catch (e) {
+      NET.reset();
       $("net-join-out").innerHTML = `<span class="war">Bad invite code — paste the whole thing.</span>`;
     }
   }
@@ -2653,6 +2712,7 @@ const UI = (() => {
   }
 
   function congressAbstain() {
+    if (!myTurn()) return;
     const p = game.players[game.viewer];
     p.congressVote = null; p.congressVoteTurn = game.turn; // recorded so we don't renag
     $("congress-modal").style.display = "none";
@@ -2676,7 +2736,7 @@ const UI = (() => {
   function maybeAdvise() {
     if (!advisorEnabled() || !game || game.over || game.pendingEventFor(game.viewer) ||
         $("advisor").style.display === "block") return;
-    if (NET.active && game.activeHuman !== NET.myIndex) return;
+    if (!myTurn()) return;
     const seen = advisorSeenKeys();
     for (const tip of ADVISOR_TIPS) {
       if (seen.has(tip.key)) continue;
@@ -2747,7 +2807,6 @@ const UI = (() => {
     undoInfo = null;
     SFX.play("turn");
     snapshotForRecap(); // capture state so the next turn can recap what changed
-    const before = game.viewer;
     game.endTurn();
     try { localStorage.setItem("balkan-civ-save", game.serialize()); } catch (e) { /* storage full */ }
     if (rend.selected && !game.units.includes(rend.selected)) rend.selected = null;
@@ -2786,7 +2845,8 @@ const UI = (() => {
     $("handoff-modal").style.display = "flex";
     $("handoff-body").innerHTML = `
       <h2>🔄 Pass the device</h2>
-      <p style="font-size:18px;margin:14px 0"><b style="color:${p.civ.color}">Player ${game.viewer + 1}</b>
+      <p style="font-size:18px;margin:14px 0"><span aria-hidden="true" style="display:inline-block;width:13px;height:13px;
+      margin-right:7px;background:${p.civ.color};border:2px solid ${p.civ.color2};vertical-align:-1px"></span><b>Player ${game.viewer + 1}</b>
       — ${p.civ.name} (${p.civ.leader})</p>
       <p class="dim">Turn ${game.turn}. No peeking at the other empires!</p>
       <button onclick="UI.beginHotseatTurn()" style="font-size:16px;padding:10px 28px;margin-top:10px">⚔ Begin Turn</button>`;
@@ -3416,17 +3476,21 @@ const UI = (() => {
       startPlaying();
       netAfterLoad();
     });
-    NET.on("state", (state) => {
-      const cam = rend ? { ...rend.cam } : null;
-      game = Game.deserialize(state);
-      game._viewer = NET.myIndex;
-      if (cam) rend.cam = cam;
-      netAfterLoad();
-    });
+    NET.on("state", (state, meta) => applyNetworkState(state, meta));
     NET.on("drop", () => {
-      const b = $("net-banner");
-      b.style.display = "block";
-      b.innerHTML = `🌐 <b class="war">A player disconnected.</b> The game is auto-saved locally.`;
+      if (!NET.active) {
+        refreshHostStatus();
+        if (!NET.isHost && $("net-join-out"))
+          $("net-join-out").innerHTML = `<span class="war">The host connection closed. Cancel and request a new invite.</span>`;
+        return;
+      }
+      if (game) {
+        try { localStorage.setItem("balkan-civ-save", game.serialize()); } catch (e) { /* storage full */ }
+        selectUnit(null);
+        closeCity();
+        refreshAll();
+      }
+      netUpdateBanner();
     });
     const want3d = (localStorage.getItem("balkan-civ-gfx") || "3d") === "3d";
     rend = (want3d && typeof Renderer3D !== "undefined" && Renderer3D.supported())
@@ -3459,7 +3523,7 @@ const UI = (() => {
 
   return { init, setCityFocus, setProduction, buyItem, closeCity, pickTech, diploAction, newGame,
     showFoundingModal, confirmFounding, buyMissionary, gift, assignSpy, beginHotseatTurn,
-    hostAddSlot, hostConnect, hostStartOnline, joinCreateReply, unqueue,
+    hostAddSlot, hostConnect, hostStartOnline, joinCreateReply, cancelNetworkLobby, unqueue,
     saveSlot, loadSlot, exportSave, toMainMenu, toggleGraphics, showSettings: showSettingsModal,
     diploTrade, diploGift, diploPact, adoptPolicy, congressVote, congressAbstain,
     playChapter, resetCampaign, openCampaign, answerPeace, answerEvent, cancelProduction, buildNow,

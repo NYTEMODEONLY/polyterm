@@ -148,7 +148,8 @@ frame. Install its pinned dependencies with `npm install`, install Chromium with
   invite code over any chat app, pastes back their replies, and starts —
   after that the connection is direct between browsers. Each player picks
   their civ on their own start screen, sees only their own fog of war, and
-  plays in turn while the others watch a waiting banner
+  plays in turn while the others watch a waiting banner. The host verifies
+  every versioned turn update and rejects stale or out-of-turn state
 - **Ten campaign scenarios across all nine civilizations**, each with its own
   victory rule and a live objective tracker in the top bar:
   - *The Rise of Samuil* (Macedonia, 976) — take Constantinople in 150 turns
@@ -284,7 +285,7 @@ frame. Install its pinned dependencies with `npm install`, install Chromium with
   clickable **message log**; wounded units can fortify until healed
 - **Undo** a simple move (before anything eventful happens); **3 manual
   save slots** plus **export/import of save files** — email a save to a
-  friend to continue an online match later
+  friend to continue the match offline or move it between machines
 - An **end-game replay graph** charts every civilization's score across
   the whole game
 - Diplomacy screen: declare war, propose peace, compare scores
@@ -336,7 +337,7 @@ js/render.js      classic 2D canvas renderer + minimap
 js/render3d.js    3D WebGL renderer (extruded hex terrain, sprite units)
 js/vendor/        three.min.js (r147, vendored so the game works offline)
 js/editor.js      map editor
-js/net.js         serverless WebRTC multiplayer (invite codes, state relay)
+js/net.js         serverless WebRTC multiplayer (signaling, authoritative state relay)
 js/ui.js          panels, modals, input handling
 ```
 
@@ -344,6 +345,7 @@ Run the deterministic gameplay, balance, save-state, and AI regressions with:
 
 ```sh
 node --test tests/*.test.mjs
+npm run test:browser
 ```
 
 ## Performance
@@ -362,8 +364,11 @@ slower devices.
 The invite/reply codes are standard WebRTC session descriptions — exchange
 them over any messenger. A STUN server (Google's public one) is used for
 NAT traversal; on very restrictive networks a direct connection may fail.
-The full game state is auto-saved locally on every turn, so if a connection
-drops mid-game the host can continue against the AI or re-host later.
+The host assigns only verified connected players, owns the authoritative
+state revision, and rejects stale or out-of-turn updates. If a connection
+drops mid-game, turns pause instead of silently becoming a local game and
+the current authoritative state is saved locally. That recovery save can be
+resumed offline as hotseat or exported from the game menu.
 
 ## Ideas for future expansion
 

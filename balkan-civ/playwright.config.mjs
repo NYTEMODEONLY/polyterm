@@ -14,7 +14,8 @@ export default defineConfig({
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
     launchOptions: {
-      args: ["--enable-webgl", "--ignore-gpu-blocklist", "--use-gl=swiftshader"],
+      args: ["--enable-webgl", "--ignore-gpu-blocklist", "--use-gl=swiftshader",
+        "--disable-features=WebRtcHideLocalIpsWithMdns"],
     },
   },
   webServer: {
