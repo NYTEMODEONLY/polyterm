@@ -93,6 +93,10 @@ events, or AI choices.
   any time from the ☰ Menu — the game autosaves and resumes seamlessly,
   and both styles show the exact same match (Three.js is vendored locally,
   so the game still works fully offline)
+- **Strategic tile-yield lens** in both renderers: press `Y` or use the
+  wheat control to reveal food, production, and gold directly on every
+  currently visible hex. The setting persists between sessions and uses
+  distinct circle, square, and diamond markers for colour-independent reading
 - Procedurally generated hex maps with smooth coastlines, different every
   game — choose a rugged **Peninsula**, an island-dotted **Archipelago**,
   or a **custom map** you painted yourself in the built-in **Map Editor**
@@ -230,6 +234,7 @@ events, or AI choices.
 | Drag | Pan the map |
 | Mouse wheel | Zoom |
 | `Q` / `W` | Rotate the camera (3D mode) |
+| `Y` | Toggle the tile-yield lens |
 | `Enter` | End turn |
 | `N` / `.` | Next idle unit |
 | `F` | Fortify selected unit |

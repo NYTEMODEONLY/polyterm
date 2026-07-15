@@ -108,5 +108,56 @@ const WORLD_ART = (() => {
     ctx.restore();
   }
 
-  return { resource, site };
+  // Compact food / production / gold markers shared by the strategic lens in
+  // both renderers. Shape as well as colour identifies each yield so the lens
+  // remains readable with the colourblind palette enabled.
+  function yields(ctx, values, cx, cy, size) {
+    const tokens = [
+      { value: values.food, color: "#6f9f4a", shape: "circle" },
+      { value: values.prod, color: "#a56f43", shape: "square" },
+      { value: values.gold, color: "#d0a63c", shape: "diamond" },
+    ].filter(t => t.value > 0);
+    if (!tokens.length) return;
+
+    const gap = size * 0.84;
+    const start = cx - (tokens.length - 1) * gap / 2;
+    const r = size * 0.38;
+    const path = (shape, x, y) => {
+      const rr = r;
+      ctx.beginPath();
+      if (shape === "circle") {
+        ctx.arc(x, y, rr, 0, Math.PI * 2);
+      } else if (shape === "square") {
+        ctx.rect(x - rr, y - rr, rr * 2, rr * 2);
+      } else {
+        ctx.moveTo(x, y - rr); ctx.lineTo(x + rr, y);
+        ctx.lineTo(x, y + rr); ctx.lineTo(x - rr, y); ctx.closePath();
+      }
+    };
+
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = `800 ${Math.round(size * 0.55)}px 'Segoe UI', sans-serif`;
+    for (let i = 0; i < tokens.length; i++) {
+      const token = tokens[i], x = start + i * gap;
+      ctx.shadowColor = "rgba(0,0,0,0.72)";
+      ctx.shadowBlur = Math.max(2, size * 0.13);
+      path(token.shape, x, cy);
+      ctx.fillStyle = token.color;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = Math.max(1.5, size * 0.09);
+      ctx.strokeStyle = "rgba(245,238,214,0.9)";
+      ctx.stroke();
+      ctx.fillStyle = "#fff9e8";
+      ctx.strokeStyle = "rgba(25,20,14,0.76)";
+      ctx.lineWidth = Math.max(1.5, size * 0.1);
+      ctx.strokeText(String(token.value), x, cy + size * 0.02);
+      ctx.fillText(String(token.value), x, cy + size * 0.02);
+    }
+    ctx.restore();
+  }
+
+  return { resource, site, yields };
 })();

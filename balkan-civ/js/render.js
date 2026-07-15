@@ -41,6 +41,7 @@ class Renderer {
     this.attackable = [];        // [[c,r],...] attack highlights
     this.hoverTile = null;   // [c, r] under the cursor
     this.previewPath = null; // path preview for the selected unit
+    this.showYields = false;
     this.dirty = true;
   }
 
@@ -92,6 +93,18 @@ class Renderer {
         const [sx, sy] = this.worldToScreen(c, r);
         if (sx < -2 * s || sy < -2 * s || sx > W + 2 * s || sy > H + 2 * s) continue;
         this.drawBorder(ctx, game, t, sx, sy, s);
+      }
+    }
+
+    // Strategic yield lens. Current visibility is required so an improvement
+    // built inside the fog cannot leak information to the viewer.
+    if (this.showYields && s >= 18) {
+      const badgeSize = Math.max(12, Math.min(19, s * 0.44));
+      for (const t of game.map.tiles) {
+        if (vis[game.map.idx(t.c, t.r)] !== 2) continue;
+        const [sx, sy] = this.worldToScreen(t.c, t.r);
+        if (sx < -2 * s || sy < -2 * s || sx > W + 2 * s || sy > H + 2 * s) continue;
+        WORLD_ART.yields(ctx, game.tileYield(t), sx, sy + s * 0.47, badgeSize);
       }
     }
 

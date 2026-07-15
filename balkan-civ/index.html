@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Balkan Civilizations</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>⚔️</text></svg>">
-<link rel="stylesheet" href="css/style.css?v=10">
+<link rel="stylesheet" href="css/style.css?v=11">
 </head>
 <body>
 
@@ -127,11 +127,13 @@
   </div>
   <canvas id="map"></canvas>
   <div id="map-controls" aria-label="Map controls">
-    <button id="btn-rot-left" title="Rotate map left (Q)">↶</button>
-    <button id="btn-rot-right" title="Rotate map right (W)">↷</button>
+    <button id="btn-rot-left" title="Rotate map left (Q)" aria-label="Rotate map left">↶</button>
+    <button id="btn-rot-right" title="Rotate map right (W)" aria-label="Rotate map right">↷</button>
     <span class="control-rule"></span>
-    <button id="btn-zoom-out" title="Zoom out">−</button>
-    <button id="btn-zoom-in" title="Zoom in">+</button>
+    <button id="btn-zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
+    <button id="btn-zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+    <span class="control-rule"></span>
+    <button id="btn-yields" title="Show tile yields (Y)" aria-label="Show tile yields" aria-pressed="false">🌾</button>
   </div>
   <div id="attention"></div>
   <div id="recap"></div>
@@ -240,12 +242,12 @@
 <script src="js/ai.js?v=2"></script>
 <script src="js/vendor/three.min.js"></script>
 <script src="js/unitart.js?v=1"></script>
-<script src="js/worldart.js?v=1"></script>
-<script src="js/render.js?v=7"></script>
-<script src="js/render3d.js?v=8"></script>
+<script src="js/worldart.js?v=2"></script>
+<script src="js/render.js?v=8"></script>
+<script src="js/render3d.js?v=9"></script>
 <script src="js/net.js"></script>
 <script src="js/editor.js"></script>
-<script src="js/ui.js?v=9"></script>
+<script src="js/ui.js?v=10"></script>
 <script>
   window.addEventListener("DOMContentLoaded", () => UI.init());
 </script>

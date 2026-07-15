@@ -353,6 +353,7 @@ const UI = (() => {
     SFX.startMusic();
     resize();
     applyAccessibility();
+    applyMapPreferences();
     const rotateDisplay = rend.three ? "block" : "none";
     $("btn-rot-left").style.display = rotateDisplay;
     $("btn-rot-right").style.display = rotateDisplay;
@@ -1590,6 +1591,27 @@ const UI = (() => {
     applyReduceMotion(localStorage.getItem("balkan-civ-reduce-motion") === "1");
   }
 
+  function setYieldLens(on) {
+    if (!rend) return;
+    rend.showYields = on;
+    rend.dirty = true;
+    const button = $("btn-yields");
+    button.classList.toggle("active", on);
+    button.setAttribute("aria-pressed", on ? "true" : "false");
+    button.setAttribute("aria-label", on ? "Hide tile yields" : "Show tile yields");
+    button.title = `${on ? "Hide" : "Show"} tile yields (Y)`;
+  }
+
+  function applyMapPreferences() {
+    setYieldLens(localStorage.getItem("balkan-civ-yields") === "1");
+  }
+
+  function toggleYieldLens() {
+    const on = !rend.showYields;
+    localStorage.setItem("balkan-civ-yields", on ? "1" : "0");
+    setYieldLens(on);
+  }
+
   function showSettingsModal() {
     $("settings-modal").style.display = "flex";
     const cb = localStorage.getItem("balkan-civ-colorblind") === "1";
@@ -2412,6 +2434,7 @@ const UI = (() => {
       else if (e.key === "r") showReligionScreen();
       else if (e.key === "e") showSpyScreen();
       else if (e.key === "v") showVictoryProgress();
+      else if (e.key === "y") toggleYieldLens();
       else if ((e.key === "q" || e.key === "w") && rend.rotate) rend.rotate(e.key === "q" ? -1 : 1);
     });
 
@@ -2423,6 +2446,7 @@ const UI = (() => {
     $("stat-faith").onclick = showReligionScreen;
     $("stat-culture").onclick = showPolicyScreen;
     $("stat-score").onclick = showVictoryProgress;
+    $("btn-yields").onclick = toggleYieldLens;
     $("btn-spies").onclick = showSpyScreen;
     $("btn-pedia").onclick = () => showPediaScreen();
     $("pedia-search").addEventListener("input", renderPedia);

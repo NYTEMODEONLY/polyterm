@@ -37,6 +37,7 @@ class Renderer3D {
     this.attackable = [];
     this.hoverTile = null;
     this.previewPath = null;
+    this.showYields = false;
     this.dirty = true;
 
     this.three = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
@@ -75,9 +76,10 @@ class Renderer3D {
     this.gShroud = new THREE.Group();
     this.gBorders = new THREE.Group();
     this.gImprov = new THREE.Group();
+    this.gYields = new THREE.Group();
     // per-frame pooled objects
     this.gDyn = new THREE.Group();
-    for (const g of [this.gTerrain, this.gShroud, this.gBorders, this.gImprov, this.gDyn]) this.scene.add(g);
+    for (const g of [this.gTerrain, this.gShroud, this.gBorders, this.gImprov, this.gYields, this.gDyn]) this.scene.add(g);
 
     this._texCache = new Map();
     this._matFill = {
@@ -92,6 +94,8 @@ class Renderer3D {
     this._visSnap = null;
     this._ownSnap = null;
     this._impHash = null;
+    this._yieldShown = null;
+    this._yieldHash = null;
     this._vw = 0; this._vh = 0;
 
     this._hover = null; this._selRing = null; this._citySel = null; this._preview = null;
@@ -219,6 +223,14 @@ class Renderer3D {
     return this._tex(`world|${kind}|${key}`, 112, 112, (ctx) => {
       if (kind === "resource") WORLD_ART.resource(ctx, key, 56, 56, 94);
       else WORLD_ART.site(ctx, key, 56, 56, 96);
+    });
+  }
+
+  _yieldTex(values) {
+    const count = [values.food, values.prod, values.gold].filter(v => v > 0).length;
+    const w = 16 + count * 58, h = 70;
+    return this._tex(`yield|${values.food}|${values.prod}|${values.gold}`, w, h, (ctx) => {
+      WORLD_ART.yields(ctx, values, w / 2, h / 2, 52);
     });
   }
 
@@ -388,14 +400,20 @@ class Renderer3D {
 
   _buildStatic(game) {
     // wipe everything tied to the previous map
-    for (const g of [this.gTerrain, this.gShroud, this.gBorders, this.gImprov, this.gDyn]) {
-      for (const ch of [...g.children]) { g.remove(ch); if (ch.geometry) ch.geometry.dispose(); }
+    for (const g of [this.gTerrain, this.gShroud, this.gBorders, this.gImprov, this.gYields, this.gDyn]) {
+      for (const ch of [...g.children]) {
+        g.remove(ch);
+        if (ch.geometry) ch.geometry.dispose();
+        if (ch.material && g === this.gYields) ch.material.dispose();
+      }
     }
     this._units.clear(); this._cities.clear();
     this._pool = { move: [], atk: [], decor: [], fx: [], routes: [], flash: [], rings: [] };
     this._hover = this._selRing = this._citySel = this._preview = null;
     this._visSnap = this._ownSnap = null;
     this._impHash = null;
+    this._yieldShown = null;
+    this._yieldHash = null;
 
     const S = this.hexSize, map = game.map;
     const jitterOf = (c, r) => {
@@ -646,6 +664,32 @@ class Renderer3D {
     geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
     geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
     this.gImprov.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide })));
+  }
+
+  _rebuildYields(game) {
+    for (const ch of [...this.gYields.children]) {
+      this.gYields.remove(ch);
+      ch.material.dispose();
+    }
+    if (!this.showYields) return;
+    const vis = game.players[game.viewer].visible;
+    const S = this.hexSize;
+    for (const t of game.map.tiles) {
+      if (vis[game.map.idx(t.c, t.r)] !== 2) continue;
+      const values = game.tileYield(t);
+      const count = [values.food, values.prod, values.gold].filter(v => v > 0).length;
+      if (!count) continue;
+      const tex = this._yieldTex(values);
+      const [wx, wz] = HEX.toPixel(t.c, t.r, S);
+      const h = S * 0.48;
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: tex, transparent: true, depthTest: false, depthWrite: false,
+      }));
+      sp.position.set(wx, surfY3D(t) + S * 0.48, wz + S * 0.36);
+      sp.scale.set(h * (16 + count * 58) / 70, h, 1);
+      sp.renderOrder = 3;
+      this.gYields.add(sp);
+    }
   }
 
   // ---------------- pooled dynamic objects ----------------
@@ -1006,6 +1050,12 @@ class Renderer3D {
     if (visChanged || impHash !== this._impHash) {
       this._rebuildImprovements(game);
       this._impHash = impHash;
+    }
+    const yieldChanged = this._yieldShown !== this.showYields;
+    if (visChanged || impHash !== this._yieldHash || yieldChanged) {
+      this._rebuildYields(game);
+      this._yieldHash = impHash;
+      this._yieldShown = this.showYields;
     }
 
     const now = Date.now();
