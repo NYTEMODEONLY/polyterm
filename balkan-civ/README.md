@@ -227,9 +227,11 @@ events, or AI choices.
   length; **Mirror** world type gives fair symmetric maps for multiplayer
 - **Goal-aware AI strategy**: leaders derive a preferred victory route from
   their traits, then align research, buildings, policy branches, missionaries,
-  city-state gifts, trade routes, and army size with that plan. In war,
-  settlers get escorts, melee waits for siege engines to breach walls, armies
-  chase off raiders, and gold is spent modernizing veterans
+  city-state gifts, trade routes, and army composition with that plan. War
+  targets are scored by distance, attitude, allied fronts, and relative power;
+  armies share a campaign objective, reserve separate assault positions, and
+  maintain frontline, ranged, and siege support. Settlers get escorts, melee
+  waits for bombardment to breach walls, and gold modernizes veterans
 - Cities support a **production queue** (queue up to 6 items) and a full
   clickable **message log**; wounded units can fortify until healed
 - **Undo** a simple move (before anything eventful happens); **3 manual
@@ -287,6 +289,12 @@ js/net.js         serverless WebRTC multiplayer (invite codes, state relay)
 js/ui.js          panels, modals, input handling
 ```
 
+Run the deterministic gameplay, balance, save-state, and AI regressions with:
+
+```sh
+node --test tests/*.test.mjs
+```
+
 ## Performance
 
 The 3D renderer rebuilds terrain geometry only when the map changes and
@@ -308,4 +316,5 @@ drops mid-game the host can continue against the AI or re-host later.
 
 ## Ideas for future expansion
 
-Unit artwork, save-transfer for resuming online games, scenario chains.
+Deeper naval invasion planning, longer historical campaign chains, additional
+Industrial-era scenarios, and localized interface text.

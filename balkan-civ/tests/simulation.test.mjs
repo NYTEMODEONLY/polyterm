@@ -46,10 +46,207 @@ const simulationSource = `
   return run(424242);
 `;
 
+const controlledWorldSource = `
+  const resetWorld = (g) => {
+    g.units = []; g.cities = []; g.camps = []; g.routes = []; g.peaceOffers = [];
+    g._hap = {};
+    for (const tile of g.map.tiles) {
+      tile.terrain = "PLAINS"; tile.feature = null; tile.resource = null;
+      tile.improvement = null; tile.owner = -1; tile.city = null; tile.workedBy = null;
+    }
+    for (const p of g.players) {
+      p.atWarWith.clear(); p.pacts.clear(); p.met.clear();
+      p.attitude = {}; p.warWeariness = {}; p.deals = [];
+    }
+  };
+  const addCity = (g, owner, c, r, name, capital = false) => {
+    const city = new City(name, owner, c, r);
+    city.isCapital = capital; city.pop = 5;
+    g.cities.push(city); g.tile(c, r).city = city; g.tile(c, r).owner = owner;
+    if (capital) g.players[owner].originalCapitalId = city.id;
+    return city;
+  };
+  const addUnit = (g, type, owner, c, r) => {
+    const unit = new Unit(type, owner, c, r); g.units.push(unit); return unit;
+  };
+`;
+
 test("fixed-seed AI simulations produce an identical strategic fingerprint", () => {
   const first = evaluate(loadGameContext(), simulationSource);
   const second = evaluate(loadGameContext(), simulationSource);
   assert.equal(second, first);
+});
+
+test("AI war planning chooses one viable target and will not open a second front", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    ${controlledWorldSource}
+    const g = new Game({ playerCiv: "SERBIA", numOpponents: 2, seed: 61001,
+      mapW: 24, mapH: 18, mapType: "peninsula", noMinors: true, noBarbs: true });
+    resetWorld(g);
+    addCity(g, 0, 3, 8, "Home", true);
+    addCity(g, 1, 8, 8, "Hostile Border", true);
+    addCity(g, 2, 10, 8, "Warm Border", true);
+    [[2, 7], [2, 8], [2, 9], [3, 7], [3, 9], [4, 8]].forEach(([c, r]) =>
+      addUnit(g, "WARRIOR", 0, c, r));
+    addUnit(g, "WARRIOR", 1, 8, 9);
+    addUnit(g, "WARRIOR", 2, 10, 9);
+    g.players[0].met = new Set([2, 1]);
+    g.players[1].met.add(0); g.players[2].met.add(0);
+    g.players[0].attitude[1] = -60; g.players[1].attitude[0] = -60;
+    g.players[0].attitude[2] = 10; g.players[2].attitude[0] = 10;
+
+    const plan = AI.chooseWarTarget(g, g.players[0]);
+    g.declareWar(0, plan.player);
+    g.rng = () => 0;
+    AI.takeTurn(g, g.players[0]);
+    return JSON.stringify({ plan, wars: [...g.players[0].atWarWith].sort((a, b) => a - b) });
+  `));
+
+  assert.equal(result.plan.player, 1, "target scoring should beat met-player insertion order");
+  assert.ok(result.plan.score > 0);
+  assert.deepEqual(result.wars, [1], "an active campaign must block another opportunistic declaration");
+});
+
+test("AI production plans support arms, reserves, and only one expansion unit", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    ${controlledWorldSource}
+    const wartime = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 62001,
+      mapW: 24, mapH: 18, mapType: "peninsula", noMinors: true, noBarbs: true });
+    resetWorld(wartime);
+    const cities = [addCity(wartime, 0, 3, 5, "A", true),
+      addCity(wartime, 0, 3, 9, "B"), addCity(wartime, 0, 6, 7, "C")];
+    addCity(wartime, 1, 16, 7, "Enemy", true);
+    cities.forEach((city, i) => {
+      city.producing = { kind: "building", key: "MONUMENT" };
+      addUnit(wartime, "MUSKETMAN", 0, city.c, city.r);
+    });
+    addUnit(wartime, "WARRIOR", 1, 15, 7);
+    wartime.players[0].techs = new Set(Object.keys(TECHS));
+    wartime.players[0].met.add(1); wartime.players[1].met.add(0);
+    wartime.declareWar(0, 1); wartime.rng = () => 0.5;
+    AI.takeTurn(wartime, wartime.players[0]);
+    const queued = cities.flatMap(city => city.queue).filter(item => item.kind === "unit");
+
+    const peace = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 62002,
+      mapW: 24, mapH: 18, mapType: "peninsula", noMinors: true, noBarbs: true });
+    resetWorld(peace);
+    [[3, 5], [3, 9], [6, 7]].forEach(([c, r], i) => {
+      const city = addCity(peace, 0, c, r, "P" + i, i === 0);
+      city.pop = 4; addUnit(peace, "WARRIOR", 0, c, r);
+    });
+    peace.rng = () => 0;
+    AI.takeTurn(peace, peace.players[0]);
+    return JSON.stringify({
+      queued: queued.map(item => item.key), queuedRoles: queued.map(item => AI.armyRole(item.key)),
+      settlers: peace.cities.filter(c => c.owner === 0 && c.producing && c.producing.key === "SETTLER").length,
+      desired: AI.desiredArmyRoles(10, true, "science", true),
+    });
+  `));
+
+  assert.equal(result.queued.length, 3, "busy wartime cities should maintain a one-order reserve");
+  assert.ok(result.queuedRoles.includes("siege"), "the reserve should include city bombardment");
+  assert.ok(result.queuedRoles.includes("ranged"), "the reserve should include ranged support");
+  assert.deepEqual(result.desired, { frontline: 5, ranged: 3, siege: 2 });
+  assert.equal(result.settlers, 1, "parallel cities must not all start Settlers in the same turn");
+});
+
+test("AI land campaigns reserve coordinated frontline and ranged approach positions", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    ${controlledWorldSource}
+    const g = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 63001,
+      mapW: 24, mapH: 18, mapType: "peninsula", noMinors: true, noBarbs: true });
+    resetWorld(g);
+    const home = addCity(g, 0, 3, 8, "Home", true);
+    home.producing = { kind: "building", key: "MONUMENT" };
+    addCity(g, 1, 15, 8, "Border Capital", true);
+    addCity(g, 1, 19, 13, "Rear City");
+    const army = [addUnit(g, "WARRIOR", 0, 4, 6), addUnit(g, "SPEARMAN", 0, 4, 10),
+      addUnit(g, "ARCHER", 0, 5, 7), addUnit(g, "CATAPULT", 0, 5, 11)];
+    g.players[0].techs = new Set(Object.keys(TECHS));
+    g.players[0].met.add(1); g.players[1].met.add(0);
+    g.declareWar(0, 1); g.rng = () => 0.5;
+    const target = AI.campaignTarget(g, g.players[0]);
+    AI.takeTurn(g, g.players[0]);
+    const endpoints = army.map(unit => unit.path && unit.path.length
+      ? unit.path[unit.path.length - 1] : [unit.c, unit.r]);
+    return JSON.stringify({ target: target.id, endpoints,
+      distances: endpoints.map(([c, r]) => HEX.distance(c, r, target.c, target.r)) });
+  `));
+
+  assert.deepEqual([...result.distances].sort((a, b) => a - b), [1, 1, 2, 2]);
+  assert.equal(new Set(result.endpoints.map(([c, r]) => c + "," + r)).size, 4,
+    "units should not reserve the same final approach tile");
+});
+
+test("seeded AI campaigns sustain support arms without opportunistic extra fronts", () => {
+  const metrics = JSON.parse(evaluate(loadGameContext(), `
+    const metrics = { extraFronts: 0, doubleDeclarations: 0, captures: 0,
+      warArmyTurns: 0, rangedTurns: 0, siegeReadyTurns: 0, siegeCoveredTurns: 0 };
+    for (let seed = 1; seed <= 6; seed++) {
+      const g = new Game({ playerCiv: CIV_IDS[seed % CIV_IDS.length], numOpponents: 5,
+        seed: seed * 7919, mapW: 38, mapH: 28,
+        mapType: seed % 3 === 0 ? "archipelago" : "peninsula", difficulty: "normal" });
+      let activeAI = null;
+      const originalTakeTurn = AI.takeTurn;
+      AI.takeTurn = (game, p) => {
+        activeAI = p.index;
+        try { return originalTakeTurn(game, p); } finally { activeAI = null; }
+      };
+      const declarations = [];
+      const originalDeclareWar = g.declareWar.bind(g);
+      g.declareWar = (a, b) => {
+        const fresh = !g.players[a].atWarWith.has(b);
+        const prior = [...g.players[a].atWarWith].filter(i => g.players[i].alive &&
+          !g.players[i].isMinor && !g.players[i].isBarb).length;
+        if (fresh && a === activeAI && !g.players[a].isMinor && !g.players[b].isMinor &&
+            !g.players[b].isBarb) declarations.push({ turn: g.turn, actor: a, prior });
+        return originalDeclareWar(a, b);
+      };
+      const originalCapture = g.captureCity.bind(g);
+      g.captureCity = (...args) => { metrics.captures++; return originalCapture(...args); };
+
+      for (let step = 0; step < 130 && !g.over; step++) {
+        AI.takeTurn(g, g.players[0]); g.endTurn();
+        for (const p of g.players.filter(p => p.alive && !p.isMinor && !p.isBarb)) {
+          const wars = [...p.atWarWith].filter(i => g.players[i].alive &&
+            !g.players[i].isMinor && !g.players[i].isBarb);
+          if (!wars.length) continue;
+          metrics.warArmyTurns++;
+          const army = g.units.filter(u => u.owner === p.index && !u.isCivilian &&
+            !u.def.naval && !u.def.great && u.type !== "SCOUT");
+          if (army.some(u => u.isRanged && !u.def.siege)) metrics.rangedTurns++;
+          const siegeReady = Object.keys(UNITS).some(key => UNITS[key].siege &&
+            (!UNITS[key].tech || p.hasTech(UNITS[key].tech)));
+          const siegePlanned = army.some(u => u.def.siege) || g.cities.some(city =>
+            city.owner === p.index &&
+            ((city.producing && city.producing.kind === "unit" && UNITS[city.producing.key].siege) ||
+             city.queue.some(item => item.kind === "unit" && UNITS[item.key].siege)));
+          if (siegeReady) {
+            metrics.siegeReadyTurns++;
+            if (siegePlanned) metrics.siegeCoveredTurns++;
+          }
+        }
+      }
+      metrics.extraFronts += declarations.filter(d => d.prior > 0).length;
+      const byTurnActor = new Map();
+      for (const d of declarations) {
+        const key = d.turn + ":" + d.actor;
+        byTurnActor.set(key, (byTurnActor.get(key) || 0) + 1);
+      }
+      metrics.doubleDeclarations += [...byTurnActor.values()].filter(count => count > 1).length;
+      AI.takeTurn = originalTakeTurn;
+    }
+    return JSON.stringify(metrics);
+  `));
+
+  assert.equal(metrics.extraFronts, 0);
+  assert.equal(metrics.doubleDeclarations, 0);
+  assert.ok(metrics.captures >= 1, "the reviewed sample should convert campaigns into city captures");
+  assert.ok(metrics.rangedTurns / metrics.warArmyTurns >= 0.35,
+    "ranged support should accompany a meaningful share of wartime armies");
+  assert.ok(metrics.siegeReadyTurns > 0 &&
+    metrics.siegeCoveredTurns / metrics.siegeReadyTurns >= 0.75,
+    "siege-capable wartime empires should usually field or queue siege");
 });
 
 test("empire economy forecasts every modifier and matches the applied turn", () => {

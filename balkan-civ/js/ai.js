@@ -34,6 +34,117 @@ const AI = (() => {
     return TECHS[target].req.some(req => techOnPath(key, req, new Set(seen)));
   }
 
+  const ARMY_ROLE_ORDER = ["siege", "ranged", "frontline"];
+
+  function armyRole(key) {
+    const def = UNITS[key];
+    if (!def || def.civilian || def.naval || def.great || key === "SCOUT") return null;
+    if (def.siege) return "siege";
+    if (def.rs) return "ranged";
+    return "frontline";
+  }
+
+  function armyRoleCounts(game, p) {
+    const counts = { frontline: 0, ranged: 0, siege: 0 };
+    const count = (key) => {
+      const role = armyRole(key);
+      if (role) counts[role]++;
+    };
+    for (const u of game.units) if (u.owner === p.index) count(u.type);
+    for (const city of game.cities) {
+      if (city.owner !== p.index) continue;
+      if (city.producing && city.producing.kind === "unit") count(city.producing.key);
+      for (const item of city.queue) if (item.kind === "unit") count(item.key);
+    }
+    return counts;
+  }
+
+  function desiredArmyRoles(total, atWar, focus, siegeAvailable) {
+    total = Math.max(0, Math.floor(total));
+    const siege = siegeAvailable && total >= 4
+      ? Math.max(1, Math.round(total * (atWar || focus === "domination" ? 0.2 : 0.12))) : 0;
+    const ranged = total >= 3 ? Math.max(1, Math.ceil(total * 0.25)) : 0;
+    return { frontline: Math.max(0, total - ranged - siege), ranged, siege };
+  }
+
+  function bestMilitaryOption(opts, wantedRole = null, excluded = new Set()) {
+    let choices = opts.filter(o => o.kind === "unit" && armyRole(o.key) && !excluded.has(o.key));
+    const matching = wantedRole ? choices.filter(o => armyRole(o.key) === wantedRole) : [];
+    if (matching.length) choices = matching;
+    if (!choices.length) return null;
+    choices.sort((a, b) => Math.max(UNITS[b.key].cs, UNITS[b.key].rs || 0) -
+      Math.max(UNITS[a.key].cs, UNITS[a.key].rs || 0) ||
+      UNITS[b.key].moves - UNITS[a.key].moves || UNITS[a.key].cost - UNITS[b.key].cost ||
+      a.key.localeCompare(b.key));
+    return choices[0];
+  }
+
+  function neededArmyRole(opts, counts, targets) {
+    const available = ARMY_ROLE_ORDER.filter(role =>
+      opts.some(o => o.kind === "unit" && armyRole(o.key) === role));
+    return available.sort((a, b) => {
+      const pressure = (role) => targets[role] > 0
+        ? (targets[role] - counts[role]) / targets[role] : -counts[role] - 1;
+      return pressure(b) - pressure(a) || ARMY_ROLE_ORDER.indexOf(a) - ARMY_ROLE_ORDER.indexOf(b);
+    })[0] || null;
+  }
+
+  function closestCityDistance(ours, theirs) {
+    let distance = Infinity;
+    for (const own of ours) for (const target of theirs) {
+      distance = Math.min(distance, HEX.distance(own.c, own.r, target.c, target.r));
+    }
+    return distance;
+  }
+
+  function warTargetPlan(game, p, other) {
+    if (!other || !other.alive || other.isBarb || other.index === p.index ||
+        p.atWarWith.has(other.index) || p.pacts.has(other.index)) return null;
+    const focus = victoryFocus(p);
+    if (other.isMinor && focus !== "domination") return null;
+    const ours = game.cities.filter(c => c.owner === p.index);
+    const theirs = game.cities.filter(c => c.owner === other.index);
+    if (!ours.length || !theirs.length) return null;
+
+    const allyAtWar = [...p.pacts].some(a => game.players[a].alive &&
+      game.players[a].atWarWith.has(other.index));
+    const distance = closestCityDistance(ours, theirs);
+    const maxDistance = allyAtWar ? 12 : 9;
+    const myPower = game.militaryPower(p.index);
+    const theirPower = game.militaryPower(other.index);
+    const ratio = myPower / Math.max(1, theirPower);
+    const powerNeeded = allyAtWar ? 1.0 : other.isMinor ? 2.0 : focus === "domination" ? 1.35 : 1.6;
+    if (distance > maxDistance || myPower <= 40 || ratio <= powerNeeded) return null;
+
+    const attitude = game.attitudeOf(p.index, other.index);
+    const friendly = attitude >= DIPLO.pactThreshold;
+    const chance = other.isMinor ? 0.025 : allyAtWar ? 0.3
+      : focus === "domination" ? (friendly ? 0.025 : 0.1) : (friendly ? 0.012 : 0.055);
+    const score = (maxDistance - distance) * 12 + (Math.min(ratio, 4) - powerNeeded) * 30 -
+      attitude * 0.3 + (allyAtWar ? 45 : 0) - (other.isMinor ? 20 : 0) +
+      Math.max(0, 3 - theirs.length) * 3;
+    return { player: other.index, score, chance, distance, ratio, allyAtWar };
+  }
+
+  function chooseWarTarget(game, p) {
+    return [...p.met].map(i => warTargetPlan(game, p, game.players[i])).filter(Boolean)
+      .sort((a, b) => b.score - a.score || a.player - b.player)[0] || null;
+  }
+
+  function campaignTarget(game, p) {
+    const enemies = new Set(realWars(game, p));
+    const homes = game.cities.filter(c => c.owner === p.index);
+    if (!enemies.size || !homes.length) return null;
+    const targets = game.cities.filter(c => enemies.has(c.owner));
+    const targetCost = (city) => {
+      const distance = Math.min(...homes.map(home => HEX.distance(home.c, home.r, city.c, city.r)));
+      return distance * 10 + (city.hp / Math.max(1, city.maxHp)) * 6 +
+        game.cityStrength(city) * 0.2 + game.militaryPower(city.owner) * 0.02 -
+        (city.isCapital ? 8 : 0);
+    };
+    return targets.sort((a, b) => targetCost(a) - targetCost(b) || a.owner - b.owner || a.id - b.id)[0] || null;
+  }
+
   function takeTurn(game, p) {
     if (p.isBarb) {
       runBarbarians(game, p);
@@ -227,8 +338,6 @@ const AI = (() => {
     for (const other of p.met) {
       const o = game.players[other];
       if (!o.alive) continue;
-      // conquering city-states happens, but rarely
-      if (o.isMinor && !p.atWarWith.has(other) && game.rng() > 0.08) continue;
       if (p.atWarWith.has(other)) {
         // sue for peace if clearly losing or war has dragged on
         const weary = (p.warWeariness[other] || 0) > 25;
@@ -248,25 +357,14 @@ const AI = (() => {
             game.makePact(p.index, other);
           }
         }
-        // consider declaring war on a weaker neighbour — never a pact partner,
-        // and friendship stays the sword hand
-        if (p.pacts.has(other)) continue;
-        const myPower = game.militaryPower(p.index);
-        const theirPower = game.militaryPower(other);
-        const myCities = game.cities.filter(c => c.owner === p.index);
-        const theirCities = game.cities.filter(c => c.owner === other);
-        if (!myCities.length || !theirCities.length) continue;
-        const near = myCities.some(mc => theirCities.some(tc => HEX.distance(mc.c, mc.r, tc.c, tc.r) <= 9));
-        let warChance = game.attitudeOf(p.index, other) >= DIPLO.pactThreshold ? 0.015 : 0.06;
-        // gang up: far likelier to pile on a target a pact partner already fights,
-        // and only need a slight edge when a friend is holding the other front
-        let powerNeeded = 1.6;
-        const allyAtWar = [...p.pacts].some(a => game.players[a].alive && game.players[a].atWarWith.has(other));
-        if (allyAtWar) { warChance = 0.3; powerNeeded = 1.0; }
-        if (near && myPower > theirPower * powerNeeded && myPower > 40 && game.rng() < warChance) {
-          game.declareWar(p.index, other);
-        }
       }
+    }
+    // Pick one reviewed objective instead of rolling independently for every
+    // known rival. Defensive pacts may widen a front, but the AI will not open
+    // another opportunistic war while an existing campaign is active.
+    if (!realWars(game, p).length) {
+      const target = chooseWarTarget(game, p);
+      if (target && game.rng() < target.chance) game.declareWar(p.index, target.player);
     }
   }
 
@@ -302,8 +400,6 @@ const AI = (() => {
   function runCities(game, p) {
     const myCities = game.cities.filter(c => c.owner === p.index);
     const myUnits = game.units.filter(u => u.owner === p.index);
-    const military = myUnits.filter(u => !u.isCivilian);
-    const settlers = myUnits.filter(u => u.type === "SETTLER");
     const atWar = realWars(game, p).length > 0;
     const focus = victoryFocus(p);
     const wantCities = 4 + Math.floor(game.map.w / 15);
@@ -314,21 +410,50 @@ const AI = (() => {
     }
     game.assignWorkedTiles(p.index);
 
+    const optionsByCity = new Map(myCities.map(city => [city, game.productionOptions(city)]));
+    const roleCounts = armyRoleCounts(game, p);
+    const siegeAvailable = [...optionsByCity.values()].some(opts =>
+      opts.some(o => o.kind === "unit" && armyRole(o.key) === "siege"));
+    const roleTargets = desiredArmyRoles(wantMilitary, atWar, focus, siegeAvailable);
+    const plannedByType = new Map();
+    const addType = (key) => plannedByType.set(key, (plannedByType.get(key) || 0) + 1);
+    for (const u of myUnits) addType(u.type);
+    for (const city of myCities) {
+      if (city.producing && city.producing.kind === "unit") addType(city.producing.key);
+      for (const item of city.queue) if (item.kind === "unit") addType(item.key);
+    }
+    const plannedUnitTotal = (pred) => [...plannedByType].reduce((sum, [key, count]) =>
+      sum + (UNITS[key] && pred(UNITS[key], key) ? count : 0), 0);
+    const plannedArmySize = () => roleCounts.frontline + roleCounts.ranged + roleCounts.siege;
+    const registerUnitPlan = (choice) => {
+      if (!choice || choice.kind !== "unit") return;
+      addType(choice.key);
+      const role = armyRole(choice.key);
+      if (role) roleCounts[role]++;
+    };
+
+    // Keep one reserve order behind current wartime production. This lets an
+    // empire react to a new front without cancelling accumulated production.
+    if (atWar && plannedArmySize() < wantMilitary) {
+      for (const city of myCities) {
+        if (!city.producing || city.queue.length || plannedArmySize() >= wantMilitary) continue;
+        const opts = optionsByCity.get(city);
+        const excluded = new Set([city.producing.key, ...city.queue.map(item => item.key)]);
+        const role = neededArmyRole(opts, roleCounts, roleTargets);
+        const reserve = bestMilitaryOption(opts, role, excluded);
+        if (reserve && game.setCityProduction(city,
+            { kind: reserve.kind, key: reserve.key }, true, p.index)) registerUnitPlan(reserve);
+      }
+    }
+
     for (const city of myCities) {
       if (city.producing) continue;
-      const opts = game.productionOptions(city);
+      const opts = optionsByCity.get(city);
       if (!opts.length) continue;
 
       const pick = (pred) => {
         const c = opts.filter(pred);
         return c.length ? c[Math.floor(game.rng() * c.length)] : null;
-      };
-      const bestMilitary = () => {
-        const mil = opts.filter(o => o.kind === "unit" && !UNITS[o.key].civilian &&
-          !UNITS[o.key].naval && o.key !== "SCOUT");
-        if (!mil.length) return null;
-        mil.sort((a, b) => Math.max(UNITS[b.key].cs, UNITS[b.key].rs || 0) - Math.max(UNITS[a.key].cs, UNITS[a.key].rs || 0));
-        return mil[Math.floor(game.rng() * Math.min(2, mil.length))];
       };
       const bestShip = () => {
         const ships = opts.filter(o => o.kind === "unit" && UNITS[o.key].naval);
@@ -339,34 +464,39 @@ const AI = (() => {
 
       let choice = null;
       const garrison = game.combatUnitAt(city.c, city.r);
-      if (!garrison && military.length < myCities.length) choice = bestMilitary();
+      if (!garrison && plannedArmySize() < myCities.length) {
+        choice = bestMilitaryOption(opts, "frontline") ||
+          bestMilitaryOption(opts, neededArmyRole(opts, roleCounts, roleTargets));
+      }
       const happiness = game.happinessOf(p.index);
       if (!choice && happiness < 0) {
         // unhappy: happiness buildings before anything else
         choice = opts.find(o => o.kind === "building" && (o.key === "TAVERN" || o.key === "HAMMAM")) || null;
       }
-      if (!choice && !atWar && happiness >= 2 && myCities.length + settlers.length < wantCities &&
-          city.pop >= 3 && !settlers.length && game.rng() < 0.7) {
+      const settlers = plannedByType.get("SETTLER") || 0;
+      if (!choice && !atWar && happiness >= 2 && myCities.length + settlers < wantCities &&
+          city.pop >= 3 && settlers === 0 && game.rng() < 0.7) {
         choice = pick(o => o.key === "SETTLER");
       }
-      const workers = myUnits.filter(u => u.type === "WORKER");
-      if (!choice && workers.length < Math.min(myCities.length, 3) && game.rng() < 0.4) {
+      const workers = plannedByType.get("WORKER") || 0;
+      if (!choice && workers < Math.min(myCities.length, 3) && game.rng() < 0.4) {
         choice = pick(o => o.key === "WORKER");
       }
-      const caravans = myUnits.filter(u => u.def.caravan).length;
+      const caravans = plannedUnitTotal(def => def.caravan);
       const myRoutes = game.routes.filter(r => r.owner === p.index).length;
       if (!choice && p.hasTech("CURRENCY") && myCities.length >= 2 &&
           caravans + myRoutes < Math.min(TRADE.maxRoutes, myCities.length) &&
           game.rng() < (focus === "diplomacy" ? 0.65 : 0.35)) {
         choice = pick(o => o.key === "CARAVAN");
       }
-      const navy = myUnits.filter(u => u.def.naval);
-      if (!choice && city.coastal && navy.length < Math.max(1, Math.floor(myCities.length / 2)) &&
+      const navy = plannedUnitTotal(def => def.naval);
+      if (!choice && city.coastal && navy < Math.max(1, Math.floor(myCities.length / 2)) &&
           game.rng() < (atWar ? 0.3 : 0.12)) {
         choice = bestShip();
       }
-      if (!choice && military.length < wantMilitary && game.rng() < (atWar ? 0.85 : focus === "domination" ? 0.6 : 0.35)) {
-        choice = bestMilitary();
+      if (!choice && plannedArmySize() < wantMilitary &&
+          game.rng() < (atWar ? 0.85 : focus === "domination" ? 0.6 : 0.35)) {
+        choice = bestMilitaryOption(opts, neededArmyRole(opts, roleCounts, roleTargets));
       }
       if (!choice) {
         const strategic = {
@@ -386,14 +516,17 @@ const AI = (() => {
           if (o) { choice = o; break; }
         }
       }
-      if (!choice) choice = bestMilitary() || opts[0];
-      game.setCityProduction(city, { kind: choice.kind, key: choice.key }, false, p.index);
+      if (!choice) choice = bestMilitaryOption(opts, neededArmyRole(opts, roleCounts, roleTargets)) || opts[0];
+      if (game.setCityProduction(city, { kind: choice.kind, key: choice.key }, false, p.index)) {
+        registerUnitPlan(choice);
+      }
     }
   }
 
   // ---------- unit control ----------
   function runUnits(game, p) {
     const myUnits = game.units.filter(u => u.owner === p.index);
+    const campaign = { target: campaignTarget(game, p), approaches: new Set() };
     for (const u of myUnits) {
       if (!game.units.includes(u)) continue; // died mid-loop
       if (u.type === "SETTLER") runSettler(game, p, u);
@@ -403,7 +536,7 @@ const AI = (() => {
       else if (u.type === "MISSIONARY") runMissionary(game, p, u);
       else if (u.type === "SCOUT") runScout(game, p, u);
       else if (u.def.naval) runShip(game, p, u);
-      else if (!u.isCivilian) runMilitary(game, p, u);
+      else if (!u.isCivilian) runMilitary(game, p, u, campaign);
     }
   }
 
@@ -599,7 +732,7 @@ const AI = (() => {
     }
   }
 
-  function runMilitary(game, p, u) {
+  function runMilitary(game, p, u, campaign = null) {
     const enemies = realWars(game, p);
     // chase off raiders prowling nearby
     if (!enemies.length && game.barbIndex >= 0) {
@@ -662,13 +795,12 @@ const AI = (() => {
     if (tryAttack(game, p, u)) return;
 
     if (enemies.length) {
-      // 2. march on the nearest enemy city
-      let target = null, bestD = Infinity;
-      for (const c of game.cities) {
-        if (!enemies.includes(c.owner)) continue;
-        const d = HEX.distance(u.c, u.r, c.c, c.r);
-        if (d < bestD) { bestD = d; target = c; }
-      }
+      // 2. Concentrate the land army on a shared campaign objective. If a
+      // unit captures it mid-loop, refresh the objective for the next unit.
+      if (campaign && (!campaign.target || !game.cities.includes(campaign.target) ||
+          !enemies.includes(campaign.target.owner))) campaign.target = campaignTarget(game, p);
+      let target = campaign ? campaign.target : campaignTarget(game, p);
+      let bestD = target ? HEX.distance(u.c, u.r, target.c, target.r) : Infinity;
       if (!target) {
         for (const e of game.units) {
           if (!enemies.includes(e.owner)) continue;
@@ -688,7 +820,9 @@ const AI = (() => {
           return;
         }
         // step toward target (stop next to it, attack handled next turn/iteration)
-        const dest = nearestApproach(game, u, target.c, target.r);
+        const dest = targetCity && campaign
+          ? campaignApproach(game, u, targetCity, campaign)
+          : nearestApproach(game, u, target.c, target.r);
         if (dest) game.moveUnitTo(u, dest[0], dest[1]);
         tryAttack(game, p, u);
       }
@@ -782,6 +916,27 @@ const AI = (() => {
     return false;
   }
 
+  function campaignApproach(game, u, target, campaign) {
+    const range = u.isRanged ? u.def.range : 1;
+    const candidates = HEX.ring(target.c, target.r, range).filter(([c, r]) =>
+      HEX.distance(c, r, target.c, target.r) === range).sort((a, b) =>
+      HEX.distance(u.c, u.r, a[0], a[1]) - HEX.distance(u.c, u.r, b[0], b[1]) ||
+      a[1] - b[1] || a[0] - b[0]);
+    for (const [c, r] of candidates) {
+      const key = c + "," + r;
+      if (campaign.approaches.has(key)) continue;
+      const tile = game.tile(c, r);
+      if (!tile || game.isWater(tile) || !game.unitPassable(u, tile)) continue;
+      const occupant = game.combatUnitAt(c, r);
+      if (occupant && occupant.id !== u.id) continue;
+      if (tile.city && tile.city.owner !== u.owner) continue;
+      if (!game.findPath(u, c, r)) continue;
+      campaign.approaches.add(key);
+      return [c, r];
+    }
+    return nearestApproach(game, u, target.c, target.r);
+  }
+
   // find a tile this unit can stand on, adjacent to (tc,tr), to path to
   function nearestApproach(game, u, tc, tr) {
     const t = game.tile(tc, tr);
@@ -797,5 +952,6 @@ const AI = (() => {
     return best;
   }
 
-  return { takeTurn, autoExplore, victoryFocus };
+  return { takeTurn, autoExplore, victoryFocus, chooseWarTarget, campaignTarget,
+    armyRole, desiredArmyRoles };
 })();
