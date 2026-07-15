@@ -106,6 +106,11 @@ events, or AI choices.
   highlighted on the map in both graphics modes, while the city panel shows
   exact growth and production forecasts. Purchases and queued projects enforce
   technology, resource, ownership, wonder, and unit-placement rules
+- **Guarded unit orders**: a tactical unit panel combines health, movement,
+  strength, veteran status, and current orders with grouped commands. Every
+  player action is checked against ownership and the active turn; cancelling a
+  Worker job cannot refund movement, and the only Settler cannot be disbanded
+  before a capital exists
 - Procedurally generated hex maps with smooth coastlines, different every
   game — choose a rugged **Peninsula**, an island-dotted **Archipelago**,
   or a **custom map** you painted yourself in the built-in **Map Editor**

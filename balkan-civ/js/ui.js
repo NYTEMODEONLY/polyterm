@@ -632,54 +632,99 @@ const UI = (() => {
     if (!u || !game.units.includes(u)) { panel.style.display = "none"; return; }
     panel.style.display = "flex";
     const def = u.def;
+    const hpPct = Math.max(0, Math.min(100, u.hp));
+    const hpTone = u.hp > 65 ? "healthy" : u.hp > 30 ? "wounded" : "critical";
+    const movePips = Array.from({ length: def.moves }, (_, i) =>
+      `<i class="${i < u.moves ? "ready" : ""}"></i>`).join("");
+    const states = [];
+    if (game.isEmbarked(u)) states.push("⛵ Embarked");
+    if (u.building) states.push(`${IMPROVEMENT[u.building.type].icon} ${IMPROVEMENT[u.building.type].name} · ${u.building.turnsLeft}t`);
+    if (u.healFortify) states.push("➕ Healing");
+    else if (u.fortified) states.push("🛡️ Fortified");
+    if (u.autoExplore) states.push("🗺️ Auto-exploring");
     $("unit-info").innerHTML = `
       <span class="unit-icon">${def.icon}</span>
-      <div><b>${u.gpName ? u.gpName + " — " : ""}${def.name}</b>${u.level ? " " + "⭐".repeat(u.level) : ""}${u.promos.map(k => PROMOS[k].icon).join("")}${game.isEmbarked(u) ? " <span class='alert'>⛵ embarked</span>" : ""}<br>
-      <span class="dim">HP ${u.hp}/100 · Moves ${u.moves}/${def.moves}
-      ${def.cs ? " · Str " + def.cs : ""}${def.rs ? " · Ranged " + def.rs + " (r" + def.range + ")" : ""}
-      ${!u.isCivilian ? " · XP " + u.xp : ""}</span>
-      ${u.building ? `<br><span class="alert">Building ${IMPROVEMENT[u.building.type].name} — ${u.building.turnsLeft} turn${u.building.turnsLeft > 1 ? "s" : ""} left</span>` : ""}</div>`;
+      <div class="unit-details">
+        <div class="unit-heading"><b>${u.gpName ? u.gpName + " — " : ""}${def.name}</b>
+          <span>${u.level ? "⭐".repeat(u.level) : ""}${u.promos.map(k => PROMOS[k].icon).join("")}</span></div>
+        <div class="unit-readout">
+          <span>HP <b>${u.hp}</b></span><span class="unit-health ${hpTone}"><i style="width:${hpPct}%"></i></span>
+          <span class="move-label">Move <b>${u.moves}/${def.moves}</b></span><span class="move-pips">${movePips}</span>
+        </div>
+        <div class="unit-badges">
+          ${def.cs ? `<span>⚔ ${def.cs}</span>` : ""}${def.rs ? `<span>➶ ${def.rs} · r${def.range}</span>` : ""}
+          ${!u.isCivilian ? `<span>XP ${u.xp}</span>` : ""}
+          ${states.map(s => `<span class="unit-state">${s}</span>`).join("")}
+        </div>
+      </div>`;
     const actions = $("unit-actions");
     actions.innerHTML = "";
-    const btn = (label, fn, enabled = true) => {
+    let actionButtons = actions;
+    const startGroup = (label) => {
+      const group = document.createElement("div");
+      group.className = "unit-action-group";
+      const heading = document.createElement("span");
+      heading.className = "unit-action-label";
+      heading.textContent = label;
+      actionButtons = document.createElement("div");
+      actionButtons.className = "unit-action-buttons";
+      group.append(heading, actionButtons);
+      actions.appendChild(group);
+    };
+    const btn = (label, fn, enabled = true, className = "") => {
       const b = document.createElement("button");
       b.textContent = label;
       b.disabled = !enabled;
+      if (className) b.className = className;
       b.onclick = fn;
-      actions.appendChild(b);
+      actionButtons.appendChild(b);
+      return b;
+    };
+    const commandBtn = (label, order, detail = null, onDone = null, sound = null) => {
+      const status = game.unitOrderStatus(u, order, game.viewer, detail);
+      const b = btn(label, () => {
+        if (!game.issueUnitOrder(u, order, game.viewer, detail)) return;
+        if (sound) SFX.play(sound);
+        if (onDone) onDone();
+        else selectUnit(game.units.includes(u) ? u : null);
+        refreshAll();
+      }, status.ok);
+      b.title = status.reason;
+      b.dataset.order = order;
       return b;
     };
     if (u.promoPts > 0 && u.owner === game.viewer && !u.isCivilian) {
+      startGroup("Promotions");
       for (const key of Object.keys(PROMOS)) {
         if (u.promos.includes(key)) continue;
         const pr = PROMOS[key];
-        btn(`⭐ ${pr.icon} ${pr.name}`, () => {
-          u.promos.push(key);
-          u.promoPts--;
-          SFX.play("build");
-          refreshAll();
-        }, myTurn());
+        commandBtn(`⭐ ${pr.icon} ${pr.name}`, "promote", key, null, "build");
       }
     }
+    startGroup("Abilities");
     if (u.type === "SETTLER") {
       const status = game.citySiteStatus(u.c, u.r, u.owner);
-      const ready = status.ok && u.moves > 0 && myTurn();
+      const actor = game.unitActorStatus(u, game.viewer);
+      const ready = actor.ok && status.ok && u.moves > 0;
       const foundButton = btn("🏛️ Found City", () => {
-        const city = game.foundCity(u);
+        const city = game.foundCity(u, game.viewer);
         if (city) { SFX.play("found"); selectCity(city); refreshAll(); }
       }, ready);
       foundButton.title = ready ? "Found a city on this tile"
-        : !myTurn() ? "Wait for this civilization's turn."
+        : !actor.ok ? actor.reason
         : status.ok ? "No movement points remaining; found next turn." : status.reason;
     }
     if (u.def.caravan) {
       const dests = game.tradeDestinations(u);
       const from = game.cityAt(u.c, u.r);
+      const actor = game.unitActorStatus(u, game.viewer);
       if (from && from.owner === game.viewer) {
         for (const d of dests.slice(0, 4)) {
-          btn(`🐫 → ${d.name} (+${game.routeIncome(from, d)}💰/t)`, () => {
-            if (game.establishRoute(u, d.id)) { SFX.play("coin"); selectUnit(null); refreshAll(); }
-          }, myTurn());
+          const routeButton = btn(`🐫 → ${d.name} (+${game.routeIncome(from, d)}💰/t)`, () => {
+            if (game.establishRoute(u, d.id, game.viewer)) { SFX.play("coin"); selectUnit(null); refreshAll(); }
+          }, actor.ok && u.moves > 0);
+          routeButton.title = !actor.ok ? actor.reason : u.moves > 0 ? "Establish this trade route"
+            : "No movement points remain this turn.";
         }
         if (!dests.length) {
           const cap = game.routes.filter(r => r.owner === game.viewer).length >= TRADE.maxRoutes;
@@ -690,77 +735,103 @@ const UI = (() => {
       }
     }
     if (u.def.great) {
+      const actor = game.unitActorStatus(u, game.viewer);
       if (u.def.great === "sci") {
-        btn("🔭 Discover Technology", () => {
-          if (game.useGreatPerson(u)) { SFX.play("research"); selectUnit(null); refreshAll(); }
-        }, myTurn());
+        const discover = btn("🔭 Discover Technology", () => {
+          if (game.useGreatPerson(u, game.viewer)) { SFX.play("research"); selectUnit(null); refreshAll(); }
+        }, actor.ok);
+        discover.title = actor.reason;
       } else if (u.def.great === "eng") {
         const inCity = game.cityAt(u.c, u.r) && game.cityAt(u.c, u.r).owner === game.viewer;
-        btn(`🏗️ Rush Production (+${GP.engineerRush}⚙️)`, () => {
-          if (game.useGreatPerson(u)) { SFX.play("build"); selectUnit(null); refreshAll(); }
-        }, inCity && myTurn());
+        const rush = btn(`🏗️ Rush Production (+${GP.engineerRush}⚙️)`, () => {
+          if (game.useGreatPerson(u, game.viewer)) { SFX.play("build"); selectUnit(null); refreshAll(); }
+        }, inCity && actor.ok);
+        rush.title = !actor.ok ? actor.reason : inCity ? "Rush this city's current project" : "Move into one of your cities first.";
       } else {
         btn("🎖️ +15% combat within 2 tiles", () => {}, false);
       }
     }
     if (u.def.missionary) {
       const target = game.missionaryTarget(u);
-      btn(`🕊️ Spread Religion (${u.charges} left)`, () => {
-        if (game.spreadFromMissionary(u)) {
+      const actor = game.unitActorStatus(u, game.viewer);
+      const spread = btn(`🕊️ Spread Religion (${u.charges} left)`, () => {
+        if (game.spreadFromMissionary(u, game.viewer)) {
           selectUnit(game.units.includes(u) ? u : null);
           refreshAll();
         }
-      }, !!target && u.moves > 0 && game.players[game.viewer].religionId !== null);
+      }, actor.ok && !!target && u.moves > 0 && game.players[game.viewer].religionId !== null);
+      spread.title = !actor.ok ? actor.reason : !target ? "Move next to a city first."
+        : u.moves <= 0 ? "No movement points remain this turn." : "Spread your founded religion.";
     }
     if (u.def.worker) {
       if (u.building) {
-        btn("🚫 Cancel Job", () => { u.building = null; u.moves = u.def.moves; selectUnit(u); refreshAll(); });
+        commandBtn("🚫 Cancel Job", "cancel_job", null, () => selectUnit(u));
       } else {
+        const actor = game.unitActorStatus(u, game.viewer);
         for (const key of Object.keys(IMPROVEMENT)) {
           if (game.canBuildImprovement(u, key)) {
-            btn(`${IMPROVEMENT[key].icon} Build ${IMPROVEMENT[key].name} (${IMPROVEMENT[key].turns}t)`, () => {
-              game.startImprovement(u, key);
+            const build = btn(`${IMPROVEMENT[key].icon} Build ${IMPROVEMENT[key].name} (${IMPROVEMENT[key].turns}t)`, () => {
+              if (!game.startImprovement(u, key, game.viewer)) return;
               cycleNextUnit(); refreshAll();
-            }, u.moves > 0);
+            }, actor.ok && u.moves > 0);
+            build.title = !actor.ok ? actor.reason : u.moves > 0 ? `Begin a ${IMPROVEMENT[key].turns}-turn job`
+              : "No movement points remain this turn.";
           }
         }
       }
     }
     if (u.type === "SCOUT") {
-      btn(u.autoExplore ? "🛑 Stop Exploring" : "🗺️ Auto-Explore", () => {
-        u.autoExplore = !u.autoExplore;
-        if (u.autoExplore) { AI.autoExplore(game, u); cycleNextUnit(); }
-        refreshAll();
-      });
+      const enabling = !u.autoExplore;
+      commandBtn(enabling ? "🗺️ Auto-Explore" : "🛑 Stop Exploring", "auto_explore", enabling,
+        () => { if (enabling) { AI.autoExplore(game, u); cycleNextUnit(); } else selectUnit(u); });
     }
     if (!u.isCivilian) {
-      const up = game.canUpgrade(u);
+      const actor = game.unitActorStatus(u, game.viewer);
+      const up = game.canUpgrade(u, game.viewer);
       if (u.def.upgrade) {
         const target = game.resolveUnitFor(game.players[game.viewer], u.def.upgrade);
-        btn(`⬆️ ${UNITS[target].name} (${up ? up.cost : "—"}💰)`, () => {
-          if (game.upgradeUnit(u)) { SFX.play("coin"); selectUnit(u); refreshAll(); }
-        }, !!up && myTurn());
+        const upgrade = btn(`⬆️ ${UNITS[target].name} (${up ? up.cost : "—"}💰)`, () => {
+          if (game.upgradeUnit(u, game.viewer)) { SFX.play("coin"); selectUnit(u); refreshAll(); }
+        }, !!up);
+        upgrade.title = !actor.ok ? actor.reason : up ? "Upgrade in friendly territory"
+          : "Requires its technology, resource, gold, movement, and friendly territory.";
       }
-      btn(u.fortified ? "⛺ Wake" : "🛡️ Fortify", () => {
-        u.fortified = !u.fortified;
-        u.healFortify = false;
-        if (u.fortified) u.moves = 0;
-        selectUnit(u); refreshAll();
-      });
-      if (u.hp < 100 && !u.healFortify) {
-        btn("➕ Heal Up", () => {
-          u.fortified = true;
-          u.healFortify = true;
-          u.moves = 0;
-          cycleNextUnit(); refreshAll();
-        });
-      }
+    }
+    if (!actionButtons.childElementCount) actionButtons.parentElement.remove();
+    startGroup("Orders");
+    if (!u.isCivilian) {
+      if (u.fortified || u.healFortify) commandBtn("⛺ Wake", "wake", null, () => selectUnit(u));
+      else commandBtn("🛡️ Fortify", "fortify", null, () => cycleNextUnit());
+      if (u.hp < 100 && !u.healFortify)
+        commandBtn("➕ Heal Up", "heal", null, () => cycleNextUnit());
     }
     if (undoInfo && undoInfo.id === u.id && undoInfo.turn === game.turn) {
-      btn("↩️ Undo Move", () => undoMove(), myTurn());
+      const actor = game.unitActorStatus(u, game.viewer);
+      const undo = btn("↩️ Undo Move", () => undoMove(), actor.ok);
+      undo.title = actor.reason;
     }
-    btn("⏭️ Skip", () => { u.moves = 0; cycleNextUnit(); refreshAll(); });
-    btn("❌ Disband", () => { game.removeUnit(u); selectUnit(null); refreshAll(); });
+    commandBtn("⏭️ Skip", "skip", null, () => cycleNextUnit());
+    const disbandStatus = game.unitOrderStatus(u, "disband", game.viewer);
+    const disband = btn("🗑️ Disband", () => {
+      if (disband.dataset.armed !== "true") {
+        disband.dataset.armed = "true";
+        disband.textContent = "Confirm Disband";
+        disband.classList.add("armed");
+        disband.title = "Click again to permanently remove this unit.";
+        setTimeout(() => {
+          if (!disband.isConnected || disband.dataset.armed !== "true") return;
+          disband.dataset.armed = "false";
+          disband.textContent = "🗑️ Disband";
+          disband.classList.remove("armed");
+          disband.title = disbandStatus.reason;
+        }, 2500);
+        return;
+      }
+      if (!game.issueUnitOrder(u, "disband", game.viewer)) return;
+      selectUnit(null);
+      refreshAll();
+    }, disbandStatus.ok, "unit-disband");
+    disband.title = disbandStatus.reason;
   }
 
   // ---------------- undo (simple moves only) ----------------
@@ -785,7 +856,8 @@ const UI = (() => {
 
   function undoMove() {
     const u = rend.selected;
-    if (!undoInfo || !u || u.id !== undoInfo.id || undoInfo.turn !== game.turn) return;
+    if (!undoInfo || !u || !game.unitActorStatus(u, game.viewer).ok ||
+        u.id !== undoInfo.id || undoInfo.turn !== game.turn) return;
     u.c = undoInfo.c; u.r = undoInfo.r; u.moves = undoInfo.moves; u.path = null;
     game.players[game.viewer].visible = undoInfo.visible;
     undoInfo = null;
@@ -2492,7 +2564,12 @@ const UI = (() => {
       }
       if (e.key === "Enter") { endTurn(); }
       else if (e.key === "." || e.key === "n") cycleNextUnit();
-      else if (e.key === "f" && rend.selected) { rend.selected.fortified = true; rend.selected.moves = 0; cycleNextUnit(); refreshAll(); }
+      else if (e.key === "f" && rend.selected) {
+        if (game.issueUnitOrder(rend.selected, "fortify", game.viewer)) {
+          cycleNextUnit();
+          refreshAll();
+        }
+      }
       else if (e.key === "Escape") {
         $("tech-modal").style.display = "none";
         $("diplo-modal").style.display = "none";

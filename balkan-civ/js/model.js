@@ -27,6 +27,7 @@ class Unit {
     this.building = null;        // worker job: {type, turnsLeft}
     this.charges = UNITS[type].charges || 0; // missionary spreads
     this.healFortify = false;    // fortified until fully healed
+    this.autoExplore = false;    // automated Scout exploration
   }
   get def() { return UNITS[this.type]; }
   get isCivilian() { return !!this.def.civilian; }
@@ -419,7 +420,9 @@ class Game {
     }).sort((a, b) => this.routeIncome(from, b) - this.routeIncome(from, a)).slice(0, 6);
   }
 
-  establishRoute(caravan, destCityId) {
+  establishRoute(caravan, destCityId, actorIdx = null) {
+    if (!caravan || !this.units.includes(caravan) || !caravan.def.caravan || caravan.moves <= 0) return false;
+    if (actorIdx !== null && !this.unitActorStatus(caravan, actorIdx).ok) return false;
     const from = this.cityAt(caravan.c, caravan.r);
     const dest = this.cities.find(c => c.id === destCityId);
     if (!from || !dest || !this.tradeDestinations(caravan).includes(dest)) return false;
@@ -511,7 +514,9 @@ class Game {
     }
   }
 
-  useGreatPerson(unit) {
+  useGreatPerson(unit, actorIdx = null) {
+    if (!unit || !this.units.includes(unit) || !unit.def.great) return false;
+    if (actorIdx !== null && !this.unitActorStatus(unit, actorIdx).ok) return false;
     const p = this.players[unit.owner];
     const kind = unit.def.great;
     if (kind === "sci") {
@@ -547,7 +552,9 @@ class Game {
     return uu ? uu[0] : key;
   }
 
-  canUpgrade(unit) {
+  canUpgrade(unit, actorIdx = null) {
+    if (!unit || !this.units.includes(unit)) return null;
+    if (actorIdx !== null && !this.unitActorStatus(unit, actorIdx).ok) return null;
     const p = this.players[unit.owner];
     const target = unit.def.upgrade ? this.resolveUnitFor(p, unit.def.upgrade) : null;
     if (!target) return null;
@@ -562,8 +569,8 @@ class Game {
     return { to: target, cost };
   }
 
-  upgradeUnit(unit) {
-    const up = this.canUpgrade(unit);
+  upgradeUnit(unit, actorIdx = null) {
+    const up = this.canUpgrade(unit, actorIdx);
     if (!up) return false;
     this.players[unit.owner].gold -= up.cost;
     unit.type = up.to;
@@ -779,6 +786,97 @@ class Game {
     if (i >= 0) this.units.splice(i, 1);
   }
 
+  unitActorStatus(unit, actorIdx) {
+    if (this.over) return { ok: false, code: "GAME_OVER", reason: "The game is complete." };
+    if (!unit || !this.units.includes(unit))
+      return { ok: false, code: "INVALID_UNIT", reason: "This unit is no longer available." };
+    const actor = this.players[actorIdx];
+    if (!actor || !actor.alive || !actor.isHuman)
+      return { ok: false, code: "INVALID_ACTOR", reason: "No active player can issue this order." };
+    if (unit.owner !== actorIdx)
+      return { ok: false, code: "FOREIGN_UNIT", reason: "Only the owning civilization can command this unit." };
+    if (this.activeHuman !== actorIdx)
+      return { ok: false, code: "NOT_ACTIVE", reason: "Wait for this civilization's turn." };
+    return { ok: true, code: "OK", reason: "Order available." };
+  }
+
+  unitOrderStatus(unit, order, actorIdx, detail = null) {
+    const actor = this.unitActorStatus(unit, actorIdx);
+    if (!actor.ok) return actor;
+    const fail = (code, reason) => ({ ok: false, code, reason });
+    if (order === "promote") {
+      if (unit.isCivilian || unit.promoPts <= 0) return fail("NO_PROMOTION", "No promotion is available.");
+      if (!PROMOS[detail] || unit.promos.includes(detail))
+        return fail("INVALID_PROMOTION", "This promotion cannot be selected.");
+    } else if (order === "cancel_job") {
+      if (!unit.def.worker || !unit.building) return fail("NO_JOB", "This Worker has no job to cancel.");
+    } else if (order === "auto_explore") {
+      if (unit.type !== "SCOUT") return fail("NOT_SCOUT", "Only Scouts can auto-explore.");
+      const enabling = detail !== false;
+      if (enabling && unit.autoExplore) return fail("ALREADY_AUTO", "Auto-explore is already active.");
+      if (!enabling && !unit.autoExplore) return fail("NOT_AUTO", "Auto-explore is not active.");
+      if (enabling && unit.moves <= 0) return fail("NO_MOVES", "No movement points remain this turn.");
+    } else if (order === "fortify") {
+      if (unit.isCivilian) return fail("CIVILIAN", "Civilian units cannot fortify.");
+      if (unit.fortified) return fail("ALREADY_FORTIFIED", "This unit is already fortified.");
+      if (unit.moves <= 0) return fail("NO_MOVES", "No movement points remain this turn.");
+    } else if (order === "wake") {
+      if (unit.isCivilian || (!unit.fortified && !unit.healFortify))
+        return fail("NOT_FORTIFIED", "This unit is already awake.");
+    } else if (order === "heal") {
+      if (unit.isCivilian) return fail("CIVILIAN", "Civilian units cannot fortify to heal.");
+      if (unit.hp >= 100) return fail("FULL_HEALTH", "This unit is already at full health.");
+      if (unit.healFortify) return fail("ALREADY_HEALING", "This unit is already healing.");
+      if (unit.moves <= 0) return fail("NO_MOVES", "No movement points remain this turn.");
+    } else if (order === "skip") {
+      if (unit.moves <= 0) return fail("NO_MOVES", "No movement points remain this turn.");
+    } else if (order === "disband") {
+      const ownsCity = this.cities.some(c => c.owner === actorIdx);
+      const otherSettler = this.units.some(u => u !== unit && u.owner === actorIdx && u.type === "SETTLER");
+      if (unit.type === "SETTLER" && !ownsCity && !otherSettler)
+        return fail("LAST_SETTLER", "Found a capital before disbanding your only Settler.");
+    } else {
+      return fail("UNKNOWN_ORDER", "This unit order is not recognized.");
+    }
+    return { ok: true, code: "OK", reason: "Order available." };
+  }
+
+  issueUnitOrder(unit, order, actorIdx, detail = null) {
+    if (!this.unitOrderStatus(unit, order, actorIdx, detail).ok) return false;
+    if (order === "promote") {
+      unit.promos.push(detail);
+      unit.promoPts--;
+    } else if (order === "cancel_job") {
+      unit.building = null;
+      unit.path = null;
+      unit.moves = 0;
+    } else if (order === "auto_explore") {
+      unit.autoExplore = detail !== false;
+      if (unit.autoExplore) unit.path = null;
+    } else if (order === "fortify") {
+      unit.fortified = true;
+      unit.healFortify = false;
+      unit.autoExplore = false;
+      unit.path = null;
+      unit.moves = 0;
+    } else if (order === "wake") {
+      unit.fortified = false;
+      unit.healFortify = false;
+    } else if (order === "heal") {
+      unit.fortified = true;
+      unit.healFortify = true;
+      unit.autoExplore = false;
+      unit.path = null;
+      unit.moves = 0;
+    } else if (order === "skip") {
+      unit.moves = 0;
+    } else if (order === "disband") {
+      this.removeUnit(unit);
+      this.checkElimination(actorIdx);
+    }
+    return true;
+  }
+
   moveCost(unit, c, r) {
     const t = this.tile(c, r);
     if (!this.unitPassable(unit, t)) return Infinity;
@@ -809,7 +907,9 @@ class Game {
     return true;
   }
 
-  startImprovement(unit, type) {
+  startImprovement(unit, type, actorIdx = null) {
+    if (!unit || !this.units.includes(unit) || unit.moves <= 0 || unit.building) return false;
+    if (actorIdx !== null && !this.unitActorStatus(unit, actorIdx).ok) return false;
     if (!this.canBuildImprovement(unit, type)) return false;
     unit.building = { type, turnsLeft: IMPROVEMENT[type].turns };
     unit.path = null;
@@ -1265,9 +1365,10 @@ class Game {
     return { ok: true, code: "OK", reason: "A city can be founded here." };
   }
 
-  foundCity(settler) {
+  foundCity(settler, actorIdx = null) {
     if (!settler || settler.type !== "SETTLER" || !this.units.includes(settler) || settler.moves <= 0)
       return null;
+    if (actorIdx !== null && !this.unitActorStatus(settler, actorIdx).ok) return null;
     const status = this.citySiteStatus(settler.c, settler.r, settler.owner);
     if (!status.ok) return null;
     const t = this.tile(settler.c, settler.r);
@@ -1965,7 +2066,9 @@ class Game {
     return null;
   }
 
-  spreadFromMissionary(unit) {
+  spreadFromMissionary(unit, actorIdx = null) {
+    if (!unit || !this.units.includes(unit) || !unit.def.missionary || unit.moves <= 0) return false;
+    if (actorIdx !== null && !this.unitActorStatus(unit, actorIdx).ok) return false;
     const p = this.players[unit.owner];
     if (p.religionId === null || unit.charges <= 0) return false;
     const city = this.missionaryTarget(unit);

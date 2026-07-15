@@ -392,6 +392,98 @@ test("production commands enforce prerequisites, ownership, uniqueness, and spaw
     { producing: null, unitsAdded: 1, notificationsAdded: 1, warriorAtReleasedTile: true });
 });
 
+test("unit orders enforce turn ownership and cannot refund Worker movement or strand an empire", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    const g = new Game({ playerCiv: "SERBIA", numOpponents: 1, numHumans: 2,
+      seed: 77221, mapW: 24, mapH: 18, mapType: "peninsula", noMinors: true, noBarbs: true });
+    const p = g.players[0];
+    const warrior = g.units.find(u => u.owner === 0 && u.type === "WARRIOR");
+    const settler = g.units.find(u => u.owner === 0 && u.type === "SETTLER");
+    const startingMoves = warrior.moves;
+
+    g.activeHuman = 1;
+    const outOfTurnStatus = g.unitOrderStatus(warrior, "skip", 0);
+    const outOfTurn = g.issueUnitOrder(warrior, "skip", 0);
+    const foreignStatus = g.unitOrderStatus(warrior, "skip", 1);
+    const foreign = g.issueUnitOrder(warrior, "skip", 1);
+    const movesAfterRejectedOrders = warrior.moves;
+
+    g.activeHuman = 0;
+    warrior.promoPts = 1;
+    const promoted = g.issueUnitOrder(warrior, "promote", 0, "MIGHT");
+    warrior.promoPts = 1;
+    const duplicatePromotion = g.issueUnitOrder(warrior, "promote", 0, "MIGHT");
+    const promotionState = { promos: [...warrior.promos], points: warrior.promoPts };
+
+    warrior.moves = warrior.def.moves;
+    const fortified = g.issueUnitOrder(warrior, "fortify", 0);
+    const fortifiedState = { fortified: warrior.fortified, moves: warrior.moves };
+    const woke = g.issueUnitOrder(warrior, "wake", 0);
+    warrior.hp = 42;
+    warrior.moves = warrior.def.moves;
+    const healing = g.issueUnitOrder(warrior, "heal", 0);
+    const healingState = { fortified: warrior.fortified, healing: warrior.healFortify, moves: warrior.moves };
+    g.issueUnitOrder(warrior, "wake", 0);
+
+    const scout = g.addUnit("SCOUT", 0, warrior.c, warrior.r);
+    const wrongAutoUnit = g.issueUnitOrder(warrior, "auto_explore", 0, true);
+    const autoStarted = g.issueUnitOrder(scout, "auto_explore", 0, true);
+    const autoStopped = g.issueUnitOrder(scout, "auto_explore", 0, false);
+
+    const workTile = g.tile(warrior.c, warrior.r);
+    Object.assign(workTile, { owner: 0, terrain: "HILLS", feature: null,
+      resource: null, improvement: null, city: null });
+    p.techs.add("MINING");
+    const worker = g.addUnit("WORKER", 0, workTile.c, workTile.r);
+    const jobStarted = g.startImprovement(worker, "MINE", 0);
+    const cancelled = g.issueUnitOrder(worker, "cancel_job", 0);
+    const jobRestarted = g.startImprovement(worker, "MINE", 0);
+    const workerState = { job: worker.building, moves: worker.moves };
+
+    const lastSettlerStatus = g.unitOrderStatus(settler, "disband", 0);
+    const lastSettlerDisbanded = g.issueUnitOrder(settler, "disband", 0);
+    const settlerStillPresent = g.units.includes(settler);
+    const city = g.foundCity(settler, 0);
+    const spareSettler = g.addUnit("SETTLER", 0, city.c, city.r);
+    const spareDisbanded = g.issueUnitOrder(spareSettler, "disband", 0);
+
+    warrior.moves = warrior.def.moves;
+    const skipped = g.issueUnitOrder(warrior, "skip", 0);
+    return JSON.stringify({
+      rejected: { outOfTurn: outOfTurnStatus.code, foreign: foreignStatus.code,
+        outOfTurnIssued: outOfTurn, foreignIssued: foreign,
+        startingMoves, movesAfterRejectedOrders },
+      promotion: { promoted, duplicatePromotion, ...promotionState },
+      fortify: { fortified, woke, ...fortifiedState },
+      heal: { healing, ...healingState },
+      auto: { wrongAutoUnit, autoStarted, autoStopped, active: scout.autoExplore },
+      worker: { jobStarted, cancelled, jobRestarted, ...workerState },
+      settler: { code: lastSettlerStatus.code, lastSettlerDisbanded,
+        settlerStillPresent, cityFounded: !!city, spareDisbanded,
+        sparePresent: g.units.includes(spareSettler), alive: p.alive },
+      skipped: { ok: skipped, moves: warrior.moves },
+    });
+  `));
+
+  assert.deepEqual(result.rejected,
+    { outOfTurn: "NOT_ACTIVE", foreign: "FOREIGN_UNIT", outOfTurnIssued: false,
+      foreignIssued: false, startingMoves: 2, movesAfterRejectedOrders: 2 });
+  assert.deepEqual(result.promotion,
+    { promoted: true, duplicatePromotion: false, promos: ["MIGHT"], points: 1 });
+  assert.deepEqual(result.fortify,
+    { fortified: true, woke: true, moves: 0 });
+  assert.deepEqual(result.heal,
+    { healing: true, fortified: true, moves: 0 });
+  assert.deepEqual(result.auto,
+    { wrongAutoUnit: false, autoStarted: true, autoStopped: true, active: false });
+  assert.deepEqual(result.worker,
+    { jobStarted: true, cancelled: true, jobRestarted: false, job: null, moves: 0 });
+  assert.deepEqual(result.settler,
+    { code: "LAST_SETTLER", lastSettlerDisbanded: false, settlerStillPresent: true,
+      cityFounded: true, spareDisbanded: true, sparePresent: false, alive: true });
+  assert.deepEqual(result.skipped, { ok: true, moves: 0 });
+});
+
 test("city focus assigns strategic yields without double-working shared tiles", () => {
   const result = JSON.parse(evaluate(loadGameContext(), `
     const g = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 81717,
