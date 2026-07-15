@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Balkan Civilizations</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>⚔️</text></svg>">
-<link rel="stylesheet" href="css/style.css?v=25">
+<link rel="stylesheet" href="css/style.css?v=26">
 </head>
 <body>
 
@@ -22,7 +22,7 @@
         <div><span class="eyebrow">Choose your realm</span><h2>Nine civilizations. Twenty-nine leaders.</h2></div>
         <span class="dim">Select a leader to change your starting trait.</span>
       </div>
-      <div id="civ-cards"></div>
+      <div id="civ-cards" aria-label="Choose a civilization"></div>
     </main>
     <aside class="start-panel">
       <div class="panel-eyebrow">Skirmish setup</div>
@@ -106,12 +106,12 @@
     <div class="status-strip">
       <span id="stat-turn"></span>
       <span id="stat-era"></span>
-      <span id="stat-gold" style="cursor:pointer" title="Open economy ledger (O)"></span>
+      <button id="stat-gold" class="stat-action" title="Open economy ledger (O)" aria-label="Open economy ledger"></button>
       <span id="stat-happy"></span>
-      <span id="stat-sci" style="cursor:pointer" title="Open tech tree"></span>
-      <span id="stat-faith" style="cursor:pointer" title="Open religion overview"></span>
-      <span id="stat-culture" style="cursor:pointer" title="Open social policies (P)"></span>
-      <span id="stat-score" style="cursor:pointer" title="Open victory progress (V)"></span>
+      <button id="stat-sci" class="stat-action" title="Open tech tree" aria-label="Open technology tree"></button>
+      <button id="stat-faith" class="stat-action" title="Open religion overview" aria-label="Open religion overview"></button>
+      <button id="stat-culture" class="stat-action" title="Open social policies (P)" aria-label="Open social policies"></button>
+      <button id="stat-score" class="stat-action" title="Open victory progress (V)" aria-label="Open victory progress"></button>
     </div>
     <div class="command-bar">
       <button id="btn-empire" title="Empire overview (O)"><span class="cmd-icon">🏛️</span><span class="cmd-label">Empire</span></button>
@@ -119,14 +119,14 @@
       <button id="btn-religion" title="Religion (R)"><span class="cmd-icon">☦️</span><span class="cmd-label">Religion</span></button>
       <button id="btn-diplo" title="Diplomacy (D)"><span class="cmd-icon">🤝</span><span class="cmd-label">Diplomacy</span></button>
       <button id="btn-spies" title="Espionage (E)"><span class="cmd-icon">🕵️</span><span class="cmd-label">Spies</span></button>
-      <button id="btn-pedia" title="Civilopedia (?)">📖</button>
-      <button id="btn-mute" title="Toggle sound effects">🔊</button>
-      <button id="btn-music" title="Toggle music">🎵</button>
-      <button id="btn-menu" title="Game menu">☰ <span class="cmd-label">Menu</span></button>
+      <button id="btn-pedia" title="Civilopedia (?)" aria-label="Open Civilopedia">📖</button>
+      <button id="btn-mute" title="Toggle sound effects" aria-label="Toggle sound effects">🔊</button>
+      <button id="btn-music" title="Toggle music" aria-label="Toggle music">🎵</button>
+      <button id="btn-menu" title="Game menu" aria-label="Open game menu">☰ <span class="cmd-label">Menu</span></button>
       <button id="btn-endturn">End Turn ⏵</button>
     </div>
   </div>
-  <canvas id="map"></canvas>
+  <canvas id="map" role="img" aria-label="Interactive world map"></canvas>
   <div id="map-controls" aria-label="Map controls">
     <button id="btn-rot-left" title="Rotate map left (Q)" aria-label="Rotate map left">↶</button>
     <button id="btn-rot-right" title="Rotate map right (W)" aria-label="Rotate map right">↷</button>
@@ -139,7 +139,7 @@
   <div id="attention"></div>
   <div id="recap"></div>
   <div id="combat-preview" role="status" aria-live="polite"></div>
-  <div id="minimap-wrap"><canvas id="minimap" width="200" height="150"></canvas></div>
+  <div id="minimap-wrap"><canvas id="minimap" width="200" height="150" role="img" aria-label="World minimap"></canvas></div>
   <div id="unit-panel">
     <div id="unit-info"></div>
     <div id="unit-actions"></div>
@@ -256,7 +256,7 @@
 <script src="js/render3d.js?v=18"></script>
 <script src="js/net.js"></script>
 <script src="js/editor.js?v=1"></script>
-<script src="js/ui.js?v=26"></script>
+<script src="js/ui.js?v=27"></script>
 <script>
   window.addEventListener("DOMContentLoaded", () => UI.init());
 </script>

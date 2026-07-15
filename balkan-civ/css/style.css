@@ -5,7 +5,8 @@ html, body { height: 100%; overflow: hidden; background: #0c252d; color: #e8e2d0
 button { background: linear-gradient(#403a31, #29251f); color: #f0e6c8; border: 1px solid #8a7648; border-radius: 3px;
   padding: 6px 12px; cursor: pointer; font-size: 13px; transition: background 0.15s, border-color 0.15s; }
 button:hover:not(:disabled) { background: #514735; border-color: #c9a648; }
-button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid #f0d890; outline-offset: 2px; }
+button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible,
+[role="button"]:focus-visible { outline: 2px solid #f0d890; outline-offset: 2px; }
 button:disabled { opacity: 0.4; cursor: default; }
 .dim { color: #9a927e; font-size: 12px; }
 .alert { color: #f1c40f; }
@@ -35,6 +36,11 @@ button:disabled { opacity: 0.4; cursor: default; }
 .civ-card:hover { border-color: #8a7648; transform: translateY(-2px); }
 .civ-card.sel { border-color: #f0d890; box-shadow: inset 4px 0 0 #d66a55, 0 5px 18px rgba(0,0,0,0.28); }
 .civ-card h3 { color: #f0d890; margin: 3px 0 2px; font-size: 18px; }
+.civ-card-title { min-width: 0; display: flex; align-items: start; justify-content: space-between; gap: 8px; }
+.civ-card-title h3 { min-width: 0; }
+.civ-select { flex: 0 0 28px; width: 28px; height: 28px; padding: 0; color: #8f988d;
+  background: #152027; border-color: #46565d; font-weight: 900; }
+.civ-select[aria-pressed="true"] { color: #182017; background: #d3bc72; border-color: #fff0b0; }
 .civ-card .civ-flag { width: 44px; height: 30px; border: 2px solid; border-radius: 3px; margin-top: 2px; }
 .civ-card .leader { color: #c9c0a8; font-style: italic; margin-bottom: 8px; }
 .civ-card .leaders, .civ-card .trait-slot, .civ-card .uu { grid-column: 1 / -1; }
@@ -65,9 +71,12 @@ button:disabled { opacity: 0.4; cursor: default; }
   box-shadow: 0 4px 18px rgba(0,0,0,0.48), inset 0 -1px 0 rgba(240,216,144,0.16);
   display: flex; align-items: center; gap: 10px; padding: 0 9px; font-size: 13px; }
 .status-strip { min-width: 0; display: flex; align-items: center; gap: 0; flex: 1; overflow: hidden; white-space: nowrap; }
-.status-strip > span { flex: 0 0 auto; min-height: 30px; display: inline-flex; align-items: center; padding: 3px 9px;
+.status-strip > span, .status-strip > button { flex: 0 0 auto; min-height: 30px; display: inline-flex; align-items: center; padding: 3px 9px;
   border-right: 1px solid rgba(202,178,110,0.2); text-shadow: 0 1px 2px #000; }
-.status-strip > span:first-child { border-left: 1px solid rgba(202,178,110,0.2); }
+.status-strip > :first-child { border-left: 1px solid rgba(202,178,110,0.2); }
+.status-strip > button { height: 30px; color: inherit; background: transparent; border-width: 0 1px 0 0;
+  border-color: rgba(202,178,110,0.2); border-radius: 0; font: inherit; }
+.status-strip > button:hover { color: #fff0bf; background: rgba(255,255,255,0.06); }
 .command-bar { display: flex; align-items: stretch; gap: 3px; height: 38px; flex: 0 0 auto; }
 .command-bar button { min-width: 36px; height: 38px; padding: 4px 9px; border-color: #76663f;
   background: linear-gradient(#3a342a, #211f1a); box-shadow: inset 0 1px 0 rgba(255,255,255,0.05); }
@@ -211,6 +220,7 @@ button:disabled { opacity: 0.4; cursor: default; }
 .scenario-card { background: rgba(20,28,42,0.9); border: 2px solid #3a4a63; border-radius: 8px;
   padding: 14px; cursor: pointer; transition: border-color 0.15s; }
 .scenario-card:hover { border-color: #c9a648; }
+.scenario-card:focus-visible { border-color: #f0d890; outline: 2px solid #f0d890; outline-offset: 2px; }
 .scenario-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .scenario-card h3 { color: #f0d890; margin-bottom: 4px; }
 .scenario-era { flex: 0 0 auto; padding: 2px 6px; border: 1px solid #647984; border-radius: 4px;
@@ -565,7 +575,7 @@ button:disabled { opacity: 0.4; cursor: default; }
 .campaign-chapter { display: flex; justify-content: space-between; align-items: center;
   gap: 10px; padding: 9px 11px; margin: 6px 0; background: #0f1725;
   border: 1px solid #26324a; border-radius: 6px; }
-.campaign-chapter.locked { opacity: 0.5; }
+.campaign-chapter.locked { color: #b7b09f; background: #101622; border-color: #343d4a; border-style: dashed; }
 .campaign-chapter button { flex-shrink: 0; }
 .campaign-outro { margin-top: 12px; padding: 10px; border: 1px solid #c9a648;
   border-radius: 6px; background: rgba(201,166,72,0.1); font-style: italic; }
@@ -677,7 +687,7 @@ button:disabled { opacity: 0.4; cursor: default; }
   .cmd-label { display: none; }
   .cmd-icon { margin-right: 0; }
   .command-bar button { padding-inline: 7px; }
-  .status-strip > span { padding-inline: 7px; }
+  .status-strip > span, .status-strip > button { padding-inline: 7px; }
 }
 
 @media (max-width: 900px) {
@@ -689,7 +699,7 @@ button:disabled { opacity: 0.4; cursor: default; }
   #topbar { height: 48px; padding-inline: 8px; }
   .status-strip { overflow-x: auto; scrollbar-width: none; }
   .status-strip::-webkit-scrollbar { display: none; }
-  .status-strip > span { order: 3; }
+  .status-strip > span, .status-strip > button { order: 3; }
   #stat-turn { order: 0; }
   #stat-score { order: 1; }
   #stat-era { order: 2; }

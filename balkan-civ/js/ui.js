@@ -21,48 +21,58 @@ const UI = (() => {
     campaignChapter = null; // leaving to the menu ends any campaign context
     const wrap = $("civ-cards");
     wrap.innerHTML = "";
+    const repaintAll = () => wrap.querySelectorAll(".civ-card").forEach(c => c._paint && c._paint());
 
     for (const id of CIV_IDS) {
       const civ = CIVS[id];
       const uu = UNITS[civ.uu];
       const card = document.createElement("div");
       card.className = "civ-card";
+      card.setAttribute("role", "group");
+      card.setAttribute("aria-labelledby", `civ-${id.toLowerCase()}-name`);
+      const selectCard = (leaderIdx = chosenCiv === id ? chosenLeader : 0) => {
+        chosenCiv = id;
+        chosenLeader = leaderIdx;
+        repaintAll();
+        refreshStartSummary();
+      };
       const renderLeaders = (sel) => civ.leaders.map((L, li) =>
         `<button class="leader-chip${id === chosenCiv && li === sel ? " sel" : ""}" data-li="${li}"
           title="${L.trait}: ${L.traitDesc}">${L.leader}</button>`).join("");
       const traitLine = (li) => `<div class="trait"><b>${civ.leaders[li].trait}</b><br>${civ.leaders[li].traitDesc}</div>`;
       const paint = () => {
+        const selected = id === chosenCiv;
+        card.classList.toggle("sel", selected);
+        card.setAttribute("aria-current", selected ? "true" : "false");
         card.querySelector(".leaders").innerHTML = renderLeaders(id === chosenCiv ? chosenLeader : 0);
         card.querySelector(".trait-slot").innerHTML = traitLine(id === chosenCiv ? chosenLeader : 0);
+        const selectButton = card.querySelector(".civ-select");
+        selectButton.setAttribute("aria-pressed", selected ? "true" : "false");
+        selectButton.textContent = selected ? "✓" : "○";
         bindChips();
       };
       const bindChips = () => card.querySelectorAll(".leader-chip").forEach(b => b.onclick = (e) => {
         e.stopPropagation();
-        chosenCiv = id; chosenLeader = parseInt(b.dataset.li, 10);
-        document.querySelectorAll(".civ-card").forEach(c => c.classList.remove("sel"));
-        card.classList.add("sel");
-        repaintAll();
-        refreshStartSummary();
+        selectCard(parseInt(b.dataset.li, 10));
       });
       card.innerHTML = `
-        <div class="civ-flag" style="background:${civ.color};border-color:${civ.color2}"></div>
-        <h3>${civ.name}</h3>
+        <div class="civ-flag" style="background:${civ.color};border-color:${civ.color2}" aria-hidden="true"></div>
+        <div class="civ-card-title"><h3 id="civ-${id.toLowerCase()}-name">${civ.name}</h3>
+          <button class="civ-select" aria-pressed="${id === chosenCiv}" aria-label="Select ${civ.name}"
+            title="Select ${civ.name}">${id === chosenCiv ? "✓" : "○"}</button></div>
         <div class="leaders">${renderLeaders(id === chosenCiv ? chosenLeader : 0)}</div>
         <div class="trait-slot">${traitLine(id === chosenCiv ? chosenLeader : 0)}</div>
         <div class="uu">${uu.icon} <b>${uu.name}</b> — ${uu.blurb}</div>`;
-      card.onclick = () => {
-        if (chosenCiv !== id) { chosenCiv = id; chosenLeader = 0; }
-        document.querySelectorAll(".civ-card").forEach(c => c.classList.remove("sel"));
-        card.classList.add("sel");
-        repaintAll();
-        refreshStartSummary();
+      card.querySelector(".civ-select").onclick = (e) => {
+        e.stopPropagation();
+        selectCard();
       };
+      card.onclick = (e) => { if (!e.target.closest("button")) selectCard(); };
       card._paint = paint;
       if (id === chosenCiv) card.classList.add("sel");
       bindChips();
       wrap.appendChild(card);
     }
-    const repaintAll = () => wrap.querySelectorAll(".civ-card").forEach(c => c._paint && c._paint());
     refreshStartSummary();
     buildScenarioCards();
     $("opt-custom").disabled = !localStorage.getItem("balkan-civ-custommap");
@@ -138,6 +148,12 @@ const UI = (() => {
         <div class="scenario-objective">${objective}</div>
         <p>${sc.blurb}</p>`;
       card.onclick = () => launchScenario(key, null);
+      card.setAttribute("role", "button");
+      card.setAttribute("tabindex", "0");
+      card.setAttribute("aria-label", `Play ${sc.name}, ${objective}`);
+      card.onkeydown = (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); launchScenario(key, null); }
+      };
       wrap.appendChild(card);
     }
   }
@@ -2993,7 +3009,149 @@ const UI = (() => {
     rend.dirty = true;
   }
 
+  const MODAL_FOCUSABLE = [
+    "button:not([disabled])", "a[href]", "input:not([disabled])", "select:not([disabled])",
+    "textarea:not([disabled])", "[role='button'][tabindex]:not([tabindex='-1'])",
+    "[role='tab'][tabindex]:not([tabindex='-1'])", "[tabindex]:not([tabindex='-1'])",
+  ].join(",");
+  const ESCAPE_DISMISSIBLE_MODALS = new Set([
+    "empire-modal", "tech-modal", "diplo-modal", "religion-modal", "founding-modal",
+    "spy-modal", "policy-modal", "pedia-modal", "congress-modal", "campaign-modal",
+    "progress-modal", "settings-modal", "log-modal", "menu-modal",
+  ]);
+  const modalOpenState = new WeakMap();
+  const modalFocusOrigins = new WeakMap();
+  let modalStack = [];
+
+  function modalIsOpen(modal) {
+    return !!modal && getComputedStyle(modal).display !== "none";
+  }
+
+  function modalFocusables(modal) {
+    return [...modal.querySelectorAll(MODAL_FOCUSABLE)].filter(el =>
+      !el.hidden && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden");
+  }
+
+  function activeModal() {
+    modalStack = modalStack.filter(modal => modalIsOpen(modal));
+    return modalStack[modalStack.length - 1] || null;
+  }
+
+  function configureModalSemantics(modal) {
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    const box = modal.querySelector(".modal-box");
+    if (box && !box.hasAttribute("tabindex")) box.tabIndex = -1;
+    const heading = modal.querySelector("h1, h2, h3");
+    if (heading) {
+      if (!heading.id) heading.id = `${modal.id}-title`;
+      modal.setAttribute("aria-labelledby", heading.id);
+      modal.removeAttribute("aria-label");
+    } else if (!modal.hasAttribute("aria-labelledby")) {
+      const label = modal.id.replace(/-modal$/, "").replace(/-/g, " ");
+      modal.setAttribute("aria-label", label.charAt(0).toUpperCase() + label.slice(1));
+    }
+  }
+
+  function setModalIsolation() {
+    const top = activeModal();
+    for (const child of document.body.children) {
+      if (child.tagName === "SCRIPT" || child.tagName === "STYLE") continue;
+      if (top && child !== top) {
+        child.inert = true;
+        child.dataset.modalInert = "1";
+      } else if (child.dataset.modalInert === "1") {
+        child.inert = false;
+        delete child.dataset.modalInert;
+      }
+    }
+  }
+
+  function canRestoreFocus(el) {
+    return !!(el && el.isConnected && !el.closest("[inert]") && el.getClientRects().length &&
+      getComputedStyle(el).visibility !== "hidden");
+  }
+
+  function focusIntoModal(modal) {
+    if (!modal || activeModal() !== modal || modal.contains(document.activeElement)) return;
+    const target = modal.querySelector("[autofocus], .event-choice:not([disabled])") ||
+      modalFocusables(modal)[0] || modal.querySelector(".modal-box");
+    if (target) target.focus({ preventScroll: true });
+  }
+
+  function syncModalState(modal) {
+    configureModalSemantics(modal);
+    const open = modalIsOpen(modal), wasOpen = modalOpenState.get(modal) === true;
+    modal.setAttribute("aria-hidden", open ? "false" : "true");
+    if (open === wasOpen) {
+      if (open && !modal.contains(document.activeElement)) queueMicrotask(() => focusIntoModal(modal));
+      return;
+    }
+    modalOpenState.set(modal, open);
+    if (open) {
+      modalFocusOrigins.set(modal, document.activeElement);
+      modalStack = modalStack.filter(item => item !== modal);
+      modalStack.push(modal);
+      setModalIsolation();
+      queueMicrotask(() => focusIntoModal(modal));
+      return;
+    }
+    modalStack = modalStack.filter(item => item !== modal);
+    setModalIsolation();
+    const origin = modalFocusOrigins.get(modal);
+    queueMicrotask(() => {
+      const top = activeModal();
+      if (top) { focusIntoModal(top); return; }
+      const fallback = $("btn-endturn") || $("btn-start");
+      const target = canRestoreFocus(origin) ? origin : (canRestoreFocus(fallback) ? fallback : null);
+      if (target) target.focus({ preventScroll: true });
+    });
+  }
+
+  function installModalAccessibility() {
+    const modals = [...document.querySelectorAll(".modal")];
+    for (const modal of modals) {
+      configureModalSemantics(modal);
+      modalOpenState.set(modal, modalIsOpen(modal));
+      modal.setAttribute("aria-hidden", modalIsOpen(modal) ? "false" : "true");
+    }
+    const observer = new MutationObserver(records => {
+      const changed = new Set(records.map(record => record.target.closest(".modal")).filter(Boolean));
+      for (const modal of changed) syncModalState(modal);
+    });
+    for (const modal of modals) observer.observe(modal, { attributes: true, attributeFilter: ["style", "class"] });
+  }
+
+  function handleModalKeydown(e) {
+    const modal = activeModal();
+    if (!modal) return false;
+    if (e.key === "Tab") {
+      const focusable = modalFocusables(modal);
+      if (!focusable.length) {
+        e.preventDefault();
+        modal.querySelector(".modal-box")?.focus({ preventScroll: true });
+      } else if (!focusable.includes(document.activeElement)) {
+        e.preventDefault();
+        focusable[e.shiftKey ? focusable.length - 1 : 0].focus({ preventScroll: true });
+      } else if (!e.shiftKey && document.activeElement === focusable[focusable.length - 1]) {
+        e.preventDefault(); focusable[0].focus({ preventScroll: true });
+      } else if (e.shiftKey && document.activeElement === focusable[0]) {
+        e.preventDefault(); focusable[focusable.length - 1].focus({ preventScroll: true });
+      }
+      return true;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      if (!modal.classList.contains("decision-modal") && ESCAPE_DISMISSIBLE_MODALS.has(modal.id))
+        modal.style.display = "none";
+      return true;
+    }
+    // Let focused controls process Space/Enter, but suppress all map and turn shortcuts.
+    return true;
+  }
+
   function bindInput() {
+    installModalAccessibility();
     const cv = rend.canvas;
     bindTouch(cv, {
       tap: (x, y) => onMapClick(x, y, false),
@@ -3054,18 +3212,16 @@ const UI = (() => {
     });
 
     window.addEventListener("keydown", (e) => {
+      if (handleModalKeydown(e)) return;
       if ($("start-screen").style.display !== "none") return;
-      if ($("event-modal").style.display === "flex") {
-        if (e.key !== "Tab") e.preventDefault();
-        return;
-      }
       // don't hijack keys while typing in a text field (search, net codes)
       const tag = (e.target.tagName || "").toLowerCase();
       if (tag === "input" || tag === "textarea" || tag === "select") {
         if (e.key === "Escape") e.target.blur();
         return;
       }
-      if (e.key === "Enter") { endTurn(); }
+      if (e.target.closest && e.target.closest("button, a, [role='button'], [role='tab']")) return;
+      if (e.key === "Enter") { e.preventDefault(); endTurn(); }
       else if (e.key === "." || e.key === "n") cycleNextUnit();
       else if (e.key === "f" && rend.selected) {
         if (game.issueUnitOrder(rend.selected, "fortify", game.viewer)) {

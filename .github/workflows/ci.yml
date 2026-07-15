@@ -68,6 +68,33 @@ jobs:
       - name: Balkan Civilizations deterministic simulations
         run: node --test balkan-civ/tests/*.test.mjs
 
+  browser-tests:
+    name: Balkan Civilizations browser contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: balkan-civ/package-lock.json
+
+      - name: Install browser-test dependencies
+        working-directory: balkan-civ
+        run: npm ci
+
+      - name: Install Chromium
+        working-directory: balkan-civ
+        run: npx playwright install --with-deps chromium
+
+      - name: Run desktop and mobile browser contracts
+        working-directory: balkan-civ
+        run: npm run test:browser
+
   tests:
     name: Tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest

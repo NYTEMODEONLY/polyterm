@@ -29,6 +29,15 @@ Game* on the title screen to pick up where you left off. Saves preserve the
 exact deterministic random stream, so reloading does not reroll future combat,
 events, or AI choices.
 
+## Development checks
+
+The deterministic engine suite runs with `npm test`. The browser contract uses
+Playwright and Chromium to exercise the real desktop and mobile UI, including
+keyboard-only decisions, modal focus trapping and restoration, responsive
+overflow, accessibility scans, Classic 2D canvas pixels, and a nonblank WebGL
+frame. Install its pinned dependencies with `npm install`, install Chromium with
+`npx playwright install chromium`, then run `npm run test:browser`.
+
 ## The nine civilizations
 
 | Civilization | Leader | Trait | Unique unit |
