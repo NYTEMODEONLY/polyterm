@@ -196,6 +196,7 @@ class Game {
     this.congressTurn = -999;    // last World Congress session turn
     this.congressLast = null;    // last session tally (for the UI)
     this.peaceOffers = [];       // AI->human peace proposals awaiting a decision [{from,to}]
+    this.pendingEvents = [];     // human event dilemmas awaiting a choice [{id,player,key,cityId,turn}]
     this.anims = [];             // transient movement animations (not saved)
     if (this.mapType === "custom" && opts.customMap) {
       const cm = opts.customMap;
@@ -759,9 +760,10 @@ class Game {
   // One authoritative snapshot for every decision the human-facing turn UI tracks.
   pendingOrders(playerIdx) {
     const p = this.players[playerIdx];
-    if (!p || !p.alive) return { research: false, congress: false, religion: false,
+    if (!p || !p.alive) return { event: null, research: false, congress: false, religion: false,
       policy: false, promotionUnit: null, cities: [], units: [] };
     return {
+      event: this.pendingEventFor(playerIdx),
       research: !p.researching && p.availableTechs().length > 0,
       congress: !!(this.congressDue && this.congressDue() && p.congressVoteTurn !== this.turn),
       religion: this.canFoundReligion(playerIdx),
@@ -1686,6 +1688,7 @@ class Game {
     retired.attitudeReasons = {};
     retired.truces = {};
     retired.influence = {};
+    this.pendingEvents = this.pendingEvents.filter(event => event.player !== playerIdx);
     for (const tile of this.map.tiles) {
       if (tile.owner !== playerIdx) continue;
       tile.owner = -1;
@@ -3040,7 +3043,7 @@ class Game {
   // advances to the next human; after the last one the AI phase runs
   // and the world clock advances.
   endTurn() {
-    if (this.over) return;
+    if (this.over || this.pendingEventFor(this.activeHuman)) return false;
     const human = this.players[this.activeHuman];
     this.cityStrikes(human);
     this.processNavalSupply(human);
@@ -3055,7 +3058,7 @@ class Game {
     if (next < this.humans) {
       this.activeHuman = next;
       this.beginHumanTurn(next);
-      return;
+      return true;
     }
 
     // AI phase (majors beyond the humans, then city-states)
@@ -3104,6 +3107,7 @@ class Game {
     this.activeHuman = first;
     this.beginHumanTurn(first);
     this.checkVictory();
+    return true;
   }
 
   // Housekeeping when a human's turn starts: queued paths + auto-explore
@@ -3118,10 +3122,199 @@ class Game {
   }
 
   // ---------- random events ----------
+  pendingEventFor(playerIdx) {
+    if (!Array.isArray(this.pendingEvents)) this.pendingEvents = [];
+    this.pendingEvents = this.pendingEvents.filter(event => {
+      const p = event && this.players[event.player], def = event && RANDOM_EVENTS[event.key];
+      return !!(p && p.alive && def && (!def.needsCity || this.eventCity(event)));
+    });
+    return this.pendingEvents.find(event => event.player === playerIdx) || null;
+  }
+
+  eventCity(event) {
+    if (!event) return null;
+    const p = this.players[event.player];
+    if (!p) return null;
+    return this.cities.find(city => city.id === event.cityId && city.owner === p.index) ||
+      this.cities.find(city => city.id === p.originalCapitalId && city.owner === p.index) ||
+      this.cities.find(city => city.owner === p.index) || null;
+  }
+
+  eventDecision(playerIdx, eventId = null) {
+    const event = eventId === null ? this.pendingEventFor(playerIdx)
+      : (this.pendingEvents || []).find(item => item.id === eventId && item.player === playerIdx);
+    const def = event && RANDOM_EVENTS[event.key];
+    if (!event || !def) return null;
+    const city = this.eventCity(event);
+    return { ...event, name: def.name, icon: def.icon, kind: def.kind, prompt: def.prompt,
+      city: city ? { id: city.id, name: city.name, c: city.c, r: city.r } : null,
+      choices: this.eventChoices(playerIdx, event) };
+  }
+
+  eventChoices(playerIdx, eventRef) {
+    const event = typeof eventRef === "object" ? eventRef
+      : (this.pendingEvents || []).find(item => item.id === eventRef);
+    const p = this.players[playerIdx], def = event && RANDOM_EVENTS[event.key];
+    if (!p || !event || event.player !== playerIdx || !def || !Array.isArray(def.choices)) return [];
+    const city = this.eventCity(event), era = p.era();
+    const values = {
+      harvestFood: city ? Math.floor(city.foodNeeded() * 0.6) : 0,
+      harvestGold: 40 + era * 20,
+      migrationCulture: 35 + era * 15,
+      relicFaith: 25 + era * 15,
+      relicCulture: 25 + era * 15,
+      scholarScience: 30 + era * 25,
+      scholarCulture: 30 + era * 20,
+      tradeGold: 40 + era * 30,
+      workshopProduction: 30 + era * 20,
+      festivalCulture: 35 + era * 20,
+      quarantineCost: 40 + era * 20,
+      reformCost: 45 + era * 20,
+      fireCost: 35 + era * 20,
+      raiderGold: 25 + era * 15,
+      droughtCost: 35 + era * 15,
+    };
+    const cityName = city ? city.name : "your capital";
+    const detail = (choiceKey) => {
+      switch (`${event.key}:${choiceKey}`) {
+        case "HARVEST:GRANARIES": return { description: `Gain ${values.harvestFood} food in ${cityName}.`, available: !!city };
+        case "HARVEST:MARKET": return { description: `Gain ${values.harvestGold} gold.`, available: true };
+        case "MIGRATION:WELCOME": return { description: `${cityName} gains 1 population.`, available: !!city };
+        case "MIGRATION:CHARTER": return { description: `${cityName} gains ${values.migrationCulture} border culture.`, available: !!city };
+        case "RELICS:VENERATE": return { description: `Gain ${values.relicFaith} faith.`, available: true };
+        case "RELICS:PRESERVE": return { description: `Gain ${values.relicCulture} culture toward your next policy.`, available: true };
+        case "SCHOLARS:ACADEMY": return { description: `Gain ${values.scholarScience} science toward current research.`, available: true };
+        case "SCHOLARS:COURT": return { description: `Gain ${values.scholarCulture} culture toward your next policy.`, available: true };
+        case "TRADE_WINDS:TREASURY": return { description: `Gain ${values.tradeGold} gold.`, available: true };
+        case "TRADE_WINDS:WORKSHOPS": return { description: `${cityName} gains ${values.workshopProduction} stored production.`, available: !!city };
+        case "FESTIVAL:CELEBRATE": return { description: "+3 happiness for 8 turns.", available: true };
+        case "FESTIVAL:PATRONIZE": return { description: `Gain ${values.festivalCulture} culture and +1 happiness for 4 turns.`, available: true };
+        case "PLAGUE:QUARANTINE": return { description: `Pay ${values.quarantineCost} gold; lose at most 1 population and suffer -1 happiness for 4 turns.`,
+          available: !!city && p.gold >= values.quarantineCost, reason: `Requires ${values.quarantineCost} gold` };
+        case "PLAGUE:ENDURE": return { description: `Lose up to 2 population in ${cityName} and suffer -3 happiness for 6 turns.`, available: !!city };
+        case "UNREST:REFORMS": return { description: `Pay ${values.reformCost} gold; reduce unrest to -1 happiness for 3 turns.`,
+          available: p.gold >= values.reformCost, reason: `Requires ${values.reformCost} gold` };
+        case "UNREST:SUPPRESS": return { description: "Suffer -4 happiness for 8 turns.", available: true };
+        case "FIRE:REBUILD": return { description: `Pay ${values.fireCost} gold; retain 90% of stored production and take 15 city damage.`,
+          available: !!city && p.gold >= values.fireCost, reason: `Requires ${values.fireCost} gold` };
+        case "FIRE:LET_BURN": return { description: `${cityName} retains 30% of stored production and takes 40 city damage.`, available: !!city };
+        case "RAIDERS:RANSOM": return { description: `Lose up to ${values.raiderGold} gold.`, available: true };
+        case "RAIDERS:CLOSE_ROADS": return { description: "Keep the treasury, but suffer -2 happiness for 4 turns.", available: true };
+        case "DROUGHT:IMPORT": return { description: `Pay ${values.droughtCost} gold; preserve stored food and suffer -1 happiness for 3 turns.`,
+          available: !!city && p.gold >= values.droughtCost, reason: `Requires ${values.droughtCost} gold` };
+        case "DROUGHT:RATION": return { description: `${cityName} retains 40% of stored food and suffers -2 happiness for 6 turns.`, available: !!city };
+        default: return { description: "Unavailable event response.", available: false };
+      }
+    };
+    return def.choices.map(choice => ({ ...choice, ...detail(choice.key) }));
+  }
+
+  chooseEvent(playerIdx, eventId, choiceKey, { force = false } = {}) {
+    const p = this.players[playerIdx];
+    const event = (this.pendingEvents || []).find(item => item.id === eventId && item.player === playerIdx);
+    if (!p || !p.alive || !event || (!force && (!p.isHuman || this.activeHuman !== playerIdx))) return false;
+    const choice = this.eventChoices(playerIdx, event).find(option => option.key === choiceKey);
+    if (!choice || !choice.available) return false;
+    const city = this.eventCity(event), def = RANDOM_EVENTS[event.key];
+    const message = this._applyEventChoice(p, event, choice.key, city);
+    this.pendingEvents = this.pendingEvents.filter(item => item !== event);
+    const color = def.kind === "bad" ? (choice.tone === "risk" ? "#e74c3c" : "#f1c40f") : "#2ecc71";
+    if (city) this.addEffect(city.c, city.r, def.icon, color);
+    this.notify(`${def.icon} <b>${def.name} - ${choice.label}:</b> ${message}.`, p.index);
+    return { eventId, choice: choice.key, label: choice.label, message };
+  }
+
+  _applyEventChoice(p, event, choiceKey, city) {
+    const era = p.era();
+    const mood = (turns, delta) => {
+      p.moodTurns = turns; p.moodDelta = delta; this.dirtyHappiness();
+    };
+    switch (`${event.key}:${choiceKey}`) {
+      case "HARVEST:GRANARIES": {
+        const food = Math.floor(city.foodNeeded() * 0.6); city.food += food;
+        return `${city.name}'s granaries receive ${food} food`;
+      }
+      case "HARVEST:MARKET": {
+        const gold = 40 + era * 20; p.gold += gold; return `the surplus brings ${gold} gold`;
+      }
+      case "MIGRATION:WELCOME":
+        city.pop++; this.dirtyHappiness(); return `${city.name} gains 1 population`;
+      case "MIGRATION:CHARTER": {
+        const culture = 35 + era * 15; city.cultureStored += culture;
+        return `${city.name}'s frontier gains ${culture} border culture`;
+      }
+      case "RELICS:VENERATE": {
+        const faith = 25 + era * 15; p.faith += faith; return `the shrines receive ${faith} faith`;
+      }
+      case "RELICS:PRESERVE": {
+        const culture = 25 + era * 15; p.culture += culture; return `the realm gains ${culture} culture`;
+      }
+      case "SCHOLARS:ACADEMY": {
+        const science = 30 + era * 25; p.scienceStored += science; return `current research gains ${science} science`;
+      }
+      case "SCHOLARS:COURT": {
+        const culture = 30 + era * 20; p.culture += culture; return `the court gains ${culture} culture`;
+      }
+      case "TRADE_WINDS:TREASURY": {
+        const gold = 40 + era * 30; p.gold += gold; return `the treasury gains ${gold} gold`;
+      }
+      case "TRADE_WINDS:WORKSHOPS": {
+        const production = 30 + era * 20; city.prodStored += production;
+        return `${city.name} gains ${production} stored production`;
+      }
+      case "FESTIVAL:CELEBRATE":
+        mood(8, 3); return `the realm gains 3 happiness for 8 turns`;
+      case "FESTIVAL:PATRONIZE": {
+        const culture = 35 + era * 20; p.culture += culture; mood(4, 1);
+        return `the realm gains ${culture} culture and 1 happiness for 4 turns`;
+      }
+      case "PLAGUE:QUARANTINE": {
+        const cost = 40 + era * 20; p.gold -= cost;
+        const loss = city.pop > 1 ? 1 : 0; city.pop = Math.max(1, city.pop - loss); mood(4, -1);
+        return `quarantine costs ${cost} gold; ${city.name} loses ${loss} population`;
+      }
+      case "PLAGUE:ENDURE": {
+        const loss = city.pop > 3 ? 2 : (city.pop > 1 ? 1 : 0);
+        city.pop = Math.max(1, city.pop - loss); mood(6, -3);
+        return `${city.name} loses ${loss} population and the realm suffers unrest`;
+      }
+      case "UNREST:REFORMS": {
+        const cost = 45 + era * 20; p.gold -= cost; mood(3, -1);
+        return `local reforms cost ${cost} gold and contain the unrest`;
+      }
+      case "UNREST:SUPPRESS":
+        mood(8, -4); return `suppression causes 4 unhappiness for 8 turns`;
+      case "FIRE:REBUILD": {
+        const cost = 35 + era * 20; p.gold -= cost;
+        city.prodStored = Math.floor(city.prodStored * 0.9); city.hp = Math.max(1, city.hp - 15);
+        return `emergency crews cost ${cost} gold and limit the damage in ${city.name}`;
+      }
+      case "FIRE:LET_BURN":
+        city.prodStored = Math.floor(city.prodStored * 0.3); city.hp = Math.max(1, city.hp - 40);
+        return `${city.name}'s production and defenses are badly damaged`;
+      case "RAIDERS:RANSOM": {
+        const gold = Math.min(p.gold, 25 + era * 15); p.gold -= gold;
+        return `the seized cargo costs ${gold} gold`;
+      }
+      case "RAIDERS:CLOSE_ROADS":
+        mood(4, -2); return `closed roads cause 2 unhappiness for 4 turns`;
+      case "DROUGHT:IMPORT": {
+        const cost = 35 + era * 15; p.gold -= cost; mood(3, -1);
+        return `emergency grain costs ${cost} gold and preserves ${city.name}'s stores`;
+      }
+      case "DROUGHT:RATION":
+        city.food = Math.floor(city.food * 0.4); mood(6, -2);
+        return `${city.name}'s food stores shrink under rationing`;
+      default:
+        return "the court records no outcome";
+    }
+  }
+
   processRandomEvents() {
     for (const p of this.players) {
       if (!p.alive || p.isMinor || p.isBarb) continue;
       if (p.moodTurns > 0) p.moodTurns--;
+      if (this.pendingEventFor(p.index)) continue;
       if (this.turn < EVENTS.graceTurns) continue;
       if (this.turn - p.lastEventTurn < EVENTS.cooldown) continue;
       if (this.rng() > EVENTS.chancePerTurn) continue;
@@ -3132,81 +3325,17 @@ class Game {
       const total = pool.reduce((a, [, e]) => a + e.weight, 0);
       let roll = this.rng() * total, pick = pool[0][0];
       for (const [k, e] of pool) { roll -= e.weight; if (roll <= 0) { pick = k; break; } }
+      const city = myCities.length ? myCities[Math.floor(this.rng() * myCities.length)] : null;
+      const event = { id: `${this.turn}:${p.index}`, player: p.index, key: pick,
+        cityId: city ? city.id : null, turn: this.turn };
       p.lastEventTurn = this.turn;
-      this.applyEvent(p, pick, myCities);
+      this.pendingEvents.push(event);
+      if (!p.isHuman) {
+        const choices = this.eventChoices(p.index, event);
+        const choice = AI.chooseEventChoice(this, p, event, choices);
+        this.chooseEvent(p.index, event.id, choice, { force: true });
+      }
     }
-  }
-
-  applyEvent(p, key, myCities) {
-    const ev = RANDOM_EVENTS[key];
-    const era = p.era();
-    const rc = myCities.length ? myCities[Math.floor(this.rng() * myCities.length)] : null;
-    const cap = this.cities.find(c => c.id === p.originalCapitalId && c.owner === p.index) || rc;
-    let msg = "";
-    switch (key) {
-      case "HARVEST":
-        rc.food += Math.floor(rc.foodNeeded() * 0.6);
-        msg = `a bumper harvest fills the granaries of ${rc.name}`;
-        break;
-      case "MIGRATION":
-        rc.pop += 1;
-        this.dirtyHappiness();
-        msg = `migrants settle in ${rc.name} (+1 population)`;
-        break;
-      case "RELICS": {
-        const f = 25 + era * 15;
-        p.faith += f;
-        msg = `sacred relics are unearthed near ${rc.name} (+${f} faith)`;
-        break;
-      }
-      case "SCHOLARS": {
-        const s = 30 + era * 25;
-        p.scienceStored += s;
-        msg = `wandering scholars share their learning (+${s} science)`;
-        break;
-      }
-      case "TRADE_WINDS": {
-        const g = 40 + era * 30;
-        p.gold += g;
-        msg = `favourable winds bring a windfall of trade (+${g} gold)`;
-        break;
-      }
-      case "FESTIVAL":
-        p.moodTurns = 8; p.moodDelta = 3; this.dirtyHappiness();
-        msg = `a spontaneous festival lifts spirits (+3 happiness for 8 turns)`;
-        break;
-      case "PLAGUE": {
-        const loss = rc.pop > 3 ? 2 : 1;
-        rc.pop = Math.max(1, rc.pop - loss);
-        p.moodTurns = 6; p.moodDelta = -3; this.dirtyHappiness();
-        msg = `plague sweeps through ${rc.name} (-${loss} population, unrest)`;
-        break;
-      }
-      case "UNREST":
-        p.moodTurns = 8; p.moodDelta = -4; this.dirtyHappiness();
-        msg = `civil unrest spreads through your empire (-4 happiness for 8 turns)`;
-        break;
-      case "FIRE":
-        rc.prodStored = Math.floor(rc.prodStored * 0.3);
-        rc.hp = Math.max(1, rc.hp - 40);
-        msg = `a great fire ravages ${rc.name} (production and defences set back)`;
-        break;
-      case "RAIDERS": {
-        const g = Math.min(p.gold, 25 + era * 15);
-        p.gold -= g;
-        msg = `brigands raid your caravans (-${g} gold)`;
-        break;
-      }
-      case "DROUGHT":
-        rc.food = Math.floor(rc.food * 0.4);
-        p.moodTurns = 6; p.moodDelta = -2; this.dirtyHappiness();
-        msg = `drought withers the fields around ${rc.name}`;
-        break;
-    }
-    const at = rc || cap;
-    if (at && ev.kind !== "good") this.addEffect(at.c, at.r, ev.icon, ev.kind === "bad" ? "#e74c3c" : "#f1c40f");
-    else if (at) this.addEffect(at.c, at.r, ev.icon, "#2ecc71");
-    this.notify(`${ev.icon} <b>${ev.name}:</b> ${msg}.`, p.index);
   }
 
   // ---------- World Congress ----------
@@ -3474,7 +3603,7 @@ class Game {
   // ---------- save / load ----------
   serialize() {
     return JSON.stringify({
-      v: 5, turn: this.turn, seed: this.seed,
+      v: 6, turn: this.turn, seed: this.seed,
       rngState: typeof this.rng.getState === "function" ? this.rng.getState() : null,
       mapType: this.mapType,
       difficulty: this.difficulty, humans: this.humans, activeHuman: this.activeHuman,
@@ -3482,7 +3611,7 @@ class Game {
       noBarbs: this.noBarbs, barbIndex: this.barbIndex, maxCamps: this.maxCamps || 0,
       camps: this.camps, speed: this.speed, routes: this.routes, history: this.history,
       congressTurn: this.congressTurn, congressLast: this.congressLast,
-      peaceOffers: this.peaceOffers, over: this.over,
+      peaceOffers: this.peaceOffers, pendingEvents: this.pendingEvents, over: this.over,
       winner: this.winner, victoryType: this.victoryType, nextId: NEXT_ID,
       religions: this.religions, stats: this.stats,
       map: { w: this.map.w, h: this.map.h, tiles: this.map.tiles.map(t => ({
@@ -3536,6 +3665,7 @@ class Game {
     g.congressTurn = d.congressTurn ?? -999;
     g.congressLast = d.congressLast || null;
     g.peaceOffers = d.peaceOffers || [];
+    g.pendingEvents = Array.isArray(d.pendingEvents) ? d.pendingEvents : [];
     if (g.scenario && SCENARIOS[g.scenario]) g.maxTurns = SCENARIOS[g.scenario].victory.turns;
     g.effects = [];
     g.anims = [];

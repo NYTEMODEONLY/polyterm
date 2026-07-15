@@ -212,7 +212,56 @@ const AI = (() => {
     return targets.sort((a, b) => targetCost(a) - targetCost(b) || a.owner - b.owner || a.id - b.id)[0] || null;
   }
 
+  function chooseEventChoice(game, p, event, choices) {
+    const available = choices.filter(choice => choice.available);
+    const fallback = available[0] ? available[0].key : null;
+    const can = key => available.some(choice => choice.key === key);
+    const pick = (preferred, otherwise = fallback) => can(preferred) ? preferred
+      : can(otherwise) ? otherwise : fallback;
+    const city = game.eventCity(event);
+    const happiness = game.happinessOf(p.index);
+    switch (event.key) {
+      case "HARVEST":
+        return pick(city && city.pop < 10 && happiness >= 0 ? "GRANARIES" : "MARKET");
+      case "MIGRATION":
+        return pick(happiness >= 3 ? "WELCOME" : "CHARTER");
+      case "RELICS":
+        return pick(p.religionId !== null || game.religions.length < MAX_RELIGIONS ? "VENERATE" : "PRESERVE");
+      case "SCHOLARS":
+        return pick(victoryFocus(p) === "culture" ? "COURT" : "ACADEMY");
+      case "TRADE_WINDS":
+        return pick(p.gold < 80 + p.era() * 40 ? "TREASURY" : "WORKSHOPS");
+      case "FESTIVAL":
+        return pick(happiness < 3 ? "CELEBRATE" : "PATRONIZE");
+      case "PLAGUE":
+        return pick(city && (city.pop >= 3 || happiness < 0) ? "QUARANTINE" : "ENDURE", "ENDURE");
+      case "UNREST":
+        return pick(happiness < 3 ? "REFORMS" : "SUPPRESS", "SUPPRESS");
+      case "FIRE": {
+        const wonderAtRisk = city && city.producing && city.producing.kind === "building" &&
+          BUILDINGS[city.producing.key] && BUILDINGS[city.producing.key].wonder;
+        return pick(city && (city.prodStored >= 20 || wonderAtRisk) ? "REBUILD" : "LET_BURN", "LET_BURN");
+      }
+      case "RAIDERS":
+        return pick(p.gold >= (25 + p.era() * 15) * 2 ? "RANSOM" : "CLOSE_ROADS");
+      case "DROUGHT":
+        return pick(city && (city.pop >= 4 || city.food >= city.foodNeeded() * 0.25) ? "IMPORT" : "RATION", "RATION");
+      default:
+        return fallback;
+    }
+  }
+
+  function resolvePendingEvents(game, p) {
+    let event = game.pendingEventFor(p.index);
+    while (event) {
+      const choice = chooseEventChoice(game, p, event, game.eventChoices(p.index, event));
+      if (!choice || !game.chooseEvent(p.index, event.id, choice, { force: true })) break;
+      event = game.pendingEventFor(p.index);
+    }
+  }
+
   function takeTurn(game, p) {
+    resolvePendingEvents(game, p);
     if (p.isBarb) {
       runBarbarians(game, p);
       return;
@@ -1330,5 +1379,6 @@ const AI = (() => {
   }
 
   return { takeTurn, autoExplore, victoryFocus, chooseWarTarget, campaignTarget,
-    campaignIsOverseas, hasOverseasRival, armyRole, desiredArmyRoles };
+    campaignIsOverseas, hasOverseasRival, armyRole, desiredArmyRoles,
+    chooseEventChoice, resolvePendingEvents };
 })();

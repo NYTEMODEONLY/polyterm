@@ -756,22 +756,77 @@ const QUESTS = {
 };
 
 // ------------------------------------------------------------
-// Random events — periodic flavour with real mechanical bite.
+// Random events — periodic dilemmas with two strategic responses.
 // kind: "good" | "bad" | "neutral". weight biases how often each fires.
-// Effects live in Game.applyEvent(); this table is content + balance.
+// Dynamic outcomes and availability live in Game.eventChoices().
 // ------------------------------------------------------------
 const RANDOM_EVENTS = {
-  HARVEST:     { name: "Bumper Harvest",       icon: "🌾", kind: "good", weight: 10, needsCity: true },
-  MIGRATION:   { name: "Migrants Arrive",      icon: "🧳", kind: "good", weight: 8,  needsCity: true },
-  RELICS:      { name: "Sacred Relics Found",  icon: "🕯️", kind: "good", weight: 7,  needsCity: true },
-  SCHOLARS:    { name: "Wandering Scholars",   icon: "📜", kind: "good", weight: 7,  needsCity: true },
-  TRADE_WINDS: { name: "Favourable Trade",     icon: "💰", kind: "good", weight: 9 },
-  FESTIVAL:    { name: "Spontaneous Festival", icon: "🎉", kind: "good", weight: 6 },
-  PLAGUE:      { name: "Plague",               icon: "🤢", kind: "bad",  weight: 8,  needsCity: true, minTurn: 20 },
-  UNREST:      { name: "Civil Unrest",         icon: "😠", kind: "bad",  weight: 7,  minTurn: 20 },
-  FIRE:        { name: "Great Fire",           icon: "🔥", kind: "bad",  weight: 5,  needsCity: true, minTurn: 25 },
-  RAIDERS:     { name: "Brigands on the Roads", icon: "🗡️", kind: "bad", weight: 6,  minTurn: 15 },
-  DROUGHT:     { name: "Drought",              icon: "🏜️", kind: "bad",  weight: 5,  needsCity: true, minTurn: 25 },
+  HARVEST: { name: "Bumper Harvest", icon: "🌾", kind: "good", weight: 10, needsCity: true,
+    prompt: "The storehouses overflow after an exceptional growing season. The court must decide where the surplus will do the most good.",
+    choices: [
+      { key: "GRANARIES", label: "Fill the granaries", tone: "growth" },
+      { key: "MARKET", label: "Sell the surplus", tone: "commerce" },
+    ] },
+  MIGRATION: { name: "Migrants Arrive", icon: "🧳", kind: "good", weight: 8, needsCity: true,
+    prompt: "Families from beyond the frontier ask to settle under your protection. They can strengthen a city or help secure its borderlands.",
+    choices: [
+      { key: "WELCOME", label: "Welcome new citizens", tone: "growth" },
+      { key: "CHARTER", label: "Charter the frontier", tone: "culture" },
+    ] },
+  RELICS: { name: "Sacred Relics Found", icon: "🕯️", kind: "good", weight: 7, needsCity: true,
+    prompt: "Workers uncover a reliquary beneath old foundations. Clergy and chroniclers both claim it for the realm.",
+    choices: [
+      { key: "VENERATE", label: "Enshrine the relics", tone: "faith" },
+      { key: "PRESERVE", label: "Preserve them for posterity", tone: "culture" },
+    ] },
+  SCHOLARS: { name: "Wandering Scholars", icon: "📜", kind: "good", weight: 7, needsCity: true,
+    prompt: "A learned company seeks patronage. They can advance current research or record the achievements of your dynasty.",
+    choices: [
+      { key: "ACADEMY", label: "Fund their research", tone: "science" },
+      { key: "COURT", label: "Bring them to court", tone: "culture" },
+    ] },
+  TRADE_WINDS: { name: "Favourable Trade", icon: "💰", kind: "good", weight: 9,
+    prompt: "Merchants report unusually profitable routes. Their gains can replenish the treasury or supply an ambitious building programme.",
+    choices: [
+      { key: "TREASURY", label: "Collect the windfall", tone: "commerce" },
+      { key: "WORKSHOPS", label: "Supply the workshops", tone: "industry" },
+    ] },
+  FESTIVAL: { name: "Spontaneous Festival", icon: "🎉", kind: "good", weight: 6,
+    prompt: "Celebrations have filled the streets. The palace can prolong the revelry or turn this enthusiasm toward art and ceremony.",
+    choices: [
+      { key: "CELEBRATE", label: "Let the realm celebrate", tone: "stability" },
+      { key: "PATRONIZE", label: "Patronize the festivities", tone: "culture" },
+    ] },
+  PLAGUE: { name: "Plague", icon: "🤢", kind: "bad", weight: 8, needsCity: true, minTurn: 20,
+    prompt: "Sickness spreads through crowded quarters. A costly quarantine may contain it, but delay will leave the city to endure the full outbreak.",
+    choices: [
+      { key: "QUARANTINE", label: "Fund a quarantine", tone: "stability" },
+      { key: "ENDURE", label: "Endure the outbreak", tone: "risk" },
+    ] },
+  UNREST: { name: "Civil Unrest", icon: "😠", kind: "bad", weight: 7, minTurn: 20,
+    prompt: "Petitions and angry crowds challenge the court. Concessions are expensive, while refusing them risks prolonged disorder.",
+    choices: [
+      { key: "REFORMS", label: "Fund local reforms", tone: "stability" },
+      { key: "SUPPRESS", label: "Suppress the unrest", tone: "risk" },
+    ] },
+  FIRE: { name: "Great Fire", icon: "🔥", kind: "bad", weight: 5, needsCity: true, minTurn: 25,
+    prompt: "Flames race through workshops and fortifications. Emergency crews can save much of the city, at a heavy cost to the treasury.",
+    choices: [
+      { key: "REBUILD", label: "Mobilize emergency crews", tone: "stability" },
+      { key: "LET_BURN", label: "Save the treasury", tone: "risk" },
+    ] },
+  RAIDERS: { name: "Brigands on the Roads", icon: "🗡️", kind: "bad", weight: 6, minTurn: 15,
+    prompt: "Brigands seize caravans and demand payment. Refusing their terms will close the roads and unsettle the realm.",
+    choices: [
+      { key: "RANSOM", label: "Pay for the cargo", tone: "commerce" },
+      { key: "CLOSE_ROADS", label: "Close the roads", tone: "risk" },
+    ] },
+  DROUGHT: { name: "Drought", icon: "🏜️", kind: "bad", weight: 5, needsCity: true, minTurn: 25,
+    prompt: "The rains fail and fields wither. Imported grain can protect the harvest, but only if the treasury can carry the burden.",
+    choices: [
+      { key: "IMPORT", label: "Import emergency grain", tone: "stability" },
+      { key: "RATION", label: "Order strict rationing", tone: "risk" },
+    ] },
 };
 const EVENTS = {
   chancePerTurn: 0.10,   // per living major, per turn

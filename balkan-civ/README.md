@@ -77,10 +77,13 @@ events, or AI choices.
   the first time each situation arises (found your first city, choose
   research, met a rival, a policy is affordable, and so on) — with a
   one-click opt-out
-- **Random events**: harvests, migrations, relics, and trade windfalls on
-  the upside; plagues, unrest, fires, drought, and brigands on the down —
-  each with real mechanical effects and occasional temporary happiness
-  swings, so no two games play out the same
+- **Strategic event dilemmas**: harvests, migrations, relics, and trade
+  windfalls on the upside; plagues, unrest, fires, drought, and brigands on
+  the down. Every event presents two exact, materially different responses —
+  invest gold to contain a crisis, accept its damage, or redirect an
+  opportunity toward growth, research, faith, culture, production, or the
+  treasury. Decisions are saved mid-turn and enforced per player in hotseat
+  and online games; AI rulers evaluate the same options deterministically
 - **Accessibility settings** (Menu → ⚙️): a colorblind-friendly civ
   palette, a reduce-motion toggle (stops the animated sea, drifting sun,
   and attack lunges), and an advisor-tips switch — all remembered between

@@ -252,6 +252,35 @@ button:disabled { opacity: 0.4; cursor: default; }
 .modal-box h2 { color: #f0d890; margin-bottom: 12px; }
 .modal-box h3 { color: #c9a648; margin: 14px 0 6px; }
 #tech-modal .modal-box { max-width: min(1500px, 96vw); }
+.event-box { max-width: 760px; padding: 0; overflow: hidden; border-color: #8f7441; background: #11191d; }
+.event-head { display: grid; grid-template-columns: 74px minmax(0, 1fr); align-items: center;
+  min-height: 104px; padding: 14px 20px; border-bottom: 1px solid #394448; background: #192126; }
+.event-head.good { box-shadow: inset 6px 0 0 #5e9d70; }
+.event-head.bad { box-shadow: inset 6px 0 0 #b45348; }
+.event-icon { width: 58px; height: 58px; display: grid; place-items: center; border: 1px solid #5a5c50;
+  border-radius: 50%; background: #222a29; font-size: 32px; }
+.event-kicker { color: #a7b1b2; font-size: 10px; font-weight: 800; text-transform: uppercase; }
+.event-head h2 { margin: 3px 0 0; color: #f0d890; font-size: 23px; }
+.event-location { margin-top: 4px; color: #9ca8aa; font-size: 11px; }
+.event-prompt { margin: 0; padding: 18px 22px 6px; color: #d4d9d6; font-size: 14px; line-height: 1.55; }
+.event-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 14px 22px 18px; }
+.event-choice { min-height: 116px; display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 9px;
+  align-content: start; padding: 13px; text-align: left; border-color: #4d5958; background: #172125; }
+.event-choice:hover:not(:disabled) { border-color: #d0ad5d; background: #202d30; }
+.event-choice-icon { grid-row: 1 / span 3; font-size: 21px; line-height: 1; text-align: center; }
+.event-choice strong { color: #ecdcae; font-size: 13px; }
+.event-choice span:not(.event-choice-icon) { color: #b9c3c2; font-size: 11.5px; font-weight: 400; line-height: 1.45; }
+.event-choice small { color: #d99575; font-size: 10px; }
+.event-choice[data-tone="growth"] { border-top-color: #6fa45f; }
+.event-choice[data-tone="commerce"] { border-top-color: #c3a94e; }
+.event-choice[data-tone="culture"] { border-top-color: #aa77b6; }
+.event-choice[data-tone="faith"] { border-top-color: #91a5d6; }
+.event-choice[data-tone="science"] { border-top-color: #5ea8bd; }
+.event-choice[data-tone="industry"] { border-top-color: #a78667; }
+.event-choice[data-tone="stability"] { border-top-color: #629b88; }
+.event-choice[data-tone="risk"] { border-top-color: #c65d50; }
+.event-note { padding: 9px 22px 12px; border-top: 1px solid #303b3e; color: #818d8e;
+  font-size: 10.5px; text-align: center; }
 .tech-help { color: #aebcc5; font-size: 12px; margin-bottom: 8px; }
 .tech-tree { position: relative; max-height: 66vh; overflow: auto; padding: 0 12px 20px;
   background: #0c1419; border: 1px solid #35464e; border-radius: 6px; }
@@ -334,6 +363,13 @@ button:disabled { opacity: 0.4; cursor: default; }
 .diplo-actions { display: flex; flex-wrap: wrap; gap: 5px; padding: 9px 12px 11px; }
 .diplo-actions button { min-height: 30px; margin: 0; padding: 4px 8px; font-size: 10.5px; }
 @media (max-width: 520px) {
+  .event-head { grid-template-columns: 54px minmax(0, 1fr); min-height: 84px; padding: 10px 12px; }
+  .event-icon { width: 44px; height: 44px; font-size: 25px; }
+  .event-head h2 { font-size: 19px; }
+  .event-prompt { padding: 14px 14px 4px; font-size: 13px; }
+  .event-choices { grid-template-columns: 1fr; padding: 10px 14px 14px; }
+  .event-choice { min-height: 86px; }
+  .event-note { padding-inline: 14px; }
   .diplo-memory-grid { grid-template-columns: 1fr; }
   .diplo-memory-column + .diplo-memory-column { border-left: 0; border-top: 1px solid #2e3a3f; }
   .diplo-actions button { flex: 1 1 calc(50% - 5px); }
@@ -751,6 +787,7 @@ button:disabled { opacity: 0.4; cursor: default; }
   .combat-actions button { min-height: 36px; }
   .modal { align-items: flex-end; }
   .modal-box, .modal-box.wide { width: 100%; max-height: calc(100vh - 58px); border-radius: 8px 8px 0 0; padding: 16px 12px 74px; }
+  .modal-box.event-box { padding: 0; }
   .modal-box.wide.empire-box { padding-inline: 8px; }
   .empire-box h2 { font-size: 18px; }
   .empire-tabs { overflow-x: auto; }

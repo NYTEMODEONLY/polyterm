@@ -72,7 +72,7 @@ const simulationSource = `
 
 const controlledWorldSource = `
   const resetWorld = (g) => {
-    g.units = []; g.cities = []; g.camps = []; g.routes = []; g.peaceOffers = [];
+    g.units = []; g.cities = []; g.camps = []; g.routes = []; g.peaceOffers = []; g.pendingEvents = [];
     g._hap = {}; g._aiLandmassMap = null;
     for (const tile of g.map.tiles) {
       tile.terrain = "PLAINS"; tile.feature = null; tile.resource = null;
@@ -277,10 +277,167 @@ test("diplomacy contracts explain attitudes, enforce truces, and preserve human 
   assert.equal(result.ai.declared, true);
   assert.deepEqual(result.ai.decision,
     { accepted: true, weary: true, losing: false, humanDecision: false });
-  assert.deepEqual(result.roundTrip, { version: 5, remaining: 15, sameBreakdown: true });
+  assert.deepEqual(result.roundTrip, { version: 6, remaining: 15, sameBreakdown: true });
   assert.equal(result.legacy.remaining, 0);
   assert.ok(result.legacy.reasons.includes("Prior diplomatic history"));
   assert.equal(result.legacy.explained, result.legacy.raw);
+});
+
+test("event dilemmas expose two deterministic outcomes, reject invalid choices, and migrate saves", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    ${controlledWorldSource}
+    const baseGame = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 61102,
+      mapW: 24, mapH: 18, mapType: "peninsula", noMinors: true, noBarbs: true });
+    resetWorld(baseGame);
+    const city = addCity(baseGame, 0, 4, 8, "Event City", true);
+    addCity(baseGame, 1, 16, 8, "AI City", true);
+    city.pop = 6; city.food = 90; city.prodStored = 80; city.hp = 180;
+    baseGame.players[0].gold = 500;
+    baseGame.turn = 50;
+    const baseline = baseGame.serialize();
+    const outcomeState = game => {
+      const p = game.players[0], c = game.cities.find(item => item.owner === 0);
+      return JSON.stringify({ gold: p.gold, faith: p.faith, culture: p.culture,
+        science: p.scienceStored, moodTurns: p.moodTurns, moodDelta: p.moodDelta,
+        pop: c.pop, food: c.food, production: c.prodStored, hp: c.hp,
+        border: c.cultureStored, pending: game.pendingEvents.length,
+        notification: game.notifications[game.notifications.length - 1]?.msg });
+    };
+    const contracts = [];
+    for (const [eventKey, def] of Object.entries(RANDOM_EVENTS)) {
+      const choices = [];
+      for (const spec of def.choices) {
+        const make = () => {
+          const game = Game.deserialize(baseline);
+          const target = game.cities.find(item => item.owner === 0);
+          game.pendingEvents = [{ id: eventKey + ":test", player: 0, key: eventKey,
+            cityId: target.id, turn: game.turn }];
+          return game;
+        };
+        const first = make();
+        const decision = first.eventDecision(0);
+        const option = decision.choices.find(choice => choice.key === spec.key);
+        const resolved = first.chooseEvent(0, decision.id, spec.key);
+        const firstState = outcomeState(first);
+        const second = make();
+        second.chooseEvent(0, eventKey + ":test", spec.key);
+        choices.push({ key: spec.key, available: option.available,
+          description: option.description, resolved: !!resolved,
+          deterministic: firstState === outcomeState(second), pending: first.pendingEvents.length });
+      }
+      contracts.push({ key: eventKey, prompt: def.prompt, choices });
+    }
+
+    const invalid = Game.deserialize(baseline);
+    const invalidCity = invalid.cities.find(item => item.owner === 0);
+    invalid.players[0].gold = 0;
+    invalid.pendingEvents = [{ id: "invalid", player: 0, key: "PLAGUE",
+      cityId: invalidCity.id, turn: invalid.turn }];
+    const invalidDecision = invalid.eventDecision(0);
+    const invalidResults = {
+      unavailable: invalid.chooseEvent(0, "invalid", "QUARANTINE"),
+      unknown: invalid.chooseEvent(0, "invalid", "NOT_A_CHOICE"),
+      wrongOwner: invalid.chooseEvent(1, "invalid", "ENDURE"),
+      quarantineAvailable: invalidDecision.choices.find(choice => choice.key === "QUARANTINE").available,
+      gold: invalid.players[0].gold,
+      pending: invalid.pendingEvents.length,
+    };
+
+    const hotseat = new Game({ playerCiv: "SERBIA", numOpponents: 1, numHumans: 2, seed: 61104,
+      mapW: 24, mapH: 18, mapType: "peninsula", noMinors: true, noBarbs: true });
+    resetWorld(hotseat);
+    addCity(hotseat, 0, 4, 8, "First Court", true);
+    const secondCity = addCity(hotseat, 1, 16, 8, "Second Court", true);
+    hotseat.pendingEvents = [{ id: "hotseat", player: 1, key: "HARVEST",
+      cityId: secondCity.id, turn: hotseat.turn }];
+    invalidResults.outOfTurn = hotseat.chooseEvent(1, "hotseat", "MARKET");
+    invalidResults.hotseatPending = hotseat.pendingEvents.length;
+
+    const pending = Game.deserialize(baseline);
+    const pendingCity = pending.cities.find(item => item.owner === 0);
+    pending.pendingEvents = [{ id: "saved", player: 0, key: "FIRE",
+      cityId: pendingCity.id, turn: pending.turn }];
+    const savedData = JSON.parse(pending.serialize());
+    const restored = Game.deserialize(JSON.stringify(savedData));
+    const legacyData = JSON.parse(JSON.stringify(savedData));
+    legacyData.v = 5; delete legacyData.pendingEvents;
+    const legacy = Game.deserialize(JSON.stringify(legacyData));
+    return JSON.stringify({ contracts, invalid: invalidResults,
+      save: { version: savedData.v, same: JSON.stringify(restored.eventDecision(0)) ===
+        JSON.stringify(pending.eventDecision(0)), legacyPending: legacy.pendingEvents.length } });
+  `));
+
+  assert.equal(result.contracts.length, 11);
+  for (const event of result.contracts) {
+    assert.ok(event.prompt.length > 30, `${event.key} needs a meaningful dilemma prompt`);
+    assert.equal(event.choices.length, 2, `${event.key} must offer exactly two strategic responses`);
+    for (const choice of event.choices) {
+      assert.equal(choice.available, true, `${event.key}:${choice.key} should be available in the funded fixture`);
+      assert.ok(choice.description.length > 10, `${event.key}:${choice.key} needs an exact outcome description`);
+      assert.equal(choice.resolved, true);
+      assert.equal(choice.deterministic, true);
+      assert.equal(choice.pending, 0);
+    }
+  }
+  assert.deepEqual(result.invalid, {
+    unavailable: false, unknown: false, wrongOwner: false,
+    quarantineAvailable: false, gold: 0, pending: 1,
+    outOfTurn: false, hotseatPending: 1,
+  });
+  assert.deepEqual(result.save, { version: 6, same: true, legacyPending: 0 });
+});
+
+test("random events defer human decisions, block the turn, and resolve AI policy deterministically", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    ${controlledWorldSource}
+    const build = () => {
+      const g = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 61103,
+        mapW: 24, mapH: 18, mapType: "peninsula", noMinors: true, noBarbs: true });
+      resetWorld(g);
+      const humanCity = addCity(g, 0, 4, 8, "Human City", true);
+      const aiCity = addCity(g, 1, 16, 8, "AI City", true);
+      humanCity.pop = 5; aiCity.pop = 5;
+      humanCity.food = 10; aiCity.food = 10;
+      g.players[0].gold = 100; g.players[1].gold = 100;
+      g.turn = 30; g.rng = () => 0;
+      return g;
+    };
+    const g = build();
+    const aiFoodBefore = g.cities.find(city => city.owner === 1).food;
+    g.processRandomEvents();
+    const humanEvent = g.pendingEventFor(0);
+    const beforeBlockedTurn = g.turn;
+    const blocked = g.endTurn();
+    const humanDecision = g.eventDecision(0);
+    const humanResult = g.chooseEvent(0, humanDecision.id, "MARKET");
+
+    const automated = build();
+    automated.pendingEvents = [{ id: "automation", player: 0, key: "SCHOLARS",
+      cityId: automated.cities.find(city => city.owner === 0).id, turn: automated.turn }];
+    const automatedClone = Game.deserialize(automated.serialize());
+    AI.resolvePendingEvents(automated, automated.players[0]);
+    AI.resolvePendingEvents(automatedClone, automatedClone.players[0]);
+    const snapshot = game => JSON.stringify({ pending: game.pendingEvents, gold: game.players[0].gold,
+      culture: game.players[0].culture, science: game.players[0].scienceStored,
+      notification: game.notifications[game.notifications.length - 1]?.msg });
+    return JSON.stringify({
+      queued: { key: humanEvent.key, humanPending: g.pendingEventFor(0), aiPending: g.pendingEventFor(1),
+        aiFoodGain: g.cities.find(city => city.owner === 1).food - aiFoodBefore,
+        aiLastEvent: g.players[1].lastEventTurn },
+      blocked: { result: blocked, before: beforeBlockedTurn, after: g.turn },
+      human: { choice: humanResult.choice, gold: g.players[0].gold, pending: g.pendingEventFor(0) },
+      automated: { deterministic: snapshot(automated) === snapshot(automatedClone),
+        pending: automated.pendingEvents.length, science: automated.players[0].scienceStored },
+    });
+  `));
+
+  assert.equal(result.queued.key, "HARVEST");
+  assert.equal(result.queued.aiPending, null);
+  assert.ok(result.queued.aiFoodGain > 0, "AI should immediately invest a useful harvest in city growth");
+  assert.equal(result.queued.aiLastEvent, 30);
+  assert.deepEqual(result.blocked, { result: false, before: 30, after: 30 });
+  assert.deepEqual(result.human, { choice: "MARKET", gold: 140, pending: null });
+  assert.deepEqual(result.automated, { deterministic: true, pending: 0, science: 30 });
 });
 
 test("AI production plans support arms, reserves, and only one expansion unit", () => {
@@ -2313,7 +2470,7 @@ test("save round-trips preserve the exact deterministic future", () => {
     });
   `));
 
-  assert.equal(result.version, 5);
+  assert.equal(result.version, 6);
   assert.ok(Number.isInteger(result.rngState));
   assert.equal(result.stats.routes, 3);
   assert.equal(result.exact, true);

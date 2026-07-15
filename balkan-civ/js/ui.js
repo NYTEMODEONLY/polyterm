@@ -258,7 +258,7 @@ const UI = (() => {
     if (myTurn() && !game.over) {
       SFX.play("turn");
       cycleNextUnit();
-      maybePromptFounding();
+      showTurnPrompts();
     }
   }
 
@@ -380,6 +380,7 @@ const UI = (() => {
     if (firstUnit) rend.centerOn(game, firstUnit.c, firstUnit.r);
     selectUnit(firstUnit || null);
     refreshAll();
+    showTurnPrompts();
   }
 
   // ---------------- selection ----------------
@@ -1518,10 +1519,11 @@ const UI = (() => {
 
   // ---- peace proposals from the AI (shown at the start of your turn) ----
   function maybeShowPeaceOffers() {
-    if (!game || game.over || !myTurn()) return;
+    if (!game || game.over || !myTurn()) return false;
     const offers = game.pendingPeaceOffers(game.viewer);
-    if (!offers.length) return;
+    if (!offers.length) return false;
     showPeaceModal(offers);
+    return true;
   }
   function showPeaceModal(offers) {
     const modal = $("peace-modal");
@@ -1550,6 +1552,59 @@ const UI = (() => {
     // chain to the next pending offer, if any
     const rest = game.pendingPeaceOffers(game.viewer);
     if (rest.length) showPeaceModal(rest);
+    else showTurnPrompts();
+  }
+
+  // ---------------- event decisions ----------------
+  const EVENT_CHOICE_ICONS = {
+    growth: "🌾", commerce: "💰", culture: "🎭", faith: "☦️",
+    science: "🔬", industry: "⚙️", stability: "🛡️", risk: "⚠️",
+  };
+
+  function showEventDecision() {
+    const modal = $("event-modal");
+    if (!game || game.over || !myTurn()) { modal.style.display = "none"; return false; }
+    const decision = game.eventDecision(game.viewer);
+    if (!decision) { modal.style.display = "none"; return false; }
+    const place = decision.city ? `${decision.city.name} · ` : "";
+    const buttons = decision.choices.map(choice => `
+      <button class="event-choice" data-tone="${choice.tone}" ${choice.available ? "" : "disabled"}
+        title="${choice.available ? choice.description : choice.reason || "This response is unavailable"}"
+        onclick='UI.answerEvent(${JSON.stringify(decision.id)}, ${JSON.stringify(choice.key)})'>
+        <span class="event-choice-icon">${EVENT_CHOICE_ICONS[choice.tone] || "◆"}</span>
+        <strong>${choice.label}</strong>
+        <span>${choice.description}</span>
+        ${choice.available ? "" : `<small>${choice.reason || "Unavailable"}</small>`}
+      </button>`).join("");
+    $("event-body").innerHTML = `
+      <header class="event-head ${decision.kind}">
+        <span class="event-icon">${decision.icon}</span>
+        <div><span class="event-kicker">Court decision</span><h2>${decision.name}</h2>
+          <div class="event-location">${place}reported on turn ${decision.turn}</div></div>
+      </header>
+      <p class="event-prompt">${decision.prompt}</p>
+      <div class="event-choices">${buttons}</div>
+      <div class="event-note">The court must choose before this turn can advance.</div>`;
+    modal.style.display = "flex";
+    return true;
+  }
+
+  function answerEvent(eventId, choiceKey) {
+    if (!myTurn()) return;
+    const outcome = game.chooseEvent(game.viewer, eventId, choiceKey);
+    if (!outcome) return;
+    $("event-modal").style.display = "none";
+    try { localStorage.setItem("balkan-civ-save", game.serialize()); } catch (e) { /* storage full */ }
+    if (NET.active) NET.sendState(game);
+    refreshAll();
+    showTurnPrompts();
+  }
+
+  function showTurnPrompts() {
+    if (!game || game.over || !myTurn()) return false;
+    if (showEventDecision()) return true;
+    if (maybeShowPeaceOffers()) return true;
+    return maybePromptFounding();
   }
 
   function diploAction(idx) {
@@ -2432,6 +2487,11 @@ const UI = (() => {
     if (!myTurn() || game.over) return items;
     const v = game.viewer;
     const pending = game.pendingOrders(v);
+    if (pending.event) {
+      const event = RANDOM_EVENTS[pending.event.key];
+      items.push({ icon: event ? event.icon : "⚖️", label: "Resolve court event",
+        hint: "Choose how your realm responds before the turn can advance.", act: showEventDecision });
+    }
     if (pending.research)
       items.push({ icon: "🔬", label: "Choose research", tipKey: "research",
         hint: "Choose the technology path that will shape your next units and buildings.", act: showTechScreen });
@@ -2537,6 +2597,7 @@ const UI = (() => {
   function maybeShowCongress() {
     if (!game || game.over || !game.congressDue || !game.congressDue()) return;
     if (!myTurn()) return;
+    if (game.pendingEventFor(game.viewer) || game.pendingPeaceOffers(game.viewer).length) return;
     if (congressSeenTurn === game.turn) return;       // shown once this session
     const p = game.players[game.viewer];
     if (p.congressVoteTurn === game.turn) return;      // already voted
@@ -2597,7 +2658,8 @@ const UI = (() => {
   }
 
   function maybeAdvise() {
-    if (!advisorEnabled() || !game || game.over || $("advisor").style.display === "block") return;
+    if (!advisorEnabled() || !game || game.over || game.pendingEventFor(game.viewer) ||
+        $("advisor").style.display === "block") return;
     if (NET.active && game.activeHuman !== NET.myIndex) return;
     const seen = advisorSeenKeys();
     for (const tip of ADVISOR_TIPS) {
@@ -2626,6 +2688,7 @@ const UI = (() => {
     if (!game || game.over) return { kind: "over" };
     if (!myTurn()) return { kind: "waiting" };
     const pending = game.pendingOrders(game.viewer);
+    if (pending.event) return { kind: "event", target: pending.event };
     if (pending.research) return { kind: "research" };
     if (pending.congress) return { kind: "congress" };
     if (pending.cities.length) return { kind: "production", target: pending.cities[0] };
@@ -2639,12 +2702,13 @@ const UI = (() => {
     const action = pendingTurnAction();
     const labels = {
       over: "Game Complete", waiting: "Waiting…", research: "Choose Research",
-      congress: "Cast Vote", production: "Choose Production", ready: "End Turn ⏵",
+      event: "Resolve Event", congress: "Cast Vote", production: "Choose Production", ready: "End Turn ⏵",
     };
     button.textContent = action.kind === "unit" ? `Next Unit (${action.count})` : labels[action.kind];
     button.dataset.state = action.kind;
     button.disabled = action.kind === "over" || action.kind === "waiting";
     button.title = action.kind === "ready" ? "Advance to the next turn"
+      : action.kind === "event" ? "Choose how your court responds to the pending event"
       : action.kind === "unit" ? "Select the next unit that needs orders"
       : action.kind === "production" ? "Select a city that needs production"
       : action.kind === "research" ? "Choose a technology before ending the turn"
@@ -2654,6 +2718,7 @@ const UI = (() => {
   function endTurn() {
     const action = pendingTurnAction();
     if (action.kind === "waiting" || action.kind === "over") return;
+    if (action.kind === "event") { showEventDecision(); return; }
     if (action.kind === "research") { showTechScreen(); return; }
     if (action.kind === "congress") { congressSeenTurn = -1; maybeShowCongress(); return; }
     if (action.kind === "production") {
@@ -2677,7 +2742,7 @@ const UI = (() => {
       NET.sendState(game);
       refreshAll();
       netUpdateBanner();
-      if (myTurn() && !game.over) { cycleNextUnit(); maybePromptFounding(); maybeShowPeaceOffers(); }
+      if (myTurn() && !game.over) { cycleNextUnit(); showTurnPrompts(); }
       return;
     }
     if (game.humans > 1 && !game.over) {
@@ -2686,8 +2751,7 @@ const UI = (() => {
     }
     refreshAll();
     if (!game.over) cycleNextUnit();
-    maybePromptFounding();
-    maybeShowPeaceOffers();
+    showTurnPrompts();
   }
 
   function maybePromptFounding() {
@@ -2695,7 +2759,9 @@ const UI = (() => {
         foundingPromptTurn !== game.turn * 10 + game.viewer) {
       foundingPromptTurn = game.turn * 10 + game.viewer;
       showFoundingModal();
+      return true;
     }
+    return false;
   }
 
   // hotseat: blackout screen between human turns
@@ -2720,8 +2786,7 @@ const UI = (() => {
     if (home) rend.centerOn(game, home.c, home.r);
     refreshAll();
     cycleNextUnit();
-    maybePromptFounding();
-    maybeShowPeaceOffers();
+    showTurnPrompts();
   }
 
   function showVictory() {
@@ -2990,6 +3055,10 @@ const UI = (() => {
 
     window.addEventListener("keydown", (e) => {
       if ($("start-screen").style.display !== "none") return;
+      if ($("event-modal").style.display === "flex") {
+        if (e.key !== "Tab") e.preventDefault();
+        return;
+      }
       // don't hijack keys while typing in a text field (search, net codes)
       const tag = (e.target.tagName || "").toLowerCase();
       if (tag === "input" || tag === "textarea" || tag === "select") {
@@ -3078,7 +3147,9 @@ const UI = (() => {
       reader.readAsText(file);
     });
     document.querySelectorAll(".modal").forEach(m => {
-      m.addEventListener("mousedown", (e) => { if (e.target === m) m.style.display = "none"; });
+      m.addEventListener("mousedown", (e) => {
+        if (e.target === m && !m.classList.contains("decision-modal")) m.style.display = "none";
+      });
     });
   }
 
@@ -3235,7 +3306,7 @@ const UI = (() => {
     hostAddSlot, hostConnect, hostStartOnline, joinCreateReply, unqueue,
     saveSlot, loadSlot, exportSave, toMainMenu, toggleGraphics, showSettings: showSettingsModal,
     diploTrade, diploGift, diploPact, adoptPolicy, congressVote, congressAbstain,
-    playChapter, resetCampaign, openCampaign, answerPeace, cancelProduction, buildNow,
+    playChapter, resetCampaign, openCampaign, answerPeace, answerEvent, cancelProduction, buildNow,
     declareWarAndAttack, setEmpireTab, setEmpireCitySort, setEmpireUnitSort, empireSetFocus,
     empireJumpCity, empireJumpUnit,
     get game() { return game; }, get renderer() { return rend; } };
