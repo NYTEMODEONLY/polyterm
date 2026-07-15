@@ -614,6 +614,26 @@ class Renderer {
       ctx.fillStyle = u.hp > 60 ? "#2ecc71" : u.hp > 30 ? "#f39c12" : "#e74c3c";
       ctx.fillRect(sx - rad, sy - rad - 7, w * (u.hp / 100), 4);
     }
+    if (u.owner === game.viewer && u.def.naval) {
+      const supply = game.navalSupply(u);
+      if (!supply.supplied) {
+        const warning = supply.attritionActive ? "#d94f3d" : "#e7a447";
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(sx - rad * 0.95, sy - rad * 0.88);
+        ctx.lineTo(sx - rad * 0.18, sy - rad * 0.88);
+        ctx.lineTo(sx - rad * 0.95, sy - rad * 0.10);
+        ctx.closePath();
+        ctx.fillStyle = warning;
+        ctx.fill();
+        ctx.fillStyle = "#17120c";
+        ctx.font = `bold ${Math.max(8, Math.floor(rad * 0.55))}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("!", sx - rad * 0.69, sy - rad * 0.62);
+        ctx.restore();
+      }
+    }
     // fortified marker
     if (u.fortified) {
       ctx.font = `${Math.floor(rad * 0.8)}px serif`;

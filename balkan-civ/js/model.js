@@ -28,6 +28,8 @@ class Unit {
     this.charges = UNITS[type].charges || 0; // missionary spreads
     this.healFortify = false;    // fortified until fully healed
     this.autoExplore = false;    // automated Scout exploration
+    this.unsuppliedTurns = 0;    // consecutive completed turns beyond naval supply
+    this.resupplying = false;    // AI return-to-port mission survives across turns
   }
   get def() { return UNITS[this.type]; }
   get isCivilian() { return !!this.def.civilian; }
@@ -414,7 +416,10 @@ class Game {
     if (!unit || unit.isCivilian || !unit.def.naval) return 0;
     const base = Math.max(unit.def.cs || 0, unit.def.rs || 0);
     const health = 0.5 + 0.5 * Math.max(0, Math.min(100, unit.hp)) / 100;
-    return base * health * (1 + unit.level * 0.05);
+    const supply = (unit.unsuppliedTurns || 0) > NAVAL_SUPPLY.graceTurns &&
+      !this.navalSupply(unit).supplied
+      ? NAVAL_SUPPLY.combatMultiplier : 1;
+    return base * health * (1 + unit.level * 0.05) * supply;
   }
 
   cityBlockade(city) {
@@ -432,6 +437,85 @@ class Game {
     clear.defensePower = clear.defenders.reduce((sum, unit) => sum + this.blockadeStrength(unit), 0);
     clear.active = clear.attackers.length > 0 && clear.attackPower > clear.defensePower;
     return clear;
+  }
+
+  navalSupplyRange(owner) {
+    const p = this.players[owner];
+    if (!p) return 0;
+    if (p.hasTech("STEAM_POWER")) return NAVAL_SUPPLY.steamRange;
+    if (p.hasTech("COMPASS")) return NAVAL_SUPPLY.compassRange;
+    return NAVAL_SUPPLY.baseRange;
+  }
+
+  // Multi-source breadth-first coverage keeps supply tied to connected water,
+  // so a nearby port on the other side of a peninsula cannot service a fleet.
+  navalSupplyCoverage(unit) {
+    const coverage = new Map();
+    if (!unit || !unit.def.naval || !this.players[unit.owner]) return coverage;
+    const range = this.navalSupplyRange(unit.owner);
+    const queue = [];
+    const ports = this.cities.filter(city => city.owner === unit.owner && city.coastal)
+      .sort((a, b) => a.id - b.id);
+    for (const city of ports) {
+      for (const [c, r] of HEX.neighbors(city.c, city.r)) {
+        const tile = this.tile(c, r);
+        if (!tile || !this.isWater(tile) || !this.unitPassable(unit, tile)) continue;
+        const key = this.map.idx(c, r);
+        const prior = coverage.get(key);
+        if (prior && prior.source.id <= city.id) continue;
+        coverage.set(key, { source: city, distance: 0 });
+        queue.push([c, r]);
+      }
+    }
+    for (let head = 0; head < queue.length; head++) {
+      const [c, r] = queue[head];
+      const current = coverage.get(this.map.idx(c, r));
+      if (!current || current.distance >= range) continue;
+      for (const [nc, nr] of HEX.neighbors(c, r)) {
+        const tile = this.tile(nc, nr);
+        if (!tile || !this.isWater(tile) || !this.unitPassable(unit, tile)) continue;
+        const key = this.map.idx(nc, nr);
+        const nextDistance = current.distance + 1;
+        const prior = coverage.get(key);
+        if (prior && (prior.distance < nextDistance ||
+            (prior.distance === nextDistance && prior.source.id <= current.source.id))) continue;
+        coverage.set(key, { source: current.source, distance: nextDistance });
+        queue.push([nc, nr]);
+      }
+    }
+    return coverage;
+  }
+
+  navalSupply(unit) {
+    if (!unit || !unit.def.naval) return { supplied: true, source: null, distance: 0,
+      range: 0, turns: 0, graceLeft: NAVAL_SUPPLY.graceTurns, attritionActive: false };
+    const entry = this.navalSupplyCoverage(unit).get(this.map.idx(unit.c, unit.r));
+    const turns = Math.max(0, unit.unsuppliedTurns || 0);
+    const supplied = !!entry;
+    return { supplied, source: entry ? entry.source : null,
+      distance: entry ? entry.distance : null, range: this.navalSupplyRange(unit.owner), turns,
+      graceLeft: supplied ? NAVAL_SUPPLY.graceTurns : Math.max(0, NAVAL_SUPPLY.graceTurns - turns),
+      attritionActive: !supplied && turns > NAVAL_SUPPLY.graceTurns };
+  }
+
+  navalResupplyDestination(unit) {
+    if (!unit || !unit.def.naval) return null;
+    const candidates = [];
+    const ports = this.cities.filter(city => city.owner === unit.owner && city.coastal)
+      .sort((a, b) => a.id - b.id);
+    for (const city of ports) {
+      for (const [c, r] of HEX.neighbors(city.c, city.r)) {
+        const tile = this.tile(c, r);
+        const occupant = this.combatUnitAt(c, r);
+        if (!tile || !this.isWater(tile) || !this.unitPassable(unit, tile) ||
+            (occupant && occupant.id !== unit.id)) continue;
+        const path = this.findPath(unit, c, r);
+        if (!path) continue;
+        candidates.push({ c, r, city, pathLength: path.length });
+      }
+    }
+    return candidates.sort((a, b) => a.pathLength - b.pathLength || a.city.id - b.city.id ||
+      a.r - b.r || a.c - b.c)[0] || null;
   }
 
   tradeRouteStatus(route) {
@@ -1154,6 +1238,9 @@ class Game {
         HEX.distance(g.c, g.r, unit.c, unit.r) <= 2)) {
       mod += GP.generalAura;
     }
+    if (unit.def.naval && (unit.unsuppliedTurns || 0) > NAVAL_SUPPLY.graceTurns &&
+        !this.navalSupply(unit).supplied)
+      mod *= NAVAL_SUPPLY.combatMultiplier;
     return str * mod;
   }
 
@@ -2587,6 +2674,7 @@ class Game {
       const t = this.tile(u.c, u.r);
       const moved = u.moves < u.maxMoves || u.attacked;
       if (moved) continue;
+      if (u.def.naval && !this.navalSupply(u).supplied) continue;
       let heal = 5;
       if (this.isWater(t)) heal = u.def.naval && t.owner === p.index ? 10 : 0; // ships mend in home waters
       else if (t.owner === p.index) heal = 10;
@@ -2602,6 +2690,31 @@ class Game {
     }
   }
 
+  processNavalSupply(p) {
+    for (const u of [...this.units]) {
+      if (u.owner !== p.index || !u.def.naval) continue;
+      const state = this.navalSupply(u);
+      if (state.supplied) {
+        u.unsuppliedTurns = 0;
+        continue;
+      }
+      u.unsuppliedTurns = (u.unsuppliedTurns || 0) + 1;
+      if (u.unsuppliedTurns === 1) {
+        this.notify(`${u.def.name} has left naval supply; attrition begins after ` +
+          `${NAVAL_SUPPLY.graceTurns} turns unless it reaches a friendly port.`, u.owner);
+      }
+      if (u.unsuppliedTurns <= NAVAL_SUPPLY.graceTurns) continue;
+      u.hp -= NAVAL_SUPPLY.attritionDamage;
+      this.addEffect(u.c, u.r, `-${NAVAL_SUPPLY.attritionDamage} supply`, "#e27b4d");
+      if (u.hp <= 0) {
+        this.notify(`${u.def.name} was lost after operating too long without naval supply.`, u.owner);
+        this.removeUnit(u);
+      } else {
+        this.notify(`${u.def.name} suffers ${NAVAL_SUPPLY.attritionDamage} damage from naval attrition.`, u.owner);
+      }
+    }
+  }
+
   // Ends the ACTIVE human's turn. With multiple humans (hotseat) this
   // advances to the next human; after the last one the AI phase runs
   // and the world clock advances.
@@ -2609,6 +2722,7 @@ class Game {
     if (this.over) return;
     const human = this.players[this.activeHuman];
     this.cityStrikes(human);
+    this.processNavalSupply(human);
     this.healUnits(human);
     this.progressWorkers(human);
     this.processPlayerEconomy(human);
@@ -2629,6 +2743,7 @@ class Game {
       if (!p.alive) continue;
       AI.takeTurn(this, p);
       this.cityStrikes(p);
+      this.processNavalSupply(p);
       this.healUnits(p);
       this.progressWorkers(p);
       this.processPlayerEconomy(p);
@@ -3066,6 +3181,7 @@ class Game {
         xp: u.xp, level: u.level, promos: u.promos, promoPts: u.promoPts,
         building: u.building, charges: u.charges,
         autoExplore: u.autoExplore || false, healFortify: u.healFortify || false,
+        unsuppliedTurns: u.unsuppliedTurns || 0, resupplying: u.resupplying || false,
         gpName: u.gpName || null })),
       notifications: this.notifications.slice(-30),
     });
@@ -3122,6 +3238,8 @@ class Game {
       if (!Array.isArray(u.promos)) u.promos = [];
       // pre-promotion saves: bank the earned levels as pending picks
       if (typeof u.promoPts !== "number") u.promoPts = Math.max(0, (u.level || 0) - u.promos.length);
+      if (typeof u.unsuppliedTurns !== "number") u.unsuppliedTurns = 0;
+      if (typeof u.resupplying !== "boolean") u.resupplying = false;
     }
     g.players = d.players.map(pd => {
       const p = new Player(pd.index, pd.civId, pd.isHuman);

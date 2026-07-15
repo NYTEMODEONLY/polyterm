@@ -789,8 +789,9 @@ const AI = (() => {
   }
 
   function navalExploreTarget(game, p, u) {
+    const supply = game.navalSupplyCoverage(u);
     const targets = game.map.tiles.filter(tile => p.visible[game.map.idx(tile.c, tile.r)] === 0 &&
-      game.isWater(tile) && game.unitPassable(u, tile)).sort((a, b) =>
+      game.isWater(tile) && game.unitPassable(u, tile) && supply.has(game.map.idx(tile.c, tile.r))).sort((a, b) =>
       HEX.distance(u.c, u.r, a.c, a.r) - HEX.distance(u.c, u.r, b.c, b.r) ||
       a.r - b.r || a.c - b.c);
     for (const tile of targets) if (game.findPath(u, tile.c, tile.r)) return tile;
@@ -834,6 +835,7 @@ const AI = (() => {
   }
 
   function blockadeTarget(game, p, u, campaign, enemies) {
+    const supply = game.navalSupplyCoverage(u);
     const candidates = game.cities.filter(city => city.coastal && enemies.includes(city.owner) &&
       HEX.neighbors(city.c, city.r).some(([c, r]) => {
         const tile = game.tile(c, r);
@@ -844,13 +846,41 @@ const AI = (() => {
       const routeValue = game.routes.filter(route => route.fromId === city.id || route.toId === city.id).length * 12;
       const yields = game.cityYields(city);
       const strategic = campaign && campaign.target && campaign.target.id === city.id ? 120 : 0;
+      const supported = HEX.neighbors(city.c, city.r).some(([c, r]) => supply.has(game.map.idx(c, r)));
       return { city, score: strategic + (city.isCapital ? 35 : 0) + city.pop * 5 +
-        yields.gold * 4 + routeValue - HEX.distance(u.c, u.r, city.c, city.r) };
+        yields.gold * 4 + routeValue + (supported ? 30 : -45) -
+        HEX.distance(u.c, u.r, city.c, city.r) };
     }).sort((a, b) => b.score - a.score || a.city.id - b.city.id)[0]?.city || null;
+  }
+
+  function continueNavalResupply(game, u) {
+    const supply = game.navalSupply(u);
+    if (!u.resupplying && !supply.supplied && supply.turns >= NAVAL_SUPPLY.graceTurns)
+      u.resupplying = true;
+    if (!u.resupplying) return false;
+    const destination = game.navalResupplyDestination(u);
+    if (!destination) {
+      u.path = null; u.fortified = true;
+      return true;
+    }
+    const atPort = destination.c === u.c && destination.r === u.r;
+    if (atPort && supply.supplied) {
+      if (u.hp < NAVAL_SUPPLY.recoverHp) {
+        u.path = null; u.fortified = true;
+        return true;
+      }
+      u.resupplying = false;
+      u.fortified = false;
+      return false;
+    }
+    u.fortified = false;
+    game.moveUnitTo(u, destination.c, destination.r);
+    return true;
   }
 
   function runShip(game, p, u, campaign = null) {
     const enemies = realWars(game, p);
+    if (continueNavalResupply(game, u)) return;
     if (!p.isMinor) {
       const upgrade = game.canUpgrade(u);
       const reserve = campaign && campaign.overseas ? 80 : 200;
@@ -1153,8 +1183,10 @@ const AI = (() => {
 
   function navalCampaignApproach(game, u, target, campaign) {
     const range = u.isRanged ? u.def.range : 1;
+    const supply = game.navalSupplyCoverage(u);
     const candidates = HEX.ring(target.c, target.r, range).filter(([c, r]) =>
       HEX.distance(c, r, target.c, target.r) === range).sort((a, b) =>
+      Number(!supply.has(game.map.idx(a[0], a[1]))) - Number(!supply.has(game.map.idx(b[0], b[1]))) ||
       HEX.distance(u.c, u.r, a[0], a[1]) - HEX.distance(u.c, u.r, b[0], b[1]) ||
       a[1] - b[1] || a[0] - b[0]);
     for (const [c, r] of candidates) {
@@ -1170,8 +1202,10 @@ const AI = (() => {
   }
 
   function navalBlockadeApproach(game, u, target, campaign) {
+    const supply = game.navalSupplyCoverage(u);
     const candidates = HEX.ring(target.c, target.r, BLOCKADE.radius).filter(([c, r]) =>
       HEX.distance(c, r, target.c, target.r) === BLOCKADE.radius).sort((a, b) =>
+      Number(!supply.has(game.map.idx(a[0], a[1]))) - Number(!supply.has(game.map.idx(b[0], b[1]))) ||
       HEX.distance(u.c, u.r, a[0], a[1]) - HEX.distance(u.c, u.r, b[0], b[1]) ||
       a[1] - b[1] || a[0] - b[0]);
     for (const [c, r] of candidates) {

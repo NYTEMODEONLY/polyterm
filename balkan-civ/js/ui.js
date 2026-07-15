@@ -639,6 +639,7 @@ const UI = (() => {
     const def = u.def;
     const hpPct = Math.max(0, Math.min(100, u.hp));
     const hpTone = u.hp > 65 ? "healthy" : u.hp > 30 ? "wounded" : "critical";
+    const supply = def.naval ? game.navalSupply(u) : null;
     const movePips = Array.from({ length: u.maxMoves }, (_, i) =>
       `<i class="${i < u.moves ? "ready" : ""}"></i>`).join("");
     const states = [];
@@ -647,8 +648,16 @@ const UI = (() => {
     if (u.healFortify) states.push("➕ Healing");
     else if (u.fortified) states.push("🛡️ Fortified");
     if (u.autoExplore) states.push("🗺️ Auto-exploring");
+    if (supply && supply.supplied)
+      states.push(`⚓ Supplied · ${supply.source.name} · ${supply.distance}/${supply.range}`);
+    else if (supply && supply.attritionActive)
+      states.push(`⚠ Attrition · -${NAVAL_SUPPLY.attritionDamage} HP/turn · ` +
+        `${Math.round((1 - NAVAL_SUPPLY.combatMultiplier) * 100)}% weaker`);
+    else if (supply)
+      states.push(supply.graceLeft > 0 ? `⚠ Beyond supply · ${supply.graceLeft}t grace`
+        : "⚠ Beyond supply · attrition next turn");
     $("unit-info").innerHTML = `
-      <span class="unit-icon">${def.icon}</span>
+      <canvas class="unit-icon unit-art-icon" width="42" height="42" role="img" aria-label="${def.name} silhouette"></canvas>
       <div class="unit-details">
         <div class="unit-heading"><b>${u.gpName ? u.gpName + " — " : ""}${def.name}</b>
           <span>${u.level ? "⭐".repeat(u.level) : ""}${u.promos.map(k => PROMOS[k].icon).join("")}</span></div>
@@ -662,6 +671,8 @@ const UI = (() => {
           ${states.map(s => `<span class="unit-state">${s}</span>`).join("")}
         </div>
       </div>`;
+    const art = $("unit-info").querySelector(".unit-art-icon");
+    UNIT_ART.draw(art.getContext("2d"), def, 21, 21, 34, "#f4ead3");
     const actions = $("unit-actions");
     actions.innerHTML = "";
     let actionButtons = actions;
@@ -1652,8 +1663,13 @@ const UI = (() => {
     renderEmpireScreen();
   }
 
-  function empireUnitOrder(unit) {
+  function empireUnitOrder(unit, supply = unit.def.naval ? game.navalSupply(unit) : null) {
     if (unit.promoPts > 0 && !unit.isCivilian) return ["Promotion ready", "attention"];
+    if (supply && !supply.supplied && supply.turns >= NAVAL_SUPPLY.graceTurns)
+      return [supply.attritionActive ? "Taking naval attrition" : "Attrition next turn", "attention"];
+    if (supply && !supply.supplied)
+      return [`Beyond supply · ${supply.graceLeft}t grace`, "working"];
+    if (unit.resupplying) return ["Returning to port", "working"];
     if (unit.building) return [`Building ${IMPROVEMENT[unit.building.type].name} · ${unit.building.turnsLeft}t`, "working"];
     if (unit.healFortify) return ["Fortified until healed", "working"];
     if (unit.fortified) return ["Fortified", "working"];
@@ -1665,9 +1681,10 @@ const UI = (() => {
 
   function renderEmpireMilitary() {
     const units = game.units.filter(u => u.owner === game.viewer).map(unit => {
-      const order = empireUnitOrder(unit);
+      const supply = unit.def.naval ? game.navalSupply(unit) : null;
+      const order = empireUnitOrder(unit, supply);
       const strength = Math.max(unit.def.cs || 0, unit.def.rs || 0);
-      return { unit, order, strength };
+      return { unit, order, strength, supply };
     });
     const rank = { attention: 0, ready: 1, working: 2, spent: 3 };
     units.sort((a, b) => {
@@ -1678,26 +1695,34 @@ const UI = (() => {
     });
     const combat = units.filter(x => !x.unit.isCivilian).length;
     const ready = units.filter(x => x.order[1] === "ready" || x.order[1] === "attention").length;
+    const supplyRisks = units.filter(x => x.supply && !x.supply.supplied).length;
     const economy = game.empireEconomy(game.viewer);
     const sortOptions = [["readiness", "Readiness"], ["type", "Unit type"], ["strength", "Strength"], ["health", "Lowest health"]]
       .map(([key, label]) => `<option value="${key}" ${empireUnitSort === key ? "selected" : ""}>${label}</option>`).join("");
-    const unitRows = units.map(({ unit, order }) => {
+    const unitRows = units.map(({ unit, order, supply }) => {
       const city = game.cityAt(unit.c, unit.r);
       const tile = game.tile(unit.c, unit.r);
       const location = city ? city.name : `${TERRAIN[tile.terrain].name} · ${unit.c + 1},${unit.r + 1}`;
       const power = [unit.def.cs ? `⚔ ${unit.def.cs}` : "", unit.def.rs ? `➶ ${unit.def.rs}` : ""].filter(Boolean).join(" · ") || "Civilian";
-      return `<div class="empire-row empire-unit-row ${order[1]}">
+      const supplyText = !supply ? "" : supply.supplied
+        ? `Supply: ${supply.source.name} · ${supply.distance}/${supply.range}`
+        : supply.attritionActive ? `Out of supply · -${NAVAL_SUPPLY.attritionDamage} HP/turn`
+        : `Beyond supply · ${supply.graceLeft}t grace`;
+      const detail = [unit.promos.length ? unit.promos.map(key => PROMOS[key].name).join(", ") :
+        (!unit.isCivilian ? "No promotions" : ""), supplyText].filter(Boolean).join(" · ");
+      return `<div class="empire-row empire-unit-row ${order[1]} ${supply && !supply.supplied ?
+          (supply.attritionActive ? "supply-critical" : "supply-warning") : ""}">
         <button class="empire-jump" title="Center map on ${unit.def.name}" aria-label="Center map on ${unit.def.name}"
           onclick="UI.empireJumpUnit(${unit.id})">⌖</button>
         <div class="empire-primary"><strong>${unit.def.icon} ${unit.gpName || unit.def.name}</strong>
           <span class="dim">${unit.gpName ? unit.def.name + " · " : ""}Level ${unit.level} · ${unit.xp} XP</span></div>
         <div class="empire-health"><span><b>${unit.hp}</b> HP</span><i><b style="width:${unit.hp}%"></b></i></div>
         <div class="empire-moves"><b>${unit.moves}/${unit.maxMoves}</b><span class="dim">Movement</span></div>
-        <div class="empire-strength"><b>${power}</b><span class="dim">${unit.promos.length ? unit.promos.map(key => PROMOS[key].name).join(", ") : "No promotions"}</span></div>
+        <div class="empire-strength"><b>${power}</b><span class="dim">${detail}</span></div>
         <div class="empire-order"><b>${order[0]}</b><span class="dim">${location}</span></div>
       </div>`;
     }).join("");
-    return `<div class="empire-toolbar"><div><strong>Armed forces</strong><span>${combat} combat · ${units.length - combat} civilian · ${ready} awaiting orders · ${economy.maintenance} upkeep</span></div>
+    return `<div class="empire-toolbar"><div><strong>Armed forces</strong><span>${combat} combat · ${units.length - combat} civilian · ${ready} awaiting orders · ${economy.maintenance} upkeep${supplyRisks ? ` · ${supplyRisks} beyond supply` : ""}</span></div>
         <label>Sort <select name="empire-unit-sort" onchange="UI.setEmpireUnitSort(this.value)">${sortOptions}</select></label></div>
       <div class="empire-table empire-unit-table">
         <div class="empire-row empire-head"><span></span><span>Unit</span><span>Health</span><span>Moves</span><span>Strength</span><span>Orders / location</span></div>
@@ -2143,6 +2168,8 @@ const UI = (() => {
       html: `<p>Build a Caravan and send it from one of your cities to a peaceful city within ${TRADE.maxDist} hexes. A route lasts ${TRADE.duration} turns and earns more gold over longer distances, with a bonus for foreign trade.</p><p class="dim">Hostile units can plunder the route path for ${TRADE.plunderGold} gold. A blockade at either endpoint suspends its income without destroying it.</p>` });
     E.push({ cat: "Mechanics", name: "Naval Blockades", icon: "⚓", tags: "naval blockade port pressure trade repair coastal gold",
       html: `<p>Warships within ${BLOCKADE.radius} hex of an enemy coastal city exert pressure based on combat strength, health, and level. If hostile pressure exceeds the nearby defending fleet, the port is blockaded.</p><p><b>Effects:</b> city gold is reduced by ${Math.round((1 - BLOCKADE.cityGoldMultiplier) * 100)}%, endpoint trade routes are suspended, and city repairs stop. The city can still bombard attackers; move enough friendly naval strength beside it to break the blockade immediately.</p>` });
+    E.push({ cat: "Mechanics", name: "Fleet Logistics", icon: "⚓", tags: "naval fleet supply port logistics attrition range repair",
+      html: `<p>Owned coastal cities project supply through connected water: ${NAVAL_SUPPLY.baseRange} hexes initially, ${NAVAL_SUPPLY.compassRange} with Compass, and ${NAVAL_SUPPLY.steamRange} with Steam Power. Land barriers block this coverage, making forward ports strategically important.</p><p>Warships may operate beyond supply for ${NAVAL_SUPPLY.graceTurns} turns. After that they suffer <b>${NAVAL_SUPPLY.attritionDamage} damage per turn</b>, fight ${Math.round((1 - NAVAL_SUPPLY.combatMultiplier) * 100)}% weaker, exert less blockade pressure, and cannot repair until they return to supply. AI fleets retreat to a friendly port and recover before resuming operations.</p>` });
     // Civilizations (with all their leaders)
     for (const id of CIV_IDS) {
       const civ = CIVS[id];
@@ -2287,9 +2314,16 @@ const UI = (() => {
       items.push({ icon: "🏙️", label: "Set production", tipKey: "founded",
         hint: "Choose what this city should build; early military and workers establish momentum.",
         act: () => { selectCity(idleCity); rend.centerOn(game, idleCity.c, idleCity.r); } });
-    const idleUnits = pending.units;
+    const fleetRisk = game.units.find(unit => unit.owner === v && unit.def.naval &&
+      !game.navalSupply(unit).supplied && (unit.unsuppliedTurns || 0) >= NAVAL_SUPPLY.graceTurns);
+    if (fleetRisk)
+      items.push({ icon: "⚓", label: "Fleet needs supply",
+        hint: "Return this ship to a friendly port before attrition destroys it.",
+        act: () => { selectUnit(fleetRisk); rend.centerOn(game, fleetRisk.c, fleetRisk.r); } });
+    const idleUnits = pending.units.filter(unit => !fleetRisk || unit.id !== fleetRisk.id);
     if (idleUnits.length)
-      items.push({ icon: "🎖️", label: `${idleUnits.length} unit${idleUnits.length > 1 ? "s" : ""} to move`, act: cycleNextUnit });
+      items.push({ icon: "🎖️", label: `${idleUnits.length} unit${idleUnits.length > 1 ? "s" : ""} to move`,
+        act: () => { selectUnit(idleUnits[0]); rend.centerOn(game, idleUnits[0].c, idleUnits[0].r); } });
     return items;
   }
 

@@ -416,6 +416,19 @@ const BLOCKADE = {
   preventsRepair: true,
 };
 
+// Coastal cities project supply through connected water. Fleets can briefly
+// sortie beyond that coverage, but sustained blue-water operations need a
+// forward port and increasingly capable navigation technology.
+const NAVAL_SUPPLY = {
+  baseRange: 5,
+  compassRange: 8,
+  steamRange: 11,
+  graceTurns: 2,
+  attritionDamage: 12,
+  combatMultiplier: 0.85,
+  recoverHp: 75,
+};
+
 // ------------------------------------------------------------
 // Great People
 // ------------------------------------------------------------

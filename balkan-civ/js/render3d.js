@@ -264,7 +264,9 @@ class Renderer3D {
     const spent = u.owner === game.viewer && u.moves <= 0;
     const emb = game.isEmbarked(u);
     const art = UNIT_ART.kind(u.def);
-    const key = `u|${art}|${civ.color}|${outline}|${hpB}|${u.level}|${u.fortified ? 1 : 0}|${emb ? 1 : 0}|${spent ? 1 : 0}`;
+    const supply = u.owner === game.viewer && u.def.naval ? game.navalSupply(u) : null;
+    const supplyStatus = !supply || supply.supplied ? 0 : supply.attritionActive ? 2 : 1;
+    const key = `u|${art}|${civ.color}|${outline}|${hpB}|${u.level}|${u.fortified ? 1 : 0}|${emb ? 1 : 0}|${spent ? 1 : 0}|${supplyStatus}`;
     return this._tex(key, 128, 152, (ctx) => {
       if (spent) ctx.globalAlpha = 0.58;
       // Civ-style strategic badge: shadow, civ rim, parchment field.
@@ -294,6 +296,19 @@ class Renderer3D {
         ctx.fillRect(20, 16, 88, 11);
         ctx.fillStyle = hpB > 60 ? "#2ecc71" : hpB > 30 ? "#f39c12" : "#e74c3c";
         ctx.fillRect(20, 16, 88 * hpB / 100, 11);
+      }
+      if (supplyStatus) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(11, 37); ctx.lineTo(42, 37); ctx.lineTo(11, 68); ctx.closePath();
+        ctx.fillStyle = supplyStatus === 2 ? "#d94f3d" : "#e7a447";
+        ctx.fill();
+        ctx.fillStyle = "#17120c";
+        ctx.font = "bold 22px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("!", 22, 48);
+        ctx.restore();
       }
       // badges
       ctx.font = "30px serif";

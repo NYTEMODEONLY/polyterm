@@ -171,7 +171,11 @@ events, or AI choices.
   A stronger adjacent fleet **blockades** a hostile port, halving city gold,
   suspending endpoint trade routes, and stopping repairs until defending
   warships restore local naval control. AI fleets impose and break these
-  blockades as part of their coastal campaigns
+  blockades as part of their coastal campaigns. Fleets also depend on
+  connected supply projected by owned coastal cities: Compass and Steam Power
+  extend its reach, while ships that remain beyond coverage exhaust a two-turn
+  grace period, then suffer attrition and reduced combat effectiveness. AI
+  admirals return endangered ships to port and recover before redeploying
 - Fog of war with explored/visible states
 - Cities: population growth, worked tiles, culture-driven border expansion,
   production queues, gold purchasing, 16 buildings and 10 world wonders
@@ -325,5 +329,5 @@ drops mid-game the host can continue against the AI or re-host later.
 
 ## Ideas for future expansion
 
-Fleet logistics, longer historical campaign chains, additional Industrial-era
-scenarios, and localized interface text.
+Longer historical campaign chains, additional Industrial-era scenarios, and
+localized interface text.

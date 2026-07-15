@@ -106,6 +106,7 @@ button:disabled { opacity: 0.4; cursor: default; }
 #unit-info { display: flex; flex: 0 1 330px; min-width: 270px; gap: 10px; align-items: center; }
 #unit-info .unit-icon { width: 42px; height: 42px; display: grid; place-items: center; font-size: 27px;
   flex: 0 0 42px; background: #141c1b; border: 1px solid #9c844d; border-radius: 50%; }
+#unit-info canvas.unit-icon { display: block; box-sizing: border-box; padding: 2px; }
 .unit-details { min-width: 0; flex: 1; }
 .unit-heading { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
 .unit-heading b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -342,6 +343,9 @@ button:disabled { opacity: 0.4; cursor: default; }
 .empire-unit-row.attention { box-shadow: inset 3px 0 0 #d6a34f; }
 .empire-unit-row.ready .empire-order b { color: #8fc88e; }
 .empire-unit-row.attention .empire-order b { color: #e4bd65; }
+.empire-unit-row.supply-warning { box-shadow: inset 3px 0 0 #e7a447; }
+.empire-unit-row.supply-critical { box-shadow: inset 3px 0 0 #d94f3d; background: rgba(150,48,38,0.09); }
+.empire-unit-row.supply-critical .empire-order b { color: #ef8c7d; }
 .empire-unit-row.spent { opacity: 0.72; }
 .empire-empty { padding: 22px 12px; color: #8d9899; text-align: center; }
 .empire-economy-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr); gap: 0 24px; padding: 6px 14px 18px; }

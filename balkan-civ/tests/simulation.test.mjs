@@ -361,6 +361,116 @@ test("naval pressure blockades ports, suspends trade, and yields immediately to 
   assert.equal(result.relieved.hp, 135);
 });
 
+test("connected ports project technology-scaled supply with deterministic attrition and recovery", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    ${controlledWorldSource}
+    const g = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 64012,
+      mapW: 24, mapH: 18, mapType: "archipelago", noMinors: true, noBarbs: true });
+    resetWorld(g);
+    for (let c = 6; c <= 18; c++) g.tile(c, 8).terrain = "COAST";
+    const home = addCity(g, 0, 5, 8, "Home Port", true); home.coastal = true;
+    const ship = addUnit(g, "GALLEY", 0, 12, 8);
+    const base = g.navalSupply(ship);
+    g.players[0].techs.add("COMPASS");
+    const compass = g.navalSupply(ship);
+    g.players[0].techs.delete("COMPASS");
+
+    const isolated = addCity(g, 0, 12, 5, "Landlocked Sea", false); isolated.coastal = true;
+    g.tile(12, 6).terrain = "COAST";
+    const separated = g.navalSupply(ship);
+
+    const hp = [];
+    for (let i = 0; i < 3; i++) { g.processNavalSupply(g.players[0]); hp.push(ship.hp); }
+    const active = g.navalSupply(ship);
+    const tiredStrength = g.strengthOf(ship, { attacking: true, ranged: false });
+    const tiredPressure = g.blockadeStrength(ship);
+    ship.unsuppliedTurns = 0;
+    const freshStrength = g.strengthOf(ship, { attacking: true, ranged: false });
+    const freshPressure = g.blockadeStrength(ship);
+    ship.unsuppliedTurns = 3; ship.resupplying = true;
+    const loaded = Game.deserialize(g.serialize());
+    const loadedShip = loaded.units.find(unit => unit.id === ship.id);
+
+    g.tile(13, 8).terrain = "PLAINS";
+    const forward = addCity(g, 0, 13, 8, "Forward Port"); forward.coastal = true;
+    g.tile(12, 8).owner = 0;
+    g.processNavalSupply(g.players[0]);
+    const recovered = g.navalSupply(ship);
+    const recoveredStrength = g.strengthOf(ship, { attacking: true, ranged: false });
+    const beforeRepair = ship.hp;
+    ship.moves = ship.maxMoves; ship.attacked = false;
+    g.healUnits(g.players[0]);
+    return JSON.stringify({
+      ranges: { base: base.range, compass: compass.range },
+      supplied: { base: base.supplied, compass: compass.supplied, separated: separated.supplied },
+      hp, active: { turns: active.turns, grace: active.graceLeft, attrition: active.attritionActive },
+      strengthRatio: tiredStrength / freshStrength, pressureRatio: tiredPressure / freshPressure,
+      recoveredStrengthRatio: recoveredStrength / freshStrength,
+      saved: { turns: loadedShip.unsuppliedTurns, resupplying: loadedShip.resupplying },
+      recovered: { supplied: recovered.supplied, source: recovered.source.name,
+        turns: ship.unsuppliedTurns, beforeRepair, afterRepair: ship.hp },
+    });
+  `));
+
+  assert.deepEqual(result.ranges, { base: 5, compass: 8 });
+  assert.deepEqual(result.supplied, { base: false, compass: true, separated: false },
+    "supply must follow connected water rather than raw distance to a port");
+  assert.deepEqual(result.hp, [100, 100, 88], "two safe turns must precede fixed attrition damage");
+  assert.deepEqual(result.active, { turns: 3, grace: 0, attrition: true });
+  assert.ok(Math.abs(result.strengthRatio - 0.85) < 1e-9);
+  assert.ok(Math.abs(result.pressureRatio - 0.85) < 1e-9);
+  assert.ok(Math.abs(result.recoveredStrengthRatio - 1) < 1e-9,
+    "combat effectiveness should return immediately on re-entering supply");
+  assert.deepEqual(result.saved, { turns: 3, resupplying: true });
+  assert.deepEqual(result.recovered,
+    { supplied: true, source: "Forward Port", turns: 0, beforeRepair: 88, afterRepair: 98 });
+});
+
+test("AI fleets keep a return-to-port mission until supplied and repaired", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    ${controlledWorldSource}
+    const g = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 64013,
+      mapW: 24, mapH: 18, mapType: "archipelago", noMinors: true, noBarbs: true });
+    resetWorld(g);
+    for (let c = 6; c <= 18; c++) g.tile(c, 8).terrain = "COAST";
+    const home = addCity(g, 0, 5, 8, "Home Port", true); home.coastal = true;
+    g.tile(6, 8).owner = 0;
+    g.players[0].techs.add("COMPASS");
+    const ship = addUnit(g, "FRIGATE", 0, 15, 8);
+    ship.hp = 50; ship.unsuppliedTurns = NAVAL_SUPPLY.graceTurns;
+    const startDistance = HEX.distance(ship.c, ship.r, home.c, home.r);
+
+    const cycle = () => {
+      AI.takeTurn(g, g.players[0]);
+      g.processNavalSupply(g.players[0]);
+      g.healUnits(g.players[0]);
+      const state = { c: ship.c, r: ship.r, hp: ship.hp, resupplying: ship.resupplying,
+        supplied: g.navalSupply(ship).supplied, fortified: ship.fortified };
+      ship.resetTurn();
+      return state;
+    };
+    const first = cycle();
+    const second = cycle();
+    const recovery = [cycle(), cycle(), cycle()];
+    return JSON.stringify({ startDistance, firstDistance: HEX.distance(first.c, first.r, home.c, home.r),
+      first, second, recovery,
+      portDistance: HEX.distance(ship.c, ship.r, home.c, home.r) });
+  `));
+
+  assert.ok(result.firstDistance < result.startDistance,
+    "a fleet at the grace limit should immediately close on a friendly port");
+  assert.equal(result.first.resupplying, true);
+  assert.equal(result.first.supplied, true);
+  assert.deepEqual([result.second.c, result.second.r], [6, 8]);
+  assert.equal(result.second.resupplying, true);
+  assert.ok(result.recovery.some(turn => turn.fortified && turn.hp > 50),
+    "the ship should hold in port long enough to repair");
+  assert.ok(result.recovery.at(-1).hp >= 75);
+  assert.equal(result.recovery.at(-1).resupplying, true,
+    "the mission clears on the following order cycle, after recovery is proven");
+  assert.equal(result.portDistance, 1);
+});
+
 test("AI fleets advance to impose blockades and intercept ships blockading home ports", () => {
   const result = JSON.parse(evaluate(loadGameContext(), `
     ${controlledWorldSource}
