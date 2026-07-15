@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Balkan Civilizations</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>⚔️</text></svg>">
-<link rel="stylesheet" href="css/style.css?v=26">
+<link rel="stylesheet" href="css/style.css?v=27">
 </head>
 <body>
 
@@ -95,7 +95,7 @@
   </div>
   <div class="dim" style="margin-top:14px">
     Controls: click to select · click a highlighted hex to move/attack · drag to pan · wheel to zoom ·
-    Enter = end turn · O = empire overview · T = tech · D = diplomacy · F = fortify · N = next unit<br>
+    Enter = end turn · Home = center selection · O = empire overview · T = tech · D = diplomacy · F = fortify · N = next unit<br>
     Research <b>Sailing</b> to embark and build Galleys; <b>Compass</b> opens the deep sea, while Gunpowder and Steam Power modernize the fleet.
   </div>
 </div>
@@ -131,6 +131,7 @@
     <button id="btn-rot-left" title="Rotate map left (Q)" aria-label="Rotate map left">↶</button>
     <button id="btn-rot-right" title="Rotate map right (W)" aria-label="Rotate map right">↷</button>
     <span class="control-rule"></span>
+    <button id="btn-center-map" title="Center selection or capital (Home)" aria-label="Center map on selection or capital">⌖</button>
     <button id="btn-zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
     <button id="btn-zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
     <span class="control-rule"></span>
@@ -199,7 +200,7 @@
 <div id="pedia-modal" class="modal">
   <div class="modal-box wide"><h2>📖 Civilopedia</h2>
     <input id="pedia-search" type="text" placeholder="🔍 Search units, buildings, techs, policies…" autocomplete="off">
-    <div id="pedia-tabs"></div>
+    <div id="pedia-tabs" role="tablist" aria-label="Civilopedia categories"></div>
     <div id="pedia-body"></div>
   </div>
 </div>
@@ -252,11 +253,11 @@
 <script src="js/vendor/three.min.js"></script>
 <script src="js/unitart.js?v=2"></script>
 <script src="js/worldart.js?v=2"></script>
-<script src="js/render.js?v=17"></script>
-<script src="js/render3d.js?v=18"></script>
+<script src="js/render.js?v=18"></script>
+<script src="js/render3d.js?v=19"></script>
 <script src="js/net.js?v=2"></script>
 <script src="js/editor.js?v=1"></script>
-<script src="js/ui.js?v=28"></script>
+<script src="js/ui.js?v=29"></script>
 <script>
   window.addEventListener("DOMContentLoaded", () => UI.init());
 </script>

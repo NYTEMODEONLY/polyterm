@@ -101,10 +101,15 @@ frame. Install its pinned dependencies with `npm install`, install Chromium with
   hex terrain with cliff faces, cone mountains with snow caps, stepped
   hills, tree-covered forests, a translucent sea over a depth-shaded
   seabed, and dark "uncharted" prisms hiding the unexplored world. Rotate
-  the camera with `Q` / `W`. Switch to the original **Classic 2D** renderer
-  any time from the ☰ Menu — the game autosaves and resumes seamlessly,
+  the camera with `Q` / `W`; `Home` or the crosshair control recenters the
+  selected unit or capital in the unobstructed viewport. Switch to the original
+  **Classic 2D** renderer any time from the ☰ Menu — the game autosaves and resumes seamlessly,
   and both styles show the exact same match (Three.js is vendored locally,
   so the game still works fully offline)
+- **Shared unit silhouettes** replace platform-dependent unit emoji on the map,
+  civilization picker, production lists, combat forecast, military ledger, and
+  Civilopedia. The same code-native atlas remains crisp in 2D, 3D, desktop,
+  mobile, and offline play
 - **Living city skylines** in both renderers: settlements grow denser with
   population and advance through five architectural eras. Constructed walls,
   religious landmarks, factories, and world wonders visibly change the map,
@@ -304,6 +309,7 @@ frame. Install its pinned dependencies with `npm install`, install Chromium with
 | Drag | Pan the map |
 | Mouse wheel | Zoom |
 | `Q` / `W` | Rotate the camera (3D mode) |
+| `Home` | Center the selected unit, selected city, or capital |
 | `Y` | Toggle the tile-yield lens |
 | `Enter` | End turn |
 | `N` / `.` | Next idle unit |

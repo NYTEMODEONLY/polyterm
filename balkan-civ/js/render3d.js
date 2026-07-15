@@ -116,11 +116,34 @@ class Renderer3D {
 
   get size() { return this.hexSize * this.cam.zoom; }
 
-  centerOn(game, c, r) {
-    const [x, y] = HEX.toPixel(c, r, this.size);
-    this.cam.x = x - this.canvas.width / 2;
-    this.cam.y = y - this.canvas.height / 2;
+  centerOn(game, c, r, screenPoint = null) {
+    const [x, z] = HEX.toPixel(c, r, this.hexSize);
+    const targetX = screenPoint?.x ?? this.canvas.width / 2;
+    const targetY = screenPoint?.y ?? this.canvas.height / 2;
+    this.cam.x = x * this.cam.zoom - this.canvas.width / 2 + 30;
+    this.cam.y = z * this.cam.zoom - this.canvas.height / 2 + 30;
+
+    // Perspective needs a ground-plane projection to place a tile at a
+    // viewport point that is not the geometric center.
+    if (targetX !== this.canvas.width / 2 || targetY !== this.canvas.height / 2) {
+      this.camera.aspect = this.canvas.width / Math.max(1, this.canvas.height);
+      this.camera.updateProjectionMatrix();
+      const hit = this._groundPoint(this._rayAt(targetX, targetY), 0);
+      if (hit) {
+        this.cam.x += (x - hit.x) * this.cam.zoom;
+        this.cam.y += (z - hit.z) * this.cam.zoom;
+      }
+    }
     this.dirty = true;
+  }
+
+  worldToScreen(c, r, height = 0) {
+    this.camera.aspect = this.canvas.width / Math.max(1, this.canvas.height);
+    this.camera.updateProjectionMatrix();
+    this._placeCamera();
+    const [x, z] = HEX.toPixel(c, r, this.hexSize);
+    const point = new THREE.Vector3(x, height, z).project(this.camera);
+    return [(point.x + 1) * this.canvas.width / 2, (1 - point.y) * this.canvas.height / 2];
   }
 
   rotate(dir) {
@@ -146,6 +169,7 @@ class Renderer3D {
       Math.sin(p) * dist,
       tz + Math.cos(rot) * Math.cos(p) * dist);
     this.camera.lookAt(tx, 0, tz);
+    this.camera.updateMatrixWorld(true);
   }
 
   _rayAt(sx, sy) {

@@ -64,10 +64,12 @@ class Renderer {
     return HEX.fromPixel(sx + this.cam.x - 30, sy + this.cam.y - 30, this.size);
   }
 
-  centerOn(game, c, r) {
+  centerOn(game, c, r, screenPoint = null) {
     const [x, y] = HEX.toPixel(c, r, this.size);
-    this.cam.x = x - this.canvas.width / 2;
-    this.cam.y = y - this.canvas.height / 2;
+    const targetX = screenPoint?.x ?? this.canvas.width / 2;
+    const targetY = screenPoint?.y ?? this.canvas.height / 2;
+    this.cam.x = x + 30 - targetX;
+    this.cam.y = y + 30 - targetY;
     this.dirty = true;
   }
 

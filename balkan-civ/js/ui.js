@@ -11,6 +11,39 @@ const UI = (() => {
   let empireTab = "cities", empireCitySort = "capital", empireUnitSort = "readiness";
   const $ = (id) => document.getElementById(id);
 
+  function unitArtCanvas(unitKey, className = "unit-art-inline") {
+    const def = UNITS[unitKey];
+    if (!def) return "";
+    const pixels = className.includes("pedia-unit-art") ? 128 :
+      className.includes("unit-art-combat") ? 76 : 48;
+    return `<canvas class="${className}" width="${pixels}" height="${pixels}" data-unit-art="${unitKey}"
+      role="img" aria-label="${def.name} silhouette"></canvas>`;
+  }
+
+  function paintUnitArt(root = document) {
+    root.querySelectorAll("canvas[data-unit-art]").forEach(canvas => {
+      const def = UNITS[canvas.dataset.unitArt];
+      if (!def) return;
+      const ctx = canvas.getContext("2d");
+      const size = Math.min(canvas.width, canvas.height);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (canvas.classList.contains("pedia-unit-art")) {
+        const ring = def.uu ? CIVS[def.uu].color : def.naval ? "#4fa3c7" : "#c9a648";
+        ctx.fillStyle = "#172235";
+        ctx.beginPath(); ctx.arc(size / 2, size / 2, size * 0.43, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = ring; ctx.lineWidth = size * 0.04; ctx.stroke();
+      }
+      const scale = canvas.classList.contains("pedia-unit-art") ? 0.67 : 0.74;
+      UNIT_ART.draw(ctx, def, canvas.width / 2, canvas.height / 2, size * scale, "#f4ead3");
+    });
+  }
+
+  function productionLabel(kind, key, def) {
+    return kind === "unit"
+      ? `<span class="unit-label">${unitArtCanvas(key)}<span>${def.name}</span></span>`
+      : `${def.icon} ${def.name}`;
+  }
+
   // In a network game only the client whose turn it is may act.
   function myTurn() {
     if (!NET.active) return true;
@@ -63,7 +96,7 @@ const UI = (() => {
             title="Select ${civ.name}">${id === chosenCiv ? "✓" : "○"}</button></div>
         <div class="leaders">${renderLeaders(id === chosenCiv ? chosenLeader : 0)}</div>
         <div class="trait-slot">${traitLine(id === chosenCiv ? chosenLeader : 0)}</div>
-        <div class="uu">${uu.icon} <b>${uu.name}</b> — ${uu.blurb}</div>`;
+        <div class="uu">${unitArtCanvas(civ.uu)}<span><b>${uu.name}</b> — ${uu.blurb}</span></div>`;
       card.querySelector(".civ-select").onclick = (e) => {
         e.stopPropagation();
         selectCard();
@@ -72,6 +105,7 @@ const UI = (() => {
       card._paint = paint;
       if (id === chosenCiv) card.classList.add("sel");
       bindChips();
+      paintUnitArt(card);
       wrap.appendChild(card);
     }
     refreshStartSummary();
@@ -436,6 +470,39 @@ const UI = (() => {
     }
   }
 
+  function mapFocusPoint() {
+    const canvas = $("map");
+    const fallback = { x: canvas.width / 2, y: canvas.height / 2 };
+    if (window.innerWidth > 700) return fallback;
+    const mapRect = canvas.getBoundingClientRect();
+    let top = 0, bottom = canvas.height;
+    const occluders = [$("attention"), $("unit-panel"), $("city-panel"), document.querySelector(".command-bar")];
+    for (const el of occluders) {
+      if (!el || getComputedStyle(el).display === "none") continue;
+      const rect = el.getBoundingClientRect();
+      if (!rect.height || rect.width < mapRect.width * 0.72 || rect.bottom <= mapRect.top || rect.top >= mapRect.bottom) continue;
+      const localTop = Math.max(0, rect.top - mapRect.top);
+      const localBottom = Math.min(canvas.height, rect.bottom - mapRect.top);
+      if (localTop < canvas.height * 0.35) top = Math.max(top, localBottom + 8);
+      if (localBottom > canvas.height * 0.65) bottom = Math.min(bottom, localTop - 8);
+    }
+    if (bottom - top < 140) return fallback;
+    return { x: canvas.width / 2, y: (top + bottom) / 2 };
+  }
+
+  function centerMapOn(target) {
+    if (!target || !rend || !game) return;
+    rend.centerOn(game, target.c, target.r, mapFocusPoint());
+  }
+
+  function centerMapHome() {
+    const target = rend.selected || rend.selectedCity ||
+      game.cities.find(city => city.owner === game.viewer && city.isCapital) ||
+      game.cities.find(city => city.owner === game.viewer) ||
+      game.units.find(unit => unit.owner === game.viewer);
+    centerMapOn(target);
+  }
+
   function startPlaying() {
     $("start-screen").style.display = "none";
     $("game-ui").style.display = "block";
@@ -452,9 +519,13 @@ const UI = (() => {
     $("map-controls").querySelector(".control-rule").style.display = rotateDisplay;
     lastEraShown = null; // re-baseline era banners for this game
     const firstUnit = game.units.find(u => u.owner === game.viewer);
-    if (firstUnit) rend.centerOn(game, firstUnit.c, firstUnit.r);
     selectUnit(firstUnit || null);
+    if (firstUnit) {
+      rend.cam.zoom = rend.three ? (window.innerWidth <= 700 ? 1.42 : 1.52)
+        : (window.innerWidth <= 700 ? 1.08 : 1.12);
+    }
     refreshAll();
+    if (firstUnit) centerMapOn(firstUnit);
     showTurnPrompts();
   }
 
@@ -683,12 +754,12 @@ const UI = (() => {
       <div class="combat-title"><span>Combat forecast</span><button class="combat-close" title="Cancel attack">✕</button></div>
       <div class="combat-versus">
         <div class="combatant">
-          <span class="combat-icon">${unit.def.icon}</span>
+          ${unitArtCanvas(unit.type, "combat-icon unit-art-combat")}
           <span><b>${unit.def.name}</b><small>${game.players[unit.owner].civ.name} · ${unit.hp} HP</small>${hpMeter(unit.hp, 100, game.players[unit.owner].civ.color)}</span>
         </div>
         <span class="combat-vs">VS</span>
         <div class="combatant target">
-          <span class="combat-icon">${hitsCity ? "🏙️" : defender.def.icon}</span>
+          ${hitsCity ? `<span class="combat-icon">🏙️</span>` : unitArtCanvas(defender.type, "combat-icon unit-art-combat")}
           <span><b>${forecast.target}</b><small>${targetPlayer.civ.name} · ${forecast.targetHp} HP</small>${hpMeter(forecast.targetHp, hitsCity ? defender.maxHp : 100, targetPlayer.civ.color)}</span>
         </div>
       </div>
@@ -700,6 +771,7 @@ const UI = (() => {
       ${combatBreakdown(forecast)}
       <div class="combat-actions"><button class="combat-confirm">⚔ Attack</button><button class="combat-cancel">Cancel</button></div>`;
     panel.style.display = "block";
+    paintUnitArt(panel);
     panel.querySelector(".combat-close").onclick = hideCombatPreview;
     panel.querySelector(".combat-cancel").onclick = hideCombatPreview;
     panel.querySelector(".combat-confirm").onclick = () => {
@@ -1021,7 +1093,7 @@ const UI = (() => {
     const cur = rend.selected ? candidates.indexOf(rend.selected) : -1;
     const next = candidates[(cur + 1) % candidates.length];
     selectUnit(next);
-    rend.centerOn(game, next.c, next.r);
+    centerMapOn(next);
   }
 
   // ---------------- city panel ----------------
@@ -1088,7 +1160,7 @@ const UI = (() => {
       const prodPct = curCost ? Math.max(0, Math.min(100, city.prodStored / curCost * 100)) : 0;
       html += `<div class="city-section-title">Production</div>
         <div class="prod-current">
-          <div><span>${curDef ? `${curDef.icon} <b>${curDef.name}</b>` : "Choose a project"}</span>
+          <div><span>${curDef ? productionLabel(cur.kind, cur.key, curDef) : "Choose a project"}</span>
             ${cur ? `<button class="prod-cancel" title="Stop production" aria-label="Stop production" onclick="UI.cancelProduction(${city.id})">✕</button>` : ""}</div>
           ${cur ? `<div class="dim">${city.prodStored}/${curCost} ⚙️ · ${blocked ? "Waiting for unit space" : `${prodRate}/turn · ${prodTurns}t`}</div>
             <span class="meter-track production"><span style="width:${prodPct}%"></span></span>` : ""}
@@ -1096,7 +1168,7 @@ const UI = (() => {
       if (city.queue.length) {
         html += `<div class="prod-queue"><span class="dim">Queue</span>${city.queue.map((q, i) => {
           const d = q.kind === "unit" ? UNITS[q.key] : BUILDINGS[q.key];
-          return `<span class="queue-entry">${d.icon} ${d.name}<button title="Remove from queue" aria-label="Remove ${d.name} from queue"
+          return `<span class="queue-entry">${productionLabel(q.kind, q.key, d)}<button title="Remove from queue" aria-label="Remove ${d.name} from queue"
             onclick="UI.unqueue(${city.id},${i})">✕</button></span>`;
         }).join("")}</div>`;
       }
@@ -1111,7 +1183,7 @@ const UI = (() => {
         const afford = p0.gold >= price;
         const canQueue = !!cur && !current && !queued && city.queue.length < 6;
         html += `<div class="prod-item ${o.wonder ? "wonder" : ""}">
-          <span class="prod-name">${o.icon} ${o.name}</span>
+          <span class="prod-name">${productionLabel(o.kind, o.key, o)}</span>
           <span class="prod-meta">${o.cost}⚙️ · ${rate}/t · ~${turns}t</span>
           <div class="prod-actions">
             <button ${current ? "disabled" : ""} title="${current ? "Current project" : "Build this now"}"
@@ -1126,6 +1198,7 @@ const UI = (() => {
       html += `</div>`;
     }
     panel.innerHTML = html;
+    paintUnitArt(panel);
   }
 
   function setCityFocus(cityId, focus) {
@@ -1845,6 +1918,7 @@ const UI = (() => {
       </div>
       <div class="empire-tabs" role="tablist" aria-label="Empire overview">${tabs}</div>
       <div class="empire-view" role="tabpanel">${view}</div>`;
+    paintUnitArt($("empire-body"));
   }
 
   function renderEmpireCities() {
@@ -1877,7 +1951,7 @@ const UI = (() => {
       const growth = surplus > 0 ? `+${surplus} food · ${growthTurns}t`
         : surplus < 0 ? `${surplus} food · starving` : "Growth stalled";
       const production = current
-        ? `<strong>${def.icon} ${def.name}</strong><span class="${blocked ? "alert" : "dim"}">${blocked ? "Waiting for unit space" : `${rate} ⚙️/turn · ${productionTurns}t`}${city.queue.length ? ` · ${city.queue.length} queued` : ""}</span>`
+        ? `<strong>${productionLabel(current.kind, current.key, def)}</strong><span class="${blocked ? "alert" : "dim"}">${blocked ? "Waiting for unit space" : `${rate} ⚙️/turn · ${productionTurns}t`}${city.queue.length ? ` · ${city.queue.length} queued` : ""}</span>`
         : `<strong class="alert">Production needed</strong><span class="dim">No current project</span>`;
       const focusOptions = Object.entries(CITY_FOCUS).map(([key, focus]) =>
         `<option value="${key}" ${city.focus === key ? "selected" : ""}>${focus.icon} ${focus.name}</option>`).join("");
@@ -1974,7 +2048,7 @@ const UI = (() => {
           (supply.attritionActive ? "supply-critical" : "supply-warning") : ""}">
         <button class="empire-jump" title="Center map on ${unit.def.name}" aria-label="Center map on ${unit.def.name}"
           onclick="UI.empireJumpUnit(${unit.id})">⌖</button>
-        <div class="empire-primary"><strong>${unit.def.icon} ${unit.gpName || unit.def.name}</strong>
+        <div class="empire-primary"><strong class="empire-unit-name">${unitArtCanvas(unit.type)}<span class="unit-name-text">${unit.gpName || unit.def.name}</span></strong>
           <span class="dim">${unit.gpName ? unit.def.name + " · " : ""}Level ${unit.level} · ${unit.xp} XP</span></div>
         <div class="empire-health"><span><b>${unit.hp}</b> HP</span><i><b style="width:${unit.hp}%"></b></i></div>
         <div class="empire-moves"><b>${unit.moves}/${unit.maxMoves}</b><span class="dim">Movement</span></div>
@@ -2052,7 +2126,7 @@ const UI = (() => {
     if (!city) return;
     $("empire-modal").style.display = "none";
     selectCity(city);
-    rend.centerOn(game, city.c, city.r);
+    centerMapOn(city);
   }
 
   function empireJumpUnit(unitId) {
@@ -2060,7 +2134,7 @@ const UI = (() => {
     if (!unit) return;
     $("empire-modal").style.display = "none";
     selectUnit(unit);
-    rend.centerOn(game, unit.c, unit.r);
+    centerMapOn(unit);
   }
 
   // ---------------- victory progress ----------------
@@ -2379,7 +2453,7 @@ const UI = (() => {
       if (u.siege) notes.push("Siege: +100% vs cities");
       if (u.naval) notes.push("Naval unit — built in coastal cities");
       if (u.great) notes.push("Great Person — earned, not built");
-      E.push({ cat: "Units", name: u.name, icon: u.icon, unitKey: key,
+      E.push({ cat: "Units", name: u.name, icon: "", unitKey: key,
         tags: key.toLowerCase() + (u.naval ? " naval ship fleet" : ""),
         html: `<div class="dim">${stats.join(" · ")}</div>${u.blurb ? `<p>${u.blurb}</p>` : ""}${notes.length ? `<p class="dim">${notes.join(" · ")}</p>` : ""}` });
     }
@@ -2394,7 +2468,7 @@ const UI = (() => {
     // Techs
     for (const [key, t] of Object.entries(TECHS)) {
       const unlocks = [];
-      for (const [uk, u] of Object.entries(UNITS)) if (u.tech === key) unlocks.push(u.icon + u.name);
+      for (const [uk, u] of Object.entries(UNITS)) if (u.tech === key) unlocks.push(u.name);
       for (const [bk, b] of Object.entries(BUILDINGS)) if (b.tech === key) unlocks.push(b.icon + b.name);
       E.push({ cat: "Techs", name: t.name, icon: "🔬", tags: key.toLowerCase(),
         html: `<div class="dim">${ERAS[t.era]} Era · 🔬 ${t.cost}${t.req.length ? " · after " + t.req.map(r => TECHS[r].name).join(", ") : ""}</div>${unlocks.length ? `<p>Unlocks: ${unlocks.join(", ")}</p>` : ""}` });
@@ -2444,9 +2518,9 @@ const UI = (() => {
       const civ = CIVS[id];
       const uu = UNITS[civ.uu];
       const leaders = civ.leaders.map(L => `<p><b>${L.leader}</b> — <i>${L.trait}</i>: ${L.traitDesc}</p>`).join("");
-      E.push({ cat: "Civilizations", name: civ.name, icon: "⚔️",
+      E.push({ cat: "Civilizations", name: civ.name, icon: "", unitKey: civ.uu,
         tags: id.toLowerCase() + " " + civ.leaders.map(L => L.leader.toLowerCase()).join(" "),
-        html: `<p><b>${uu.icon} ${uu.name}</b> — ${uu.blurb}</p><div class="dim">Leaders:</div>${leaders}` });
+        html: `<p><b>${uu.name}</b> — ${uu.blurb}</p><div class="dim">Leaders:</div>${leaders}` });
     }
     // Victory conditions
     E.push({ cat: "Victory", name: "Domination Victory", icon: "⚔️", tags: "victory domination conquest",
@@ -2469,7 +2543,8 @@ const UI = (() => {
     $("pedia-modal").style.display = "flex";
     const cats = ["All", "Units", "Buildings", "Wonders", "Techs", "Policies", "Promotions", "Mechanics", "Religion", "Civilizations", "Victory"];
     $("pedia-tabs").innerHTML = cats.map(c =>
-      `<button class="pedia-tab${c === pediaCat ? " active" : ""}" data-cat="${c}">${c}</button>`).join("");
+      `<button role="tab" aria-selected="${c === pediaCat}" tabindex="${c === pediaCat ? 0 : -1}"
+        class="pedia-tab${c === pediaCat ? " active" : ""}" data-cat="${c}">${c}</button>`).join("");
     $("pedia-tabs").querySelectorAll("button").forEach(b => b.onclick = () => { pediaCat = b.dataset.cat; renderPedia(); });
     if (initialQuery !== undefined) $("pedia-search").value = initialQuery;
     renderPedia();
@@ -2478,8 +2553,12 @@ const UI = (() => {
 
   function renderPedia() {
     const q = $("pedia-search").value.trim().toLowerCase();
-    $("pedia-tabs").querySelectorAll("button").forEach(b =>
-      b.classList.toggle("active", b.dataset.cat === pediaCat));
+    $("pedia-tabs").querySelectorAll("button").forEach(b => {
+      const active = b.dataset.cat === pediaCat;
+      b.classList.toggle("active", active);
+      b.setAttribute("aria-selected", active ? "true" : "false");
+      b.tabIndex = active ? 0 : -1;
+    });
     let list = pediaEntries.filter(e => pediaCat === "All" || e.cat === pediaCat);
     if (q) list = list.filter(e => e.name.toLowerCase().includes(q) || e.tags.includes(q) ||
       e.html.toLowerCase().includes(q) || e.cat.toLowerCase().includes(q));
@@ -2493,18 +2572,10 @@ const UI = (() => {
       const art = e.unitKey ? `<canvas class="pedia-unit-art" data-unit-art="${e.unitKey}"
         width="128" height="128" role="img" aria-label="${e.name} silhouette"></canvas>` : "";
       html += `<div class="pedia-entry ${e.unitKey ? "unit" : ""}">${art}<div class="pedia-entry-main">
-        <div class="pedia-name">${e.icon} <b>${e.name}</b></div>${e.html}</div></div>`;
+        <div class="pedia-name">${e.icon ? `${e.icon} ` : ""}<b>${e.name}</b></div>${e.html}</div></div>`;
     }
     body.innerHTML = html;
-    body.querySelectorAll(".pedia-unit-art").forEach(canvas => {
-      const def = UNITS[canvas.dataset.unitArt];
-      const ctx = canvas.getContext("2d");
-      const ring = def.uu ? CIVS[def.uu].color : def.naval ? "#4fa3c7" : "#c9a648";
-      ctx.fillStyle = "#172235";
-      ctx.beginPath(); ctx.arc(64, 64, 55, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = ring; ctx.lineWidth = 5; ctx.stroke();
-      UNIT_ART.draw(ctx, def, 64, 64, 86, "#f4ead3");
-    });
+    paintUnitArt(body);
   }
 
   // Notifications surface as transient toasts that fade after a few seconds so
@@ -2582,22 +2653,22 @@ const UI = (() => {
     if (promoUnit)
       items.push({ icon: "⭐", label: "Promote unit", tipKey: "promote",
         hint: "Select a veteran upgrade before sending this unit back into battle.",
-        act: () => { selectUnit(promoUnit); rend.centerOn(game, promoUnit.c, promoUnit.r); } });
+        act: () => { selectUnit(promoUnit); centerMapOn(promoUnit); } });
     const idleCity = pending.cities[0];
     if (idleCity)
       items.push({ icon: "🏙️", label: "Set production", tipKey: "founded",
         hint: "Choose what this city should build; early military and workers establish momentum.",
-        act: () => { selectCity(idleCity); rend.centerOn(game, idleCity.c, idleCity.r); } });
+        act: () => { selectCity(idleCity); centerMapOn(idleCity); } });
     const fleetRisk = game.units.find(unit => unit.owner === v && unit.def.naval &&
       !game.navalSupply(unit).supplied && (unit.unsuppliedTurns || 0) >= NAVAL_SUPPLY.graceTurns);
     if (fleetRisk)
       items.push({ icon: "⚓", label: "Fleet needs supply",
         hint: "Return this ship to a friendly port before attrition destroys it.",
-        act: () => { selectUnit(fleetRisk); rend.centerOn(game, fleetRisk.c, fleetRisk.r); } });
+        act: () => { selectUnit(fleetRisk); centerMapOn(fleetRisk); } });
     const idleUnits = pending.units.filter(unit => !fleetRisk || unit.id !== fleetRisk.id);
     if (idleUnits.length)
       items.push({ icon: "🎖️", label: `${idleUnits.length} unit${idleUnits.length > 1 ? "s" : ""} to move`,
-        act: () => { selectUnit(idleUnits[0]); rend.centerOn(game, idleUnits[0].c, idleUnits[0].r); } });
+        act: () => { selectUnit(idleUnits[0]); centerMapOn(idleUnits[0]); } });
     return items;
   }
 
@@ -2798,10 +2869,10 @@ const UI = (() => {
     if (action.kind === "research") { showTechScreen(); return; }
     if (action.kind === "congress") { congressSeenTurn = -1; maybeShowCongress(); return; }
     if (action.kind === "production") {
-      selectCity(action.target); rend.centerOn(game, action.target.c, action.target.r); return;
+      selectCity(action.target); centerMapOn(action.target); return;
     }
     if (action.kind === "unit") {
-      selectUnit(action.target); rend.centerOn(game, action.target.c, action.target.r); return;
+      selectUnit(action.target); centerMapOn(action.target); return;
     }
     hideCombatPreview();
     undoInfo = null;
@@ -2859,7 +2930,7 @@ const UI = (() => {
     const p = game.players[game.viewer];
     const home = game.cities.find(c => c.owner === game.viewer) ||
                  game.units.find(u => u.owner === game.viewer);
-    if (home) rend.centerOn(game, home.c, home.r);
+    if (home) centerMapOn(home);
     refreshAll();
     cycleNextUnit();
     showTurnPrompts();
@@ -3260,6 +3331,7 @@ const UI = (() => {
 
     $("btn-zoom-in").onclick = () => zoomAt(1.18, cv.width / 2, cv.height / 2);
     $("btn-zoom-out").onclick = () => zoomAt(0.84, cv.width / 2, cv.height / 2);
+    $("btn-center-map").onclick = centerMapHome;
     $("btn-rot-left").onclick = () => { if (rend.rotate) rend.rotate(-1); };
     $("btn-rot-right").onclick = () => { if (rend.rotate) rend.rotate(1); };
 
@@ -3268,7 +3340,7 @@ const UI = (() => {
       const rect = e.target.getBoundingClientRect();
       const c = Math.floor((e.clientX - rect.left) / rect.width * game.map.w);
       const r = Math.floor((e.clientY - rect.top) / rect.height * game.map.h);
-      rend.centerOn(game, c, r);
+      centerMapOn({ c, r });
     });
 
     window.addEventListener("keydown", (e) => {
@@ -3282,6 +3354,7 @@ const UI = (() => {
       }
       if (e.target.closest && e.target.closest("button, a, [role='button'], [role='tab']")) return;
       if (e.key === "Enter") { e.preventDefault(); endTurn(); }
+      else if (e.key === "Home") { e.preventDefault(); centerMapHome(); }
       else if (e.key === "." || e.key === "n") cycleNextUnit();
       else if (e.key === "f" && rend.selected) {
         if (game.issueUnitOrder(rend.selected, "fortify", game.viewer)) {
@@ -3440,7 +3513,7 @@ const UI = (() => {
     const visLevel = game.players[game.viewer].visible[game.map.idx(c, r)];
     if (visLevel === 2) {
       for (const u of game.unitsAt(c, r)) {
-        html += `<br>${u.def.icon} ${u.def.name}${u.level ? " " + "⭐".repeat(u.level) : ""} (${CIVS[game.players[u.owner].civId].name}) HP ${u.hp}`;
+        html += `<br>${u.def.name}${u.level ? " " + "⭐".repeat(u.level) : ""} (${CIVS[game.players[u.owner].civId].name}) HP ${u.hp}`;
       }
     }
     tip.innerHTML = html;

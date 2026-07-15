@@ -151,6 +151,44 @@ async function canvasPixelStats(page, graphics) {
   }, graphics);
 }
 
+async function unitArtPixelStats(page, selector) {
+  return page.locator(selector).evaluateAll(canvases => canvases.map(canvas => {
+    const pixels = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+    let opaque = 0, light = 0;
+    for (let i = 0; i < pixels.length; i += 4) {
+      if (pixels[i + 3] > 0) opaque++;
+      if (Math.max(pixels[i], pixels[i + 1], pixels[i + 2]) > 100) light++;
+    }
+    return { key: canvas.dataset.unitArt, opaque, light };
+  }));
+}
+
+async function openingFocusSnapshot(page) {
+  return page.evaluate(() => {
+    const game = UI.game, renderer = UI.renderer;
+    const unit = game.units.find(candidate => candidate.owner === game.viewer);
+    const [x, y] = renderer.worldToScreen(unit.c, unit.r);
+    const map = renderer.canvas.getBoundingClientRect();
+    const panel = document.querySelector("#unit-panel").getBoundingClientRect();
+    const compact = window.innerWidth <= 700;
+    let safeTop = map.top, safeBottom = map.bottom;
+    if (compact) {
+      const attention = document.querySelector("#attention").getBoundingClientRect();
+      const commands = document.querySelector(".command-bar").getBoundingClientRect();
+      if (attention.height) safeTop = Math.max(safeTop, attention.bottom + 8);
+      safeBottom = Math.min(safeBottom, panel.top - 8, commands.top - 8);
+    }
+    return {
+      compact,
+      three: !!renderer.three,
+      zoom: renderer.cam.zoom,
+      point: { x: x + map.left, y: y + map.top },
+      expected: { x: (map.left + map.right) / 2, y: (safeTop + safeBottom) / 2 },
+      panelTop: panel.top,
+    };
+  });
+}
+
 test("launch selection and campaign dialogs are keyboard and screen-reader complete", async ({ page }) => {
   const errors = monitorRuntime(page);
   await page.addInitScript(() => localStorage.clear());
@@ -163,6 +201,11 @@ test("launch selection and campaign dialogs are keyboard and screen-reader compl
   await page.keyboard.press("Enter");
   await expect(selectors.nth(1)).toHaveAttribute("aria-pressed", "true");
   await expect(selectors.first()).toHaveAttribute("aria-pressed", "false");
+
+  const cardArt = page.locator(".civ-card .uu canvas[data-unit-art]");
+  await expect(cardArt).toHaveCount(9);
+  const cardPixels = await unitArtPixelStats(page, ".civ-card .uu canvas[data-unit-art]");
+  expect(cardPixels.every(art => art.opaque > 80 && art.light > 20)).toBe(true);
 
   await page.locator("#btn-campaign").click();
   const campaign = page.getByRole("dialog", { name: /Campaign/ });
@@ -179,6 +222,52 @@ test("launch selection and campaign dialogs are keyboard and screen-reader compl
   await expect(campaign).toBeHidden();
   await expect(page.locator("#btn-campaign")).toBeFocused();
   await expectNoAxeViolations(page, "#start-screen");
+  await expectNoViewportOverflow(page);
+  expect(errors).toEqual([]);
+});
+
+test("opening camera uses the unobstructed viewport and unit art stays coherent across screens", async ({ page }) => {
+  const errors = monitorRuntime(page);
+  await loadGame(page, "2d");
+
+  let focus = await openingFocusSnapshot(page);
+  expect(Math.abs(focus.point.x - focus.expected.x)).toBeLessThan(2);
+  expect(Math.abs(focus.point.y - focus.expected.y)).toBeLessThan(2);
+  if (focus.compact) {
+    expect(focus.point.y).toBeLessThan(focus.panelTop - 120);
+    expect(focus.zoom).toBeGreaterThanOrEqual(1.08);
+  } else {
+    expect(focus.zoom).toBeGreaterThanOrEqual(1.12);
+  }
+
+  await page.evaluate(() => { UI.renderer.cam.x += 900; UI.renderer.cam.y -= 650; UI.renderer.dirty = true; });
+  await page.locator("#btn-center-map").click();
+  focus = await openingFocusSnapshot(page);
+  expect(Math.abs(focus.point.x - focus.expected.x)).toBeLessThan(2);
+  expect(Math.abs(focus.point.y - focus.expected.y)).toBeLessThan(2);
+
+  await page.getByRole("button", { name: /Found City/ }).click();
+  await expect(page.locator("#city-panel")).toBeVisible();
+  const productionArt = page.locator("#city-panel .prod-list canvas[data-unit-art]");
+  await expect(productionArt).not.toHaveCount(0);
+  const productionPixels = await unitArtPixelStats(page, "#city-panel .prod-list canvas[data-unit-art]");
+  expect(productionPixels.every(art => art.opaque > 80 && art.light > 20)).toBe(true);
+  await page.evaluate(() => UI.closeCity());
+
+  await page.locator("#btn-empire").click();
+  await page.getByRole("tab", { name: /Military/ }).click();
+  const expectedUnits = await page.evaluate(() => UI.game.units.filter(unit => unit.owner === UI.game.viewer).length);
+  await expect(page.locator("#empire-body .empire-unit-name canvas[data-unit-art]")).toHaveCount(expectedUnits);
+  const empirePixels = await unitArtPixelStats(page, "#empire-body .empire-unit-name canvas[data-unit-art]");
+  expect(empirePixels.every(art => art.opaque > 80 && art.light > 20)).toBe(true);
+  await page.keyboard.press("Escape");
+
+  await page.locator("#btn-pedia").click();
+  await page.getByRole("tab", { name: "Units", exact: true }).click();
+  const pediaArt = page.locator("#pedia-body .pedia-unit-art[data-unit-art]");
+  await expect(pediaArt).not.toHaveCount(0);
+  const pediaPixels = await unitArtPixelStats(page, "#pedia-body .pedia-unit-art[data-unit-art]");
+  expect(pediaPixels.every(art => art.opaque > 500 && art.light > 150)).toBe(true);
   await expectNoViewportOverflow(page);
   expect(errors).toEqual([]);
 });
@@ -236,8 +325,7 @@ test("event decisions trap focus without blocking keyboard choices or leaking tu
   expect(errors).toEqual([]);
 });
 
-test("the 3D renderer produces a nonblank frame and responds to camera controls", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium-desktop", "3D pixel contract runs once on desktop Chromium");
+test("the 3D renderer produces a nonblank frame and responds to camera controls", async ({ page }) => {
   const errors = monitorRuntime(page);
   await loadGame(page, "3d");
   await expect.poll(() => page.evaluate(() => !!UI.renderer.three)).toBe(true);
@@ -247,9 +335,20 @@ test("the 3D renderer produces a nonblank frame and responds to camera controls"
   expect(pixels.opaque).toBeGreaterThan(10_000);
   expect(pixels.range).toBeGreaterThan(30);
 
+  let focus = await openingFocusSnapshot(page);
+  expect(focus.three).toBe(true);
+  expect(Math.abs(focus.point.x - focus.expected.x)).toBeLessThan(2);
+  expect(Math.abs(focus.point.y - focus.expected.y)).toBeLessThan(2);
+  expect(focus.zoom).toBeGreaterThanOrEqual(focus.compact ? 1.42 : 1.52);
+
   const before = await page.evaluate(() => UI.renderer.cam.rot || 0);
   await page.locator("#btn-rot-right").click();
   await expect.poll(() => page.evaluate(() => UI.renderer.cam.rot || 0)).not.toBe(before);
+  await page.evaluate(() => { UI.renderer.cam.x -= 700; UI.renderer.cam.y += 400; UI.renderer.dirty = true; });
+  await page.locator("#btn-center-map").click();
+  focus = await openingFocusSnapshot(page);
+  expect(Math.abs(focus.point.x - focus.expected.x)).toBeLessThan(2);
+  expect(Math.abs(focus.point.y - focus.expected.y)).toBeLessThan(2);
   await expect(page.getByRole("img", { name: "Interactive world map" })).toBeVisible();
   await expectNoViewportOverflow(page);
   expect(errors).toEqual([]);

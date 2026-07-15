@@ -45,7 +45,10 @@ button:disabled { opacity: 0.4; cursor: default; }
 .civ-card .leader { color: #c9c0a8; font-style: italic; margin-bottom: 8px; }
 .civ-card .leaders, .civ-card .trait-slot, .civ-card .uu { grid-column: 1 / -1; }
 .civ-card .trait { font-size: 12.5px; margin-bottom: 8px; color: #d8d0bc; line-height: 1.35; }
-.civ-card .uu { font-size: 12px; color: #a9bdc2; line-height: 1.35; }
+.civ-card .uu { display: flex; align-items: flex-start; gap: 7px; font-size: 12px; color: #a9bdc2; line-height: 1.35; }
+.unit-art-inline { width: 24px; height: 24px; flex: 0 0 24px; display: inline-block; box-sizing: border-box;
+  padding: 2px; vertical-align: middle; background: #141c1b; border: 1px solid #796b48; border-radius: 50%; }
+.unit-label { min-width: 0; display: inline-flex; align-items: center; gap: 6px; }
 .start-panel { position: sticky; top: 18px; min-width: 0; background: linear-gradient(160deg, #172328, #171b19 72%);
   border: 1px solid #a28a51; border-radius: 4px; padding: 16px;
   box-shadow: inset 0 0 0 1px rgba(231,211,155,0.08), 0 12px 32px rgba(0,0,0,0.32); }
@@ -439,6 +442,9 @@ button:disabled { opacity: 0.4; cursor: default; }
 .empire-production span, .empire-order b, .empire-order span, .empire-strength b,
 .empire-strength span, .empire-moves b, .empire-moves span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .empire-primary strong { color: #e7d9b6; }
+.empire-primary strong.empire-unit-name { display: flex; align-items: center; gap: 7px; }
+.empire-unit-name .unit-art-inline { width: 26px; height: 26px; flex-basis: 26px; }
+.empire-unit-name .unit-name-text { min-width: 0; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .infrastructure-warning { color: #d2a75a; }
 .empire-primary span, .empire-pop span, .empire-production span, .empire-order span,
 .empire-strength span, .empire-moves span { margin-top: 2px; font-size: 10px; }
@@ -635,6 +641,7 @@ button:disabled { opacity: 0.4; cursor: default; }
 .combatant small { color: #aaa89f; font-size: 10px; margin: 1px 0 3px; }
 .combat-icon { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid #796b48;
   border-radius: 50%; background: #111a19; font-size: 22px; }
+.combat-icon.unit-art-combat { display: block; box-sizing: border-box; padding: 3px; }
 .combat-vs { color: #d1b466; font-size: 11px; font-weight: 900; text-align: center; }
 .combat-hp { display: block; height: 5px; overflow: hidden; background: #111; border: 1px solid #4a483e; }
 .combat-hp > span { display: block; height: 100%; }
