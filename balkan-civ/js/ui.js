@@ -148,6 +148,7 @@ const UI = (() => {
   // ---------------- start screen ----------------
   function showStartScreen() {
     campaignChapter = null; // leaving to the menu ends any campaign context
+    hideAdvisor();
     restoreSetup();
     const wrap = $("civ-cards");
     wrap.innerHTML = "";
@@ -596,7 +597,8 @@ const UI = (() => {
     if (window.innerWidth > 700) return fallback;
     const mapRect = canvas.getBoundingClientRect();
     let top = 0, bottom = canvas.height;
-    const occluders = [$("attention"), $("unit-panel"), $("city-panel"), document.querySelector(".command-bar")];
+    const occluders = [$("attention"), $("advisor"), $("unit-panel"), $("city-panel"),
+      document.querySelector(".command-bar")];
     for (const el of occluders) {
       if (!el || getComputedStyle(el).display === "none") continue;
       const rect = el.getBoundingClientRect();
@@ -949,6 +951,37 @@ const UI = (() => {
     rend.dirty = true;
     $("unit-panel").style.display = "none";
     showCityPanel(city);
+    syncAdvisor();
+  }
+
+  function productionGuidance(city, options) {
+    const units = game.units.filter(unit => unit.owner === city.owner);
+    const cities = game.cities.filter(candidate => candidate.owner === city.owner);
+    const plannedUnits = cities.flatMap(candidate => [candidate.producing, ...candidate.queue])
+      .filter(item => item && item.kind === "unit").map(item => UNITS[item.key]).filter(Boolean);
+    const option = (kind, key) => options.find(candidate => candidate.kind === kind && candidate.key === key);
+    const hasUnitPlanned = key => plannedUnits.some(def => def === UNITS[key]);
+    if (!units.some(unit => unit.type === "SCOUT") && !hasUnitPlanned("SCOUT") && option("unit", "SCOUT"))
+      return { kind: "unit", key: "SCOUT", reason: "Reveal terrain, ruins, and nearby rivals" };
+    const defenders = units.filter(unit => !unit.isCivilian && unit.def.cs >= 8).length +
+      plannedUnits.filter(def => !def.civilian && def.cs >= 8).length;
+    if (defenders < cities.length) {
+      const combat = options.filter(candidate => candidate.kind === "unit" &&
+          !UNITS[candidate.key].civilian && UNITS[candidate.key].cs >= 8)
+        .sort((a, b) => a.cost - b.cost)[0];
+      if (combat) return { kind: combat.kind, key: combat.key, reason: "Garrison and defend your cities" };
+    }
+    const workers = units.filter(unit => unit.def.worker).length + plannedUnits.filter(def => def.worker).length;
+    if (workers < cities.length && option("unit", "WORKER"))
+      return { kind: "unit", key: "WORKER", reason: "Improve tiles for your growing cities" };
+    if (game.turn > 12 && city.pop >= 2 && cities.length < 2 &&
+        !units.some(unit => unit.type === "SETTLER") && !hasUnitPlanned("SETTLER") && option("unit", "SETTLER"))
+      return { kind: "unit", key: "SETTLER", reason: "Claim a second city before rivals close the frontier" };
+    const infrastructure = options.filter(candidate => candidate.kind === "building" && !candidate.wonder)
+      .sort((a, b) => a.cost - b.cost)[0];
+    return infrastructure
+      ? { kind: infrastructure.kind, key: infrastructure.key, reason: "Add efficient infrastructure to this city" }
+      : null;
   }
 
   // ---------------- unit panel ----------------
@@ -1272,6 +1305,7 @@ const UI = (() => {
       }
       const opts = game.productionOptions(city);
       const cur = city.producing;
+      const guidance = cur ? null : productionGuidance(city, opts);
       const curDef = cur ? (cur.kind === "unit" ? UNITS[cur.key] : BUILDINGS[cur.key]) : null;
       const curCost = curDef ? curDef.cost : 0;
       const prodRate = cur ? game.cityProductionRate(city, cur, y) : y.prod;
@@ -1292,8 +1326,7 @@ const UI = (() => {
             onclick="UI.unqueue(${city.id},${i})">✕</button></span>`;
         }).join("")}</div>`;
       }
-      html += `<div class="prod-list">`;
-      for (const o of opts) {
+      const rows = opts.map(o => {
         const current = !!(cur && cur.kind === o.kind && cur.key === o.key);
         const queued = city.queue.some(q => q.kind === o.kind && q.key === o.key);
         const rate = game.cityProductionRate(city, { kind: o.kind, key: o.key }, y);
@@ -1302,9 +1335,18 @@ const UI = (() => {
         const canPlace = o.kind !== "unit" || !!game.productionUnitSpot(city, o.key);
         const afford = p0.gold >= price;
         const canQueue = !!cur && !current && !queued && city.queue.length < 6;
-        html += `<div class="prod-item ${o.wonder ? "wonder" : ""}">
+        const recommended = !!(guidance && guidance.kind === o.kind && guidance.key === o.key);
+        return { o, current, queued, rate, turns, price, canPlace, afford, canQueue, recommended };
+      }).sort((a, b) => Number(b.current) - Number(a.current) || Number(b.recommended) - Number(a.recommended) ||
+        (a.o.kind === b.o.kind ? a.turns - b.turns || (a.o.name < b.o.name ? -1 : a.o.name > b.o.name ? 1 : 0)
+          : a.o.kind === "unit" ? -1 : 1));
+      html += `<div class="prod-list">`;
+      for (const row of rows) {
+        const { o, current, queued, rate, turns, price, canPlace, afford, canQueue, recommended } = row;
+        html += `<div class="prod-item ${o.wonder ? "wonder" : ""} ${recommended ? "recommended" : ""}">
           <span class="prod-name">${productionLabel(o.kind, o.key, o)}</span>
           <span class="prod-meta">${o.cost}⚙️ · ${rate}/t · ~${turns}t</span>
+          ${recommended ? `<span class="prod-advice"><b>Suggested</b> · ${guidance.reason}</span>` : ""}
           <div class="prod-actions">
             <button ${current ? "disabled" : ""} title="${current ? "Current project" : "Build this now"}"
               onclick="UI.buildNow(${city.id},'${o.kind}','${o.key}')">${current ? "✓ Current" : "🔨 Build"}</button>
@@ -1381,6 +1423,10 @@ const UI = (() => {
     rend.selectedCity = null;
     $("city-panel").style.display = "none";
     rend.dirty = true;
+    if (game && !game.over) {
+      refreshAttention();
+      maybeAdvise();
+    }
   }
 
   // ---------------- tech dependency tree ----------------
@@ -2763,6 +2809,7 @@ const UI = (() => {
     if (rend.selected && !game.units.includes(rend.selected)) rend.selected = null;
     refreshSelectionOverlays();
     rend.dirty = true;
+    syncAdvisor();
     refreshAttention();
     maybeAdvise();
     maybeShowCongress();
@@ -2864,7 +2911,9 @@ const UI = (() => {
   // Contextual, one-time hints for newcomers. Each fires the first time its
   // `when` predicate holds; shown one at a time and remembered in localStorage.
   const ADVISOR_TIPS = [
-    { key: "welcome", title: "Welcome, ruler!", when: () => game.turn <= 1,
+    { key: "welcome", title: "Welcome, ruler!", when: () => game.turn <= 1 &&
+        !game.cities.some(c => c.owner === game.viewer) &&
+        game.units.some(u => u.owner === game.viewer && u.type === "SETTLER"),
       body: "Select your <b>Settler</b> and press <b>🏛️ Found City</b> on good ground (grassland near water, hills, or a resource). Your capital is the heart of your empire. Press <b>?</b> any time to open the Civilopedia." },
     { key: "founded", title: "Your first city", when: () => game.cities.some(c => c.owner === game.viewer),
       body: "Click a city to set what it <b>builds</b> and which tiles it works. Build a <b>Warrior</b> or <b>Scout</b> to explore and defend, then a <b>Worker</b> to improve your land. Cities grow with food and expand their borders with culture." },
@@ -2949,9 +2998,25 @@ const UI = (() => {
     try { localStorage.setItem("balkan-civ-tips-seen", JSON.stringify([...seen])); } catch (e) { /* storage full */ }
   }
 
+  function advisorTipRelevant(tip) {
+    if (!tip || !game || game.over || !myTurn()) return false;
+    try { return !!tip.when(); } catch (e) { return false; }
+  }
+
+  function advisorBlockedBySurface() {
+    return $("city-panel").style.display === "block";
+  }
+
+  function syncAdvisor() {
+    const advisor = $("advisor");
+    if (advisor.style.display !== "block") return;
+    const tip = ADVISOR_TIPS.find(candidate => candidate.key === advisor.dataset.tipKey);
+    if (!advisorEnabled() || advisorBlockedBySurface() || !advisorTipRelevant(tip)) hideAdvisor();
+  }
+
   function maybeAdvise() {
     if (!advisorEnabled() || !game || game.over || game.pendingEventFor(game.viewer) ||
-        $("advisor").style.display === "block") return;
+        advisorBlockedBySurface() || $("advisor").style.display === "block") return;
     if (!myTurn()) return;
     const seen = advisorSeenKeys();
     for (const tip of ADVISOR_TIPS) {

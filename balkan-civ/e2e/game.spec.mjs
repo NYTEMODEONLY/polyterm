@@ -176,8 +176,10 @@ async function openingFocusSnapshot(page) {
     let safeTop = map.top, safeBottom = map.bottom;
     if (compact) {
       const attention = document.querySelector("#attention").getBoundingClientRect();
+      const advisor = document.querySelector("#advisor").getBoundingClientRect();
       const commands = document.querySelector(".command-bar").getBoundingClientRect();
       if (attention.height) safeTop = Math.max(safeTop, attention.bottom + 8);
+      if (advisor.height) safeBottom = Math.min(safeBottom, advisor.top - 8);
       safeBottom = Math.min(safeBottom, panel.top - 8, commands.top - 8);
     }
     return {
@@ -295,6 +297,59 @@ test("skirmish setup persists and launches the exact shared map seed", async ({ 
   await page.locator("#btn-menu").click();
   await expect(page.locator("#menu-seed")).toHaveText("4294967295");
   await expectNoAxeViolations(page, "#menu-modal");
+  await expectNoViewportOverflow(page);
+  expect(errors).toEqual([]);
+});
+
+test("first-turn guidance clears completed advice and preserves the usable map", async ({ page }) => {
+  const errors = monitorRuntime(page);
+  await page.goto("/index.html");
+  await page.evaluate(() => {
+    localStorage.clear();
+    localStorage.setItem("balkan-civ-gfx", "2d");
+    localStorage.setItem("balkan-civ-reduce-motion", "1");
+  });
+  await page.reload();
+  await page.locator("#sel-mapsize").selectOption("small");
+  await page.locator("#sel-opponents").selectOption("3");
+  await page.locator("#chk-barbs").uncheck();
+  await page.locator("#inp-seed").fill("1701");
+  await page.locator("#btn-start").click();
+
+  const advisor = page.locator("#advisor");
+  await expect(advisor).toBeVisible();
+  await expect(advisor).toHaveAttribute("data-tip-key", "welcome");
+  await expect(page.getByRole("region", { name: /Welcome, ruler/ })).toBeVisible();
+  await expectNoAxeViolations(page, "#advisor");
+  const focus = await openingFocusSnapshot(page);
+  expect(Math.abs(focus.point.x - focus.expected.x)).toBeLessThan(2);
+  expect(Math.abs(focus.point.y - focus.expected.y)).toBeLessThan(2);
+
+  await page.locator("#btn-menu").click();
+  await page.getByRole("button", { name: /Main Menu/ }).click();
+  await expect(page.locator("#start-screen")).toBeVisible();
+  await expect(advisor).toBeHidden();
+  await page.evaluate(() => localStorage.removeItem("balkan-civ-tips-seen"));
+  await page.locator("#btn-start").click();
+  await expect(advisor).toBeVisible();
+
+  await page.getByRole("button", { name: /Found City/ }).click();
+  await expect(page.locator("#city-panel")).toBeVisible();
+  await expect(advisor).toBeHidden();
+  await expect(advisor).toHaveAttribute("data-tip-key", "");
+  await expect(page.locator("#attention")).toContainText("Choose research");
+  await expect(page.locator("#attention")).toContainText("Set production");
+  const production = page.locator("#city-panel .prod-item");
+  await expect(production.first()).toContainText("Scout");
+  await expect(production.first().locator(".prod-advice")).toContainText("Reveal terrain");
+  await expect(page.locator("#city-panel .prod-item").filter({ hasText: "Worker" })).toBeVisible();
+  await production.first().getByRole("button", { name: /Build/ }).click();
+  await expect(page.locator("#city-panel .prod-current")).toContainText("Scout");
+  await expect(page.locator("#attention")).not.toContainText("Set production");
+
+  await page.locator("#city-panel .close").click();
+  await expect(page.locator("#city-panel")).toBeHidden();
+  await expect(advisor).toBeHidden();
   await expectNoViewportOverflow(page);
   expect(errors).toEqual([]);
 });

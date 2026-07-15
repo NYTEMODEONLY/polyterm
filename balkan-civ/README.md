@@ -87,10 +87,11 @@ frame. Install its pinned dependencies with `npm install`, install Chromium with
   belief, city-state type, civilization, and victory condition, with a
   live search box and category tabs. Generated straight from the game's
   data tables, so it always matches the actual rules
-- **Advisor tips**: dismissible contextual hints for newcomers that appear
-  the first time each situation arises (found your first city, choose
-  research, met a rival, a policy is affordable, and so on) — with a
-  one-click opt-out
+- **Consolidated guidance**: a one-time advisor explains new milestones while
+  actionable research, production, policy, religion, and promotion decisions
+  live only in the clickable attention queue. Completed advice clears
+  immediately, production offers one state-aware strategic suggestion, and all
+  guidance has a one-click opt-out
 - **Strategic event dilemmas**: harvests, migrations, relics, and trade
   windfalls on the upside; plagues, unrest, fires, drought, and brigands on
   the down. Every event presents two exact, materially different responses —

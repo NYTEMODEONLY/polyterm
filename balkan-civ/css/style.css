@@ -200,6 +200,9 @@ button:disabled { opacity: 0.4; cursor: default; }
 .game-seed code { min-width: 0; color: #f0d890; font-size: 14px; font-weight: 800; text-align: right; overflow-wrap: anywhere; }
 .prod-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; align-items: center;
   font-size: 13px; padding: 7px; border-radius: 4px; background: rgba(255,255,255,0.04); }
+.prod-item.recommended { border-left: 3px solid #d6a34f; background: rgba(214,163,79,0.1); }
+.prod-advice { grid-column: 1 / -1; color: #d9bf7a; font-size: 10.5px; line-height: 1.3; }
+.prod-advice b { color: #f0d890; text-transform: uppercase; }
 .prod-item.menu-slot { grid-template-columns: minmax(0, 1fr) auto auto; }
 .prod-item.wonder { background: rgba(240,216,144,0.12); }
 .prod-name { min-width: 0; font-weight: 700; }

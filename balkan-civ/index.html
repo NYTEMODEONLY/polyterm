@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Balkan Civilizations</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>⚔️</text></svg>">
-<link rel="stylesheet" href="css/style.css?v=28">
+<link rel="stylesheet" href="css/style.css?v=29">
 </head>
 <body>
 
@@ -162,9 +162,10 @@
 
 <div id="tooltip"></div>
 <div id="game-banner"></div>
-<div id="advisor" style="display:none">
-  <div id="advisor-head"><span id="advisor-title"></span><button id="advisor-close" title="Dismiss">✕</button></div>
-  <div id="advisor-body"></div>
+<div id="advisor" role="region" aria-labelledby="advisor-title" style="display:none">
+  <div id="advisor-head"><span id="advisor-title"></span><button id="advisor-close" title="Dismiss advisor"
+    aria-label="Dismiss advisor">✕</button></div>
+  <div id="advisor-body" aria-live="polite"></div>
   <label id="advisor-off"><input type="checkbox" id="advisor-off-chk"> Don't show advisor tips</label>
 </div>
 
@@ -268,7 +269,7 @@
 <script src="js/render3d.js?v=19"></script>
 <script src="js/net.js?v=2"></script>
 <script src="js/editor.js?v=1"></script>
-<script src="js/ui.js?v=30"></script>
+<script src="js/ui.js?v=31"></script>
 <script>
   window.addEventListener("DOMContentLoaded", () => UI.init());
 </script>
