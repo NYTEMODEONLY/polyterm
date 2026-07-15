@@ -224,8 +224,10 @@ events, or AI choices.
   files) for combat, research, golden ages, spies and more, plus an ambient
   score — a low drone under a wandering melody in the double-harmonic
   "Balkan" scale. Toggle effects (🔊) and music (🎵) separately
-- Workers and tile improvements: farms, mines, and roads (roads cut movement
-  cost to 1 on any terrain)
+- Workers and tile improvements: farms, mines, and roads. Roads coexist with
+  productive improvements, cut movement cost to 1, and form visible capital
+  networks; each linked city earns population-scaled connection gold. AI
+  Workers coordinate deterministic intercity corridors before routine tile jobs
 - Strategic resources (horses, iron) gating unit types; luxury resources
   feeding happiness
 - 3–8 AI opponents that scout, settle (across the sea, too), improve their

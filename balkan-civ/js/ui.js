@@ -922,6 +922,9 @@ const UI = (() => {
     const y = game.cityYields(city);
     const blockade = game.cityBlockade(city);
     const isMine = city.owner === game.viewer;
+    const roadNetwork = isMine ? game.roadNetwork(game.viewer) : null;
+    const isRoadHub = !!(roadNetwork && roadNetwork.capital && roadNetwork.capital.id === city.id);
+    const hasCapitalRoad = !!(roadNetwork && roadNetwork.cityIds.has(city.id));
     const foodNeeded = city.foodNeeded();
     const surplus = game.cityFoodSurplus(city, y);
     const growthTurns = surplus > 0 ? Math.max(1, Math.ceil((foodNeeded - city.food) / surplus)) : null;
@@ -944,6 +947,10 @@ const UI = (() => {
           <span class="meter-track"><span style="width:${foodPct}%"></span></span>
         </div>
         <div class="city-vitals dim"><span>👥 ${worked}/${city.pop} worked tiles</span><span>♥ ${city.hp}/${city.maxHp}</span></div>
+        ${isMine ? `<div class="city-connection ${isRoadHub || hasCapitalRoad ? "connected" : "unlinked"}">
+          <b>${isRoadHub ? "🛤️ Road network hub" : hasCapitalRoad ? "🛤️ Capital road" : "○ Capital road unlinked"}</b>
+          <span>${isRoadHub ? `${Math.max(0, roadNetwork.connectedCities.length - 1)}/${Math.max(0, roadNetwork.connectedCities.length + roadNetwork.disconnectedCities.length - 1)} cities linked` : hasCapitalRoad ? `+${game.roadConnectionIncome(city)} gold/turn` : "0 gold/turn"}</span>
+        </div>` : ""}
         ${blockade.active ? `<div class="city-blockade" role="status"><b>⚓ Blockaded</b><span>Naval pressure ${Math.ceil(blockade.attackPower)} vs ${Math.ceil(blockade.defensePower)}. Gold halved; trade and repairs suspended.</span></div>` : ""}
         ${city.religion !== null ? `<br><span class="dim">Faith: ${game.religions[city.religion].icon} ${game.religions[city.religion].name}</span>` : ""}
       </div>`;
@@ -1618,6 +1625,7 @@ const UI = (() => {
   }
 
   function renderEmpireCities() {
+    const roadNetwork = game.roadNetwork(game.viewer);
     const rows = game.cities.filter(c => c.owner === game.viewer).map(city => {
       const y = game.cityYields(city);
       const blockade = game.cityBlockade(city);
@@ -1650,11 +1658,16 @@ const UI = (() => {
         : `<strong class="alert">Production needed</strong><span class="dim">No current project</span>`;
       const focusOptions = Object.entries(CITY_FOCUS).map(([key, focus]) =>
         `<option value="${key}" ${city.focus === key ? "selected" : ""}>${focus.icon} ${focus.name}</option>`).join("");
+      const isHub = roadNetwork.capital && roadNetwork.capital.id === city.id;
+      const connected = roadNetwork.cityIds.has(city.id);
+      const roadStatus = isHub ? `Road hub · ${Math.max(0, roadNetwork.connectedCities.length - 1)}/${Math.max(0, rows.length - 1)} linked`
+        : connected ? `Capital road · +${game.roadConnectionIncome(city)} gold`
+        : "Capital road unlinked";
       return `<div class="empire-row empire-city-row${current ? "" : " needs-order"}${blockade.active ? " blockaded" : ""}">
         <button class="empire-jump" title="Center map on ${city.name}" aria-label="Center map on ${city.name}"
           onclick="UI.empireJumpCity(${city.id})">⌖</button>
         <div class="empire-primary"><strong>${city.name}${city.isCapital ? " ★" : ""}</strong>
-          <span class="${blockade.active ? "alert" : "dim"}">${blockade.active ? `⚓ Blockaded · ${Math.ceil(blockade.attackPower)} vs ${Math.ceil(blockade.defensePower)} pressure` : `${city.buildings.length} building${city.buildings.length === 1 ? "" : "s"} · ${city.hp}/${city.maxHp} HP`}</span></div>
+          <span class="${blockade.active ? "alert" : !isHub && !connected ? "infrastructure-warning" : "dim"}">${blockade.active ? `⚓ Blockaded · ${Math.ceil(blockade.attackPower)} vs ${Math.ceil(blockade.defensePower)} pressure` : `${city.buildings.length} building${city.buildings.length === 1 ? "" : "s"} · ${city.hp}/${city.maxHp} HP · ${roadStatus}`}</span></div>
         <div class="empire-pop"><b>👥 ${city.pop}</b><span class="${surplus < 0 ? "alert" : "dim"}">${growth}</span></div>
         <div class="empire-yields" aria-label="City yields"><span>🍞 ${y.food}</span><span>⚙️ ${y.prod}</span>
           <span>💰 ${y.gold}</span><span>🔬 ${y.sci}</span><span>🎭 ${Math.floor(y.culture)}</span><span>☦️ ${y.faith}</span></div>
@@ -1766,6 +1779,7 @@ const UI = (() => {
     const ledger = [
       ["City income", e.cityGold, `${e.cities} cit${e.cities === 1 ? "y" : "ies"}`],
       ["Golden Age", e.goldenAgeGold, p.goldenAgeTurns > 0 ? `${p.goldenAgeTurns} turns remaining` : "Inactive"],
+      ["Capital roads", e.connectionGold, `${e.connectedCities}/${e.connectableCities} cities linked`],
       ["Trade routes", e.tradeGold, `${game.routes.filter(r => r.owner === game.viewer).length} outbound`],
       ["Guilds", e.guildGold, p.policies.has("GUILDS")
         ? `${luxuries.length} controlled luxur${luxuries.length === 1 ? "y" : "ies"}` : "Policy not adopted"],
@@ -2190,6 +2204,8 @@ const UI = (() => {
     // Core systems
     E.push({ cat: "Mechanics", name: "Trade Routes", icon: "🐫", tags: "trade route caravan gold commerce",
       html: `<p>Build a Caravan and send it from one of your cities to a peaceful city within ${TRADE.maxDist} hexes. A route lasts ${TRADE.duration} turns and earns more gold over longer distances, with a bonus for foreign trade.</p><p class="dim">Hostile units can plunder the route path for ${TRADE.plunderGold} gold. A blockade at either endpoint suspends its income without destroying it.</p>` });
+    E.push({ cat: "Mechanics", name: "Road Networks", icon: "🛤️", tags: "road capital connection infrastructure worker movement gold",
+      html: `<p>Roads coexist with Farms and Mines and reduce movement through their hex to one. A continuous road corridor through owned or neutral land connects another city to your capital.</p><p>Each connected city earns <b>${INFRASTRUCTURE.connectionBaseGold} base gold plus 1 gold per ${INFRASTRUCTURE.populationPerGold} population</b> every turn. Connected segments are drawn in ochre; disconnected roads remain brown. A foreign border severs the link even when the road remains.</p>` });
     E.push({ cat: "Mechanics", name: "Naval Blockades", icon: "⚓", tags: "naval blockade port pressure trade repair coastal gold",
       html: `<p>Warships within ${BLOCKADE.radius} hex of an enemy coastal city exert pressure based on combat strength, health, and level. If hostile pressure exceeds the nearby defending fleet, the port is blockaded.</p><p><b>Effects:</b> city gold is reduced by ${Math.round((1 - BLOCKADE.cityGoldMultiplier) * 100)}%, endpoint trade routes are suspended, and city repairs stop. The city can still bombard attackers; move enough friendly naval strength beside it to break the blockade immediately.</p>` });
     E.push({ cat: "Mechanics", name: "Fleet Logistics", icon: "⚓", tags: "naval fleet supply port logistics attrition range repair",
@@ -3030,6 +3046,10 @@ const UI = (() => {
     }
     if (t.resource) html += ` · ${RESOURCE[t.resource].icon} ${RESOURCE[t.resource].name}${RESOURCE[t.resource].luxury ? " (luxury)" : ""}`;
     if (t.improvement) html += ` · ${IMPROVEMENT[t.improvement].icon} ${IMPROVEMENT[t.improvement].name}`;
+    if (t.road) {
+      const connected = game.roadNetwork(game.viewer).tiles.has(game.map.idx(c, r));
+      html += ` · 🛤️ ${connected ? "Capital road network" : "Road"}`;
+    }
     html += `<br><span class="dim">🍞${y.food} ⚙️${y.prod} 💰${y.gold}</span>`;
     if (t.owner !== -1) html += `<br><span style="color:${CIVS[game.players[t.owner].civId].color}">${CIVS[game.players[t.owner].civId].name} territory</span>`;
     const visLevel = game.players[game.viewer].visible[game.map.idx(c, r)];

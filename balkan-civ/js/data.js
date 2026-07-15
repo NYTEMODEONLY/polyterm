@@ -438,6 +438,13 @@ const TACTICS = {
   maxFlank: 0.20,
 };
 
+// Continuous road links to the capital turn Worker time into recurring
+// commerce without replacing the farm or mine already on a tile.
+const INFRASTRUCTURE = {
+  connectionBaseGold: 1,
+  populationPerGold: 2,
+};
+
 // ------------------------------------------------------------
 // Great People
 // ------------------------------------------------------------

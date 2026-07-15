@@ -200,7 +200,7 @@ class Game {
       this.map = { w: cm.w, h: cm.h, idx: (c, r) => r * cm.w + c, seed: this.seed,
         tiles: cm.tiles.map((t, i) => ({ c: i % cm.w, r: Math.floor(i / cm.w),
           terrain: t.terrain, feature: t.feature || null, resource: t.resource || null,
-          improvement: null, owner: -1, city: null, workedBy: null })) };
+          improvement: null, road: false, owner: -1, city: null, workedBy: null })) };
     } else {
       this.map = generateMap(opts.mapW || GAME_DEFAULTS.mapW, opts.mapH || GAME_DEFAULTS.mapH, this.seed, this.mapType);
     }
@@ -1032,7 +1032,7 @@ class Game {
     if (!this.unitPassable(unit, t)) return Infinity;
     if (this.isWater(t)) return 1;
     if (unit.def.naval) return Infinity;
-    if (t.improvement === "ROAD" || t.city) return 1;
+    if (t.road || t.city) return 1;
     let cost = TERRAIN[t.terrain].moveCost;
     if (t.feature) cost = Math.max(cost, FEATURE[t.feature].moveCost);
     if (cost > 1 && cost < 99 && unit.promos && unit.promos.includes("PATHFINDER")) cost = 1;
@@ -1057,6 +1057,111 @@ class Game {
       p.visible[this.map.idx(controller.c, controller.r)] === 2);
   }
 
+  // A player's own cities and roads in owned or neutral territory form a
+  // capital network. Foreign borders sever the link even when a road survives.
+  roadNetwork(playerIdx) {
+    const ownCities = this.cities.filter(city => city.owner === playerIdx)
+      .sort((a, b) => a.id - b.id);
+    const empty = { capital: null, tiles: new Set(), cityIds: new Set(),
+      connectedCities: [], disconnectedCities: ownCities, income: 0 };
+    if (!ownCities.length) return empty;
+    const p = this.players[playerIdx];
+    const capital = ownCities.find(city => city.id === p.originalCapitalId) ||
+      ownCities.find(city => city.isCapital) || ownCities[0];
+    const start = this.map.idx(capital.c, capital.r);
+    const tiles = new Set([start]);
+    const queue = [[capital.c, capital.r]];
+    while (queue.length) {
+      const [c, r] = queue.shift();
+      for (const [nc, nr] of HEX.neighbors(c, r)) {
+        const tile = this.tile(nc, nr);
+        if (!tile) continue;
+        const idx = this.map.idx(nc, nr);
+        if (tiles.has(idx)) continue;
+        const ownCity = tile.city && tile.city.owner === playerIdx;
+        const usableRoad = tile.road && (tile.owner === playerIdx || tile.owner === -1);
+        if (!ownCity && !usableRoad) continue;
+        tiles.add(idx);
+        queue.push([nc, nr]);
+      }
+    }
+    const connectedCities = ownCities.filter(city => tiles.has(this.map.idx(city.c, city.r)));
+    const cityIds = new Set(connectedCities.map(city => city.id));
+    const disconnectedCities = ownCities.filter(city => !cityIds.has(city.id));
+    const income = connectedCities.reduce((sum, city) =>
+      sum + (city.id === capital.id ? 0 : this.roadConnectionIncome(city)), 0);
+    return { capital, tiles, cityIds, connectedCities, disconnectedCities, income };
+  }
+
+  roadConnectionIncome(city) {
+    return city ? INFRASTRUCTURE.connectionBaseGold +
+      Math.floor(city.pop / INFRASTRUCTURE.populationPerGold) : 0;
+  }
+
+  // Deterministic least-construction route between the capital and one city.
+  // Existing roads are heavily preferred, so new corridors reuse trunk lines.
+  roadConnectionPath(playerIdx, targetCity) {
+    const network = this.roadNetwork(playerIdx);
+    const capital = network.capital;
+    if (!capital || !targetCity || targetCity.owner !== playerIdx) return null;
+    const { w } = this.map;
+    const key = (c, r) => r * w + c;
+    const start = key(capital.c, capital.r), goal = key(targetCity.c, targetCity.r);
+    if (start === goal) return [];
+    const open = [[0, start]], closed = new Set();
+    const came = new Map(), score = new Map([[start, 0]]);
+    while (open.length) {
+      let best = 0;
+      for (let i = 1; i < open.length; i++) {
+        if (open[i][0] < open[best][0] ||
+            (open[i][0] === open[best][0] && open[i][1] < open[best][1])) best = i;
+      }
+      const [, current] = open.splice(best, 1)[0];
+      if (closed.has(current)) continue;
+      closed.add(current);
+      if (current === goal) {
+        const path = [];
+        let cursor = goal;
+        while (cursor !== start) {
+          path.unshift([cursor % w, Math.floor(cursor / w)]);
+          cursor = came.get(cursor);
+        }
+        return path;
+      }
+      const c = current % w, r = Math.floor(current / w);
+      for (const [nc, nr] of HEX.neighbors(c, r)) {
+        const tile = this.tile(nc, nr);
+        if (!tile) continue;
+        const ownCity = tile.city && tile.city.owner === playerIdx;
+        const buildable = IMPROVEMENT.ROAD.terrains.includes(tile.terrain) &&
+          (tile.owner === playerIdx || tile.owner === -1);
+        if (!ownCity && !buildable) continue;
+        const next = key(nc, nr);
+        const step = ownCity ? 0.05 : tile.road ? 0.12 :
+          1 + (TERRAIN[tile.terrain].moveCost || 1) * 0.05;
+        const nextScore = score.get(current) + step;
+        if (nextScore >= (score.get(next) ?? Infinity)) continue;
+        score.set(next, nextScore);
+        came.set(next, current);
+        open.push([nextScore + HEX.distance(nc, nr, targetCity.c, targetCity.r) * 0.05, next]);
+      }
+      if (score.size > 5000) return null;
+    }
+    return null;
+  }
+
+  roadConnectionPlans(playerIdx) {
+    const network = this.roadNetwork(playerIdx);
+    return network.disconnectedCities.map(city => {
+      const path = this.roadConnectionPath(playerIdx, city);
+      if (!path) return null;
+      const missing = path.map(([c, r]) => this.tile(c, r))
+        .filter(tile => tile && !tile.city && !tile.road);
+      return { city, path, missing };
+    }).filter(Boolean).sort((a, b) => a.missing.length - b.missing.length ||
+      a.path.length - b.path.length || a.city.id - b.city.id);
+  }
+
   // ---------- workers ----------
   canBuildImprovement(unit, type) {
     if (!unit.def.worker) return false;
@@ -1071,7 +1176,7 @@ class Game {
     else if (t.owner !== unit.owner) return false;
     if (!imp.terrains.includes(t.terrain)) return false;
     if (t.feature && !imp.road) return false;      // farms/mines need clear ground
-    if (imp.road ? t.improvement === "ROAD" : t.improvement === type) return false;
+    if (imp.road ? t.road : t.improvement === type) return false;
     return true;
   }
 
@@ -1094,7 +1199,8 @@ class Game {
       if (!t || (t.owner !== p.index && !(isRoad && t.owner === -1))) { u.building = null; continue; } // lost the tile
       u.building.turnsLeft--;
       if (u.building.turnsLeft <= 0) {
-        t.improvement = u.building.type;
+        if (isRoad) t.road = true;
+        else t.improvement = u.building.type;
         this.notify(`${IMPROVEMENT[u.building.type].name} completed.`, p.index);
         u.building = null;
       }
@@ -2580,8 +2686,9 @@ class Game {
     const out = {
       cities: 0, population: 0, units: 0, freeUnits: 0,
       food: 0, production: 0, science: 0, culture: 0, faith: 0,
-      cityGold: 0, goldenAgeGold: 0, tradeGold: 0, guildGold: 0,
+      cityGold: 0, goldenAgeGold: 0, connectionGold: 0, tradeGold: 0, guildGold: 0,
       carsijaGold: 0, cityStateGold: 0, titheGold: 0,
+      connectedCities: 0, connectableCities: 0,
       maintenance: 0, grossGold: 0, netGold: 0,
     };
     for (const city of this.cities) {
@@ -2603,6 +2710,10 @@ class Game {
     out.units = this.units.filter(u => u.owner === playerIdx).length;
     out.freeUnits = 4 + (p.policies.has("FRONTIERSMEN") ? 4 : 0);
     out.maintenance = Math.max(0, out.units - out.freeUnits);
+    const roadNetwork = this.roadNetwork(playerIdx);
+    out.connectionGold = roadNetwork.income;
+    out.connectedCities = Math.max(0, roadNetwork.connectedCities.length - (roadNetwork.capital ? 1 : 0));
+    out.connectableCities = Math.max(0, out.cities - (roadNetwork.capital ? 1 : 0));
     if (!p.isMinor) {
       out.tradeGold = this.tradeIncome(playerIdx);
       if (p.policies.has("GUILDS")) out.guildGold = this.luxuryTypesOf(playerIdx).length;
@@ -2613,7 +2724,7 @@ class Game {
         out.titheGold = this.religionFollowers(p.religionId);
       }
     }
-    out.grossGold = out.cityGold + out.goldenAgeGold + out.tradeGold + out.guildGold +
+    out.grossGold = out.cityGold + out.goldenAgeGold + out.connectionGold + out.tradeGold + out.guildGold +
       out.carsijaGold + out.cityStateGold + out.titheGold;
     out.netGold = out.grossGold - out.maintenance;
     return out;
@@ -3207,7 +3318,7 @@ class Game {
   // ---------- save / load ----------
   serialize() {
     return JSON.stringify({
-      v: 2, turn: this.turn, seed: this.seed,
+      v: 3, turn: this.turn, seed: this.seed,
       rngState: typeof this.rng.getState === "function" ? this.rng.getState() : null,
       mapType: this.mapType,
       difficulty: this.difficulty, humans: this.humans, activeHuman: this.activeHuman,
@@ -3220,7 +3331,7 @@ class Game {
       religions: this.religions, stats: this.stats,
       map: { w: this.map.w, h: this.map.h, tiles: this.map.tiles.map(t => ({
         c: t.c, r: t.r, terrain: t.terrain, feature: t.feature, resource: t.resource,
-        improvement: t.improvement, ruin: t.ruin || false,
+        improvement: t.improvement, road: !!t.road, ruin: t.ruin || false,
         owner: t.owner, cityId: t.city ? t.city.id : null })) },
       players: this.players.map(p => ({
         index: p.index, civId: p.civId, isHuman: p.isHuman, alive: p.alive,
@@ -3275,7 +3386,7 @@ class Game {
     g.lastCombat = null;
     g.winner = d.winner; g.victoryType = d.victoryType;
     if (!g.scenario) g.maxTurns = SPEEDS[g.speed].turns;
-    // Version 2 persists the exact PRNG state. Version 1 saves retain their
+    // Version 2+ persists the exact PRNG state. Version 1 saves retain their
     // historical turn-derived fallback so existing local saves still load.
     const fallbackRngState = (d.seed + d.turn * 7919) >>> 0;
     g.rng = mulberry32(d.rngState ?? fallbackRngState);
@@ -3285,8 +3396,10 @@ class Game {
 
     g.map = { w: d.map.w, h: d.map.h, tiles: [], idx: (c, r) => r * d.map.w + c, seed: d.seed };
     for (const td of d.map.tiles) {
+      const legacyRoad = td.improvement === "ROAD";
       g.map.tiles.push({ c: td.c, r: td.r, terrain: td.terrain, feature: td.feature,
-        resource: td.resource, improvement: td.improvement ?? null, ruin: td.ruin || false,
+        resource: td.resource, improvement: legacyRoad ? null : (td.improvement ?? null),
+        road: !!td.road || legacyRoad, ruin: td.ruin || false,
         owner: td.owner, city: null, workedBy: null, _cityId: td.cityId });
     }
     g.cities = d.cities.map(cd => Object.assign(new City(cd.name, cd.owner, cd.c, cd.r), cd));

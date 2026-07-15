@@ -60,7 +60,7 @@ const controlledWorldSource = `
     g._hap = {}; g._aiLandmassMap = null;
     for (const tile of g.map.tiles) {
       tile.terrain = "PLAINS"; tile.feature = null; tile.resource = null;
-      tile.improvement = null; tile.owner = -1; tile.city = null; tile.workedBy = null;
+      tile.improvement = null; tile.road = false; tile.owner = -1; tile.city = null; tile.workedBy = null;
     }
     for (const p of g.players) {
       p.atWarWith.clear(); p.pacts.clear(); p.met.clear();
@@ -954,17 +954,149 @@ test("empire economy forecasts every modifier and matches the applied turn", () 
   assert.equal(e.units, 11);
   assert.equal(e.freeUnits, 8);
   assert.equal(e.maintenance, 3);
+  assert.equal(e.connectionGold, 0);
   assert.equal(e.goldenAgeGold, Math.floor(e.cityGold * 1.2) - e.cityGold);
   assert.equal(e.tradeGold, result.routeGold);
   assert.equal(e.guildGold, 1);
   assert.equal(e.carsijaGold, 2);
   assert.equal(e.cityStateGold, 4);
   assert.equal(e.titheGold, 2);
-  assert.equal(e.grossGold, e.cityGold + e.goldenAgeGold + e.tradeGold + e.guildGold +
+  assert.equal(e.grossGold, e.cityGold + e.goldenAgeGold + e.connectionGold + e.tradeGold + e.guildGold +
     e.carsijaGold + e.cityStateGold + e.titheGold);
   assert.equal(e.netGold, e.grossGold - e.maintenance);
   assert.deepEqual(result.delta,
     { gold: e.netGold, science: e.science, faith: e.faith, culture: e.culture });
+});
+
+test("roads coexist with tile improvements and capital links produce audited income", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    ${controlledWorldSource}
+    const g = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 43022,
+      mapW: 20, mapH: 16, mapType: "peninsula", noMinors: true, noBarbs: true });
+    resetWorld(g);
+    const p = g.players[0];
+    const capital = addCity(g, 0, 4, 8, "Belgrade", true);
+    const linked = addCity(g, 0, 9, 8, "Nis");
+    linked.pop = 6;
+    for (let c = 5; c <= 8; c++) Object.assign(g.tile(c, 8), {
+      terrain: "PLAINS", owner: 0, feature: null,
+    });
+    p.techs.add("THE_WHEEL");
+    const farmTile = g.tile(5, 8);
+    farmTile.improvement = "FARM";
+    const yieldBefore = g.tileYield(farmTile);
+    const worker = addUnit(g, "WORKER", 0, farmTile.c, farmTile.r);
+    const started = g.startImprovement(worker, "ROAD");
+    for (let i = 0; i < IMPROVEMENT.ROAD.turns; i++) g.progressWorkers(p);
+    const coexistence = { started, road: farmTile.road, improvement: farmTile.improvement,
+      yieldBefore, yieldAfter: g.tileYield(farmTile) };
+
+    for (let c = 6; c <= 8; c++) g.tile(c, 8).road = true;
+    const connected = g.roadNetwork(0);
+    const economy = g.empireEconomy(0);
+    const expectedIncome = INFRASTRUCTURE.connectionBaseGold +
+      Math.floor(linked.pop / INFRASTRUCTURE.populationPerGold);
+
+    const hill = g.tile(6, 8);
+    hill.terrain = "HILLS";
+    const warrior = addUnit(g, "WARRIOR", 0, capital.c, capital.r);
+    const roadMoveCost = g.moveCost(warrior, hill.c, hill.r);
+    hill.road = false;
+    const broken = g.roadNetwork(0);
+    hill.road = true;
+    hill.owner = 1;
+    const foreignBorder = g.roadNetwork(0);
+    hill.owner = 0;
+
+    const restored = Game.deserialize(g.serialize());
+    const restoredFarm = restored.tile(farmTile.c, farmTile.r);
+    const legacy = JSON.parse(g.serialize());
+    const legacyTile = legacy.map.tiles.find(t => t.c === 7 && t.r === 8);
+    delete legacyTile.road;
+    legacyTile.improvement = "ROAD";
+    legacy.v = 2;
+    const migrated = Game.deserialize(JSON.stringify(legacy)).tile(7, 8);
+    return JSON.stringify({
+      coexistence,
+      connected: { cityIds: [...connected.cityIds], capitalId: capital.id, linkedId: linked.id,
+        income: connected.income, connectedCities: connected.connectedCities.length },
+      economy: { connectionGold: economy.connectionGold, grossGold: economy.grossGold,
+        grossWithoutConnection: economy.grossGold - economy.connectionGold,
+        connectedCities: economy.connectedCities, connectableCities: economy.connectableCities },
+      expectedIncome, roadMoveCost,
+      broken: { linked: broken.cityIds.has(linked.id), income: broken.income },
+      foreignBorder: { linked: foreignBorder.cityIds.has(linked.id), income: foreignBorder.income },
+      restored: { road: restoredFarm.road, improvement: restoredFarm.improvement },
+      migrated: { road: migrated.road, improvement: migrated.improvement },
+    });
+  `));
+
+  assert.deepEqual(result.coexistence, {
+    started: true, road: true, improvement: "FARM",
+    yieldBefore: { food: 2, prod: 1, gold: 0 },
+    yieldAfter: { food: 2, prod: 1, gold: 0 },
+  });
+  assert.deepEqual(result.connected.cityIds, [result.connected.capitalId, result.connected.linkedId]);
+  assert.equal(result.connected.income, 4);
+  assert.equal(result.connected.connectedCities, 2);
+  assert.equal(result.economy.connectionGold, result.expectedIncome);
+  assert.equal(result.economy.grossGold - result.economy.grossWithoutConnection, result.expectedIncome);
+  assert.deepEqual(
+    { connectedCities: result.economy.connectedCities, connectableCities: result.economy.connectableCities },
+    { connectedCities: 1, connectableCities: 1 },
+  );
+  assert.equal(result.roadMoveCost, 1);
+  assert.deepEqual(result.broken, { linked: false, income: 0 });
+  assert.deepEqual(result.foreignBorder, { linked: false, income: 0 });
+  assert.deepEqual(result.restored, { road: true, improvement: "FARM" });
+  assert.deepEqual(result.migrated, { road: true, improvement: null });
+});
+
+test("AI Workers coordinate deterministic construction of a capital corridor", () => {
+  const simulate = () => JSON.parse(evaluate(loadGameContext(), `
+    ${controlledWorldSource}
+    const g = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 43023,
+      mapW: 20, mapH: 16, mapType: "peninsula", noMinors: true, noBarbs: true });
+    resetWorld(g);
+    for (const tile of g.map.tiles) tile.terrain = "MOUNTAIN";
+    const p = g.players[0];
+    const capital = addCity(g, 0, 3, 8, "Belgrade", true);
+    const destination = addCity(g, 0, 9, 8, "Skopje");
+    destination.pop = 4;
+    for (let c = 4; c <= 8; c++) Object.assign(g.tile(c, 8), {
+      terrain: "PLAINS", owner: 0, feature: null,
+    });
+    p.techs.add("THE_WHEEL");
+    const workers = [addUnit(g, "WORKER", 0, 4, 8), addUnit(g, "WORKER", 0, 8, 8)];
+    const assignments = [];
+    let duplicateAssignments = 0;
+    for (let step = 0; step < 18 && !g.roadNetwork(0).cityIds.has(destination.id); step++) {
+      workers.forEach(worker => worker.resetTurn());
+      AI.takeTurn(g, p);
+      const active = workers.filter(worker => worker.building && worker.building.type === "ROAD")
+        .map(worker => worker.c + "," + worker.r).sort();
+      if (new Set(active).size !== active.length) duplicateAssignments++;
+      assignments.push(active.join("|"));
+      g.progressWorkers(p);
+    }
+    const network = g.roadNetwork(0);
+    return JSON.stringify({ assignments, duplicateAssignments,
+      roadColumns: [4, 5, 6, 7, 8].filter(c => g.tile(c, 8).road),
+      connected: network.cityIds.has(destination.id), income: network.income,
+      plansRemaining: g.roadConnectionPlans(0).length,
+      workers: workers.map(worker => ({ c: worker.c, r: worker.r,
+        building: worker.building && worker.building.type })),
+    });
+  `));
+
+  const first = simulate();
+  const second = simulate();
+  assert.deepEqual(second, first, "fixed inputs should produce the same Worker assignment history");
+  assert.equal(first.duplicateAssignments, 0, "Workers must never claim one road tile together");
+  assert.deepEqual(first.roadColumns, [4, 5, 6, 7, 8]);
+  assert.equal(first.connected, true);
+  assert.equal(first.income, 3);
+  assert.equal(first.plansRemaining, 0);
 });
 
 test("long AI simulations preserve core state invariants", () => {
@@ -1289,8 +1421,9 @@ test("capturing the last city resets production and retires defeated-player stat
   assert.deepEqual(result.defeatedEconomy, {
     cities: 0, population: 0, units: 0, freeUnits: 4,
     food: 0, production: 0, science: 0, culture: 0, faith: 0,
-    cityGold: 0, goldenAgeGold: 0, tradeGold: 0, guildGold: 0,
+    cityGold: 0, goldenAgeGold: 0, connectionGold: 0, tradeGold: 0, guildGold: 0,
     carsijaGold: 0, cityStateGold: 0, titheGold: 0,
+    connectedCities: 0, connectableCities: 0,
     maintenance: 0, grossGold: 0, netGold: 0,
   });
 });
@@ -1646,7 +1779,7 @@ test("save round-trips preserve the exact deterministic future", () => {
     });
   `));
 
-  assert.equal(result.version, 2);
+  assert.equal(result.version, 3);
   assert.ok(Number.isInteger(result.rngState));
   assert.equal(result.stats.routes, 3);
   assert.equal(result.exact, true);

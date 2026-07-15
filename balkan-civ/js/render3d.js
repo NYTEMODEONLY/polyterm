@@ -656,7 +656,9 @@ class Renderer3D {
     const vis = game.players[game.viewer].visible;
     const S = this.hexSize;
     const pos = [], col = [];
-    const road = new THREE.Color("#5a3c1e"), farm = new THREE.Color("#f0dc78");
+    const road = new THREE.Color("#5a3c1e"), connectedRoad = new THREE.Color("#b57d37");
+    const farm = new THREE.Color("#f0dc78");
+    const connected = game.roadNetwork ? game.roadNetwork(game.viewer).tiles : new Set();
     const quad = (x1, z1, x2, z2, w, y, c) => {
       // strip of width w from (x1,z1) to (x2,z2) at height y
       let px = -(z2 - z1), pz = x2 - x1;
@@ -666,23 +668,26 @@ class Renderer3D {
       this._pushTri(pos, col, [x1 - px, y, z1 - pz], [x2 + px, y, z2 + pz], [x1 + px, y, z1 + pz], c);
     };
     for (const t of game.map.tiles) {
-      if (!t.improvement) continue;
+      if (!t.improvement && !t.road) continue;
       const v = vis[game.map.idx(t.c, t.r)];
       if (v === 0) continue;
       const [wx, wz] = HEX.toPixel(t.c, t.r, S);
       const y = ELEV3D[t.terrain] + 0.3;
-      if (t.improvement === "ROAD") {
-        const c = v === 1 ? road.clone().multiplyScalar(0.6) : road;
+      if (t.road) {
+        const base = connected.has(game.map.idx(t.c, t.r)) ? connectedRoad : road;
+        const c = v === 1 ? base.clone().multiplyScalar(0.6) : base;
+        const roadY = y + 0.025;
         let any = false;
         for (const [nc, nr] of HEX.neighbors(t.c, t.r)) {
           const n = game.tile(nc, nr);
-          if (!n || (n.improvement !== "ROAD" && !n.city)) continue;
+          if (!n || !vis[game.map.idx(nc, nr)] || (!n.road && !n.city)) continue;
           const [nx, nz] = HEX.toPixel(nc, nr, S);
-          quad(wx, wz, (wx + nx) / 2, (wz + nz) / 2, S * 0.18, y, c);
+          quad(wx, wz, (wx + nx) / 2, (wz + nz) / 2, S * 0.18, roadY, c);
           any = true;
         }
-        if (!any) quad(wx - S * 0.15, wz, wx + S * 0.15, wz, S * 0.18, y, c);
-      } else if (t.improvement === "FARM") {
+        if (!any) quad(wx - S * 0.15, wz, wx + S * 0.15, wz, S * 0.18, roadY, c);
+      }
+      if (t.improvement === "FARM") {
         const c = v === 1 ? farm.clone().multiplyScalar(0.6) : farm;
         for (const dz of [-0.2, 0, 0.2]) {
           quad(wx - S * 0.34, wz + (dz + 0.26) * S, wx + S * 0.34, wz + (dz + 0.26) * S, S * 0.07, y, c);
@@ -1110,7 +1115,8 @@ class Renderer3D {
     let impHash = 0;
     for (let i = 0; i < game.map.tiles.length; i++) {
       const t = game.map.tiles[i];
-      if (t.improvement) impHash = (impHash * 31 + i * 3 + (t.improvement === "ROAD" ? 1 : t.improvement === "FARM" ? 2 : 3)) >>> 0;
+      impHash = (impHash * 31 + (t.road ? 1 : 0) +
+        (t.improvement === "FARM" ? 2 : t.improvement === "MINE" ? 3 : 0)) >>> 0;
     }
     if (visChanged || ownChanged) {
       this._recolor(game);
@@ -1119,7 +1125,7 @@ class Renderer3D {
     }
     if (visChanged) this._rebuildShroud(game);
     if (visChanged || ownChanged) this._rebuildBorders(game);
-    if (visChanged || impHash !== this._impHash) {
+    if (visChanged || ownChanged || impHash !== this._impHash) {
       this._rebuildImprovements(game);
       this._impHash = impHash;
     }

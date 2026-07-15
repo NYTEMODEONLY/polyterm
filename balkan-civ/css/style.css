@@ -153,6 +153,10 @@ button:disabled { opacity: 0.4; cursor: default; }
 .meter-track > span { display: block; height: 100%; background: #75ad68; }
 .meter-track.production > span { background: #c99e45; }
 .city-vitals { margin-top: 5px; font-size: 11px; }
+.city-connection { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; padding-top: 5px;
+  border-top: 1px solid #3a4744; font-size: 11px; }
+.city-connection.connected b { color: #d8b66a; }
+.city-connection.unlinked { color: #9c9180; }
 .city-blockade { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 7px;
   margin-top: 7px; padding: 6px 7px; color: #f4d5c9; background: rgba(146,55,40,0.24);
   border-left: 3px solid #de684b; font-size: 11px; }
@@ -332,6 +336,7 @@ button:disabled { opacity: 0.4; cursor: default; }
 .empire-production span, .empire-order b, .empire-order span, .empire-strength b,
 .empire-strength span, .empire-moves b, .empire-moves span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .empire-primary strong { color: #e7d9b6; }
+.infrastructure-warning { color: #d2a75a; }
 .empire-primary span, .empire-pop span, .empire-production span, .empire-order span,
 .empire-strength span, .empire-moves span { margin-top: 2px; font-size: 10px; }
 .empire-pop b { display: block; }
@@ -690,5 +695,9 @@ button:disabled { opacity: 0.4; cursor: default; }
   .command-bar { justify-content: stretch; overflow-x: hidden; }
   .command-bar button { min-width: 0; flex: 1 1 0; }
   #btn-endturn { min-width: 0; flex: 1.9 1 0; }
+  #unit-actions { display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; overflow-x: visible; }
+  .unit-action-group { width: 100%; min-width: 0; grid-template-columns: 14px minmax(0, 1fr); }
+  .unit-action-buttons { min-width: 0; flex-wrap: wrap; }
+  #unit-actions button { min-width: 0; flex: 1 1 auto; }
   #advisor { bottom: 218px; }
 }

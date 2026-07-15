@@ -49,6 +49,7 @@ class Renderer {
     this.hoverTile = null;   // [c, r] under the cursor
     this.previewPath = null; // path preview for the selected unit
     this.showYields = false;
+    this.connectedRoads = new Set();
     this.dirty = true;
   }
 
@@ -77,6 +78,7 @@ class Renderer {
     ctx.fillRect(0, 0, W, H);
     const vis = game.players[game.viewer].visible;
     const s = this.size;
+    this.connectedRoads = game.roadNetwork ? game.roadNetwork(game.viewer).tiles : new Set();
 
     // visible tile range
     for (let r = 0; r < game.map.h; r++) {
@@ -470,15 +472,16 @@ class Renderer {
         ctx.closePath(); ctx.fill();
       }
     }
-    if (t.improvement === "ROAD") {
+    if (t.road) {
       // connect toward neighbouring roads/cities
-      ctx.strokeStyle = "rgba(90,60,30,0.85)";
+      const connected = this.connectedRoads.has(game.map.idx(t.c, t.r));
+      ctx.strokeStyle = connected ? "rgba(181,125,55,0.96)" : "rgba(90,60,30,0.82)";
       ctx.lineWidth = Math.max(2, s * 0.12);
       ctx.lineCap = "round";
       let drewAny = false;
       for (const [nc, nr] of HEX.neighbors(t.c, t.r)) {
         const n = game.tile(nc, nr);
-        if (!n || (n.improvement !== "ROAD" && !n.city)) continue;
+        if (!n || !game.players[game.viewer].visible[game.map.idx(nc, nr)] || (!n.road && !n.city)) continue;
         const [nx, ny] = this.worldToScreen(nc, nr);
         ctx.beginPath();
         ctx.moveTo(sx, sy);
@@ -491,7 +494,8 @@ class Renderer {
         ctx.arc(sx, sy, s * 0.14, 0, Math.PI * 2);
         ctx.stroke();
       }
-    } else if (t.improvement === "FARM") {
+    }
+    if (t.improvement === "FARM") {
       ctx.strokeStyle = "rgba(240,220,120,0.75)";
       ctx.lineWidth = Math.max(1, s * 0.05);
       for (const dy of [-0.18, 0, 0.18]) {

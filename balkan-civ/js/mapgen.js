@@ -73,7 +73,8 @@ function generateMap(w, h, seed, mapType = "peninsula") {
 
       tiles[idx(c, r)] = {
         c, r, terrain, feature, resource: null, ruin: false,
-        improvement: null,           // FARM / MINE / ROAD
+        improvement: null,           // FARM / MINE
+        road: false,                 // roads coexist with productive improvements
         owner: -1, city: null,       // city object occupying this tile
         workedBy: null,              // city id working this tile
       };

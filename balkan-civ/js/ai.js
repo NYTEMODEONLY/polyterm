@@ -620,11 +620,16 @@ const AI = (() => {
     const target = campaignTarget(game, p);
     const campaign = { target, overseas: campaignIsOverseas(game, p, target),
       approaches: new Set(), navalApproaches: new Set(), escortAssigned: false,
-      blockaderAssigned: false, defenseApproaches: new Set() };
+      blockaderAssigned: false, defenseApproaches: new Set(), roadClaims: new Map() };
+    for (const worker of myUnits.filter(unit => unit.type === "WORKER")) {
+      const destination = worker.building && worker.building.type === "ROAD" ? [worker.c, worker.r]
+        : worker.path && worker.path.length ? worker.path[worker.path.length - 1] : null;
+      if (destination) campaign.roadClaims.set(destination[0] + "," + destination[1], worker.id);
+    }
     for (const u of myUnits) {
       if (!game.units.includes(u)) continue; // died mid-loop
       if (u.type === "SETTLER") runSettler(game, p, u);
-      else if (u.type === "WORKER") runWorker(game, p, u);
+      else if (u.type === "WORKER") runWorker(game, p, u, campaign);
       else if (u.def.caravan) runCaravan(game, p, u);
       else if (u.def.great) runGreatPerson(game, p, u);
       else if (u.type === "MISSIONARY") runMissionary(game, p, u);
@@ -670,8 +675,37 @@ const AI = (() => {
     }
   }
 
-  function runWorker(game, p, u) {
+  function runWorker(game, p, u, campaign = null) {
     if (u.building) return; // keep working
+    if (p.hasTech("THE_WHEEL")) {
+      const claims = campaign ? campaign.roadClaims : new Map();
+      const candidates = [];
+      for (const [planIndex, plan] of game.roadConnectionPlans(p.index).entries()) {
+        plan.missing.forEach((tile, segmentIndex) => candidates.push({ tile, planIndex, segmentIndex }));
+      }
+      candidates.sort((a, b) =>
+        HEX.distance(u.c, u.r, a.tile.c, a.tile.r) - HEX.distance(u.c, u.r, b.tile.c, b.tile.r) ||
+        a.planIndex - b.planIndex || a.segmentIndex - b.segmentIndex ||
+        a.tile.r - b.tile.r || a.tile.c - b.tile.c);
+      const task = candidates.find(({ tile }) => {
+        const key = tile.c + "," + tile.r;
+        const claimedBy = claims.get(key);
+        if (claimedBy !== undefined && claimedBy !== u.id) return false;
+        if (game.unitsAt(tile.c, tile.r).some(other => other.id !== u.id)) return false;
+        return game.findPath(u, tile.c, tile.r) !== null;
+      });
+      if (task) {
+        const key = task.tile.c + "," + task.tile.r;
+        claims.set(key, u.id);
+        if (u.c === task.tile.c && u.r === task.tile.r) {
+          if (game.startImprovement(u, "ROAD")) return;
+        } else if (game.moveUnitTo(u, task.tile.c, task.tile.r)) {
+          if (u.c === task.tile.c && u.r === task.tile.r) game.startImprovement(u, "ROAD");
+          return;
+        }
+        if (claims.get(key) === u.id) claims.delete(key);
+      }
+    }
     const wanted = (t) => {
       if (t.owner !== p.index || t.city || t.feature) return null;
       if (t.terrain === "HILLS" && t.improvement !== "MINE" && p.hasTech("MINING")) return "MINE";
