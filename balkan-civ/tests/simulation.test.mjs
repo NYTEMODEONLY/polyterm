@@ -76,11 +76,30 @@ test("long AI simulations preserve core state invariants", () => {
           const tile = g.tile(city.c, city.r);
           if (!tile || tile.city !== city || city.owner < 0 || !g.players[city.owner])
             failures.push(seed + ": invalid city ownership/reference");
+          if (!city.producing && city.queue.length)
+            failures.push(seed + ": city has an orphaned production queue");
         }
         for (const p of g.players) {
           if (![p.gold, p.scienceStored, p.faith, p.culture].every(Number.isFinite))
             failures.push(seed + ": non-finite player economy");
-          for (const enemy of p.atWarWith) if (!g.players[enemy]) failures.push(seed + ": invalid war target");
+          for (const enemy of p.atWarWith) {
+            if (!g.players[enemy] || !g.players[enemy].alive) failures.push(seed + ": invalid war target");
+            else if (!g.players[enemy].atWarWith.has(p.index)) failures.push(seed + ": asymmetric war");
+          }
+          for (const ally of p.pacts) {
+            if (!g.players[ally] || !g.players[ally].alive) failures.push(seed + ": invalid pact target");
+            else if (!g.players[ally].pacts.has(p.index)) failures.push(seed + ": asymmetric pact");
+          }
+          for (const deal of p.deals) if (!g.players[deal.other] || !g.players[deal.other].alive)
+            failures.push(seed + ": deal with defeated player");
+          if (!p.alive && (p.atWarWith.size || p.pacts.size || p.deals.length))
+            failures.push(seed + ": defeated player retained diplomatic state");
+        }
+        for (const route of g.routes) {
+          const from = g.cities.find(c => c.id === route.fromId);
+          const to = g.cities.find(c => c.id === route.toId);
+          if (!g.players[route.owner] || !g.players[route.owner].alive || !from || !to || from.owner !== route.owner)
+            failures.push(seed + ": invalid trade route state");
         }
         if (failures.length) break;
       }
@@ -191,6 +210,56 @@ test("combat reports preserve damage accounting and notify human defenders", () 
   assert.equal(result.report.attackerHpAfter, 100 - result.report.counterDamage);
   assert.equal(result.report.targetHpAfter, 100 - result.report.damage);
   assert.match(result.defenderNotices.at(-1), /Serbia Warrior dealt \d+ damage/);
+});
+
+test("capturing the last city resets production and retires defeated-player state", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    const g = new Game({ playerCiv: "SERBIA", numOpponents: 2, seed: 8844,
+      mapW: 28, mapH: 22, mapType: "peninsula", noMinors: true, noBarbs: true });
+    for (const p of g.players) {
+      const settler = g.units.find(u => u.owner === p.index && u.type === "SETTLER");
+      if (!g.foundCity(settler)) throw new Error("could not found conquest test city");
+    }
+    const home = g.cities.find(c => c.owner === 0);
+    const captured = g.cities.find(c => c.owner === 1);
+    const survivor = g.cities.find(c => c.owner === 2);
+    home.producing = { kind: "unit", key: "WARRIOR" };
+    captured.producing = { kind: "unit", key: "WARRIOR" };
+    captured.queue = [{ kind: "building", key: "MONUMENT" }];
+    captured.prodStored = 31;
+
+    g.players[0].atWarWith.add(1); g.players[1].atWarWith.add(0);
+    g.players[1].pacts.add(2); g.players[2].pacts.add(1);
+    g.players[1].deals.push({ give: "WINE", get: "SALT", other: 2, ends: 30 });
+    g.players[2].deals.push({ give: "SALT", get: "WINE", other: 1, ends: 30 });
+    g.offerPeace(1, 0);
+    g.routes.push({ owner: 1, fromId: captured.id, toId: survivor.id, path: [], ends: 30 });
+    g.routes.push({ owner: 2, fromId: survivor.id, toId: captured.id, path: [], ends: 30 });
+
+    const attacker = g.units.find(u => u.owner === 0 && !u.isCivilian);
+    g.captureCity(captured, attacker);
+    const defeated = g.players[1];
+    return JSON.stringify({
+      captured: { owner: captured.owner, producing: captured.producing,
+        queue: captured.queue, prodStored: captured.prodStored },
+      pendingCityIds: g.pendingOrders(0).cities.map(c => c.id),
+      defeated: { alive: defeated.alive, wars: [...defeated.atWarWith],
+        pacts: [...defeated.pacts], deals: defeated.deals },
+      survivor: { atWar: g.players[0].atWarWith.has(1), pact: g.players[2].pacts.has(1),
+        deal: g.players[2].deals.some(d => d.other === 1) },
+      routes: g.routes.map(r => ({ owner: r.owner, fromId: r.fromId, toId: r.toId })),
+      staleOffers: g.peaceOffers.filter(o => o.from === 1 || o.to === 1).length,
+      capturedId: captured.id, survivorId: survivor.id,
+    });
+  `));
+
+  assert.deepEqual(result.captured, { owner: 0, producing: null, queue: [], prodStored: 0 });
+  assert.deepEqual(result.pendingCityIds, [result.capturedId]);
+  assert.deepEqual(result.defeated, { alive: false, wars: [], pacts: [], deals: [] });
+  assert.deepEqual(result.survivor, { atWar: false, pact: false, deal: false });
+  assert.deepEqual(result.routes, [{ owner: 2,
+    fromId: result.survivorId, toId: result.capturedId }]);
+  assert.equal(result.staleOffers, 0);
 });
 
 test("pending-order snapshots track research, production, and unit decisions", () => {

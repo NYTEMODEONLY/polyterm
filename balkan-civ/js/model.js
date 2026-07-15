@@ -1168,6 +1168,8 @@ class Game {
     city.hp = Math.floor(city.maxHp * 0.4);
     city.pop = Math.max(1, city.pop - 1);
     city.producing = null;
+    city.queue = [];
+    city.prodStored = 0;
     // reassign tile ownership
     for (const tile of this.map.tiles) if (tile.workedBy === city.id) tile.workedBy = null;
     for (const tile of this.map.tiles) {
@@ -1196,10 +1198,32 @@ class Game {
     if (!hasCities && !hasSettlers) {
       p.alive = false;
       this.units = this.units.filter(u => u.owner !== playerIdx);
+      this.retirePlayerState(playerIdx);
       this.notify(p.isMinor ? `The city-state of ${p.civ.name} has been destroyed!`
                             : `${p.civ.name} has been destroyed!`, -1);
       this.checkVictory();
     }
+  }
+
+  retirePlayerState(playerIdx) {
+    const retired = this.players[playerIdx];
+    for (const p of this.players) {
+      p.atWarWith.delete(playerIdx);
+      p.pacts.delete(playerIdx);
+      p.deals = p.deals.filter(d => d.other !== playerIdx);
+      delete p.warWeariness[playerIdx];
+      delete p.attitude[playerIdx];
+      delete p.influence[playerIdx];
+    }
+    retired.atWarWith.clear();
+    retired.pacts.clear();
+    retired.deals = [];
+    retired.warWeariness = {};
+    retired.attitude = {};
+    retired.influence = {};
+    this.routes = this.routes.filter(r => r.owner !== playerIdx);
+    this.peaceOffers = this.peaceOffers.filter(o => o.from !== playerIdx && o.to !== playerIdx);
+    this.dirtyHappiness();
   }
 
   // ---------- movement API ----------
