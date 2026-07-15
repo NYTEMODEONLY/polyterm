@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Balkan Civilizations</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>⚔️</text></svg>">
+<link rel="stylesheet" href="css/style.css?v=6">
+</head>
+<body>
+
+<!-- ============ start screen ============ -->
+<div id="start-screen">
+  <header class="start-header">
+    <div class="title-kicker">A Balkan 4X strategy game</div>
+    <h1>⚔ Balkan Civilizations ⚔</h1>
+    <div class="subtitle">Forge an empire from the Adriatic to the Black Sea</div>
+  </header>
+  <div class="start-layout">
+    <main class="start-main">
+      <div class="section-heading">
+        <div><span class="eyebrow">Choose your realm</span><h2>Nine civilizations. Twenty-seven leaders.</h2></div>
+        <span class="dim">Select a leader to change your starting trait.</span>
+      </div>
+      <div id="civ-cards"></div>
+    </main>
+    <aside class="start-panel">
+      <div class="panel-eyebrow">Skirmish setup</div>
+      <div id="selected-civ-summary"></div>
+      <div id="start-options">
+        <div class="option-grid">
+          <label>Humans
+            <select id="sel-humans" title="Hotseat: extra human players get random civs and take turns on this device">
+              <option value="1" selected>1</option>
+              <option value="2">2 (hotseat)</option>
+              <option value="3">3 (hotseat)</option>
+            </select>
+          </label>
+          <label>Opponents
+            <select id="sel-opponents">
+              <option value="3">3</option>
+              <option value="4" selected>4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="8">8</option>
+            </select>
+          </label>
+          <label>Map size
+            <select id="sel-mapsize">
+              <option value="small">Small</option>
+              <option value="standard" selected>Standard</option>
+              <option value="large">Large</option>
+            </select>
+          </label>
+          <label>World
+            <select id="sel-maptype">
+              <option value="peninsula" selected>Peninsula</option>
+              <option value="archipelago">Archipelago</option>
+              <option value="mirror">Mirror (fair)</option>
+              <option value="custom" id="opt-custom">Custom map</option>
+            </select>
+          </label>
+          <label>Speed
+            <select id="sel-speed">
+              <option value="quick">Quick</option>
+              <option value="standard" selected>Standard</option>
+              <option value="epic">Epic</option>
+            </select>
+          </label>
+          <label>Difficulty
+            <select id="sel-difficulty">
+              <option value="easy">Prince</option>
+              <option value="normal" selected>King</option>
+              <option value="hard">Emperor</option>
+            </select>
+          </label>
+        </div>
+        <label class="toggle-row" title="Barbarian camps spawn raiders in the wilds">
+          <input type="checkbox" id="chk-barbs" checked> <span>Barbarian clans</span>
+        </label>
+        <button id="btn-start">⚔ Start New Game</button>
+        <button id="btn-continue">📜 Continue Saved Game</button>
+        <div class="secondary-actions">
+          <button id="btn-campaign">🎖️ Campaign</button>
+          <button id="btn-editor">🖌️ Map Editor</button>
+          <button id="btn-host">🌐 Host</button>
+          <button id="btn-join">🌐 Join</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+  <div id="scenario-strip">
+    <h2>📜 Campaign Scenarios</h2>
+    <div id="scenario-cards"></div>
+  </div>
+  <div class="dim" style="margin-top:14px">
+    Controls: click to select · click a highlighted hex to move/attack · drag to pan · wheel to zoom ·
+    Enter = end turn · T = tech · D = diplomacy · F = fortify · N = next unit<br>
+    Research <b>Sailing</b> to embark onto coast and build Galleys; <b>Compass</b> opens the deep sea and the War Galleass.
+  </div>
+</div>
+
+<!-- ============ in-game UI ============ -->
+<div id="game-ui">
+  <div id="topbar">
+    <div class="status-strip">
+      <span id="stat-turn"></span>
+      <span id="stat-era"></span>
+      <span id="stat-gold"></span>
+      <span id="stat-happy"></span>
+      <span id="stat-sci" style="cursor:pointer" title="Open tech tree"></span>
+      <span id="stat-faith" style="cursor:pointer" title="Open religion overview"></span>
+      <span id="stat-culture" style="cursor:pointer" title="Open social policies (P)"></span>
+      <span id="stat-score"></span>
+    </div>
+    <div class="command-bar">
+      <button id="btn-tech" title="Technology (T)"><span class="cmd-icon">🔬</span><span class="cmd-label">Tech</span></button>
+      <button id="btn-religion" title="Religion (R)"><span class="cmd-icon">☦️</span><span class="cmd-label">Religion</span></button>
+      <button id="btn-diplo" title="Diplomacy (D)"><span class="cmd-icon">🤝</span><span class="cmd-label">Diplomacy</span></button>
+      <button id="btn-spies" title="Espionage (E)"><span class="cmd-icon">🕵️</span><span class="cmd-label">Spies</span></button>
+      <button id="btn-pedia" title="Civilopedia (?)">📖</button>
+      <button id="btn-mute" title="Toggle sound effects">🔊</button>
+      <button id="btn-music" title="Toggle music">🎵</button>
+      <button id="btn-menu" title="Game menu">☰ <span class="cmd-label">Menu</span></button>
+      <button id="btn-endturn">End Turn ⏵</button>
+    </div>
+  </div>
+  <canvas id="map"></canvas>
+  <div id="map-controls" aria-label="Map controls">
+    <button id="btn-rot-left" title="Rotate map left (Q)">↶</button>
+    <button id="btn-rot-right" title="Rotate map right (W)">↷</button>
+    <span class="control-rule"></span>
+    <button id="btn-zoom-out" title="Zoom out">−</button>
+    <button id="btn-zoom-in" title="Zoom in">+</button>
+  </div>
+  <div id="attention"></div>
+  <div id="recap"></div>
+  <div id="minimap-wrap"><canvas id="minimap" width="200" height="150"></canvas></div>
+  <div id="unit-panel">
+    <div id="unit-info"></div>
+    <div id="unit-actions"></div>
+  </div>
+  <div id="city-panel"></div>
+  <div id="notif-list"></div>
+</div>
+
+<div id="tooltip"></div>
+<div id="game-banner"></div>
+<div id="advisor" style="display:none">
+  <div id="advisor-head"><span id="advisor-title"></span><button id="advisor-close" title="Dismiss">✕</button></div>
+  <div id="advisor-body"></div>
+  <label id="advisor-off"><input type="checkbox" id="advisor-off-chk"> Don't show advisor tips</label>
+</div>
+
+<!-- ============ modals ============ -->
+<div id="tech-modal" class="modal">
+  <div class="modal-box"><h2>🔬 Technology</h2><div id="tech-body"></div></div>
+</div>
+<div id="diplo-modal" class="modal">
+  <div class="modal-box"><h2>🤝 Diplomacy</h2><div id="diplo-body"></div></div>
+</div>
+<div id="religion-modal" class="modal">
+  <div class="modal-box"><h2>☦️ Religion</h2><div id="religion-body"></div></div>
+</div>
+<div id="founding-modal" class="modal">
+  <div class="modal-box"><h2>🕊️ Found a Religion</h2><div id="founding-body"></div></div>
+</div>
+<div id="spy-modal" class="modal">
+  <div class="modal-box"><h2>🕵️ Espionage</h2><div id="spy-body"></div></div>
+</div>
+<div id="policy-modal" class="modal">
+  <div class="modal-box wide"><h2>🎭 Social Policies</h2><div id="policy-body"></div></div>
+</div>
+<div id="congress-modal" class="modal">
+  <div class="modal-box"><h2>🏛️ World Congress</h2><div id="congress-body"></div></div>
+</div>
+<div id="campaign-modal" class="modal">
+  <div class="modal-box wide"><h2>🎖️ Campaign — A Thousand Years of the Balkans</h2><div id="campaign-body"></div></div>
+</div>
+<div id="peace-modal" class="modal">
+  <div class="modal-box"><h2>☮️ Peace Proposal</h2><div id="peace-body"></div></div>
+</div>
+<div id="war-modal" class="modal">
+  <div class="modal-box"><h2>⚔️ Declare War?</h2><div id="war-body"></div></div>
+</div>
+<div id="pedia-modal" class="modal">
+  <div class="modal-box wide"><h2>📖 Civilopedia</h2>
+    <input id="pedia-search" type="text" placeholder="🔍 Search units, buildings, techs, policies…" autocomplete="off">
+    <div id="pedia-tabs"></div>
+    <div id="pedia-body"></div>
+  </div>
+</div>
+<div id="log-modal" class="modal">
+  <div class="modal-box"><h2>📜 Message Log</h2><div id="log-body"></div></div>
+</div>
+<div id="menu-modal" class="modal">
+  <div class="modal-box" id="menu-body"></div>
+</div>
+<div id="settings-modal" class="modal">
+  <div class="modal-box"><h2>⚙️ Settings</h2><div id="settings-body"></div></div>
+</div>
+<input type="file" id="file-import" accept=".json,application/json" style="display:none">
+<div id="handoff-modal" class="modal" style="background:#0d1b2a">
+  <div class="modal-box" id="handoff-body" style="text-align:center"></div>
+</div>
+<div id="net-modal" class="modal">
+  <div class="modal-box" id="net-body"></div>
+</div>
+<div id="net-banner">🌐</div>
+
+<!-- ============ map editor ============ -->
+<div id="editor-screen">
+  <div id="editor-toolbar">
+    <b>🖌️ Map Editor</b>
+    <span id="editor-palette"></span>
+    <span class="spacer"></span>
+    <button id="ed-random">🎲 Randomize</button>
+    <button id="ed-clear">🌊 All Sea</button>
+    <button id="ed-save">💾 Save &amp; Use</button>
+    <button id="ed-exit">✕ Exit</button>
+  </div>
+  <canvas id="editor-canvas"></canvas>
+  <div id="editor-minimap-wrap"><canvas id="editor-minimap" width="200" height="150"></canvas></div>
+  <div id="editor-hint" class="dim">Left-click / drag to paint · right-drag to pan · wheel to zoom ·
+    paint plenty of land or the civs won't fit!</div>
+</div>
+<div id="victory-modal" class="modal">
+  <div class="modal-box" id="victory-body"></div>
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/sound.js"></script>
+<script src="js/hex.js"></script>
+<script src="js/mapgen.js"></script>
+<script src="js/model.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/vendor/three.min.js"></script>
+<script src="js/unitart.js?v=1"></script>
+<script src="js/render.js?v=6"></script>
+<script src="js/render3d.js?v=6"></script>
+<script src="js/net.js"></script>
+<script src="js/editor.js"></script>
+<script src="js/ui.js?v=7"></script>
+<script>
+  window.addEventListener("DOMContentLoaded", () => UI.init());
+</script>
+</body>
+</html>

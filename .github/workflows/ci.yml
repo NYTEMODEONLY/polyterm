@@ -65,6 +65,9 @@ jobs:
           print("Import smoke tests passed")
           PY
 
+      - name: Balkan Civilizations deterministic simulations
+        run: node --test balkan-civ/tests/*.test.mjs
+
   tests:
     name: Tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
