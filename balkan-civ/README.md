@@ -197,7 +197,10 @@ events, or AI choices.
   fortification, floating damage numbers, and sieges — cities bombard one
   besieger every turn, so bring catapults. Select a target for a **combat
   forecast** with damage ranges and a risk verdict before confirming the
-  strike; a battle report records the outcome, and attacks suffered during
+  strike. Expand its strength ledger to inspect health, experience, terrain,
+  formations, promotions, policies, leader traits, faith, generals, garrisons,
+  fortifications, and naval supply from the same formula that resolves the
+  attack; a battle report records the outcome, and attacks suffered during
   the AI turn appear in the defender's turn recap. Enemy land melee formations
   control adjacent ground and end movement on entry; visible controlled hexes
   are outlined in amber. Surround a land target with up to two additional

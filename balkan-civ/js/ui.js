@@ -546,6 +546,40 @@ const UI = (() => {
     return `<span class="combat-hp"><span style="width:${pct}%;background:${color}"></span></span>`;
   }
 
+  function combatNumber(value) {
+    const rounded = Math.round(value * 10) / 10;
+    return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+  }
+
+  function combatFactorValue(factor) {
+    if (factor.operation === "multiply") return `×${Math.round(factor.value * 100)}%`;
+    if (factor.operation === "flat") return `${factor.value >= 0 ? "+" : "−"}${combatNumber(Math.abs(factor.value))}`;
+    return `${factor.value >= 0 ? "+" : "−"}${Math.round(Math.abs(factor.value) * 100)}%`;
+  }
+
+  function combatStrengthLedger(label, breakdown) {
+    const rows = breakdown.factors.map(factor => `
+      <div class="combat-factor${factor.value < 0 || (factor.operation === "multiply" && factor.value < 1) ? " penalty" : ""}">
+        <span>${factor.label}</span><b>${combatFactorValue(factor)}</b>
+      </div>`).join("");
+    return `<section class="combat-ledger">
+      <header><span>${label}</span><strong>${combatNumber(breakdown.strength)}</strong></header>
+      <div class="combat-factor base"><span>Base strength</span><b>${combatNumber(breakdown.base)}</b></div>
+      ${rows || `<div class="combat-factor quiet"><span>No active modifiers</span></div>`}
+    </section>`;
+  }
+
+  function combatBreakdown(forecast) {
+    const expanded = window.innerWidth >= 700 ? " open" : "";
+    return `<details class="combat-breakdown"${expanded}>
+      <summary><span>Effective strength</span><b>${combatNumber(forecast.attackerBreakdown.strength)} <i>vs</i> ${combatNumber(forecast.defenderBreakdown.strength)}</b></summary>
+      <div class="combat-ledgers">
+        ${combatStrengthLedger("Attacker", forecast.attackerBreakdown)}
+        ${combatStrengthLedger("Defender", forecast.defenderBreakdown)}
+      </div>
+    </details>`;
+  }
+
   function combatVerdict(unit, forecast) {
     if (forecast.out[0] >= forecast.targetHp) return ["Decisive strike", "good"];
     if (!forecast.back) return ["No counterattack", "good"];
@@ -589,7 +623,7 @@ const UI = (() => {
         <span>${forecast.back ? `Take <b>${forecast.back[0]}–${forecast.back[1]}</b>` : "No retaliation"}</span>
         <strong class="${verdictClass}">${verdict}</strong>
       </div>
-      ${forecast.flankBonus ? `<div class="combat-tactic">Formation bonus · ${forecast.flankSupport} supporting unit${forecast.flankSupport === 1 ? "" : "s"} · +${Math.round(forecast.flankBonus * 100)}% strength</div>` : ""}
+      ${combatBreakdown(forecast)}
       <div class="combat-actions"><button class="combat-confirm">⚔ Attack</button><button class="combat-cancel">Cancel</button></div>`;
     panel.style.display = "block";
     panel.querySelector(".combat-close").onclick = hideCombatPreview;

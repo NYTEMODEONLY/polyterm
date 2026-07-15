@@ -102,6 +102,46 @@ test("fixed-seed AI simulations produce an identical strategic fingerprint", () 
   assert.equal(second, first);
 });
 
+test("content schemas require an explicit engine contract for every field and keyed effect", () => {
+  const schemas = JSON.parse(evaluate(loadGameContext(), `
+    const fields = values => [...new Set(values.flatMap(value => Object.keys(value)))].sort();
+    const leaders = Object.values(CIVS).filter(civ => Array.isArray(civ.leaders)).flatMap(civ => civ.leaders);
+    const policies = Object.values(POLICY_BRANCHES).flatMap(branch => Object.keys(branch.policies));
+    return JSON.stringify({
+      buildings: fields(Object.values(BUILDINGS)),
+      units: fields(Object.values(UNITS)),
+      leaders: fields(leaders),
+      beliefs: Object.keys(BELIEFS).sort(),
+      promotions: Object.keys(PROMOS).sort(),
+      policies: policies.sort(),
+      finishers: Object.keys(POLICY_BRANCHES).sort(),
+    });
+  `));
+
+  assert.deepEqual(schemas.buildings, ["blurb", "cityHp", "cityStr", "cost", "culture", "faith",
+    "food", "gold", "happy", "icon", "name", "prod", "requires", "sci", "tech", "wonder"]);
+  assert.deepEqual(schemas.units, ["blurb", "caravan", "charges", "civilian", "coastOnly", "cost", "cs",
+    "defendBonus", "faithCost", "great", "healOnKill", "icon", "missionary", "moves", "name", "naval",
+    "needs", "range", "replaces", "rs", "siege", "sight", "tech", "terrainBonus", "upgrade", "uu", "worker"]);
+  assert.deepEqual(schemas.leaders, ["attackBonus", "buildingProdBonus", "capitalGold", "cityCulture",
+    "cityFaith", "cityFood", "cityGold", "cityProd", "cityScience", "coastalFood", "coastalGold",
+    "cultureBonus", "defendCiv", "homeBonus", "leader", "randomAI", "roughBonus", "trait", "traitDesc",
+    "unitProdBonus", "vsCityBonus"]);
+  assert.deepEqual(schemas.beliefs, ["HEARTH", "SCHOLAR", "TITHE", "ZEAL"]);
+  assert.deepEqual(schemas.promotions,
+    ["AMPHIBIOUS", "BOARDING", "BOMBARDMENT", "BULWARK", "MEDIC", "MIGHT", "NAVIGATION", "PATHFINDER"]);
+  assert.deepEqual(schemas.policies, ["BAZAAR", "BROTHERHOOD", "CARAVANSERAI", "ELDERS", "FRESCOES",
+    "FRONTIERSMEN", "GUILDS", "GUSLARS", "HARVEST", "HEARTH", "HOMESTEAD", "ICONS", "MINTERS",
+    "PILGRIMS", "SYNOD", "WARRIOR_CULT"]);
+  assert.deepEqual(schemas.finishers, ["CARSIJA", "JUNAK", "SABOR", "ZADRUGA"]);
+
+  const modelSource = fs.readFileSync(path.join(gameRoot, "js", "model.js"), "utf8");
+  for (const key of [...schemas.beliefs, ...schemas.promotions, ...schemas.policies, ...schemas.finishers]) {
+    assert.ok(modelSource.includes(`"${key}"`) || modelSource.includes(`.${key}`),
+      `${key} is advertised by content data but has no explicit engine hook`);
+  }
+});
+
 test("AI war planning chooses one viable target and will not open a second front", () => {
   const result = JSON.parse(evaluate(loadGameContext(), `
     ${controlledWorldSource}
@@ -1020,6 +1060,82 @@ test("land melee flanking is capped, excludes support arms, and survives forecas
   assert.equal(result.attacked, true);
   assert.equal(result.report.flankSupport, 2);
   assert.equal(result.report.flankBonus, 0.2);
+});
+
+test("combat forecasts expose the authoritative unit, city, and supply modifier stacks", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    ${controlledWorldSource}
+    const g = new Game({ playerCiv: "ALBANIA", playerLeader: 0, fixedOpponents: ["MACEDONIA"],
+      leaders: [0, 1], numOpponents: 1, seed: 640073, mapW: 24, mapH: 18,
+      mapType: "peninsula", noMinors: true, noBarbs: true });
+    resetWorld(g);
+    g.happinessOf = () => 0;
+    const holy = addCity(g, 0, 5, 8, "Krujë", true);
+    const enemy = addCity(g, 1, 12, 8, "Ohrid", true);
+    g.players[0].religionId = 0; g.religions = [{ belief: "ZEAL" }]; holy.religion = 0;
+    g.players[0].policies.add("WARRIOR_CULT");
+
+    const attacker = addUnit(g, "STRADIOT", 0, 7, 8);
+    attacker.hp = 60; attacker.level = 2; attacker.promos.push("MIGHT");
+    const target = g.tile(8, 8);
+    target.terrain = "HILLS"; target.feature = "FOREST"; target.owner = 1;
+    const origin = g.tile(attacker.c, attacker.r);
+    origin.terrain = "HILLS"; origin.feature = "FOREST"; origin.owner = 0;
+    addUnit(g, "WARRIOR", 0, 8, 7);
+    addUnit(g, "SPEARMAN", 0, 7, 7);
+    addUnit(g, "GREAT_GENERAL", 0, 6, 8);
+    const defender = addUnit(g, "SAMUIL_GUARD", 1, 8, 8);
+    defender.hp = 80; defender.level = 1; defender.promos.push("BULWARK"); defender.fortified = true;
+    g.players[0].atWarWith.add(1); g.players[1].atWarWith.add(0);
+
+    const attackContext = { attacking: true, targetTile: target, ranged: false };
+    const attackerBreakdown = g.strengthBreakdown(attacker, attackContext);
+    const defenderBreakdown = g.strengthBreakdown(defender, { attacking: false });
+    const forecast = g.predictAttack(attacker, target.c, target.r);
+
+    enemy.pop = 7; enemy.buildings.push("WALLS", "CASTLE");
+    g.players[1].techs.add("CHIVALRY");
+    const garrison = addUnit(g, "PIKEMAN", 1, enemy.c, enemy.r);
+    const cityBreakdown = g.cityStrengthBreakdown(enemy);
+
+    const shipTile = g.tile(21, 15); shipTile.terrain = "COAST";
+    const ship = addUnit(g, "GALLEY", 0, shipTile.c, shipTile.r);
+    ship.unsuppliedTurns = NAVAL_SUPPLY.graceTurns + 1;
+    const supplyBreakdown = g.strengthBreakdown(ship, {});
+    return JSON.stringify({
+      attackerBreakdown, defenderBreakdown,
+      strengthOf: g.strengthOf(attacker, attackContext), forecast,
+      cityBreakdown, cityStrength: g.cityStrength(enemy), garrison: garrison.def.name,
+      supplyBreakdown, supplyStrength: g.strengthOf(ship, {}),
+    });
+  `));
+
+  assert.ok(Math.abs(result.attackerBreakdown.modifier - 2.2) < 1e-9);
+  assert.ok(Math.abs(result.attackerBreakdown.strength - 26.4) < 1e-9);
+  assert.equal(result.attackerBreakdown.strength, result.strengthOf);
+  assert.deepEqual(result.attackerBreakdown.factors.map(factor => factor.label), [
+    "Wounded (60 HP)", "Veteran level 2", "Might", "Formation (2 support)", "Warrior Cult",
+    "Lord of the Mountains", "Stradiot terrain", "Holy Warriors", "Great General",
+  ]);
+  assert.ok(Math.abs(result.defenderBreakdown.modifier - 2.3) < 1e-9);
+  assert.ok(Math.abs(result.defenderBreakdown.strength - 29.9) < 1e-9);
+  assert.deepEqual(result.defenderBreakdown.factors.map(factor => factor.label), [
+    "Wounded (80 HP)", "Veteran level 1", "Bulwark", "Hills terrain", "Forest", "Fortified",
+    "Samuil's Guard defense", "Warrior Prince",
+  ]);
+  assert.equal(result.forecast.attackerBreakdown.strength, result.attackerBreakdown.strength);
+  assert.equal(result.forecast.defenderBreakdown.strength, result.defenderBreakdown.strength);
+
+  const explainedCityStrength = result.cityBreakdown.base +
+    result.cityBreakdown.factors.reduce((sum, factor) => sum + factor.value, 0);
+  assert.ok(Math.abs(result.cityBreakdown.strength - explainedCityStrength) < 1e-9);
+  assert.equal(result.cityBreakdown.strength, result.cityStrength);
+  assert.deepEqual(result.cityBreakdown.factors.map(factor => factor.label), [
+    "Population (7)", "Walls", "Castle", `Garrison (${result.garrison})`, "Era (Medieval)",
+  ]);
+  assert.equal(result.supplyBreakdown.strength, result.supplyStrength);
+  assert.deepEqual(result.supplyBreakdown.factors,
+    [{ label: "Out of naval supply", value: 0.85, operation: "multiply" }]);
 });
 
 test("naval promotions affect combat and AI specialization deterministically", () => {

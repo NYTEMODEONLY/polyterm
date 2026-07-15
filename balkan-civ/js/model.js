@@ -724,7 +724,8 @@ class Game {
     if (!t) return null;
     if (this.isEmbarked(unit) && !this.canAttackFromEmbarked(unit, t)) return null;
     const ranged = unit.isRanged;
-    const attStr = this.strengthOf(unit, { attacking: true, targetTile: t, ranged });
+    const attackerBreakdown = this.strengthBreakdown(unit, { attacking: true, targetTile: t, ranged });
+    const attStr = attackerBreakdown.strength;
     const flankSupport = this.flankingSupport(unit, t).length;
     const flankBonus = Math.min(TACTICS.maxFlank, flankSupport * TACTICS.flankPerSupport);
     const span = (att, def) => {
@@ -737,13 +738,17 @@ class Game {
       return cu && this.players[unit.owner].atWarWith.has(cu.owner) ? cu : null;
     })();
     if (enemyCity && (!enemyUnit || !ranged)) {
-      const defStr = this.cityStrength(enemyCity);
+      const defenderBreakdown = this.cityStrengthBreakdown(enemyCity);
+      const defStr = defenderBreakdown.strength;
       return { target: enemyCity.name, targetHp: enemyCity.hp, city: true, flankSupport, flankBonus,
+        attackerBreakdown, defenderBreakdown,
         out: span(attStr, defStr), back: ranged ? null : span(defStr, attStr) };
     }
     if (enemyUnit) {
-      const defStr = this.strengthOf(enemyUnit, { attacking: false });
+      const defenderBreakdown = this.strengthBreakdown(enemyUnit, { attacking: false });
+      const defStr = defenderBreakdown.strength;
       return { target: enemyUnit.def.name, targetHp: enemyUnit.hp, city: false, flankSupport, flankBonus,
+        attackerBreakdown, defenderBreakdown,
         out: span(attStr, defStr), back: ranged ? null : span(defStr, attStr) };
     }
     return null;
@@ -1337,79 +1342,125 @@ class Game {
       this.flankingSupport(unit, targetTile).length * TACTICS.flankPerSupport);
   }
 
-  strengthOf(unit, { attacking, targetTile, ranged } = {}) {
+  strengthBreakdown(unit, { attacking, targetTile, ranged } = {}) {
     const p = this.players[unit.owner];
-    let str = ranged ? (unit.def.rs || 0) : unit.def.cs;
+    let base = ranged ? (unit.def.rs || 0) : unit.def.cs;
     const amphibiousAttack = attacking && targetTile && this.canAttackFromEmbarked(unit, targetTile);
-    if (this.isEmbarked(unit) && !amphibiousAttack) str = 2; // helpless at sea
-    let mod = 1;
+    if (this.isEmbarked(unit) && !amphibiousAttack) base = 2; // helpless at sea
+    const factors = [];
+    const add = (label, value) => {
+      if (value) factors.push({ label, value, operation: "add" });
+    };
+    const multiply = (label, value) => {
+      if (value !== 1) factors.push({ label, value, operation: "multiply" });
+    };
+    const healthModifier = 0.5 + 0.5 * (unit.hp / 100);
+    let mod = healthModifier;
+    if (healthModifier < 1) add(`Wounded (${Math.max(0, Math.round(unit.hp))} HP)`, healthModifier - 1);
     const here = this.tile(unit.c, unit.r);
-    // wounded units fight at 50–100%
-    mod *= 0.5 + 0.5 * (unit.hp / 100);
-    mod += unit.level * 0.05; // seasoning on top of chosen promotions
-    if (attacking && unit.promos.includes("MIGHT")) mod += 0.15;
-    if (!attacking && unit.promos.includes("BULWARK")) mod += 0.15;
-    if (attacking && !ranged && targetTile) mod += this.flankingBonus(unit, targetTile);
-    if (amphibiousAttack) mod -= 0.15;
+    const veteranBonus = unit.level * 0.05;
+    mod += veteranBonus; // seasoning on top of chosen promotions
+    add(`Veteran level ${unit.level}`, veteranBonus);
+    if (attacking && unit.promos.includes("MIGHT")) { mod += 0.15; add(PROMOS.MIGHT.name, 0.15); }
+    if (!attacking && unit.promos.includes("BULWARK")) { mod += 0.15; add(PROMOS.BULWARK.name, 0.15); }
+    if (attacking && !ranged && targetTile) {
+      const support = this.flankingSupport(unit, targetTile).length;
+      const bonus = Math.min(TACTICS.maxFlank, support * TACTICS.flankPerSupport);
+      mod += bonus;
+      add(`Formation (${support} support)`, bonus);
+    }
+    if (amphibiousAttack) { mod -= 0.15; add("Amphibious landing", -0.15); }
     if (attacking && unit.def.naval && unit.promos.includes("BOARDING") && targetTile) {
       const foe = this.combatUnitAt(targetTile.c, targetTile.r);
-      if (foe && (foe.def.naval || this.isEmbarked(foe))) mod += 0.20;
+      if (foe && (foe.def.naval || this.isEmbarked(foe))) { mod += 0.20; add(PROMOS.BOARDING.name, 0.20); }
     }
     if (attacking && unit.def.naval && unit.promos.includes("BOMBARDMENT") &&
-        targetTile && targetTile.city) mod += 0.20;
+        targetTile && targetTile.city) { mod += 0.20; add(PROMOS.BOMBARDMENT.name, 0.20); }
     if (!p.isMinor && !p.isBarb) {
-      if (attacking && p.policies.has("WARRIOR_CULT")) mod += 0.10;
+      if (attacking && p.policies.has("WARRIOR_CULT")) { mod += 0.10; add("Warrior Cult", 0.10); }
       if (attacking && p.policies.has("GUSLARS") && targetTile) {
         const foe = this.combatUnitAt(targetTile.c, targetTile.r);
-        if ((foe && this.players[foe.owner].isBarb) || this.campAt(targetTile.c, targetTile.r)) mod += 0.25;
+        if ((foe && this.players[foe.owner].isBarb) || this.campAt(targetTile.c, targetTile.r)) {
+          mod += 0.25; add("Guslars", 0.25);
+        }
       }
     }
     if (!attacking) {
       if (here) {
-        mod += TERRAIN[here.terrain].defense || 0;
-        if (here.feature) mod += FEATURE[here.feature].defense || 0;
+        const terrainDefense = TERRAIN[here.terrain].defense || 0;
+        mod += terrainDefense; add(`${TERRAIN[here.terrain].name} terrain`, terrainDefense);
+        if (here.feature) {
+          const featureDefense = FEATURE[here.feature].defense || 0;
+          mod += featureDefense; add(FEATURE[here.feature].name, featureDefense);
+        }
       }
-      if (unit.fortified) mod += 0.25;
-      if (unit.def.defendBonus) mod += unit.def.defendBonus;
+      if (unit.fortified) { mod += 0.25; add("Fortified", 0.25); }
+      if (unit.def.defendBonus) { mod += unit.def.defendBonus; add(`${unit.def.name} defense`, unit.def.defendBonus); }
     }
     // civ traits
     const civ = p.civ;
-    if (civ.roughBonus && here && (here.terrain === "HILLS" || here.feature === "FOREST")) mod += civ.roughBonus;
-    if (civ.homeBonus && here && here.owner === unit.owner) mod += civ.homeBonus;
-    if (civ.vsCityBonus && attacking && targetTile && targetTile.city) mod += civ.vsCityBonus;
-    if (civ.attackBonus && attacking) mod += civ.attackBonus;
-    if (civ.defendCiv && !attacking) mod += civ.defendCiv;
-    if (unit.def.terrainBonus && here && (here.terrain === "HILLS" || here.feature === "FOREST")) mod += unit.def.terrainBonus;
-    if (unit.def.siege && attacking && targetTile && targetTile.city) mod += 1.0; // siege vs cities
+    if (civ.roughBonus && here && (here.terrain === "HILLS" || here.feature === "FOREST")) {
+      mod += civ.roughBonus; add(civ.trait, civ.roughBonus);
+    }
+    if (civ.homeBonus && here && here.owner === unit.owner) { mod += civ.homeBonus; add(civ.trait, civ.homeBonus); }
+    if (civ.vsCityBonus && attacking && targetTile && targetTile.city) { mod += civ.vsCityBonus; add(civ.trait, civ.vsCityBonus); }
+    if (civ.attackBonus && attacking) { mod += civ.attackBonus; add(civ.trait, civ.attackBonus); }
+    if (civ.defendCiv && !attacking) { mod += civ.defendCiv; add(civ.trait, civ.defendCiv); }
+    if (unit.def.terrainBonus && here && (here.terrain === "HILLS" || here.feature === "FOREST")) {
+      mod += unit.def.terrainBonus; add(`${unit.def.name} terrain`, unit.def.terrainBonus);
+    }
+    if (unit.def.siege && attacking && targetTile && targetTile.city) {
+      mod += 1.0; add("Siege weapon", 1.0);
+    }
     // Holy Warriors: faith-fuelled fighting near follower cities
     if (!p.isMinor && p.religionId !== null && this.religions[p.religionId].belief === "ZEAL") {
       const rid = p.religionId;
       if (this.cities.some(c => c.religion === rid && HEX.distance(c.c, c.r, unit.c, unit.r) <= 2)) {
-        mod += 0.15;
+        mod += 0.15; add(BELIEFS.ZEAL.name, 0.15);
       }
     }
     // a miserable empire fights poorly
-    if (!p.isMinor && this.happinessOf(p.index) < HAPPINESS.strikeAt) mod -= 0.15;
+    if (!p.isMinor && this.happinessOf(p.index) < HAPPINESS.strikeAt) {
+      mod -= 0.15; add("Civil unrest", -0.15);
+    }
     // Great General aura
     if (!unit.def.great && this.units.some(g => g.owner === unit.owner && g.def.great === "gen" &&
         HEX.distance(g.c, g.r, unit.c, unit.r) <= 2)) {
-      mod += GP.generalAura;
+      mod += GP.generalAura; add("Great General", GP.generalAura);
     }
+    let supplyModifier = 1;
     if (unit.def.naval && (unit.unsuppliedTurns || 0) > NAVAL_SUPPLY.graceTurns &&
-        !this.navalSupply(unit).supplied)
-      mod *= NAVAL_SUPPLY.combatMultiplier;
-    return str * mod;
+        !this.navalSupply(unit).supplied) {
+      supplyModifier = NAVAL_SUPPLY.combatMultiplier;
+      mod *= supplyModifier;
+      multiply("Out of naval supply", supplyModifier);
+    }
+    return { base, modifier: mod, strength: base * mod, factors };
+  }
+
+  strengthOf(unit, context = {}) {
+    return this.strengthBreakdown(unit, context).strength;
+  }
+
+  cityStrengthBreakdown(city) {
+    const base = 8;
+    let str = base;
+    const factors = [];
+    const add = (label, value) => {
+      if (value) { str += value; factors.push({ label, value, operation: "flat" }); }
+    };
+    add(`Population (${city.pop})`, city.pop * 1.2);
+    for (const b of city.buildings) add(BUILDINGS[b].name, BUILDINGS[b].cityStr || 0);
+    const garrison = this.combatUnitAt(city.c, city.r);
+    if (garrison) add(`Garrison (${garrison.def.name})`, this.strengthOf(garrison, {}) * 0.25);
+    const era = this.players[city.owner].era();
+    add(`Era (${ERAS[era]})`, era * 3);
+    if (this.players[city.owner].isMinor) add("City-state defenses", 6);
+    return { base, strength: str, factors };
   }
 
   cityStrength(city) {
-    let str = 8 + city.pop * 1.2;
-    for (const b of city.buildings) str += BUILDINGS[b].cityStr || 0;
-    const garrison = this.combatUnitAt(city.c, city.r);
-    if (garrison) str += this.strengthOf(garrison, {}) * 0.25;
-    const era = this.players[city.owner].era();
-    str += era * 3;
-    if (this.players[city.owner].isMinor) str += 6; // city-states dig in
-    return str;
+    return this.cityStrengthBreakdown(city).strength;
   }
 
   damageRoll(attStr, defStr) {

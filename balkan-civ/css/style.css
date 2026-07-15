@@ -517,7 +517,8 @@ button:disabled { opacity: 0.4; cursor: default; }
 
 /* ---------- combat command / report ---------- */
 #combat-preview { position: fixed; top: 98px; left: 50%; transform: translateX(-50%); z-index: 31;
-  display: none; width: min(540px, calc(100vw - 24px)); padding: 10px 12px;
+  display: none; width: min(620px, calc(100vw - 24px)); max-height: calc(100vh - 118px);
+  overflow-y: auto; padding: 10px 12px;
   background: linear-gradient(150deg, rgba(18,31,32,0.98), rgba(25,24,20,0.98));
   border: 2px solid #b79b57; border-radius: 3px;
   box-shadow: inset 0 0 0 1px rgba(240,216,144,0.08), 0 8px 24px rgba(0,0,0,0.54); }
@@ -543,6 +544,29 @@ button:disabled { opacity: 0.4; cursor: default; }
 .combat-odds .good { color: #8fd18a; }
 .combat-odds .even { color: #e0c77d; }
 .combat-odds .bad { color: #ef8c78; }
+.combat-breakdown { border-bottom: 1px solid rgba(183,155,87,0.28); }
+.combat-breakdown summary { display: flex; align-items: center; gap: 8px; min-height: 34px;
+  color: #c8c6bd; font-size: 11px; font-weight: 700; cursor: pointer; list-style: none; }
+.combat-breakdown summary::-webkit-details-marker { display: none; }
+.combat-breakdown summary::before { content: "▸"; color: #d8bd78; width: 10px; }
+.combat-breakdown[open] summary::before { content: "▾"; }
+.combat-breakdown summary b { margin-left: auto; color: #f4e4b5; font-size: 13px; }
+.combat-breakdown summary i { color: #88867e; font-size: 9px; font-style: normal; text-transform: uppercase; }
+.combat-ledgers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid rgba(183,155,87,0.22); }
+.combat-ledger { min-width: 0; padding: 7px 9px 8px; }
+.combat-ledger + .combat-ledger { border-left: 1px solid rgba(183,155,87,0.22); }
+.combat-ledger header, .combat-factor { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.combat-ledger header { color: #d8bd78; margin-bottom: 4px; font-size: 10px; font-weight: 800;
+  text-transform: uppercase; }
+.combat-ledger header strong { color: #fff0c4; font-size: 15px; }
+.combat-factor { min-height: 21px; padding: 3px 0; border-top: 1px solid rgba(255,255,255,0.045);
+  color: #c4c3bd; font-size: 10.5px; line-height: 1.25; }
+.combat-factor span { min-width: 0; overflow-wrap: anywhere; }
+.combat-factor b { flex: 0 0 auto; color: #91cb8e; }
+.combat-factor.base b { color: #ddd9cb; }
+.combat-factor.penalty b { color: #ef8c78; }
+.combat-factor.quiet { color: #77766f; }
 .combat-tactic { color: #e0c77d; padding: 5px 0; border-bottom: 1px solid rgba(183,155,87,0.28);
   font-size: 11px; font-weight: 700; text-align: center; }
 .tactical-warning { color: #e7c34c; }
@@ -667,6 +691,7 @@ button:disabled { opacity: 0.4; cursor: default; }
   #advisor { left: 10px; right: 10px; bottom: 220px; width: auto; max-height: 200px; overflow-y: auto; }
   #recap { bottom: 174px; width: calc(100vw - 20px); max-width: none; }
   #game-banner { max-width: calc(100vw - 20px); padding: 12px 18px; font-size: 20px; white-space: normal; text-align: center; }
+  #combat-preview { width: calc(100vw - 12px); max-height: calc(100vh - 162px); }
   .combat-odds { gap: 8px; flex-wrap: wrap; justify-content: flex-start; }
   .combat-odds strong { width: 100%; margin-left: 0; text-align: center; }
   .combat-actions button { min-height: 36px; }
