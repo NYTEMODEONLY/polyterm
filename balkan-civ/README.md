@@ -25,7 +25,9 @@ hex to move, long-press for move orders, drag to pan, pinch to zoom — so
 they can join from phones and tablets.
 
 Your game **auto-saves every turn** (browser localStorage) — use *Continue Saved
-Game* on the title screen to pick up where you left off.
+Game* on the title screen to pick up where you left off. Saves preserve the
+exact deterministic random stream, so reloading does not reroll future combat,
+events, or AI choices.
 
 ## The nine civilizations
 
@@ -52,11 +54,16 @@ Game* on the title screen to pick up where you left off.
   Rifling, Steam Power, and Military Science unlock Riflemen, Cannon,
   Cavalry, and the Ironclad, plus Factories, Hospitals, Stock Exchanges,
   and two new wonders (the Iron Gates Works and the Orient Express)
-- **Six ways to win**: Domination, Score, Cultural, and now a
-  **Diplomatic Victory** — once a civ researches Civil Service, the
-  **World Congress** convenes every few turns to elect a World Leader.
-  Delegates come from your empire and, above all, your **city-state
-  allies**; win a supermajority of the vote to be elected and win
+- **Six ways to win**: conquer every original capital (**Domination**),
+  master all 32 technologies (**Scientific**), complete three policy branches
+  (**Cultural**), spread your founded religion across every surviving empire
+  and over 60% of major cities after six active Missionary spreads against at
+  least one rival faith (**Religious**), lead the final standings
+  (**Score**), or win a **Diplomatic Victory**. Once a civ researches Civil
+  Service, the **World Congress** convenes every few turns to elect a World
+  Leader. Delegates come from your empire and, above all, your **city-state
+  allies**; win a supermajority of the vote to be elected and win. Click the
+  score in the top bar or press `V` for a live overview of all six paths
 - **Campaign mode** — *A Thousand Years of the Balkans* strings all nine
   scenarios into one chronological arc from 893 to 1462 AD. Chapters
   unlock in sequence and a running **Glory** score is carried across the
@@ -119,7 +126,7 @@ Game* on the title screen to pick up where you left off.
   quarter — trade and coin), and **Sabor** (the church council — faith and
   art). Each policy costs more than the last; completing every policy in a
   branch grants a powerful finisher. Complete **three branches** to win a
-  **Cultural Victory** — the fifth way to win, alongside Domination and Score
+  **Cultural Victory**
 - **Deeper diplomacy** between major civs: swap surplus **luxuries** for a
   fixed term (both sides gain happiness), send **gold gifts** to warm a
   rival's attitude, and sign **defensive pacts** with friends — if either
@@ -195,9 +202,11 @@ Game* on the title screen to pick up where you left off.
   Balkan names (yes, Tesla is in there)
 - **Game speed** (Quick / Standard / Epic) scales research pace and game
   length; **Mirror** world type gives fair symmetric maps for multiplayer
-- **Smarter AI warfare**: settlers get escorts, melee waits for siege
-  engines to breach walls before assaulting, armies chase off raiders,
-  and gold is spent modernizing veterans
+- **Goal-aware AI strategy**: leaders derive a preferred victory route from
+  their traits, then align research, buildings, policy branches, missionaries,
+  city-state gifts, trade routes, and army size with that plan. In war,
+  settlers get escorts, melee waits for siege engines to breach walls, armies
+  chase off raiders, and gold is spent modernizing veterans
 - Cities support a **production queue** (queue up to 6 items) and a full
   clickable **message log**; wounded units can fortify until healed
 - **Undo** a simple move (before anything eventful happens); **3 manual
@@ -209,7 +218,7 @@ Game* on the title screen to pick up where you left off.
 - Three difficulty levels (Prince / King / Emperor) scaling AI output
 - Hover any hex for a movement path preview with turn count; scouts can
   **auto-explore**; units glide between hexes instead of teleporting
-- Victory by **Domination** (control every capital) or **Score** at turn 300
+- Six standard victory routes with live progress and known-rival standings
 - Autosave + continue
 
 ## Controls

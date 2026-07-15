@@ -336,8 +336,14 @@ const BELIEFS = {
   ZEAL:    { name: "Holy Warriors",  desc: "+15% combat strength within 2 tiles of a city following your religion" },
 };
 
-const RELIGION_FOUND_COST = (nFounded) => 120 + 140 * nFounded;
+const RELIGION_FOUND_COST = (nFounded) => 120 + 90 * nFounded;
 const MAX_RELIGIONS = 4;
+const RELIGION_VICTORY = {
+  share: 0.6,             // strictly more than 60% of all major-civ cities
+  minCities: 6,           // prevents an opening conversion from ending tiny games
+  minReligions: 2,        // a victory requires at least one competing faith
+  minSpreads: 6,          // the founder must actively preach, not win passively
+};
 const MISSIONARY_PRESSURE = 150;
 
 // ------------------------------------------------------------

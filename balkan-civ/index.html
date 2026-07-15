@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Balkan Civilizations</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>⚔️</text></svg>">
-<link rel="stylesheet" href="css/style.css?v=9">
+<link rel="stylesheet" href="css/style.css?v=10">
 </head>
 <body>
 
@@ -111,7 +111,7 @@
       <span id="stat-sci" style="cursor:pointer" title="Open tech tree"></span>
       <span id="stat-faith" style="cursor:pointer" title="Open religion overview"></span>
       <span id="stat-culture" style="cursor:pointer" title="Open social policies (P)"></span>
-      <span id="stat-score"></span>
+      <span id="stat-score" style="cursor:pointer" title="Open victory progress (V)"></span>
     </div>
     <div class="command-bar">
       <button id="btn-tech" title="Technology (T)"><span class="cmd-icon">🔬</span><span class="cmd-label">Tech</span></button>
@@ -178,6 +178,9 @@
 <div id="campaign-modal" class="modal">
   <div class="modal-box wide"><h2>🎖️ Campaign — A Thousand Years of the Balkans</h2><div id="campaign-body"></div></div>
 </div>
+<div id="progress-modal" class="modal">
+  <div class="modal-box wide"><h2>🏆 Victory Progress</h2><div id="progress-body"></div></div>
+</div>
 <div id="peace-modal" class="modal">
   <div class="modal-box"><h2>☮️ Peace Proposal</h2><div id="peace-body"></div></div>
 </div>
@@ -229,12 +232,12 @@
   <div class="modal-box" id="victory-body"></div>
 </div>
 
-<script src="js/data.js"></script>
+<script src="js/data.js?v=2"></script>
 <script src="js/sound.js"></script>
 <script src="js/hex.js"></script>
-<script src="js/mapgen.js"></script>
-<script src="js/model.js?v=2"></script>
-<script src="js/ai.js"></script>
+<script src="js/mapgen.js?v=2"></script>
+<script src="js/model.js?v=3"></script>
+<script src="js/ai.js?v=2"></script>
 <script src="js/vendor/three.min.js"></script>
 <script src="js/unitart.js?v=1"></script>
 <script src="js/worldart.js?v=1"></script>
@@ -242,7 +245,7 @@
 <script src="js/render3d.js?v=8"></script>
 <script src="js/net.js"></script>
 <script src="js/editor.js"></script>
-<script src="js/ui.js?v=8"></script>
+<script src="js/ui.js?v=9"></script>
 <script>
   window.addEventListener("DOMContentLoaded", () => UI.init());
 </script>

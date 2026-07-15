@@ -1380,6 +1380,83 @@ const UI = (() => {
     refreshEndTurnButton();
   }
 
+  // ---------------- victory progress ----------------
+  function showVictoryProgress() {
+    if (!game) return;
+    const body = $("progress-body");
+    if (game.scenario) {
+      const sc = SCENARIOS[game.scenario];
+      body.innerHTML = `<div class="scenario-progress">
+        <strong>${sc.icon} ${sc.name}</strong>
+        <div>${game.scenarioStatus()}</div>
+        <p class="dim">${sc.blurb}</p>
+        <span class="dim">Turn ${game.turn} of ${game.maxTurns}</span>
+      </div>`;
+      $("progress-modal").style.display = "flex";
+      return;
+    }
+
+    const me = game.players[game.viewer];
+    const v = game.victoryProgress(game.viewer);
+    const percent = (current, target) => target > 0 ? Math.min(100, Math.round(current / target * 100)) : 0;
+    const route = (icon, title, value, progress, color, description) => `
+      <div class="victory-route" style="--route:${color};--progress:${progress}%">
+        <div class="victory-route-head"><span class="victory-route-icon">${icon}</span>
+          <span class="victory-route-title">${title}</span><span class="victory-route-value">${value}</span></div>
+        <div class="victory-meter"><i></i></div><p>${description}</p>
+      </div>`;
+
+    const religionValue = v.religion.founded
+      ? `${v.religion.current}/${v.religion.target} cities`
+      : "Not founded";
+    const religionDesc = v.religion.founded
+      ? `${v.religion.icon} ${v.religion.name} leads ${v.religion.civs}/${v.religion.civTarget} civilizations and ${v.religion.current}/${v.religion.target} major cities. Complete ${v.religion.spreads}/${v.religion.spreadTarget} missionary spreads; ${v.religion.religions}/${v.religion.religionTarget} competing religions exist.`
+      : "Found a religion, complete six missionary spreads, then make it the majority faith in every surviving civilization and over 60% of all major cities. At least two religions must compete.";
+    const diploValue = v.diplomacy.unlocked
+      ? `${v.diplomacy.current}/${v.diplomacy.target} delegates`
+      : "Congress locked";
+    const diploDesc = v.diplomacy.unlocked
+      ? `Ally city-states and reach ${Math.round(WCONGRESS.winFraction * 100)}% of ${v.diplomacy.total} delegates in one World Congress vote.`
+      : `Research ${TECHS[WCONGRESS.unlockTech].name}; Congress sessions begin on turn ${WCONGRESS.startTurn}.`;
+
+    const routes = [
+      route("⚔️", "Domination", `${v.domination.current}/${v.domination.target} capitals`,
+        percent(v.domination.current, v.domination.target), "#dc765f", "Capture and hold every civilization's original capital, or become the last major power standing."),
+      route("🔬", "Scientific", `${v.science.current}/${v.science.target} technologies`,
+        percent(v.science.current, v.science.target), "#63b6d8", "Master the complete technology tree before another civilization closes out its own victory route."),
+      route("🎭", "Cultural", `${v.culture.current}/${v.culture.target} branches`,
+        percent(v.culture.current, v.culture.target), "#d8a85e", `Complete every policy in ${CULTURE_VICTORY_BRANCHES} social-policy branches.`),
+      route(v.religion.icon || "☦️", "Religious", religionValue,
+        v.religion.founded ? percent(v.religion.current, v.religion.target) : 0, "#c28bd8", religionDesc),
+      route("🏛️", "Diplomatic", diploValue,
+        v.diplomacy.unlocked ? percent(v.diplomacy.current, v.diplomacy.target) : 0, "#79b88a", diploDesc),
+      route("🏆", "Score", `#${v.score.rank} · ${v.score.current} points`,
+        percent(game.turn, game.maxTurns), "#d9ba68", `${v.score.turnsLeft} turns remain. If no one wins another way, the highest score takes the game.`),
+    ].join("");
+
+    const known = game.players.filter(p => !p.isMinor && !p.isBarb && p.alive &&
+      (p.index === game.viewer || me.met.has(p.index)))
+      .sort((a, b) => game.score(b.index) - game.score(a.index));
+    const standings = known.map((p, i) => {
+      const religion = p.religionId !== null && game.religions[p.religionId];
+      return `<div class="standing-row${p.index === game.viewer ? " me" : ""}">
+        <span class="standing-rank">${i + 1}</span><span class="standing-civ" style="color:${p.civ.color}">${p.civ.name}${p.index === game.viewer ? " · you" : ""}</span>
+        <span>${game.score(p.index)} pts</span><span>${game.cities.filter(c => c.owner === p.index).length} cities</span>
+        <span>${p.techs.size} techs</span><span>${religion ? religion.icon + " " + religion.name : "No religion"}</span>
+      </div>`;
+    }).join("");
+    const unknown = game.players.filter(p => !p.isMinor && !p.isBarb && p.alive &&
+      p.index !== game.viewer && !me.met.has(p.index)).length;
+    body.innerHTML = `<div class="victory-intro"><span>Six distinct paths can end the campaign.</span>
+      <span><b>${me.civ.name}</b> · Turn ${game.turn}/${game.maxTurns}</span></div>
+      <div class="victory-routes">${routes}</div>
+      <div class="victory-standings"><h3>Known standings</h3>
+        <div class="standing-row header"><span>#</span><span>Civilization</span><span>Score</span><span>Cities</span><span>Tech</span><span>Faith</span></div>
+        ${standings}${unknown ? `<div class="dim" style="padding:8px">${unknown} civilization${unknown > 1 ? "s remain" : " remains"} unmet.</div>` : ""}
+      </div>`;
+    $("progress-modal").style.display = "flex";
+  }
+
   // ---------------- headline banner ----------------
   let lastEraShown = null, bannerTimer = null;
   function showBanner(html) {
@@ -1653,6 +1730,10 @@ const UI = (() => {
       html: `<p>Be the last major civilization standing, or capture and hold every major civ's original capital.</p>` });
     E.push({ cat: "Victory", name: "Cultural Victory", icon: "🎭", tags: "victory culture policy",
       html: `<p>Complete every policy in <b>${CULTURE_VICTORY_BRANCHES} of the ${Object.keys(POLICY_BRANCHES).length} social-policy branches</b>. Culture accumulates from Monuments, Temples, wonders, and policies.</p>` });
+    E.push({ cat: "Victory", name: "Scientific Victory", icon: "🔬", tags: "victory science research technology",
+      html: `<p>Research all <b>${Object.keys(TECHS).length} technologies</b> in the tree. Libraries, Universities, scientific wonders, Great Scientists, and espionage can accelerate the race.</p>` });
+    E.push({ cat: "Victory", name: "Religious Victory", icon: "☦️", tags: "victory religion faith missionary",
+      html: `<p>Complete at least <b>${RELIGION_VICTORY.minSpreads} Missionary spreads</b>, then make your founded religion the majority faith in <b>every surviving major civilization</b> and in over ${Math.round(RELIGION_VICTORY.share * 100)}% of all major-civilization cities. At least ${RELIGION_VICTORY.minCities} major cities and ${RELIGION_VICTORY.minReligions} competing religions must exist.</p>` });
     E.push({ cat: "Victory", name: "Diplomatic Victory", icon: "🏛️", tags: "victory diplomacy congress world leader",
       html: `<p>Once a civilization researches <b>${TECHS[WCONGRESS.unlockTech].name}</b>, the <b>World Congress</b> convenes every ${WCONGRESS.interval} turns to elect a World Leader. Each civ casts delegates — ${WCONGRESS.base} base, <b>+${WCONGRESS.perAlly} per allied city-state</b>, and +1 per ${WCONGRESS.perCities} cities. Win <b>${Math.round(WCONGRESS.winFraction * 100)}%</b> of all delegates in a single vote to be elected and win. Allying city-states is the key.</p>` });
     E.push({ cat: "Victory", name: "Score Victory", icon: "🏆", tags: "victory score time",
@@ -2318,6 +2399,7 @@ const UI = (() => {
         $("pedia-modal").style.display = "none";
         $("congress-modal").style.display = "none";
         $("campaign-modal").style.display = "none";
+        $("progress-modal").style.display = "none";
         $("settings-modal").style.display = "none";
         $("log-modal").style.display = "none";
         $("menu-modal").style.display = "none";
@@ -2329,6 +2411,7 @@ const UI = (() => {
       else if (e.key === "d") showDiploScreen();
       else if (e.key === "r") showReligionScreen();
       else if (e.key === "e") showSpyScreen();
+      else if (e.key === "v") showVictoryProgress();
       else if ((e.key === "q" || e.key === "w") && rend.rotate) rend.rotate(e.key === "q" ? -1 : 1);
     });
 
@@ -2339,6 +2422,7 @@ const UI = (() => {
     $("btn-religion").onclick = showReligionScreen;
     $("stat-faith").onclick = showReligionScreen;
     $("stat-culture").onclick = showPolicyScreen;
+    $("stat-score").onclick = showVictoryProgress;
     $("btn-spies").onclick = showSpyScreen;
     $("btn-pedia").onclick = () => showPediaScreen();
     $("pedia-search").addEventListener("input", renderPedia);

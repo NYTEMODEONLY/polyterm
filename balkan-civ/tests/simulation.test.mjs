@@ -94,6 +94,31 @@ test("long AI simulations preserve core state invariants", () => {
   assert.deepEqual(Array.from(result), []);
 });
 
+test("standard-game victory routes stay inside deterministic balance bands", () => {
+  const outcomes = JSON.parse(evaluate(loadGameContext(), `
+    const results = [];
+    for (let seed = 1; seed <= 8; seed++) {
+      const g = new Game({ playerCiv: CIV_IDS[seed % CIV_IDS.length], playerLeader: seed % 3,
+        numOpponents: 4, seed: seed * 7919, mapW: 34, mapH: 26,
+        mapType: seed % 3 === 0 ? "archipelago" : "peninsula", difficulty: "normal" });
+      while (!g.over && g.turn <= g.maxTurns + 2) {
+        AI.takeTurn(g, g.players[0]);
+        g.endTurn();
+      }
+      results.push({ turn: g.turn, type: g.victoryType, winner: g.winner });
+    }
+    return JSON.stringify(results);
+  `));
+
+  assert.equal(outcomes.length, 8);
+  assert.ok(outcomes.every(o => o.type && o.winner !== null), "every sampled game should resolve");
+  assert.ok(outcomes.every(o => o.turn >= 100 && o.turn <= 301), "victories should land in the mid or late game");
+  const counts = new Map();
+  for (const o of outcomes) counts.set(o.type, (counts.get(o.type) || 0) + 1);
+  assert.ok(counts.size >= 2, "the sample should exercise more than one victory route");
+  assert.ok(Math.max(...counts.values()) <= 6, "no route should take more than 75% of the reviewed sample");
+});
+
 test("scenario openings stay inside their reviewed military balance bands", () => {
   const metrics = evaluate(loadGameContext(), `
     return Object.entries(SCENARIOS).map(([key, sc]) => {
@@ -196,4 +221,136 @@ test("pending-order snapshots track research, production, and unit decisions", (
     research: false, cities: 1, units: 0, cityId: result.foundedCityId,
   });
   assert.deepEqual(result.ready, { research: false, cities: 0, units: 0 });
+});
+
+test("save round-trips preserve the exact deterministic future", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    const advance = (g, turns) => {
+      for (let i = 0; i < turns && !g.over; i++) {
+        AI.takeTurn(g, g.players[0]);
+        g.endTurn();
+      }
+    };
+    const g = new Game({ playerCiv: "MACEDONIA", numOpponents: 4, seed: 737373,
+      mapW: 34, mapH: 26, mapType: "archipelago", difficulty: "hard" });
+    advance(g, 18);
+    g.stats.routes = 3;
+    const saved = g.serialize();
+    const saveData = JSON.parse(saved);
+    advance(g, 24);
+    const uninterrupted = g.serialize();
+
+    const resumed = Game.deserialize(saved);
+    advance(resumed, 24);
+    const afterResume = resumed.serialize();
+
+    const legacy = JSON.parse(saved);
+    delete legacy.rngState;
+    legacy.v = 1;
+    const oldSave = Game.deserialize(JSON.stringify(legacy));
+    const expectedLegacyRng = mulberry32((legacy.seed + legacy.turn * 7919) >>> 0)();
+    return JSON.stringify({
+      version: saveData.v,
+      rngState: saveData.rngState,
+      stats: saveData.stats,
+      exact: uninterrupted === afterResume,
+      legacyRng: oldSave.rng(),
+      expectedLegacyRng,
+    });
+  `));
+
+  assert.equal(result.version, 2);
+  assert.ok(Number.isInteger(result.rngState));
+  assert.equal(result.stats.routes, 3);
+  assert.equal(result.exact, true);
+  assert.equal(result.legacyRng, result.expectedLegacyRng);
+});
+
+test("scientific and religious victories enforce their complete requirements", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    const science = new Game({ playerCiv: "BULGARIA", numOpponents: 2, seed: 1414,
+      mapW: 28, mapH: 22, mapType: "peninsula", noMinors: true });
+    science.players[0].techs = new Set(Object.keys(TECHS));
+    science.checkVictory();
+
+    const religion = new Game({ playerCiv: "BYZANTIUM", numOpponents: 5, seed: 1515,
+      mapW: 40, mapH: 30, mapType: "peninsula", noMinors: true });
+    for (const p of religion.players.filter(p => !p.isMinor && !p.isBarb)) {
+      const settler = religion.units.find(u => u.owner === p.index && u.type === "SETTLER");
+      if (!religion.foundCity(settler)) throw new Error("could not found test city");
+    }
+    religion.players[0].faith = 1000;
+    const faith = religion.availableReligionNames()[0];
+    religion.foundReligion(0, faith.name, faith.icon, Object.keys(BELIEFS)[0]);
+    const rid = religion.players[0].religionId;
+    religion.players[0].missionarySpreads = RELIGION_VICTORY.minSpreads;
+    const majorCities = religion.cities.filter(c => !religion.players[c.owner].isMinor);
+    for (const city of majorCities) city.religion = rid;
+    const oneFaithOnly = religion.religiousVictoryProgress(0);
+    religion.players[1].faith = 1000;
+    const rivalFaith = religion.availableReligionNames()[0];
+    religion.foundReligion(1, rivalFaith.name, rivalFaith.icon, Object.keys(BELIEFS)[1]);
+    for (const city of majorCities.slice(0, 5)) city.religion = rid;
+    majorCities[5].religion = religion.players[1].religionId;
+    const guarded = religion.religiousVictoryProgress(0);
+    religion.checkVictory();
+    const beforeCoverage = religion.over;
+    majorCities[5].religion = rid;
+    const complete = religion.religiousVictoryProgress(0);
+    religion.checkVictory();
+    const overview = religion.victoryProgress(0);
+
+    return JSON.stringify({
+      science: { over: science.over, winner: science.winner, type: science.victoryType },
+      oneFaithOnly, guarded, beforeCoverage, complete,
+      religion: { over: religion.over, winner: religion.winner, type: religion.victoryType },
+      overview: { science: overview.science, culture: overview.culture,
+        domination: overview.domination, religion: overview.religion },
+    });
+  `));
+
+  assert.deepEqual(result.science, { over: true, winner: 0, type: "Scientific" });
+  assert.equal(result.oneFaithOnly.religions, 1);
+  assert.equal(result.oneFaithOnly.religionTarget, 2);
+  assert.equal(result.oneFaithOnly.complete, false);
+  assert.equal(result.guarded.current, 5);
+  assert.equal(result.guarded.target, 4);
+  assert.equal(result.guarded.civs, 5);
+  assert.equal(result.guarded.civTarget, 6);
+  assert.equal(result.guarded.religions, 2);
+  assert.equal(result.guarded.spreads, 6);
+  assert.equal(result.guarded.complete, false);
+  assert.equal(result.beforeCoverage, false);
+  assert.equal(result.complete.complete, true);
+  assert.deepEqual(result.religion, { over: true, winner: 0, type: "Religious" });
+  assert.equal(result.overview.religion.current, 6);
+  assert.equal(result.overview.religion.civs, 6);
+  assert.ok(result.overview.science.target > result.overview.science.current);
+  assert.equal(result.overview.culture.target, 3);
+  assert.equal(result.overview.domination.target, 6);
+});
+
+test("AI victory focus follows the selected leader's strengths", () => {
+  const focuses = JSON.parse(evaluate(loadGameContext(), `
+    const focus = (civ, leader) => {
+      const p = new Player(0, civ, false);
+      p.leaderIdx = leader;
+      return AI.victoryFocus(p);
+    };
+    return JSON.stringify({
+      simeon: focus("BULGARIA", 0),
+      boris: focus("BULGARIA", 2),
+      nemanja: focus("SERBIA", 1),
+      kresimir: focus("CROATIA", 1),
+      skanderbeg: focus("ALBANIA", 0),
+    });
+  `));
+
+  assert.deepEqual(focuses, {
+    simeon: "science",
+    boris: "religion",
+    nemanja: "culture",
+    kresimir: "diplomacy",
+    skanderbeg: "domination",
+  });
 });

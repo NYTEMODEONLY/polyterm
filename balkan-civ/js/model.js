@@ -119,6 +119,7 @@ class Player {
     this.leaderIdx = 0;          // which of the civ's leaders is chosen
     this.congressVote = null;    // World Congress: chosen candidate index
     this.congressVoteTurn = -1;  // the session (turn) that vote belongs to
+    this.missionarySpreads = 0;  // active spreads toward a Religious Victory
   }
   get civ() {
     const base = CIVS[this.civId];
@@ -198,6 +199,7 @@ class Game {
     this.effects = [];           // transient combat popups (not saved)
     this.strikes = [];           // transient attack animations (not saved)
     this.lastCombat = null;      // latest resolved attack (transient UI/report data)
+    this.stats = { steals: 0, catches: 0 };
     this.difficulty = opts.difficulty || "normal";
     this.over = false;
     this.winner = null;
@@ -1784,6 +1786,7 @@ class Game {
     if (!city) return false;
     city.pressure[p.religionId] = (city.pressure[p.religionId] || 0) + MISSIONARY_PRESSURE;
     this.updateCityReligion(city);
+    p.missionarySpreads++;
     unit.charges--;
     unit.moves = 0;
     if (unit.charges <= 0) this.removeUnit(unit);
@@ -2412,6 +2415,73 @@ class Game {
     return this.players.filter(p => !p.isMinor && !p.isBarb && p.alive).map(p => p.index);
   }
 
+  religiousVictoryProgress(playerIdx) {
+    const p = this.players[playerIdx];
+    const alive = this.players.filter(o => !o.isMinor && !o.isBarb && o.alive);
+    const majorOwners = new Set(alive.map(o => o.index));
+    const majorCities = this.cities.filter(c => majorOwners.has(c.owner));
+    const religion = p && p.religionId !== null ? this.religions[p.religionId] : null;
+    const converted = religion ? majorCities.filter(c => c.religion === religion.id) : [];
+    const dominatedCivs = religion ? alive.filter(o => {
+      const owned = majorCities.filter(c => c.owner === o.index);
+      const convertedOwned = owned.filter(c => c.religion === religion.id).length;
+      return owned.length > 0 && convertedOwned > owned.length / 2;
+    }) : [];
+    const target = Math.floor(majorCities.length * RELIGION_VICTORY.share) + 1;
+    const enoughCities = majorCities.length >= Math.max(RELIGION_VICTORY.minCities, alive.length);
+    const enoughReligions = this.religions.length >= RELIGION_VICTORY.minReligions;
+    return {
+      founded: !!religion,
+      religionId: religion ? religion.id : null,
+      name: religion ? religion.name : null,
+      icon: religion ? religion.icon : null,
+      current: converted.length,
+      target,
+      totalCities: majorCities.length,
+      civs: dominatedCivs.length,
+      civTarget: alive.length,
+      religions: this.religions.length,
+      religionTarget: RELIGION_VICTORY.minReligions,
+      spreads: p ? p.missionarySpreads : 0,
+      spreadTarget: RELIGION_VICTORY.minSpreads,
+      complete: !!religion && enoughCities && enoughReligions &&
+        p.missionarySpreads >= RELIGION_VICTORY.minSpreads && converted.length >= target && dominatedCivs.length === alive.length,
+    };
+  }
+
+  victoryProgress(playerIdx) {
+    const p = this.players[playerIdx];
+    const majors = this.players.filter(o => !o.isMinor && !o.isBarb);
+    const alive = majors.filter(o => o.alive);
+    const capitalIds = new Set(majors.map(o => o.originalCapitalId).filter(id => id !== null));
+    const capitals = this.cities.filter(c => capitalIds.has(c.id));
+    const delegatesTotal = alive.reduce((sum, o) => sum + this.congressDelegates(o.index), 0);
+    const scoreOrder = alive.slice().sort((a, b) => this.score(b.index) - this.score(a.index));
+    return {
+      domination: {
+        current: capitals.filter(c => c.owner === playerIdx).length,
+        // All major civilizations will eventually found or receive an original
+        // capital; show the full race target even during the opening Settler turn.
+        target: majors.length,
+      },
+      science: { current: p.techs.size, target: Object.keys(TECHS).length },
+      culture: { current: this.branchesDone(playerIdx), target: CULTURE_VICTORY_BRANCHES },
+      religion: this.religiousVictoryProgress(playerIdx),
+      diplomacy: {
+        current: this.congressDelegates(playerIdx),
+        target: Math.ceil(delegatesTotal * WCONGRESS.winFraction),
+        total: delegatesTotal,
+        unlocked: this.congressUnlocked(),
+      },
+      score: {
+        current: this.score(playerIdx),
+        rank: Math.max(1, scoreOrder.findIndex(o => o.index === playerIdx) + 1),
+        field: alive.length,
+        turnsLeft: Math.max(0, this.maxTurns - this.turn + 1),
+      },
+    };
+  }
+
   // AI ballot: back yourself if you lead, otherwise the friendliest major
   // who isn't at war with you (helps a would-be diplomatic winner build a bloc)
   aiCongressVote(p) {
@@ -2529,6 +2599,24 @@ class Game {
         return;
       }
     }
+    // scientific victory: master the complete technology tree
+    for (const p of majors) {
+      if (p.alive && p.techs.size >= Object.keys(TECHS).length) {
+        this.over = true; this.winner = p.index; this.victoryType = "Scientific";
+        this.notify(`🔬 ${p.civ.name} has mastered every technology — a Scientific Victory!`, -1);
+        return;
+      }
+    }
+    // religious victory: a majority of major cities and every surviving
+    // civilization. The minimum city count prevents opening rush wins.
+    for (const p of majors) {
+      const progress = this.religiousVictoryProgress(p.index);
+      if (p.alive && progress.complete) {
+        this.over = true; this.winner = p.index; this.victoryType = "Religious";
+        this.notify(`${progress.icon} ${progress.name} has become the faith of the Balkans — a Religious Victory for ${p.civ.name}!`, -1);
+        return;
+      }
+    }
     const alive = majors.filter(p => p.alive);
     if (alive.length === 1) {
       this.over = true; this.winner = alive[0].index; this.victoryType = "Domination";
@@ -2558,7 +2646,9 @@ class Game {
   // ---------- save / load ----------
   serialize() {
     return JSON.stringify({
-      v: 1, turn: this.turn, seed: this.seed, mapType: this.mapType,
+      v: 2, turn: this.turn, seed: this.seed,
+      rngState: typeof this.rng.getState === "function" ? this.rng.getState() : null,
+      mapType: this.mapType,
       difficulty: this.difficulty, humans: this.humans, activeHuman: this.activeHuman,
       scenario: this.scenario, scenarioKills: this.scenarioKills,
       noBarbs: this.noBarbs, barbIndex: this.barbIndex, maxCamps: this.maxCamps || 0,
@@ -2566,7 +2656,7 @@ class Game {
       congressTurn: this.congressTurn, congressLast: this.congressLast,
       peaceOffers: this.peaceOffers, over: this.over,
       winner: this.winner, victoryType: this.victoryType, nextId: NEXT_ID,
-      religions: this.religions,
+      religions: this.religions, stats: this.stats,
       map: { w: this.map.w, h: this.map.h, tiles: this.map.tiles.map(t => ({
         c: t.c, r: t.r, terrain: t.terrain, feature: t.feature, resource: t.resource,
         improvement: t.improvement, ruin: t.ruin || false,
@@ -2583,7 +2673,8 @@ class Game {
         culture: p.culture, policies: [...p.policies], attitude: p.attitude,
         pacts: [...p.pacts], deals: p.deals, quest: p.quest,
         moodTurns: p.moodTurns, moodDelta: p.moodDelta, lastEventTurn: p.lastEventTurn,
-        leaderIdx: p.leaderIdx, congressVote: p.congressVote, congressVoteTurn: p.congressVoteTurn })),
+        leaderIdx: p.leaderIdx, congressVote: p.congressVote, congressVoteTurn: p.congressVoteTurn,
+        missionarySpreads: p.missionarySpreads })),
       cities: this.cities.map(c => ({ ...c })),
       units: this.units.map(u => ({ id: u.id, type: u.type, owner: u.owner, c: u.c, r: u.r,
         hp: u.hp, moves: u.moves, fortified: u.fortified, attacked: u.attacked, path: u.path,
@@ -2619,12 +2710,16 @@ class Game {
     g.effects = [];
     g.anims = [];
     g.strikes = [];
+    g.lastCombat = null;
     g.winner = d.winner; g.victoryType = d.victoryType;
     if (!g.scenario) g.maxTurns = SPEEDS[g.speed].turns;
-    g.rng = mulberry32((d.seed + d.turn * 7919) >>> 0);
+    // Version 2 persists the exact PRNG state. Version 1 saves retain their
+    // historical turn-derived fallback so existing local saves still load.
+    const fallbackRngState = (d.seed + d.turn * 7919) >>> 0;
+    g.rng = mulberry32(d.rngState ?? fallbackRngState);
     g.notifications = d.notifications || [];
     g.religions = d.religions || [];
-    NEXT_ID = d.nextId;
+    g.stats = d.stats || { steals: 0, catches: 0 };
 
     g.map = { w: d.map.w, h: d.map.h, tiles: [], idx: (c, r) => r * d.map.w + c, seed: d.seed };
     for (const td of d.map.tiles) {
@@ -2668,8 +2763,15 @@ class Game {
       p.leaderIdx = pd.leaderIdx || 0;
       p.congressVote = pd.congressVote ?? null;
       p.congressVoteTurn = pd.congressVoteTurn ?? -1;
+      p.missionarySpreads = pd.missionarySpreads || 0;
       return p;
     });
+    // City and Unit constructors allocate temporary IDs while rebuilding
+    // prototypes. Reset the global allocator only after hydration so loading a
+    // save cannot skip IDs and diverge from uninterrupted deterministic play.
+    const existingIds = [...g.cities.map(c => c.id), ...g.units.map(u => u.id),
+      ...g.players.flatMap(p => p.spies.map(s => s.id))].filter(Number.isFinite);
+    NEXT_ID = Math.max(Number(d.nextId) || 1, (existingIds.length ? Math.max(...existingIds) : 0) + 1);
     return g;
   }
 }

@@ -215,6 +215,32 @@ button:disabled { opacity: 0.4; cursor: default; }
 #victory-modal h2 { font-size: 34px; }
 #victory-modal p { margin: 10px 0; }
 
+/* ---------- victory progress ---------- */
+.victory-intro { display: flex; justify-content: space-between; gap: 16px; align-items: baseline;
+  margin-bottom: 12px; color: #b9c6db; }
+.victory-routes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.victory-route { min-width: 0; padding: 12px; background: #0f1725; border: 1px solid #33415c;
+  border-top: 3px solid var(--route, #c9a648); border-radius: 6px; }
+.victory-route-head { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 8px;
+  align-items: center; margin-bottom: 8px; }
+.victory-route-icon { width: 30px; height: 30px; display: grid; place-items: center; font-size: 19px;
+  background: #192437; border: 1px solid #3b4961; border-radius: 50%; }
+.victory-route-title { min-width: 0; color: #e9dfca; font-weight: 800; }
+.victory-route-value { color: var(--route, #d9ba68); font-size: 12px; font-weight: 800; white-space: nowrap; }
+.victory-meter { height: 6px; overflow: hidden; background: #26324a; border-radius: 3px; }
+.victory-meter > i { display: block; height: 100%; width: var(--progress, 0%); background: var(--route, #c9a648); }
+.victory-route p { min-height: 34px; margin: 8px 0 0; color: #9fadc2; font-size: 12px; line-height: 1.4; }
+.victory-standings { margin-top: 16px; border-top: 1px solid #33415c; padding-top: 12px; }
+.victory-standings h3 { margin-top: 0; }
+.standing-row { display: grid; grid-template-columns: 34px minmax(150px, 1.4fr) repeat(4, minmax(62px, 0.55fr));
+  gap: 8px; align-items: center; padding: 7px 9px; border-bottom: 1px solid #26324a; font-size: 12px; }
+.standing-row.header { color: #8393ab; font-size: 10px; font-weight: 800; text-transform: uppercase; }
+.standing-row.me { background: rgba(201,166,72,0.09); }
+.standing-rank { color: #d9ba68; font-weight: 800; }
+.standing-civ { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scenario-progress { padding: 16px; border-left: 4px solid #c9a648; background: #0f1725; }
+.scenario-progress strong { display: block; margin-bottom: 8px; color: #f0d890; font-size: 18px; }
+
 /* ---------- social policies ---------- */
 .modal-box.wide { max-width: 1100px; width: 94vw; }
 .policy-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
@@ -379,6 +405,7 @@ button:disabled { opacity: 0.4; cursor: default; }
   #minimap-wrap { bottom: 66px; }
   #recap { bottom: 132px; }
   #combat-preview { top: 96px; }
+  .victory-routes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 700px) {
@@ -428,6 +455,10 @@ button:disabled { opacity: 0.4; cursor: default; }
   .modal { align-items: flex-end; }
   .modal-box, .modal-box.wide { width: 100%; max-height: calc(100vh - 58px); border-radius: 8px 8px 0 0; padding: 16px 12px 74px; }
   .policy-grid { grid-template-columns: 1fr; }
+  .victory-intro { display: block; }
+  .victory-routes { grid-template-columns: 1fr; }
+  .standing-row { grid-template-columns: 28px minmax(110px, 1fr) repeat(2, minmax(50px, auto)); }
+  .standing-row > :nth-child(5), .standing-row > :nth-child(6) { display: none; }
   #tech-modal .modal-box { max-height: calc(100vh - 58px); }
   .tech-tree { max-height: calc(100vh - 160px); }
   .tech-era-ruler, .tech-node-grid { grid-template-columns: repeat(var(--tech-cols), 164px); column-gap: 34px; }

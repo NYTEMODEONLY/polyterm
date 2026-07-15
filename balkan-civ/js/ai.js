@@ -10,6 +10,30 @@ const AI = (() => {
     return [...p.atWarWith].filter(e => e !== game.barbIndex && game.players[e].alive);
   }
 
+  // Each leader leans into the victory route their bonuses support. Keeping
+  // this derived from data makes alternate leaders play differently without
+  // maintaining a second civilization-specific strategy table.
+  function victoryFocus(p) {
+    const c = p.civ;
+    const n = (value) => Number(value) || 0;
+    const weights = {
+      science: n(c.cityScience) * 4,
+      culture: n(c.cityCulture) * 3 + n(c.cultureBonus) * 10,
+      religion: n(c.cityFaith) * 4,
+      diplomacy: n(c.cityGold) * 2 + n(c.capitalGold) + n(c.coastalGold) * 2,
+      domination: 1 + (n(c.attackBonus) + n(c.defendCiv) + n(c.vsCityBonus) +
+        n(c.roughBonus) + n(c.homeBonus) + n(c.unitProdBonus)) * 10,
+    };
+    return Object.keys(weights).sort((a, b) => weights[b] - weights[a] || a.localeCompare(b))[0];
+  }
+
+  function techOnPath(key, target, seen = new Set()) {
+    if (key === target) return true;
+    if (seen.has(target) || !TECHS[target]) return false;
+    seen.add(target);
+    return TECHS[target].req.some(req => techOnPath(key, req, new Set(seen)));
+  }
+
   function takeTurn(game, p) {
     if (p.isBarb) {
       runBarbarians(game, p);
@@ -33,10 +57,15 @@ const AI = (() => {
 
   // ---------- social policies ----------
   function adoptPolicies(game, p) {
-    // each civ leans on a branch order derived from its identity
-    const branches = Object.keys(POLICY_BRANCHES);
-    const lean = p.civId.charCodeAt(0) % branches.length;
-    const order = [...branches.slice(lean), ...branches.slice(0, lean)];
+    const focus = victoryFocus(p);
+    const orders = {
+      domination: ["JUNAK", "ZADRUGA", "CARSIJA", "SABOR"],
+      science: ["SABOR", "ZADRUGA", "CARSIJA", "JUNAK"],
+      culture: ["ZADRUGA", "SABOR", "CARSIJA", "JUNAK"],
+      religion: ["SABOR", "ZADRUGA", "CARSIJA", "JUNAK"],
+      diplomacy: ["CARSIJA", "ZADRUGA", "SABOR", "JUNAK"],
+    };
+    const order = orders[focus];
     let guard = 0;
     while (game.canAdoptPolicy(p.index) && guard++ < 20) {
       let picked = null;
@@ -107,10 +136,13 @@ const AI = (() => {
         game.foundReligion(p.index, pref.name, pref.icon, beliefs[Math.floor(game.rng() * beliefs.length)]);
       }
     }
-    // buy a missionary when faith allows (keep a small buffer)
-    if (p.religionId !== null && p.faith >= UNITS.MISSIONARY.faithCost + 40) {
+    // Faith-led rulers sustain a larger mission network and spend closer to
+    // their reserve; other rulers still defend and spread their own religion.
+    const religious = victoryFocus(p) === "religion";
+    const reserve = religious ? 10 : 40;
+    if (p.religionId !== null && p.faith >= game.missionaryCost(p.index) + reserve) {
       const nMissionaries = game.units.filter(u => u.owner === p.index && u.type === "MISSIONARY").length;
-      if (nMissionaries < 2) {
+      if (nMissionaries < (religious ? 3 : 2)) {
         const home = game.cities.find(c => c.owner === p.index);
         if (home) game.buyMissionary(home);
       }
@@ -182,8 +214,9 @@ const AI = (() => {
 
   // ---------- diplomacy ----------
   function diplomacy(game, p) {
+    const diplomatic = victoryFocus(p) === "diplomacy";
     // court city-states when rich
-    if (p.gold > 350 && game.rng() < 0.15) {
+    if (p.gold > (diplomatic ? 250 : 350) && game.rng() < (diplomatic ? 0.4 : 0.15)) {
       const minors = [...p.met].filter(i => game.players[i].isMinor && game.players[i].alive &&
         !p.atWarWith.has(i));
       if (minors.length) {
@@ -246,10 +279,21 @@ const AI = (() => {
     const milTechs = ["ARCHERY", "BRONZE_WORKING", "IRON_WORKING", "HORSEBACK_RIDING",
       "CHIVALRY", "STEEL", "MACHINERY", "GUNPOWDER", "MASONRY", "CONSTRUCTION", "PHYSICS", "MATHEMATICS",
       "SAILING", "COMPASS", "METALLURGY", "RIFLING", "MILITARY_SCIENCE", "STEAM_POWER"];
+    const goals = {
+      science: ["WRITING", "PHILOSOPHY", "EDUCATION", "INDUSTRIALIZATION", "SANITATION"],
+      culture: ["PHILOSOPHY", "THEOLOGY", "EDUCATION", "INDUSTRIALIZATION"],
+      religion: ["POTTERY", "PHILOSOPHY", "THEOLOGY", "EDUCATION"],
+      diplomacy: ["CURRENCY", "CIVIL_SERVICE", "BANKING", "STEAM_POWER"],
+      domination: milTechs,
+    }[victoryFocus(p)];
+    const score = (key) => {
+      let value = TECHS[key].cost;
+      if (goals.some(target => !p.hasTech(target) && techOnPath(key, target))) value *= 0.55;
+      if (atWar && milTechs.includes(key)) value *= 0.5;
+      return value;
+    };
     const ranked = av.sort((a, b) => {
-      let sa = TECHS[a].cost, sb = TECHS[b].cost;
-      if (atWar) { if (milTechs.includes(a)) sa *= 0.5; if (milTechs.includes(b)) sb *= 0.5; }
-      return sa - sb;
+      return score(a) - score(b) || TECHS[a].cost - TECHS[b].cost || a.localeCompare(b);
     });
     p.researching = ranked[0];
   }
@@ -261,8 +305,9 @@ const AI = (() => {
     const military = myUnits.filter(u => !u.isCivilian);
     const settlers = myUnits.filter(u => u.type === "SETTLER");
     const atWar = realWars(game, p).length > 0;
+    const focus = victoryFocus(p);
     const wantCities = 4 + Math.floor(game.map.w / 15);
-    const wantMilitary = myCities.length * 2 + (atWar ? 4 : 1);
+    const wantMilitary = myCities.length * (focus === "domination" ? 3 : 2) + (atWar ? 4 : 1);
 
     for (const city of myCities) {
       if (city.producing) continue;
@@ -306,7 +351,8 @@ const AI = (() => {
       const caravans = myUnits.filter(u => u.def.caravan).length;
       const myRoutes = game.routes.filter(r => r.owner === p.index).length;
       if (!choice && p.hasTech("CURRENCY") && myCities.length >= 2 &&
-          caravans + myRoutes < Math.min(TRADE.maxRoutes, myCities.length) && game.rng() < 0.35) {
+          caravans + myRoutes < Math.min(TRADE.maxRoutes, myCities.length) &&
+          game.rng() < (focus === "diplomacy" ? 0.65 : 0.35)) {
         choice = pick(o => o.key === "CARAVAN");
       }
       const navy = myUnits.filter(u => u.def.naval);
@@ -314,15 +360,22 @@ const AI = (() => {
           game.rng() < (atWar ? 0.3 : 0.12)) {
         choice = bestShip();
       }
-      if (!choice && military.length < wantMilitary && game.rng() < (atWar ? 0.85 : 0.35)) {
+      if (!choice && military.length < wantMilitary && game.rng() < (atWar ? 0.85 : focus === "domination" ? 0.6 : 0.35)) {
         choice = bestMilitary();
       }
       if (!choice) {
-        // building priority order
-        const prio = ["MONUMENT", "SHRINE", "GRANARY", "LIBRARY", "TAVERN", "WALLS", "MARKET", "BARRACKS",
+        const strategic = {
+          science: ["LIBRARY", "UNIVERSITY", "OHRID_SCHOOL", "RILA", "ORIENT_EXPRESS"],
+          culture: ["MONUMENT", "TEMPLE", "STUDENICA", "HAGIA_SOPHIA", "MOUNT_ATHOS"],
+          religion: ["SHRINE", "TEMPLE", "MOUNT_ATHOS", "HAGIA_SOPHIA", "STUDENICA", "RILA"],
+          diplomacy: ["MARKET", "BANK", "STOCK_EXCHANGE", "STARI_MOST", "ORIENT_EXPRESS"],
+          domination: ["BARRACKS", "FORGE", "WALLS", "CASTLE", "ARSENAL", "KALEMEGDAN"],
+        }[focus];
+        const prio = [...strategic, "MONUMENT", "SHRINE", "GRANARY", "LIBRARY", "TAVERN", "WALLS", "MARKET", "BARRACKS",
           "TEMPLE", "HAMMAM", "AQUEDUCT", "FORGE", "UNIVERSITY", "CASTLE", "WORKSHOP", "BANK",
+          "FACTORY", "HOSPITAL", "ARSENAL", "STOCK_EXCHANGE",
           "DIOCLETIAN", "HIPPODROME", "OHRID_SCHOOL", "STARI_MOST", "MOUNT_ATHOS", "BRAN_CASTLE",
-          "HAGIA_SOPHIA", "STUDENICA", "RILA", "KALEMEGDAN"];
+          "HAGIA_SOPHIA", "STUDENICA", "RILA", "KALEMEGDAN", "IRON_GATES", "ORIENT_EXPRESS"];
         for (const key of prio) {
           const o = opts.find(x => x.kind === "building" && x.key === key);
           if (o) { choice = o; break; }
@@ -739,5 +792,5 @@ const AI = (() => {
     return best;
   }
 
-  return { takeTurn, autoExplore };
+  return { takeTurn, autoExplore, victoryFocus };
 })();
