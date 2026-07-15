@@ -143,8 +143,10 @@ Game* on the title screen to pick up where you left off.
 - 32-technology research tree across five eras (Ancient → Industrial)
 - Civ V-style combat: hit points, ranged vs melee, terrain defense bonuses,
   fortification, floating damage numbers, and sieges — cities bombard one
-  besieger every turn, so bring catapults. Hover a target for a **combat
-  forecast** (damage dealt and taken) before you commit
+  besieger every turn, so bring catapults. Select a target for a **combat
+  forecast** with damage ranges and a risk verdict before confirming the
+  strike; a battle report records the outcome, and attacks suffered during
+  the AI turn appear in the defender's turn recap
 - **Barbarians** (optional toggle): camps seed the wilds and spawn raiders
   that scale with the era; burn a camp for a 40-gold bounty. **Ancient
   ruins** reward explorers with gold, faith, science, veteran experience,

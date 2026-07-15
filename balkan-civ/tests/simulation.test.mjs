@@ -125,3 +125,75 @@ test("scenario openings stay inside their reviewed military balance bands", () =
     assert.ok(metric.cities >= 1, `${metric.key} failed to establish a player city`);
   }
 });
+
+test("combat reports preserve damage accounting and notify human defenders", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    const g = new Game({ playerCiv: "SERBIA", numOpponents: 1, numHumans: 2,
+      seed: 8181, mapW: 24, mapH: 18, mapType: "peninsula", difficulty: "normal" });
+    g.units = [];
+    g.cities = [];
+    g.camps = [];
+    for (const tile of g.map.tiles) {
+      tile.city = null; tile.owner = -1; tile.workedBy = null;
+    }
+    let pair = null;
+    for (const tile of g.map.tiles) {
+      if (!TERRAIN[tile.terrain].passable) continue;
+      const next = HEX.neighbors(tile.c, tile.r).map(([c, r]) => g.tile(c, r))
+        .find(t => t && TERRAIN[t.terrain].passable);
+      if (next) { pair = [tile, next]; break; }
+    }
+    if (!pair) throw new Error("test map did not contain adjacent land");
+    pair[0].terrain = "GRASSLAND"; pair[0].feature = null;
+    pair[1].terrain = "GRASSLAND"; pair[1].feature = null;
+    const attacker = g.addUnit("WARRIOR", 0, pair[0].c, pair[0].r);
+    const defender = g.addUnit("WARRIOR", 1, pair[1].c, pair[1].r);
+    g.players[0].atWarWith.add(1);
+    g.players[1].atWarWith.add(0);
+    const ok = g.attack(attacker, defender.c, defender.r);
+    return JSON.stringify({ ok, report: g.lastCombat,
+      defenderNotices: g.notifications.filter(n => n.p === 1).map(n => n.msg) });
+  `));
+
+  assert.equal(result.ok, true);
+  assert.equal(result.report.attackerOwner, 0);
+  assert.equal(result.report.targetOwner, 1);
+  assert.equal(result.report.attackerName, "Warrior");
+  assert.equal(result.report.targetName, "Warrior");
+  assert.equal(result.report.targetKind, "unit");
+  assert.ok(result.report.damage > 0);
+  assert.ok(result.report.counterDamage > 0);
+  assert.equal(result.report.attackerHpAfter, 100 - result.report.counterDamage);
+  assert.equal(result.report.targetHpAfter, 100 - result.report.damage);
+  assert.match(result.defenderNotices.at(-1), /Serbia Warrior dealt \d+ damage/);
+});
+
+test("pending-order snapshots track research, production, and unit decisions", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    const g = new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 9191,
+      mapW: 24, mapH: 18, mapType: "peninsula", difficulty: "normal" });
+    const initial = g.pendingOrders(0);
+    g.players[0].researching = g.players[0].availableTechs()[0];
+    const settler = g.units.find(u => u.owner === 0 && u.type === "SETTLER");
+    const city = g.foundCity(settler);
+    for (const unit of g.units) if (unit.owner === 0) unit.moves = 0;
+    const needsProduction = g.pendingOrders(0);
+    city.producing = { kind: "unit", key: "WARRIOR" };
+    const ready = g.pendingOrders(0);
+    return JSON.stringify({
+      initial: { research: initial.research, cities: initial.cities.length, units: initial.units.length },
+      needsProduction: { research: needsProduction.research, cities: needsProduction.cities.length,
+        units: needsProduction.units.length, cityId: needsProduction.cities[0] && needsProduction.cities[0].id },
+      ready: { research: ready.research, cities: ready.cities.length, units: ready.units.length },
+      foundedCityId: city.id,
+    });
+  `));
+
+  assert.equal(result.initial.research, true);
+  assert.equal(result.initial.cities, 0);
+  assert.ok(result.initial.units >= 2);
+  assert.deepEqual(result.needsProduction, {
+    research: false, cities: 1, units: 0, cityId: result.foundedCityId,
+  });
+  assert.deepEqual(result.ready, { research: false, cities: 0, units: 0 });
+});

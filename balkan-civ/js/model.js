@@ -197,6 +197,7 @@ class Game {
     this.notifications = [];
     this.effects = [];           // transient combat popups (not saved)
     this.strikes = [];           // transient attack animations (not saved)
+    this.lastCombat = null;      // latest resolved attack (transient UI/report data)
     this.difficulty = opts.difficulty || "normal";
     this.over = false;
     this.winner = null;
@@ -597,6 +598,23 @@ class Game {
         out: span(attStr, defStr), back: ranged ? null : span(defStr, attStr) };
     }
     return null;
+  }
+
+  // One authoritative snapshot for every decision the human-facing turn UI tracks.
+  pendingOrders(playerIdx) {
+    const p = this.players[playerIdx];
+    if (!p || !p.alive) return { research: false, congress: false, religion: false,
+      policy: false, promotionUnit: null, cities: [], units: [] };
+    return {
+      research: !p.researching && p.availableTechs().length > 0,
+      congress: !!(this.congressDue && this.congressDue() && p.congressVoteTurn !== this.turn),
+      religion: this.canFoundReligion(playerIdx),
+      policy: this.canAdoptPolicy(playerIdx),
+      promotionUnit: this.units.find(u => u.owner === playerIdx && u.promoPts > 0 && !u.isCivilian) || null,
+      cities: this.cities.filter(c => c.owner === playerIdx && !c.producing && !c.queue.length),
+      units: this.units.filter(u => u.owner === playerIdx && u.moves > 0 && !u.fortified && !u.attacked &&
+        !u.building && !u.autoExplore && !(u.path && u.path.length)),
+    };
   }
 
   // Scenario setup: shared tech era, gold, starting armies, opening wars
@@ -1026,17 +1044,46 @@ class Game {
     }
 
     const attStr = this.strengthOf(unit, { attacking: true, targetTile: t, ranged });
+    const hitsCity = !!(targetCity && (!targetUnit || !ranged));
+    const defender = hitsCity ? targetCity : targetUnit;
+    const report = {
+      turn: this.turn,
+      attackerId: unit.id,
+      attackerOwner: unit.owner,
+      attackerType: unit.type,
+      attackerName: unit.def.name,
+      attackerHpBefore: unit.hp,
+      attackerHpAfter: unit.hp,
+      attackerDestroyed: false,
+      targetKind: hitsCity ? "city" : "unit",
+      targetId: defender.id,
+      targetOwner: defender.owner,
+      targetType: hitsCity ? null : defender.type,
+      targetName: hitsCity ? defender.name : defender.def.name,
+      targetHpBefore: defender.hp,
+      targetHpAfter: defender.hp,
+      targetMaxHp: hitsCity ? defender.maxHp : 100,
+      targetDestroyed: false,
+      cityCaptured: false,
+      damage: 0,
+      counterDamage: 0,
+      ranged,
+      c, r,
+      ts: Date.now(),
+    };
     unit.fortified = false;
     this.addStrike(unit, c, r, ranged);
 
-    if (targetCity && (!targetUnit || !ranged)) {
+    if (hitsCity) {
       // attack the city itself (garrison protects a city only vs ranged pokes)
       const defStr = this.cityStrength(targetCity);
       const dmg = this.damageRoll(attStr, defStr);
+      report.damage = dmg;
       targetCity.hp -= dmg;
       this.addEffect(c, r, "-" + dmg);
       if (!ranged) {
         const back = this.damageRoll(defStr, attStr);
+        report.counterDamage = back;
         unit.hp -= back;
         this.addEffect(unit.c, unit.r, "-" + back, "#ffaa33");
         if (unit.hp <= 0) {
@@ -1047,15 +1094,20 @@ class Game {
       if (this.units.includes(unit)) unit.gainXp(ranged ? 3 : 5);
       if (targetCity.hp <= 0 && this.units.includes(unit)) {
         if (ranged) targetCity.hp = 1; // ranged can't capture
-        else this.captureCity(targetCity, unit);
+        else {
+          this.captureCity(targetCity, unit);
+          report.cityCaptured = true;
+        }
       }
     } else if (targetUnit) {
       const defStr = this.strengthOf(targetUnit, { attacking: false });
       const dmg = this.damageRoll(attStr, defStr);
+      report.damage = dmg;
       targetUnit.hp -= dmg;
       this.addEffect(c, r, "-" + dmg);
       if (!ranged) {
         const back = this.damageRoll(defStr, attStr);
+        report.counterDamage = back;
         unit.hp -= back;
         this.addEffect(unit.c, unit.r, "-" + back, "#ffaa33");
       }
@@ -1080,6 +1132,21 @@ class Game {
         }
       }
       if (unit.hp <= 0) this.removeUnit(unit);
+    }
+
+    report.attackerHpAfter = Math.max(0, unit.hp);
+    report.attackerDestroyed = !this.units.includes(unit);
+    report.targetHpAfter = report.cityCaptured ? 0 : Math.max(0, defender.hp);
+    report.targetDestroyed = report.cityCaptured || (report.targetKind === "unit" && !this.units.includes(defender));
+    this.lastCombat = report;
+
+    const targetPlayer = this.players[report.targetOwner];
+    if (targetPlayer && targetPlayer.isHuman && report.attackerOwner !== report.targetOwner) {
+      const attackerCiv = this.players[report.attackerOwner].civ.name;
+      const outcome = report.cityCaptured ? ` and captured ${report.targetName}`
+        : report.targetDestroyed ? ` and destroyed ${report.targetName}` : "";
+      const counter = report.counterDamage ? ` Your counterattack dealt ${report.counterDamage}.` : "";
+      this.notify(`⚔️ ${attackerCiv} ${report.attackerName} dealt ${report.damage} damage${outcome}.${counter}`, report.targetOwner);
     }
 
     unit.attacked = true;

@@ -72,9 +72,16 @@ button:disabled { opacity: 0.4; cursor: default; }
 .command-bar button { min-width: 36px; height: 38px; padding: 4px 9px; border-color: #76663f;
   background: linear-gradient(#3a342a, #211f1a); box-shadow: inset 0 1px 0 rgba(255,255,255,0.05); }
 .cmd-icon { margin-right: 4px; }
-#btn-endturn { background: linear-gradient(#8a4936, #5e2b25); border-color: #de8b66; color: #fff2d6;
-  font-weight: 800; white-space: nowrap; box-shadow: inset 0 0 0 1px rgba(255,225,171,0.12); }
+#btn-endturn { position: fixed; right: 224px; bottom: 52px; z-index: 12; min-width: 168px; height: 44px;
+  background: linear-gradient(#8a4936, #5e2b25); border-color: #de8b66; color: #fff2d6;
+  font-weight: 800; white-space: nowrap;
+  box-shadow: inset 0 0 0 1px rgba(255,225,171,0.12), 0 5px 16px rgba(0,0,0,0.46); }
 #btn-endturn:hover:not(:disabled) { background: #8c3b31; }
+#btn-endturn[data-state="research"], #btn-endturn[data-state="congress"],
+#btn-endturn[data-state="production"], #btn-endturn[data-state="unit"] {
+  background: linear-gradient(#6a5936, #3f3727); border-color: #d1b466; color: #fff0c4; }
+#btn-endturn[data-state="waiting"], #btn-endturn[data-state="over"] {
+  background: #272a28; border-color: #595d57; color: #a7aaa3; }
 #map { position: fixed; top: 52px; left: 0; cursor: grab; touch-action: none; }
 #map:active { cursor: grabbing; }
 
@@ -304,6 +311,41 @@ button:disabled { opacity: 0.4; cursor: default; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity 0.4s, transform 0.4s; }
 #recap.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+/* ---------- combat command / report ---------- */
+#combat-preview { position: fixed; top: 98px; left: 50%; transform: translateX(-50%); z-index: 31;
+  display: none; width: min(540px, calc(100vw - 24px)); padding: 10px 12px;
+  background: linear-gradient(150deg, rgba(18,31,32,0.98), rgba(25,24,20,0.98));
+  border: 2px solid #b79b57; border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(240,216,144,0.08), 0 8px 24px rgba(0,0,0,0.54); }
+.combat-title { display: flex; align-items: center; justify-content: space-between; color: #d8bd78;
+  font-size: 11px; font-weight: 800; text-transform: uppercase; }
+.combat-close { width: 24px; height: 22px; padding: 0; font-size: 12px; }
+.combat-versus { display: grid; grid-template-columns: minmax(0, 1fr) 30px minmax(0, 1fr);
+  align-items: center; gap: 7px; margin: 7px 0; }
+.combatant { min-width: 0; display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 8px; align-items: center; }
+.combatant.target { text-align: right; grid-template-columns: minmax(0, 1fr) 38px; }
+.combatant.target .combat-icon { grid-column: 2; grid-row: 1; }
+.combatant.target > span:not(.combat-icon) { grid-column: 1; grid-row: 1; }
+.combatant b, .combatant small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.combatant small { color: #aaa89f; font-size: 10px; margin: 1px 0 3px; }
+.combat-icon { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid #796b48;
+  border-radius: 50%; background: #111a19; font-size: 22px; }
+.combat-vs { color: #d1b466; font-size: 11px; font-weight: 900; text-align: center; }
+.combat-hp { display: block; height: 5px; overflow: hidden; background: #111; border: 1px solid #4a483e; }
+.combat-hp > span { display: block; height: 100%; }
+.combat-odds { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 7px 0;
+  border-top: 1px solid rgba(183,155,87,0.28); border-bottom: 1px solid rgba(183,155,87,0.28); font-size: 12px; }
+.combat-odds strong { margin-left: auto; }
+.combat-odds .good { color: #8fd18a; }
+.combat-odds .even { color: #e0c77d; }
+.combat-odds .bad { color: #ef8c78; }
+.combat-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
+.combat-confirm { background: linear-gradient(#8a4936, #5e2b25); border-color: #de8b66; font-weight: 800; }
+.combat-result-title { color: #fff0c4; font-size: 18px; font-weight: 800; margin: 4px 0 7px; }
+.combat-result-line, .combat-survivors { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; }
+.combat-result-line { padding-bottom: 6px; border-bottom: 1px solid rgba(183,155,87,0.28); }
+.combat-survivors { color: #aaa89f; padding-top: 6px; }
+
 /* ---------- responsive shell ---------- */
 @media (max-width: 1260px) {
   .start-layout { grid-template-columns: minmax(0, 1fr) 320px; }
@@ -330,11 +372,13 @@ button:disabled { opacity: 0.4; cursor: default; }
     justify-content: space-between; gap: 4px; background: linear-gradient(#272117, #17140f);
     border-top: 2px solid #8a7648; box-shadow: 0 -5px 18px rgba(0,0,0,0.4); }
   .command-bar button { flex: 1 1 0; min-width: 38px; height: 44px; font-size: 17px; padding: 4px; }
-  #btn-endturn { flex: 1.9 0 92px; font-size: 12px; }
+  #btn-endturn { position: static; min-width: 38px; height: 44px; flex: 1.9 0 92px;
+    font-size: 12px; white-space: normal; line-height: 1.05; }
   #map-controls { right: 8px; bottom: 66px; }
   #unit-panel { bottom: 66px; }
   #minimap-wrap { bottom: 66px; }
   #recap { bottom: 132px; }
+  #combat-preview { top: 96px; }
 }
 
 @media (max-width: 700px) {
@@ -378,6 +422,9 @@ button:disabled { opacity: 0.4; cursor: default; }
   #advisor { left: 10px; right: 10px; bottom: 220px; width: auto; max-height: 200px; overflow-y: auto; }
   #recap { bottom: 174px; width: calc(100vw - 20px); max-width: none; }
   #game-banner { max-width: calc(100vw - 20px); padding: 12px 18px; font-size: 20px; white-space: normal; text-align: center; }
+  .combat-odds { gap: 8px; flex-wrap: wrap; justify-content: flex-start; }
+  .combat-odds strong { width: 100%; margin-left: 0; text-align: center; }
+  .combat-actions button { min-height: 36px; }
   .modal { align-items: flex-end; }
   .modal-box, .modal-box.wide { width: 100%; max-height: calc(100vh - 58px); border-radius: 8px 8px 0 0; padding: 16px 12px 74px; }
   .policy-grid { grid-template-columns: 1fr; }

@@ -7,6 +7,7 @@ const UI = (() => {
   let game = null, rend = null;
   let chosenCiv = CIV_IDS[0];
   let chosenLeader = 0;
+  let pendingAttack = null, combatPanelTimer = null;
   const $ = (id) => document.getElementById(id);
 
   // In a network game only the client whose turn it is may act.
@@ -365,6 +366,7 @@ const UI = (() => {
 
   // ---------------- selection ----------------
   function selectUnit(u) {
+    hideCombatPreview();
     if (u && u !== rend.selected) SFX.play("select");
     rend.previewPath = null;
     rend.selected = u;
@@ -451,14 +453,120 @@ const UI = (() => {
     const owner = warTargetOwner(sel, c, r);
     if (owner < 0) return;
     game.declareWar(game.viewer, owner);
-    const t = game.tile(c, r);
-    SFX.play(t && t.city ? "cityhit" : "attack");
-    game.attack(sel, c, r);
-    selectUnit(game.units.includes(sel) ? sel : null);
+    executePlayerAttack(sel, c, r);
+  }
+
+  function hideCombatPreview() {
+    const panel = $("combat-preview");
+    if (panel) {
+      panel.style.display = "none";
+      panel.classList.remove("resolved");
+      panel.innerHTML = "";
+    }
+    pendingAttack = null;
+    clearTimeout(combatPanelTimer);
+  }
+
+  function hpMeter(current, max, color) {
+    const pct = Math.max(0, Math.min(100, current / Math.max(1, max) * 100));
+    return `<span class="combat-hp"><span style="width:${pct}%;background:${color}"></span></span>`;
+  }
+
+  function combatVerdict(unit, forecast) {
+    if (forecast.out[0] >= forecast.targetHp) return ["Decisive strike", "good"];
+    if (!forecast.back) return ["No counterattack", "good"];
+    const dealt = (forecast.out[0] + forecast.out[1]) / 2;
+    const taken = (forecast.back[0] + forecast.back[1]) / 2;
+    if (taken >= unit.hp) return ["Attacker at risk", "bad"];
+    if (dealt >= taken * 1.45) return ["Favourable", "good"];
+    if (taken >= dealt * 1.45) return ["Unfavourable", "bad"];
+    return ["Even engagement", "even"];
+  }
+
+  function showCombatPreview(unit, c, r) {
+    const forecast = game.predictAttack(unit, c, r);
+    if (!forecast) return false;
+    const tile = game.tile(c, r);
+    const targetUnit = game.combatUnitAt(c, r);
+    const hitsCity = !!(tile.city && (!targetUnit || !unit.isRanged));
+    const defender = hitsCity ? tile.city : targetUnit;
+    if (!defender) return false;
+    const targetPlayer = game.players[defender.owner];
+    const [verdict, verdictClass] = combatVerdict(unit, forecast);
+    const panel = $("combat-preview");
+    pendingAttack = { unitId: unit.id, c, r };
+    clearTimeout(combatPanelTimer);
+    panel.className = "";
+    panel.innerHTML = `
+      <div class="combat-title"><span>Combat forecast</span><button class="combat-close" title="Cancel attack">✕</button></div>
+      <div class="combat-versus">
+        <div class="combatant">
+          <span class="combat-icon">${unit.def.icon}</span>
+          <span><b>${unit.def.name}</b><small>${game.players[unit.owner].civ.name} · ${unit.hp} HP</small>${hpMeter(unit.hp, 100, game.players[unit.owner].civ.color)}</span>
+        </div>
+        <span class="combat-vs">VS</span>
+        <div class="combatant target">
+          <span class="combat-icon">${hitsCity ? "🏙️" : defender.def.icon}</span>
+          <span><b>${forecast.target}</b><small>${targetPlayer.civ.name} · ${forecast.targetHp} HP</small>${hpMeter(forecast.targetHp, hitsCity ? defender.maxHp : 100, targetPlayer.civ.color)}</span>
+        </div>
+      </div>
+      <div class="combat-odds">
+        <span>Deal <b>${forecast.out[0]}–${forecast.out[1]}</b></span>
+        <span>${forecast.back ? `Take <b>${forecast.back[0]}–${forecast.back[1]}</b>` : "No retaliation"}</span>
+        <strong class="${verdictClass}">${verdict}</strong>
+      </div>
+      <div class="combat-actions"><button class="combat-confirm">⚔ Attack</button><button class="combat-cancel">Cancel</button></div>`;
+    panel.style.display = "block";
+    panel.querySelector(".combat-close").onclick = hideCombatPreview;
+    panel.querySelector(".combat-cancel").onclick = hideCombatPreview;
+    panel.querySelector(".combat-confirm").onclick = () => {
+      const current = game.units.find(u => u.id === pendingAttack?.unitId);
+      if (current) executePlayerAttack(current, c, r);
+    };
+    return true;
+  }
+
+  function showCombatResult(report) {
+    if (!report) return;
+    const panel = $("combat-preview");
+    const attacker = game.players[report.attackerOwner];
+    const defender = game.players[report.targetOwner];
+    const outcome = report.cityCaptured ? `${report.targetName} captured`
+      : report.targetDestroyed ? `${report.targetName} destroyed`
+      : report.attackerDestroyed ? `${report.attackerName} lost` : "Engagement complete";
+    panel.className = "resolved";
+    panel.innerHTML = `
+      <div class="combat-title"><span>Battle report</span><button class="combat-close" title="Dismiss">✕</button></div>
+      <div class="combat-result-title">${outcome}</div>
+      <div class="combat-result-line">
+        <span style="color:${attacker.civ.color}">${report.attackerName}</span>
+        <b>dealt ${report.damage}</b>
+        ${report.counterDamage ? `<span>· took ${report.counterDamage}</span>` : `<span>· no retaliation</span>`}
+      </div>
+      <div class="combat-survivors">
+        <span>${report.attackerDestroyed ? "Defeated" : `${report.attackerHpAfter} HP`} · ${report.attackerName}</span>
+        <span>${report.targetDestroyed ? "Defeated" : `${report.targetHpAfter} HP`} · <span style="color:${defender.civ.color}">${report.targetName}</span></span>
+      </div>`;
+    panel.style.display = "block";
+    panel.querySelector(".combat-close").onclick = hideCombatPreview;
+    clearTimeout(combatPanelTimer);
+    combatPanelTimer = setTimeout(hideCombatPreview, rend.reduceMotion ? 6500 : 4500);
+  }
+
+  function executePlayerAttack(unit, c, r) {
+    hideCombatPreview();
+    const tile = game.tile(c, r);
+    SFX.play(tile && tile.city ? "cityhit" : "attack");
+    const ok = game.attack(unit, c, r);
+    const report = ok ? game.lastCombat : null;
+    selectUnit(game.units.includes(unit) ? unit : null);
     refreshAll();
+    if (report) showCombatResult(report);
+    return ok;
   }
 
   function selectCity(city) {
+    hideCombatPreview();
     rend.selected = null;
     rend.reachable = []; rend.attackable = [];
     rend.selectedCity = city;
@@ -1269,6 +1377,7 @@ const UI = (() => {
       ? `${relIcon} <b class="alert">found a religion!</b>`
       : `${relIcon} ${Math.floor(p.faith)} (+${faith})`;
     $("stat-score").textContent = game.scenario ? game.scenarioStatus() : `🏆 ${game.score(game.viewer)}`;
+    refreshEndTurnButton();
   }
 
   // ---------------- headline banner ----------------
@@ -1637,30 +1746,30 @@ const UI = (() => {
   function computeAttention() {
     const items = [];
     if (!myTurn() || game.over) return items;
-    const v = game.viewer, p = game.players[v];
-    if (!p.researching && p.availableTechs().length)
+    const v = game.viewer;
+    const pending = game.pendingOrders(v);
+    if (pending.research)
       items.push({ icon: "🔬", label: "Choose research", tipKey: "research",
         hint: "Choose the technology path that will shape your next units and buildings.", act: showTechScreen });
-    if (game.congressDue && game.congressDue() && p.congressVoteTurn !== game.turn)
+    if (pending.congress)
       items.push({ icon: "🗳️", label: "Congress vote", act: () => { congressSeenTurn = -1; maybeShowCongress(); } });
-    if (game.canFoundReligion(v))
+    if (pending.religion)
       items.push({ icon: "☦️", label: "Found religion", tipKey: "religion",
         hint: "Choose a founder belief, then spread the faith with Missionaries.", act: showReligionScreen });
-    if (game.canAdoptPolicy(v))
+    if (pending.policy)
       items.push({ icon: "🎭", label: "Adopt policy", tipKey: "policy",
         hint: "Spend culture on a policy branch; completing three branches wins a Cultural Victory.", act: showPolicyScreen });
-    const promoUnit = game.units.find(u => u.owner === v && u.promoPts > 0 && !u.isCivilian);
+    const promoUnit = pending.promotionUnit;
     if (promoUnit)
       items.push({ icon: "⭐", label: "Promote unit", tipKey: "promote",
         hint: "Select a veteran upgrade before sending this unit back into battle.",
         act: () => { selectUnit(promoUnit); rend.centerOn(game, promoUnit.c, promoUnit.r); } });
-    const idleCity = game.cities.find(c => c.owner === v && !c.producing && !c.queue.length);
+    const idleCity = pending.cities[0];
     if (idleCity)
       items.push({ icon: "🏙️", label: "Set production", tipKey: "founded",
         hint: "Choose what this city should build; early military and workers establish momentum.",
         act: () => { selectCity(idleCity); rend.centerOn(game, idleCity.c, idleCity.r); } });
-    const idleUnits = game.units.filter(u => u.owner === v && u.moves > 0 && !u.fortified &&
-      !u.attacked && !u.building && !u.autoExplore && !(u.path && u.path.length));
+    const idleUnits = pending.units;
     if (idleUnits.length)
       items.push({ icon: "🎖️", label: `${idleUnits.length} unit${idleUnits.length > 1 ? "s" : ""} to move`, act: cycleNextUnit });
     return items;
@@ -1822,23 +1931,47 @@ const UI = (() => {
   function hideAdvisor() { $("advisor").style.display = "none"; $("advisor").dataset.tipKey = ""; }
 
   // ---------------- end turn ----------------
+  function pendingTurnAction() {
+    if (!game || game.over) return { kind: "over" };
+    if (!myTurn()) return { kind: "waiting" };
+    const pending = game.pendingOrders(game.viewer);
+    if (pending.research) return { kind: "research" };
+    if (pending.congress) return { kind: "congress" };
+    if (pending.cities.length) return { kind: "production", target: pending.cities[0] };
+    if (pending.units.length) return { kind: "unit", target: pending.units[0], count: pending.units.length };
+    return { kind: "ready" };
+  }
+
+  function refreshEndTurnButton() {
+    const button = $("btn-endturn");
+    if (!button) return;
+    const action = pendingTurnAction();
+    const labels = {
+      over: "Game Complete", waiting: "Waiting…", research: "Choose Research",
+      congress: "Cast Vote", production: "Choose Production", ready: "End Turn ⏵",
+    };
+    button.textContent = action.kind === "unit" ? `Next Unit (${action.count})` : labels[action.kind];
+    button.dataset.state = action.kind;
+    button.disabled = action.kind === "over" || action.kind === "waiting";
+    button.title = action.kind === "ready" ? "Advance to the next turn"
+      : action.kind === "unit" ? "Select the next unit that needs orders"
+      : action.kind === "production" ? "Select a city that needs production"
+      : action.kind === "research" ? "Choose a technology before ending the turn"
+      : action.kind === "congress" ? "Cast your World Congress vote" : "";
+  }
+
   function endTurn() {
-    if (!myTurn()) return;
-    const p = game.players[game.viewer];
-    if (!p.researching && p.availableTechs().length) { showTechScreen(); return; }
-    const idle = game.units.find(u => u.owner === game.viewer && u.moves > 0 && !u.fortified && !u.attacked &&
-      !u.building && !u.autoExplore && !(u.path && u.path.length));
-    const cityIdle = game.cities.find(c => c.owner === game.viewer && !c.producing);
-    if (cityIdle) { selectCity(cityIdle); rend.centerOn(game, cityIdle.c, cityIdle.r); return; }
-    if (idle && !endTurn.skipIdle) {
-      selectUnit(idle);
-      rend.centerOn(game, idle.c, idle.r);
-      endTurn.skipIdle = true; // second click ends anyway
-      $("btn-endturn").textContent = "Units idle — End Anyway";
-      return;
+    const action = pendingTurnAction();
+    if (action.kind === "waiting" || action.kind === "over") return;
+    if (action.kind === "research") { showTechScreen(); return; }
+    if (action.kind === "congress") { congressSeenTurn = -1; maybeShowCongress(); return; }
+    if (action.kind === "production") {
+      selectCity(action.target); rend.centerOn(game, action.target.c, action.target.r); return;
     }
-    endTurn.skipIdle = false;
-    $("btn-endturn").textContent = "End Turn ⏵";
+    if (action.kind === "unit") {
+      selectUnit(action.target); rend.centerOn(game, action.target.c, action.target.r); return;
+    }
+    hideCombatPreview();
     undoInfo = null;
     SFX.play("turn");
     snapshotForRecap(); // capture state so the next turn can recap what changed
@@ -1995,10 +2128,9 @@ const UI = (() => {
     const sel = rend.selected;
     // attack?
     if (sel && !rightClick && rend.attackable.some(([ac, ar]) => ac === c && ar === r)) {
-      SFX.play(t.city ? "cityhit" : "attack");
-      game.attack(sel, c, r);
-      if (game.units.includes(sel)) selectUnit(sel); else selectUnit(null);
-      refreshAll();
+      if (pendingAttack && pendingAttack.unitId === sel.id && pendingAttack.c === c && pendingAttack.r === r)
+        executePlayerAttack(sel, c, r);
+      else showCombatPreview(sel, c, r);
       return;
     }
     // clicking an at-peace rival's unit/city in range: offer to declare war & strike
