@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Balkan Civilizations</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>⚔️</text></svg>">
-<link rel="stylesheet" href="css/style.css?v=6">
+<link rel="stylesheet" href="css/style.css?v=30">
 </head>
 <body>
 
@@ -19,10 +19,12 @@
   <div class="start-layout">
     <main class="start-main">
       <div class="section-heading">
-        <div><span class="eyebrow">Choose your realm</span><h2>Nine civilizations. Twenty-seven leaders.</h2></div>
-        <span class="dim">Select a leader to change your starting trait.</span>
+        <div><span class="eyebrow">Choose your realm</span><h2>Nine civilizations. Twenty-nine leaders.</h2></div>
+        <div class="realm-tools"><span class="dim">Select a leader to change your starting trait.</span>
+          <button id="btn-random-realm" class="icon-command" title="Choose a random civilization and leader"
+            aria-label="Choose a random civilization and leader">🎲</button></div>
       </div>
-      <div id="civ-cards"></div>
+      <div id="civ-cards" aria-label="Choose a civilization"></div>
     </main>
     <aside class="start-panel">
       <div class="panel-eyebrow">Skirmish setup</div>
@@ -74,6 +76,15 @@
               <option value="hard">Emperor</option>
             </select>
           </label>
+          <div class="seed-option">
+            <label for="inp-seed">Map seed</label>
+            <div class="seed-control">
+              <input id="inp-seed" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="10"
+                placeholder="Random" autocomplete="off" spellcheck="false"
+                title="Enter a whole number from 0 to 4294967295, or leave blank for a random map">
+              <button id="btn-random-seed" type="button" title="Generate a new map seed" aria-label="Generate a new map seed">↻</button>
+            </div>
+          </div>
         </div>
         <label class="toggle-row" title="Barbarian camps spawn raiders in the wilds">
           <input type="checkbox" id="chk-barbs" checked> <span>Barbarian clans</span>
@@ -95,8 +106,8 @@
   </div>
   <div class="dim" style="margin-top:14px">
     Controls: click to select · click a highlighted hex to move/attack · drag to pan · wheel to zoom ·
-    Enter = end turn · T = tech · D = diplomacy · F = fortify · N = next unit<br>
-    Research <b>Sailing</b> to embark onto coast and build Galleys; <b>Compass</b> opens the deep sea and the War Galleass.
+    Enter = end turn · Home = center selection · O = empire overview · T = tech · D = diplomacy · F = fortify · N = next unit<br>
+    Research <b>Sailing</b> to embark and build Galleys; <b>Compass</b> opens the deep sea, while Gunpowder and Steam Power modernize the fleet.
   </div>
 </div>
 
@@ -106,36 +117,41 @@
     <div class="status-strip">
       <span id="stat-turn"></span>
       <span id="stat-era"></span>
-      <span id="stat-gold"></span>
+      <button id="stat-gold" class="stat-action" title="Open economy ledger (O)" aria-label="Open economy ledger"></button>
       <span id="stat-happy"></span>
-      <span id="stat-sci" style="cursor:pointer" title="Open tech tree"></span>
-      <span id="stat-faith" style="cursor:pointer" title="Open religion overview"></span>
-      <span id="stat-culture" style="cursor:pointer" title="Open social policies (P)"></span>
-      <span id="stat-score"></span>
+      <button id="stat-sci" class="stat-action" title="Open tech tree" aria-label="Open technology tree"></button>
+      <button id="stat-faith" class="stat-action" title="Open religion overview" aria-label="Open religion overview"></button>
+      <button id="stat-culture" class="stat-action" title="Open social policies (P)" aria-label="Open social policies"></button>
+      <button id="stat-score" class="stat-action" title="Open victory progress (V)" aria-label="Open victory progress"></button>
     </div>
     <div class="command-bar">
+      <button id="btn-empire" title="Empire overview (O)"><span class="cmd-icon">🏛️</span><span class="cmd-label">Empire</span></button>
       <button id="btn-tech" title="Technology (T)"><span class="cmd-icon">🔬</span><span class="cmd-label">Tech</span></button>
       <button id="btn-religion" title="Religion (R)"><span class="cmd-icon">☦️</span><span class="cmd-label">Religion</span></button>
       <button id="btn-diplo" title="Diplomacy (D)"><span class="cmd-icon">🤝</span><span class="cmd-label">Diplomacy</span></button>
       <button id="btn-spies" title="Espionage (E)"><span class="cmd-icon">🕵️</span><span class="cmd-label">Spies</span></button>
-      <button id="btn-pedia" title="Civilopedia (?)">📖</button>
-      <button id="btn-mute" title="Toggle sound effects">🔊</button>
-      <button id="btn-music" title="Toggle music">🎵</button>
-      <button id="btn-menu" title="Game menu">☰ <span class="cmd-label">Menu</span></button>
+      <button id="btn-pedia" title="Civilopedia (?)" aria-label="Open Civilopedia">📖</button>
+      <button id="btn-mute" title="Toggle sound effects" aria-label="Toggle sound effects">🔊</button>
+      <button id="btn-music" title="Toggle music" aria-label="Toggle music">🎵</button>
+      <button id="btn-menu" title="Game menu" aria-label="Open game menu">☰ <span class="cmd-label">Menu</span></button>
       <button id="btn-endturn">End Turn ⏵</button>
     </div>
   </div>
-  <canvas id="map"></canvas>
+  <canvas id="map" role="img" aria-label="Interactive world map"></canvas>
   <div id="map-controls" aria-label="Map controls">
-    <button id="btn-rot-left" title="Rotate map left (Q)">↶</button>
-    <button id="btn-rot-right" title="Rotate map right (W)">↷</button>
+    <button id="btn-rot-left" title="Rotate map left (Q)" aria-label="Rotate map left">↶</button>
+    <button id="btn-rot-right" title="Rotate map right (W)" aria-label="Rotate map right">↷</button>
     <span class="control-rule"></span>
-    <button id="btn-zoom-out" title="Zoom out">−</button>
-    <button id="btn-zoom-in" title="Zoom in">+</button>
+    <button id="btn-center-map" title="Center selection or capital (Home)" aria-label="Center map on selection or capital">⌖</button>
+    <button id="btn-zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
+    <button id="btn-zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+    <span class="control-rule"></span>
+    <button id="btn-yields" title="Show tile yields (Y)" aria-label="Show tile yields" aria-pressed="false">🌾</button>
   </div>
   <div id="attention"></div>
   <div id="recap"></div>
-  <div id="minimap-wrap"><canvas id="minimap" width="200" height="150"></canvas></div>
+  <div id="combat-preview" role="status" aria-live="polite"></div>
+  <div id="minimap-wrap"><canvas id="minimap" width="200" height="150" role="img" aria-label="World minimap"></canvas></div>
   <div id="unit-panel">
     <div id="unit-info"></div>
     <div id="unit-actions"></div>
@@ -146,18 +162,22 @@
 
 <div id="tooltip"></div>
 <div id="game-banner"></div>
-<div id="advisor" style="display:none">
-  <div id="advisor-head"><span id="advisor-title"></span><button id="advisor-close" title="Dismiss">✕</button></div>
-  <div id="advisor-body"></div>
+<div id="advisor" role="region" aria-labelledby="advisor-title" style="display:none">
+  <div id="advisor-head"><span id="advisor-title"></span><button id="advisor-close" title="Dismiss advisor"
+    aria-label="Dismiss advisor">✕</button></div>
+  <div id="advisor-body" aria-live="polite"></div>
   <label id="advisor-off"><input type="checkbox" id="advisor-off-chk"> Don't show advisor tips</label>
 </div>
 
 <!-- ============ modals ============ -->
+<div id="empire-modal" class="modal">
+  <div class="modal-box wide empire-box"><h2>🏛️ Empire Overview</h2><div id="empire-body"></div></div>
+</div>
 <div id="tech-modal" class="modal">
   <div class="modal-box"><h2>🔬 Technology</h2><div id="tech-body"></div></div>
 </div>
 <div id="diplo-modal" class="modal">
-  <div class="modal-box"><h2>🤝 Diplomacy</h2><div id="diplo-body"></div></div>
+  <div class="modal-box wide"><h2>🤝 Diplomacy</h2><div id="diplo-body"></div></div>
 </div>
 <div id="religion-modal" class="modal">
   <div class="modal-box"><h2>☦️ Religion</h2><div id="religion-body"></div></div>
@@ -177,6 +197,12 @@
 <div id="campaign-modal" class="modal">
   <div class="modal-box wide"><h2>🎖️ Campaign — A Thousand Years of the Balkans</h2><div id="campaign-body"></div></div>
 </div>
+<div id="progress-modal" class="modal">
+  <div class="modal-box wide"><h2>🏆 Victory Progress</h2><div id="progress-body"></div></div>
+</div>
+<div id="event-modal" class="modal decision-modal">
+  <div class="modal-box event-box"><div id="event-body"></div></div>
+</div>
 <div id="peace-modal" class="modal">
   <div class="modal-box"><h2>☮️ Peace Proposal</h2><div id="peace-body"></div></div>
 </div>
@@ -186,7 +212,7 @@
 <div id="pedia-modal" class="modal">
   <div class="modal-box wide"><h2>📖 Civilopedia</h2>
     <input id="pedia-search" type="text" placeholder="🔍 Search units, buildings, techs, policies…" autocomplete="off">
-    <div id="pedia-tabs"></div>
+    <div id="pedia-tabs" role="tablist" aria-label="Civilopedia categories"></div>
     <div id="pedia-body"></div>
   </div>
 </div>
@@ -200,10 +226,10 @@
   <div class="modal-box"><h2>⚙️ Settings</h2><div id="settings-body"></div></div>
 </div>
 <input type="file" id="file-import" accept=".json,application/json" style="display:none">
-<div id="handoff-modal" class="modal" style="background:#0d1b2a">
+<div id="handoff-modal" class="modal decision-modal" style="background:#0d1b2a">
   <div class="modal-box" id="handoff-body" style="text-align:center"></div>
 </div>
-<div id="net-modal" class="modal">
+<div id="net-modal" class="modal decision-modal">
   <div class="modal-box" id="net-body"></div>
 </div>
 <div id="net-banner">🌐</div>
@@ -214,10 +240,10 @@
     <b>🖌️ Map Editor</b>
     <span id="editor-palette"></span>
     <span class="spacer"></span>
-    <button id="ed-random">🎲 Randomize</button>
-    <button id="ed-clear">🌊 All Sea</button>
-    <button id="ed-save">💾 Save &amp; Use</button>
-    <button id="ed-exit">✕ Exit</button>
+    <button id="ed-random" title="Generate a random map">🎲 <span>Randomize</span></button>
+    <button id="ed-clear" title="Clear the map to sea">🌊 <span>All Sea</span></button>
+    <button id="ed-save" title="Save and use this map">💾 <span>Save &amp; Use</span></button>
+    <button id="ed-exit" title="Exit the map editor">✕ <span>Exit</span></button>
   </div>
   <canvas id="editor-canvas"></canvas>
   <div id="editor-minimap-wrap"><canvas id="editor-minimap" width="200" height="150"></canvas></div>
@@ -228,19 +254,22 @@
   <div class="modal-box" id="victory-body"></div>
 </div>
 
-<script src="js/data.js"></script>
+<script src="js/data.js?v=12"></script>
+<script src="js/cityart.js?v=1"></script>
 <script src="js/sound.js"></script>
 <script src="js/hex.js"></script>
-<script src="js/mapgen.js"></script>
-<script src="js/model.js"></script>
-<script src="js/ai.js"></script>
+<script src="js/riverart.js?v=1"></script>
+<script src="js/mapgen.js?v=4"></script>
+<script src="js/model.js?v=20"></script>
+<script src="js/ai.js?v=10"></script>
 <script src="js/vendor/three.min.js"></script>
-<script src="js/unitart.js?v=1"></script>
-<script src="js/render.js?v=6"></script>
-<script src="js/render3d.js?v=6"></script>
-<script src="js/net.js"></script>
-<script src="js/editor.js"></script>
-<script src="js/ui.js?v=7"></script>
+<script src="js/unitart.js?v=2"></script>
+<script src="js/worldart.js?v=2"></script>
+<script src="js/render.js?v=18"></script>
+<script src="js/render3d.js?v=19"></script>
+<script src="js/net.js?v=2"></script>
+<script src="js/editor.js?v=1"></script>
+<script src="js/ui.js?v=32"></script>
 <script>
   window.addEventListener("DOMContentLoaded", () => UI.init());
 </script>

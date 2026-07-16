@@ -27,11 +27,22 @@ class Unit {
     this.building = null;        // worker job: {type, turnsLeft}
     this.charges = UNITS[type].charges || 0; // missionary spreads
     this.healFortify = false;    // fortified until fully healed
+    this.autoExplore = false;    // automated Scout exploration
+    this.unsuppliedTurns = 0;    // consecutive completed turns beyond naval supply
+    this.resupplying = false;    // AI return-to-port mission survives across turns
   }
   get def() { return UNITS[this.type]; }
   get isCivilian() { return !!this.def.civilian; }
   get isRanged() { return !!this.def.rs; }
-  resetTurn() { this.moves = this.building ? 0 : this.def.moves; this.attacked = false; }
+  get maxMoves() { return this.def.moves + (this.promos.includes("NAVIGATION") ? 1 : 0); }
+  resetTurn() { this.moves = this.building ? 0 : this.maxMoves; this.attacked = false; }
+
+  addPromotion(key) {
+    if (this.promos.includes(key)) return false;
+    this.promos.push(key);
+    if (key === "NAVIGATION" && !this.attacked && this.moves > 0) this.moves++;
+    return true;
+  }
 
   gainXp(amount) {
     if (this.isCivilian) return;
@@ -67,6 +78,7 @@ class City {
     this.religion = null;        // majority religion id
     this.pressure = {};          // religionId -> accumulated pressure
     this.queue = [];             // production queue after the current item
+    this.focus = "balanced";     // citizen tile-assignment priority
   }
 
   get maxHp() {
@@ -91,6 +103,8 @@ class Player {
     this.gold = 40;
     this.scienceStored = 0;
     this.researching = null;
+    this.researchGoal = null;
+    this.researchQueue = [];
     this.techs = new Set(["AGRICULTURE"]);
     this.atWarWith = new Set();  // player indexes
     this.met = new Set();
@@ -110,6 +124,8 @@ class Player {
     this.culture = 0;            // stored culture toward the next policy
     this.policies = new Set();   // adopted policy keys
     this.attitude = {};          // other player index -> -100..100
+    this.attitudeReasons = {};   // other player index -> explainable score components
+    this.truces = {};            // other player index -> first turn war is legal again
     this.pacts = new Set();      // defensive-pact partner indexes
     this.deals = [];             // luxury deals: {give, get, other, ends}
     this.quest = null;           // minors: the active quest they offer
@@ -119,6 +135,7 @@ class Player {
     this.leaderIdx = 0;          // which of the civ's leaders is chosen
     this.congressVote = null;    // World Congress: chosen candidate index
     this.congressVoteTurn = -1;  // the session (turn) that vote belongs to
+    this.missionarySpreads = 0;  // active spreads toward a Religious Victory
   }
   get civ() {
     const base = CIVS[this.civId];
@@ -164,7 +181,9 @@ class Game {
     // opts: {playerCiv, numOpponents, seed, mapW, mapH}
     this.turn = 1;
     this.maxTurns = SPEEDS[SPEEDS[opts.speed] ? opts.speed : "standard"].turns;
-    this.seed = opts.seed ?? Math.floor(Math.random() * 1e9);
+    this.seed = Number.isInteger(opts.seed) && opts.seed >= 0 && opts.seed <= 0xffffffff
+      ? opts.seed >>> 0
+      : Math.floor(Math.random() * 0x100000000) >>> 0;
     this.rng = mulberry32(this.seed);
     this.mapType = opts.mapType || "peninsula";
     this.humans = Math.max(1, opts.numHumans || 1);
@@ -181,13 +200,15 @@ class Game {
     this.congressTurn = -999;    // last World Congress session turn
     this.congressLast = null;    // last session tally (for the UI)
     this.peaceOffers = [];       // AI->human peace proposals awaiting a decision [{from,to}]
+    this.pendingEvents = [];     // human event dilemmas awaiting a choice [{id,player,key,cityId,turn}]
     this.anims = [];             // transient movement animations (not saved)
     if (this.mapType === "custom" && opts.customMap) {
       const cm = opts.customMap;
       this.map = { w: cm.w, h: cm.h, idx: (c, r) => r * cm.w + c, seed: this.seed,
         tiles: cm.tiles.map((t, i) => ({ c: i % cm.w, r: Math.floor(i / cm.w),
           terrain: t.terrain, feature: t.feature || null, resource: t.resource || null,
-          improvement: null, owner: -1, city: null, workedBy: null })) };
+          improvement: null, road: false, river: !!t.river,
+          owner: -1, city: null, workedBy: null })) };
     } else {
       this.map = generateMap(opts.mapW || GAME_DEFAULTS.mapW, opts.mapH || GAME_DEFAULTS.mapH, this.seed, this.mapType);
     }
@@ -197,6 +218,8 @@ class Game {
     this.notifications = [];
     this.effects = [];           // transient combat popups (not saved)
     this.strikes = [];           // transient attack animations (not saved)
+    this.lastCombat = null;      // latest resolved attack (transient UI/report data)
+    this.stats = { steals: 0, catches: 0 };
     this.difficulty = opts.difficulty || "normal";
     this.over = false;
     this.winner = null;
@@ -223,8 +246,16 @@ class Game {
       const nLeaders = (CIVS[cid].leaders || [{}]).length;
       if (opts.leaders && opts.leaders[i] != null) p.leaderIdx = opts.leaders[i] % nLeaders;
       else if (i === 0 && opts.playerLeader != null) p.leaderIdx = opts.playerLeader % nLeaders;
-      else if (this.scenario) p.leaderIdx = 0; // scenarios use each civ's canonical leader
-      else p.leaderIdx = Math.floor(this.rng() * nLeaders);
+      else if (this.scenario) {
+        const scenarioLeader = SCENARIOS[this.scenario]?.leaders?.[cid];
+        p.leaderIdx = scenarioLeader == null ? 0 : scenarioLeader % nLeaders;
+      } else {
+        // Scenario additions must not silently rebalance established seeded games.
+        // They remain selectable by humans and explicit online rosters.
+        const randomPool = CIVS[cid].leaders.map((leader, index) => ({ leader, index }))
+          .filter(entry => entry.leader.randomAI !== false);
+        p.leaderIdx = randomPool[Math.floor(this.rng() * randomPool.length)].index;
+      }
       this.players.push(p);
     });
     const nMajors = this.players.length;
@@ -391,10 +422,195 @@ class Game {
     return Math.round(TECHS[key].cost * SPEEDS[this.speed].tech);
   }
 
+  researchPath(playerIdx, goalKey) {
+    const p = this.players[playerIdx];
+    if (!p || !TECHS[goalKey] || p.techs.has(goalKey)) return [];
+    const seen = new Set();
+    const path = [];
+    const visit = (key) => {
+      if (p.techs.has(key) || seen.has(key)) return;
+      seen.add(key);
+      for (const req of TECHS[key].req) visit(req);
+      if (key !== p.researching) path.push(key);
+    };
+    visit(goalKey);
+    return path;
+  }
+
+  advanceResearchPlan(p, announce = false) {
+    if (!p) return false;
+    const unique = new Set();
+    p.researchQueue = (Array.isArray(p.researchQueue) ? p.researchQueue : [])
+      .filter(key => {
+        if (!TECHS[key] || p.techs.has(key) || unique.has(key)) return false;
+        unique.add(key);
+        return true;
+      });
+    if (p.researchGoal && (!TECHS[p.researchGoal] || p.techs.has(p.researchGoal))) {
+      p.researchGoal = null;
+      p.researchQueue = [];
+    }
+    if (p.researching && !p.techs.has(p.researching)) return false;
+    p.researching = null;
+    const next = p.researchQueue[0];
+    if (!next || !TECHS[next].req.every(req => p.techs.has(req))) return false;
+    p.researchQueue.shift();
+    p.researching = next;
+    if (announce) this.notify(`🔬 Research plan continues: ${TECHS[next].name}.`, p.index);
+    return true;
+  }
+
+  setResearchGoal(playerIdx, goalKey) {
+    const p = this.players[playerIdx];
+    if (!p || !p.alive || !TECHS[goalKey] || p.techs.has(goalKey) || p.researching === goalKey)
+      return false;
+    const path = this.researchPath(playerIdx, goalKey);
+    if (!path.length) return false;
+    p.researchGoal = goalKey;
+    p.researchQueue = path;
+    if (!p.researching) this.advanceResearchPlan(p);
+    return true;
+  }
+
+  chooseResearch(playerIdx, key) {
+    const p = this.players[playerIdx];
+    if (!p || !p.alive || !TECHS[key] || p.techs.has(key) ||
+        !TECHS[key].req.every(req => p.techs.has(req))) return false;
+    p.researching = key;
+    p.researchGoal = null;
+    p.researchQueue = [];
+    return true;
+  }
+
+  clearResearchPlan(playerIdx) {
+    const p = this.players[playerIdx];
+    if (!p) return false;
+    p.researchGoal = null;
+    p.researchQueue = [];
+    return true;
+  }
+
   // ---------- trade routes ----------
   routeIncome(fromCity, toCity) {
     const dist = HEX.distance(fromCity.c, fromCity.r, toCity.c, toCity.r);
     return 2 + Math.floor(dist / 2) + (fromCity.owner === toCity.owner ? 0 : 2);
+  }
+
+  blockadeStrength(unit) {
+    if (!unit || unit.isCivilian || !unit.def.naval) return 0;
+    const base = Math.max(unit.def.cs || 0, unit.def.rs || 0);
+    const health = 0.5 + 0.5 * Math.max(0, Math.min(100, unit.hp)) / 100;
+    const supply = (unit.unsuppliedTurns || 0) > NAVAL_SUPPLY.graceTurns &&
+      !this.navalSupply(unit).supplied
+      ? NAVAL_SUPPLY.combatMultiplier : 1;
+    return base * health * (1 + unit.level * 0.05) * supply;
+  }
+
+  cityBlockade(city) {
+    const clear = { active: false, attackers: [], defenders: [], attackPower: 0, defensePower: 0 };
+    if (!city || !city.coastal || !this.cities.includes(city)) return clear;
+    const owner = this.players[city.owner];
+    if (!owner || !owner.alive) return clear;
+    for (const unit of this.units) {
+      if (unit.isCivilian || !unit.def.naval ||
+          HEX.distance(city.c, city.r, unit.c, unit.r) > BLOCKADE.radius) continue;
+      if (unit.owner === city.owner) clear.defenders.push(unit);
+      else if (owner.atWarWith.has(unit.owner)) clear.attackers.push(unit);
+    }
+    clear.attackPower = clear.attackers.reduce((sum, unit) => sum + this.blockadeStrength(unit), 0);
+    clear.defensePower = clear.defenders.reduce((sum, unit) => sum + this.blockadeStrength(unit), 0);
+    clear.active = clear.attackers.length > 0 && clear.attackPower > clear.defensePower;
+    return clear;
+  }
+
+  navalSupplyRange(owner) {
+    const p = this.players[owner];
+    if (!p) return 0;
+    if (p.hasTech("STEAM_POWER")) return NAVAL_SUPPLY.steamRange;
+    if (p.hasTech("COMPASS")) return NAVAL_SUPPLY.compassRange;
+    return NAVAL_SUPPLY.baseRange;
+  }
+
+  // Multi-source breadth-first coverage keeps supply tied to connected water,
+  // so a nearby port on the other side of a peninsula cannot service a fleet.
+  navalSupplyCoverage(unit) {
+    const coverage = new Map();
+    if (!unit || !unit.def.naval || !this.players[unit.owner]) return coverage;
+    const range = this.navalSupplyRange(unit.owner);
+    const queue = [];
+    const ports = this.cities.filter(city => city.owner === unit.owner && city.coastal)
+      .sort((a, b) => a.id - b.id);
+    for (const city of ports) {
+      for (const [c, r] of HEX.neighbors(city.c, city.r)) {
+        const tile = this.tile(c, r);
+        if (!tile || !this.isWater(tile) || !this.unitPassable(unit, tile)) continue;
+        const key = this.map.idx(c, r);
+        const prior = coverage.get(key);
+        if (prior && prior.source.id <= city.id) continue;
+        coverage.set(key, { source: city, distance: 0 });
+        queue.push([c, r]);
+      }
+    }
+    for (let head = 0; head < queue.length; head++) {
+      const [c, r] = queue[head];
+      const current = coverage.get(this.map.idx(c, r));
+      if (!current || current.distance >= range) continue;
+      for (const [nc, nr] of HEX.neighbors(c, r)) {
+        const tile = this.tile(nc, nr);
+        if (!tile || !this.isWater(tile) || !this.unitPassable(unit, tile)) continue;
+        const key = this.map.idx(nc, nr);
+        const nextDistance = current.distance + 1;
+        const prior = coverage.get(key);
+        if (prior && (prior.distance < nextDistance ||
+            (prior.distance === nextDistance && prior.source.id <= current.source.id))) continue;
+        coverage.set(key, { source: current.source, distance: nextDistance });
+        queue.push([nc, nr]);
+      }
+    }
+    return coverage;
+  }
+
+  navalSupply(unit) {
+    if (!unit || !unit.def.naval) return { supplied: true, source: null, distance: 0,
+      range: 0, turns: 0, graceLeft: NAVAL_SUPPLY.graceTurns, attritionActive: false };
+    const entry = this.navalSupplyCoverage(unit).get(this.map.idx(unit.c, unit.r));
+    const turns = Math.max(0, unit.unsuppliedTurns || 0);
+    const supplied = !!entry;
+    return { supplied, source: entry ? entry.source : null,
+      distance: entry ? entry.distance : null, range: this.navalSupplyRange(unit.owner), turns,
+      graceLeft: supplied ? NAVAL_SUPPLY.graceTurns : Math.max(0, NAVAL_SUPPLY.graceTurns - turns),
+      attritionActive: !supplied && turns > NAVAL_SUPPLY.graceTurns };
+  }
+
+  navalResupplyDestination(unit) {
+    if (!unit || !unit.def.naval) return null;
+    const candidates = [];
+    const ports = this.cities.filter(city => city.owner === unit.owner && city.coastal)
+      .sort((a, b) => a.id - b.id);
+    for (const city of ports) {
+      for (const [c, r] of HEX.neighbors(city.c, city.r)) {
+        const tile = this.tile(c, r);
+        const occupant = this.combatUnitAt(c, r);
+        if (!tile || !this.isWater(tile) || !this.unitPassable(unit, tile) ||
+            (occupant && occupant.id !== unit.id)) continue;
+        const path = this.findPath(unit, c, r);
+        if (!path) continue;
+        candidates.push({ c, r, city, pathLength: path.length });
+      }
+    }
+    return candidates.sort((a, b) => a.pathLength - b.pathLength || a.city.id - b.city.id ||
+      a.r - b.r || a.c - b.c)[0] || null;
+  }
+
+  tradeRouteStatus(route) {
+    const from = route && this.cities.find(city => city.id === route.fromId);
+    const to = route && this.cities.find(city => city.id === route.toId);
+    if (!from || !to) return { active: false, reason: "invalid", from, to };
+    const fromBlockade = this.cityBlockade(from);
+    const toBlockade = this.cityBlockade(to);
+    const blocked = fromBlockade.active || toBlockade.active;
+    return { active: !blocked, reason: blocked ? "blockade" : null,
+      from, to, fromBlockade, toBlockade };
   }
 
   // Cities a caravan standing in one of its own cities could trade with
@@ -415,7 +631,9 @@ class Game {
     }).sort((a, b) => this.routeIncome(from, b) - this.routeIncome(from, a)).slice(0, 6);
   }
 
-  establishRoute(caravan, destCityId) {
+  establishRoute(caravan, destCityId, actorIdx = null) {
+    if (!caravan || !this.units.includes(caravan) || !caravan.def.caravan || caravan.moves <= 0) return false;
+    if (actorIdx !== null && !this.unitActorStatus(caravan, actorIdx).ok) return false;
     const from = this.cityAt(caravan.c, caravan.r);
     const dest = this.cities.find(c => c.id === destCityId);
     if (!from || !dest || !this.tradeDestinations(caravan).includes(dest)) return false;
@@ -433,9 +651,9 @@ class Game {
   tradeIncome(playerIdx) {
     let gold = 0;
     for (const r of this.routes) {
-      const from = this.cities.find(c => c.id === r.fromId);
-      const to = this.cities.find(c => c.id === r.toId);
-      if (!from || !to) continue;
+      const status = this.tradeRouteStatus(r);
+      if (!status.active) continue;
+      const { from, to } = status;
       if (r.owner === playerIdx) gold += this.routeIncome(from, to);
       else if (to.owner === playerIdx) gold += 1; // destination's cut
     }
@@ -507,14 +725,19 @@ class Game {
     }
   }
 
-  useGreatPerson(unit) {
+  useGreatPerson(unit, actorIdx = null) {
+    if (!unit || !this.units.includes(unit) || !unit.def.great) return false;
+    if (actorIdx !== null && !this.unitActorStatus(unit, actorIdx).ok) return false;
     const p = this.players[unit.owner];
     const kind = unit.def.great;
     if (kind === "sci") {
       if (p.researching) {
-        p.techs.add(p.researching);
-        this.notify(`🔭 ${unit.gpName || "The scientist"} completes ${TECHS[p.researching].name}!`, p.index);
+        const done = p.researching;
+        p.techs.add(done);
+        this.notify(`🔭 ${unit.gpName || "The scientist"} completes ${TECHS[done].name}!`, p.index);
         p.researching = null;
+        this.questEvent("FIRST_TECH", p.index, { tech: done });
+        this.advanceResearchPlan(p, true);
       } else {
         const av = p.availableTechs();
         if (!av.length) return false;
@@ -543,7 +766,9 @@ class Game {
     return uu ? uu[0] : key;
   }
 
-  canUpgrade(unit) {
+  canUpgrade(unit, actorIdx = null) {
+    if (!unit || !this.units.includes(unit)) return null;
+    if (actorIdx !== null && !this.unitActorStatus(unit, actorIdx).ok) return null;
     const p = this.players[unit.owner];
     const target = unit.def.upgrade ? this.resolveUnitFor(p, unit.def.upgrade) : null;
     if (!target) return null;
@@ -558,8 +783,8 @@ class Game {
     return { to: target, cost };
   }
 
-  upgradeUnit(unit) {
-    const up = this.canUpgrade(unit);
+  upgradeUnit(unit, actorIdx = null) {
+    const up = this.canUpgrade(unit, actorIdx);
     if (!up) return false;
     this.players[unit.owner].gold -= up.cost;
     unit.type = up.to;
@@ -572,11 +797,15 @@ class Game {
 
   // ---------- combat forecast (mirrors damageRoll's 0.85..1.15 spread) ----------
   predictAttack(unit, c, r) {
-    if (!unit || unit.isCivilian || this.isEmbarked(unit)) return null;
+    if (!unit || unit.isCivilian) return null;
     const t = this.tile(c, r);
     if (!t) return null;
+    if (this.isEmbarked(unit) && !this.canAttackFromEmbarked(unit, t)) return null;
     const ranged = unit.isRanged;
-    const attStr = this.strengthOf(unit, { attacking: true, targetTile: t, ranged });
+    const attackerBreakdown = this.strengthBreakdown(unit, { attacking: true, targetTile: t, ranged });
+    const attStr = attackerBreakdown.strength;
+    const flankSupport = this.flankingSupport(unit, t).length;
+    const flankBonus = Math.min(TACTICS.maxFlank, flankSupport * TACTICS.flankPerSupport);
     const span = (att, def) => {
       const base = 30 * Math.pow(att / Math.max(def, 0.5), 1.25);
       return [Math.max(1, Math.round(base * 0.85)), Math.max(1, Math.round(base * 1.15))];
@@ -587,16 +816,38 @@ class Game {
       return cu && this.players[unit.owner].atWarWith.has(cu.owner) ? cu : null;
     })();
     if (enemyCity && (!enemyUnit || !ranged)) {
-      const defStr = this.cityStrength(enemyCity);
-      return { target: enemyCity.name, targetHp: enemyCity.hp, city: true,
+      const defenderBreakdown = this.cityStrengthBreakdown(enemyCity);
+      const defStr = defenderBreakdown.strength;
+      return { target: enemyCity.name, targetHp: enemyCity.hp, city: true, flankSupport, flankBonus,
+        attackerBreakdown, defenderBreakdown,
         out: span(attStr, defStr), back: ranged ? null : span(defStr, attStr) };
     }
     if (enemyUnit) {
-      const defStr = this.strengthOf(enemyUnit, { attacking: false });
-      return { target: enemyUnit.def.name, targetHp: enemyUnit.hp, city: false,
+      const defenderBreakdown = this.strengthBreakdown(enemyUnit, { attacking: false });
+      const defStr = defenderBreakdown.strength;
+      return { target: enemyUnit.def.name, targetHp: enemyUnit.hp, city: false, flankSupport, flankBonus,
+        attackerBreakdown, defenderBreakdown,
         out: span(attStr, defStr), back: ranged ? null : span(defStr, attStr) };
     }
     return null;
+  }
+
+  // One authoritative snapshot for every decision the human-facing turn UI tracks.
+  pendingOrders(playerIdx) {
+    const p = this.players[playerIdx];
+    if (!p || !p.alive) return { event: null, research: false, congress: false, religion: false,
+      policy: false, promotionUnit: null, cities: [], units: [] };
+    return {
+      event: this.pendingEventFor(playerIdx),
+      research: !p.researching && p.availableTechs().length > 0,
+      congress: !!(this.congressDue && this.congressDue() && p.congressVoteTurn !== this.turn),
+      religion: this.canFoundReligion(playerIdx),
+      policy: this.canAdoptPolicy(playerIdx),
+      promotionUnit: this.units.find(u => u.owner === playerIdx && u.promoPts > 0 && !u.isCivilian) || null,
+      cities: this.cities.filter(c => c.owner === playerIdx && !c.producing && !c.queue.length),
+      units: this.units.filter(u => u.owner === playerIdx && u.moves > 0 && !u.fortified && !u.attacked &&
+        !u.building && !u.autoExplore && !(u.path && u.path.length)),
+    };
   }
 
   // Scenario setup: shared tech era, gold, starting armies, opening wars
@@ -662,6 +913,11 @@ class Game {
         return `🎯 Techs ${this.players[0].techs.size}/${Object.keys(TECHS).length} · ${left} turns left`;
       case "kills":
         return `🎯 ${CIVS[v.target].adj} units slain ${this.scenarioKills}/${v.count} · ${left} turns left`;
+      case "resistance": {
+        const cap = this.cities.find(c => c.id === this.players[0].originalCapitalId);
+        const hold = !cap ? "Found capital" : cap.owner === 0 ? `Hold ${cap.name}` : `${cap.name} fallen`;
+        return `🎯 ${hold} · Kills ${this.scenarioKills}/${v.count} · ${left}t`;
+      }
       case "cities":
         return `🎯 Cities ${this.cities.filter(c => c.owner === 0).length}/${v.count} · ${left} turns left`;
     }
@@ -671,7 +927,7 @@ class Game {
   trackScenarioKill(killerIdx, victimIdx) {
     if (!this.scenario || killerIdx !== 0) return;
     const sc = SCENARIOS[this.scenario];
-    if (sc.victory.type !== "kills") return;
+    if (sc.victory.type !== "kills" && sc.victory.type !== "resistance") return;
     const victim = this.players[victimIdx];
     if (victim && victim.civId === sc.victory.target) {
       this.scenarioKills++;
@@ -707,6 +963,13 @@ class Game {
   isEmbarked(unit) {
     const t = this.tile(unit.c, unit.r);
     return !unit.def.naval && t && this.isWater(t);
+  }
+
+  canAttackFromEmbarked(unit, targetTile) {
+    return !!(unit && targetTile && this.isEmbarked(unit) &&
+      unit.promos.includes("AMPHIBIOUS") && !unit.isRanged && !unit.def.naval &&
+      !this.isWater(targetTile) &&
+      HEX.distance(unit.c, unit.r, targetTile.c, targetTile.r) === 1);
   }
 
   // Can this unit's type ever stand on tile t (given its owner's techs)?
@@ -758,16 +1021,230 @@ class Game {
     if (i >= 0) this.units.splice(i, 1);
   }
 
+  unitActorStatus(unit, actorIdx) {
+    if (this.over) return { ok: false, code: "GAME_OVER", reason: "The game is complete." };
+    if (!unit || !this.units.includes(unit))
+      return { ok: false, code: "INVALID_UNIT", reason: "This unit is no longer available." };
+    const actor = this.players[actorIdx];
+    if (!actor || !actor.alive || !actor.isHuman)
+      return { ok: false, code: "INVALID_ACTOR", reason: "No active player can issue this order." };
+    if (unit.owner !== actorIdx)
+      return { ok: false, code: "FOREIGN_UNIT", reason: "Only the owning civilization can command this unit." };
+    if (this.activeHuman !== actorIdx)
+      return { ok: false, code: "NOT_ACTIVE", reason: "Wait for this civilization's turn." };
+    return { ok: true, code: "OK", reason: "Order available." };
+  }
+
+  unitOrderStatus(unit, order, actorIdx, detail = null) {
+    const actor = this.unitActorStatus(unit, actorIdx);
+    if (!actor.ok) return actor;
+    const fail = (code, reason) => ({ ok: false, code, reason });
+    if (order === "promote") {
+      if (unit.isCivilian || unit.promoPts <= 0) return fail("NO_PROMOTION", "No promotion is available.");
+      if (!promotionAvailable(unit, detail) || unit.promos.includes(detail))
+        return fail("INVALID_PROMOTION", "This promotion cannot be selected.");
+    } else if (order === "cancel_job") {
+      if (!unit.def.worker || !unit.building) return fail("NO_JOB", "This Worker has no job to cancel.");
+    } else if (order === "auto_explore") {
+      if (unit.type !== "SCOUT") return fail("NOT_SCOUT", "Only Scouts can auto-explore.");
+      const enabling = detail !== false;
+      if (enabling && unit.autoExplore) return fail("ALREADY_AUTO", "Auto-explore is already active.");
+      if (!enabling && !unit.autoExplore) return fail("NOT_AUTO", "Auto-explore is not active.");
+      if (enabling && unit.moves <= 0) return fail("NO_MOVES", "No movement points remain this turn.");
+    } else if (order === "fortify") {
+      if (unit.isCivilian) return fail("CIVILIAN", "Civilian units cannot fortify.");
+      if (unit.fortified) return fail("ALREADY_FORTIFIED", "This unit is already fortified.");
+      if (unit.moves <= 0) return fail("NO_MOVES", "No movement points remain this turn.");
+    } else if (order === "wake") {
+      if (unit.isCivilian || (!unit.fortified && !unit.healFortify))
+        return fail("NOT_FORTIFIED", "This unit is already awake.");
+    } else if (order === "heal") {
+      if (unit.isCivilian) return fail("CIVILIAN", "Civilian units cannot fortify to heal.");
+      if (unit.hp >= 100) return fail("FULL_HEALTH", "This unit is already at full health.");
+      if (unit.healFortify) return fail("ALREADY_HEALING", "This unit is already healing.");
+      if (unit.moves <= 0) return fail("NO_MOVES", "No movement points remain this turn.");
+    } else if (order === "skip") {
+      if (unit.moves <= 0) return fail("NO_MOVES", "No movement points remain this turn.");
+    } else if (order === "disband") {
+      const ownsCity = this.cities.some(c => c.owner === actorIdx);
+      const otherSettler = this.units.some(u => u !== unit && u.owner === actorIdx && u.type === "SETTLER");
+      if (unit.type === "SETTLER" && !ownsCity && !otherSettler)
+        return fail("LAST_SETTLER", "Found a capital before disbanding your only Settler.");
+    } else {
+      return fail("UNKNOWN_ORDER", "This unit order is not recognized.");
+    }
+    return { ok: true, code: "OK", reason: "Order available." };
+  }
+
+  issueUnitOrder(unit, order, actorIdx, detail = null) {
+    if (!this.unitOrderStatus(unit, order, actorIdx, detail).ok) return false;
+    if (order === "promote") {
+      unit.addPromotion(detail);
+      unit.promoPts--;
+    } else if (order === "cancel_job") {
+      unit.building = null;
+      unit.path = null;
+      unit.moves = 0;
+    } else if (order === "auto_explore") {
+      unit.autoExplore = detail !== false;
+      if (unit.autoExplore) unit.path = null;
+    } else if (order === "fortify") {
+      unit.fortified = true;
+      unit.healFortify = false;
+      unit.autoExplore = false;
+      unit.path = null;
+      unit.moves = 0;
+    } else if (order === "wake") {
+      unit.fortified = false;
+      unit.healFortify = false;
+    } else if (order === "heal") {
+      unit.fortified = true;
+      unit.healFortify = true;
+      unit.autoExplore = false;
+      unit.path = null;
+      unit.moves = 0;
+    } else if (order === "skip") {
+      unit.moves = 0;
+    } else if (order === "disband") {
+      this.removeUnit(unit);
+      this.checkElimination(actorIdx);
+    }
+    return true;
+  }
+
   moveCost(unit, c, r) {
     const t = this.tile(c, r);
     if (!this.unitPassable(unit, t)) return Infinity;
     if (this.isWater(t)) return 1;
     if (unit.def.naval) return Infinity;
-    if (t.improvement === "ROAD" || t.city) return 1;
+    if (t.road || t.city) return 1;
     let cost = TERRAIN[t.terrain].moveCost;
     if (t.feature) cost = Math.max(cost, FEATURE[t.feature].moveCost);
     if (cost > 1 && cost < 99 && unit.promos && unit.promos.includes("PATHFINDER")) cost = 1;
     return cost;
+  }
+
+  // Land melee units control adjacent land while at war. Hidden controllers
+  // still stop movement, but path and UI hints expose only currently seen ones.
+  enemyZoneOfControl(unit, c, r) {
+    const tile = this.tile(c, r);
+    const owner = unit && this.players[unit.owner];
+    if (!unit || !owner || unit.def.naval || this.isEmbarked(unit) || !tile || this.isWater(tile)) return [];
+    return HEX.neighbors(c, r).map(([nc, nr]) => this.combatUnitAt(nc, nr)).filter(controller =>
+      controller && controller.owner !== unit.owner && owner.atWarWith.has(controller.owner) &&
+      !controller.def.naval && !controller.isRanged && !this.isEmbarked(controller));
+  }
+
+  knownEnemyZoneOfControl(unit, c, r) {
+    const p = unit && this.players[unit.owner];
+    if (!p || !p.visible) return [];
+    return this.enemyZoneOfControl(unit, c, r).filter(controller =>
+      p.visible[this.map.idx(controller.c, controller.r)] === 2);
+  }
+
+  // A player's own cities and roads in owned or neutral territory form a
+  // capital network. Foreign borders sever the link even when a road survives.
+  roadNetwork(playerIdx) {
+    const ownCities = this.cities.filter(city => city.owner === playerIdx)
+      .sort((a, b) => a.id - b.id);
+    const empty = { capital: null, tiles: new Set(), cityIds: new Set(),
+      connectedCities: [], disconnectedCities: ownCities, income: 0 };
+    if (!ownCities.length) return empty;
+    const p = this.players[playerIdx];
+    const capital = ownCities.find(city => city.id === p.originalCapitalId) ||
+      ownCities.find(city => city.isCapital) || ownCities[0];
+    const start = this.map.idx(capital.c, capital.r);
+    const tiles = new Set([start]);
+    const queue = [[capital.c, capital.r]];
+    while (queue.length) {
+      const [c, r] = queue.shift();
+      for (const [nc, nr] of HEX.neighbors(c, r)) {
+        const tile = this.tile(nc, nr);
+        if (!tile) continue;
+        const idx = this.map.idx(nc, nr);
+        if (tiles.has(idx)) continue;
+        const ownCity = tile.city && tile.city.owner === playerIdx;
+        const usableRoad = tile.road && (tile.owner === playerIdx || tile.owner === -1);
+        if (!ownCity && !usableRoad) continue;
+        tiles.add(idx);
+        queue.push([nc, nr]);
+      }
+    }
+    const connectedCities = ownCities.filter(city => tiles.has(this.map.idx(city.c, city.r)));
+    const cityIds = new Set(connectedCities.map(city => city.id));
+    const disconnectedCities = ownCities.filter(city => !cityIds.has(city.id));
+    const income = connectedCities.reduce((sum, city) =>
+      sum + (city.id === capital.id ? 0 : this.roadConnectionIncome(city)), 0);
+    return { capital, tiles, cityIds, connectedCities, disconnectedCities, income };
+  }
+
+  roadConnectionIncome(city) {
+    return city ? INFRASTRUCTURE.connectionBaseGold +
+      Math.floor(city.pop / INFRASTRUCTURE.populationPerGold) : 0;
+  }
+
+  // Deterministic least-construction route between the capital and one city.
+  // Existing roads are heavily preferred, so new corridors reuse trunk lines.
+  roadConnectionPath(playerIdx, targetCity) {
+    const network = this.roadNetwork(playerIdx);
+    const capital = network.capital;
+    if (!capital || !targetCity || targetCity.owner !== playerIdx) return null;
+    const { w } = this.map;
+    const key = (c, r) => r * w + c;
+    const start = key(capital.c, capital.r), goal = key(targetCity.c, targetCity.r);
+    if (start === goal) return [];
+    const open = [[0, start]], closed = new Set();
+    const came = new Map(), score = new Map([[start, 0]]);
+    while (open.length) {
+      let best = 0;
+      for (let i = 1; i < open.length; i++) {
+        if (open[i][0] < open[best][0] ||
+            (open[i][0] === open[best][0] && open[i][1] < open[best][1])) best = i;
+      }
+      const [, current] = open.splice(best, 1)[0];
+      if (closed.has(current)) continue;
+      closed.add(current);
+      if (current === goal) {
+        const path = [];
+        let cursor = goal;
+        while (cursor !== start) {
+          path.unshift([cursor % w, Math.floor(cursor / w)]);
+          cursor = came.get(cursor);
+        }
+        return path;
+      }
+      const c = current % w, r = Math.floor(current / w);
+      for (const [nc, nr] of HEX.neighbors(c, r)) {
+        const tile = this.tile(nc, nr);
+        if (!tile) continue;
+        const ownCity = tile.city && tile.city.owner === playerIdx;
+        const buildable = IMPROVEMENT.ROAD.terrains.includes(tile.terrain) &&
+          (tile.owner === playerIdx || tile.owner === -1);
+        if (!ownCity && !buildable) continue;
+        const next = key(nc, nr);
+        const step = ownCity ? 0.05 : tile.road ? 0.12 :
+          1 + (TERRAIN[tile.terrain].moveCost || 1) * 0.05;
+        const nextScore = score.get(current) + step;
+        if (nextScore >= (score.get(next) ?? Infinity)) continue;
+        score.set(next, nextScore);
+        came.set(next, current);
+        open.push([nextScore + HEX.distance(nc, nr, targetCity.c, targetCity.r) * 0.05, next]);
+      }
+      if (score.size > 5000) return null;
+    }
+    return null;
+  }
+
+  roadConnectionPlans(playerIdx) {
+    const network = this.roadNetwork(playerIdx);
+    return network.disconnectedCities.map(city => {
+      const path = this.roadConnectionPath(playerIdx, city);
+      if (!path) return null;
+      const missing = path.map(([c, r]) => this.tile(c, r))
+        .filter(tile => tile && !tile.city && !tile.road);
+      return { city, path, missing };
+    }).filter(Boolean).sort((a, b) => a.missing.length - b.missing.length ||
+      a.path.length - b.path.length || a.city.id - b.city.id);
   }
 
   // ---------- workers ----------
@@ -784,11 +1261,13 @@ class Game {
     else if (t.owner !== unit.owner) return false;
     if (!imp.terrains.includes(t.terrain)) return false;
     if (t.feature && !imp.road) return false;      // farms/mines need clear ground
-    if (imp.road ? t.improvement === "ROAD" : t.improvement === type) return false;
+    if (imp.road ? t.road : t.improvement === type) return false;
     return true;
   }
 
-  startImprovement(unit, type) {
+  startImprovement(unit, type, actorIdx = null) {
+    if (!unit || !this.units.includes(unit) || unit.moves <= 0 || unit.building) return false;
+    if (actorIdx !== null && !this.unitActorStatus(unit, actorIdx).ok) return false;
     if (!this.canBuildImprovement(unit, type)) return false;
     unit.building = { type, turnsLeft: IMPROVEMENT[type].turns };
     unit.path = null;
@@ -805,7 +1284,8 @@ class Game {
       if (!t || (t.owner !== p.index && !(isRoad && t.owner === -1))) { u.building = null; continue; } // lost the tile
       u.building.turnsLeft--;
       if (u.building.turnsLeft <= 0) {
-        t.improvement = u.building.type;
+        if (isRoad) t.road = true;
+        else t.improvement = u.building.type;
         this.notify(`${IMPROVEMENT[u.building.type].name} completed.`, p.index);
         u.building = null;
       }
@@ -853,7 +1333,8 @@ class Game {
         // block tiles occupied by other units except at the goal
         if (nk !== goal && this.combatUnitAt(nc, nr) && !unit.isCivilian) continue;
         if (nk !== goal && t.city && t.city.owner !== unit.owner) continue;
-        const g = gScore.get(cur) + this.moveCost(unit, nc, nr);
+        const zocPenalty = this.knownEnemyZoneOfControl(unit, nc, nr).length ? unit.maxMoves : 0;
+        const g = gScore.get(cur) + this.moveCost(unit, nc, nr) + zocPenalty;
         if (g < (gScore.get(nk) ?? Infinity)) {
           gScore.set(nk, g);
           came.set(nk, cur);
@@ -892,6 +1373,7 @@ class Game {
         this.removeUnit(civ);
         this.notify(`${CIVS[this.players[unit.owner].civId].adj} forces captured a ${civ.def.name}!`, -1);
       }
+      if (this.enemyZoneOfControl(unit, nc, nr).length) unit.moves = 0;
     }
     if (unit.path && !unit.path.length) unit.path = null;
     this.addMoveAnim(unit, hops);
@@ -914,10 +1396,10 @@ class Game {
         const nd = d + cost;
         if (nd > unit.moves) continue;
         const nk = key(nc, nr);
-        if (nd < (dist.get(nk) ?? Infinity)) {
+        if (nd < (dist.get(nk) ?? Infinity) && this.canEnter(unit, nc, nr)) {
           dist.set(nk, nd);
-          if (this.canEnter(unit, nc, nr)) out.push([nc, nr]);
-          frontier.push([nc, nr]);
+          out.push([nc, nr]);
+          if (!this.knownEnemyZoneOfControl(unit, nc, nr).length) frontier.push([nc, nr]);
         }
       }
     }
@@ -925,67 +1407,139 @@ class Game {
   }
 
   // ---------- combat ----------
-  strengthOf(unit, { attacking, targetTile, ranged } = {}) {
+  flankingSupport(unit, targetTile) {
+    if (!unit || !targetTile || unit.isRanged || unit.def.naval || this.isEmbarked(unit) || this.isWater(targetTile)) return [];
+    return HEX.neighbors(targetTile.c, targetTile.r)
+      .map(([c, r]) => this.combatUnitAt(c, r))
+      .filter(support => support && support.id !== unit.id && support.owner === unit.owner &&
+        !support.isCivilian && !support.isRanged && !support.def.naval && !this.isEmbarked(support))
+      .sort((a, b) => a.id - b.id);
+  }
+
+  flankingBonus(unit, targetTile) {
+    return Math.min(TACTICS.maxFlank,
+      this.flankingSupport(unit, targetTile).length * TACTICS.flankPerSupport);
+  }
+
+  strengthBreakdown(unit, { attacking, targetTile, ranged } = {}) {
     const p = this.players[unit.owner];
-    let str = ranged ? (unit.def.rs || 0) : unit.def.cs;
-    if (this.isEmbarked(unit)) str = 2; // helpless at sea
-    let mod = 1;
+    let base = ranged ? (unit.def.rs || 0) : unit.def.cs;
+    const amphibiousAttack = attacking && targetTile && this.canAttackFromEmbarked(unit, targetTile);
+    if (this.isEmbarked(unit) && !amphibiousAttack) base = 2; // helpless at sea
+    const factors = [];
+    const add = (label, value) => {
+      if (value) factors.push({ label, value, operation: "add" });
+    };
+    const multiply = (label, value) => {
+      if (value !== 1) factors.push({ label, value, operation: "multiply" });
+    };
+    const healthModifier = 0.5 + 0.5 * (unit.hp / 100);
+    let mod = healthModifier;
+    if (healthModifier < 1) add(`Wounded (${Math.max(0, Math.round(unit.hp))} HP)`, healthModifier - 1);
     const here = this.tile(unit.c, unit.r);
-    // wounded units fight at 50–100%
-    mod *= 0.5 + 0.5 * (unit.hp / 100);
-    mod += unit.level * 0.05; // seasoning on top of chosen promotions
-    if (attacking && unit.promos.includes("MIGHT")) mod += 0.15;
-    if (!attacking && unit.promos.includes("BULWARK")) mod += 0.15;
+    const veteranBonus = unit.level * 0.05;
+    mod += veteranBonus; // seasoning on top of chosen promotions
+    add(`Veteran level ${unit.level}`, veteranBonus);
+    if (attacking && unit.promos.includes("MIGHT")) { mod += 0.15; add(PROMOS.MIGHT.name, 0.15); }
+    if (!attacking && unit.promos.includes("BULWARK")) { mod += 0.15; add(PROMOS.BULWARK.name, 0.15); }
+    if (attacking && !ranged && targetTile) {
+      const support = this.flankingSupport(unit, targetTile).length;
+      const bonus = Math.min(TACTICS.maxFlank, support * TACTICS.flankPerSupport);
+      mod += bonus;
+      add(`Formation (${support} support)`, bonus);
+    }
+    if (amphibiousAttack) { mod -= 0.15; add("Amphibious landing", -0.15); }
+    if (attacking && unit.def.naval && unit.promos.includes("BOARDING") && targetTile) {
+      const foe = this.combatUnitAt(targetTile.c, targetTile.r);
+      if (foe && (foe.def.naval || this.isEmbarked(foe))) { mod += 0.20; add(PROMOS.BOARDING.name, 0.20); }
+    }
+    if (attacking && unit.def.naval && unit.promos.includes("BOMBARDMENT") &&
+        targetTile && targetTile.city) { mod += 0.20; add(PROMOS.BOMBARDMENT.name, 0.20); }
     if (!p.isMinor && !p.isBarb) {
-      if (attacking && p.policies.has("WARRIOR_CULT")) mod += 0.10;
+      if (attacking && p.policies.has("WARRIOR_CULT")) { mod += 0.10; add("Warrior Cult", 0.10); }
       if (attacking && p.policies.has("GUSLARS") && targetTile) {
         const foe = this.combatUnitAt(targetTile.c, targetTile.r);
-        if ((foe && this.players[foe.owner].isBarb) || this.campAt(targetTile.c, targetTile.r)) mod += 0.25;
+        if ((foe && this.players[foe.owner].isBarb) || this.campAt(targetTile.c, targetTile.r)) {
+          mod += 0.25; add("Guslars", 0.25);
+        }
       }
     }
     if (!attacking) {
       if (here) {
-        mod += TERRAIN[here.terrain].defense || 0;
-        if (here.feature) mod += FEATURE[here.feature].defense || 0;
+        const terrainDefense = TERRAIN[here.terrain].defense || 0;
+        mod += terrainDefense; add(`${TERRAIN[here.terrain].name} terrain`, terrainDefense);
+        if (here.feature) {
+          const featureDefense = FEATURE[here.feature].defense || 0;
+          mod += featureDefense; add(FEATURE[here.feature].name, featureDefense);
+        }
       }
-      if (unit.fortified) mod += 0.25;
-      if (unit.def.defendBonus) mod += unit.def.defendBonus;
+      if (unit.fortified) { mod += 0.25; add("Fortified", 0.25); }
+      if (unit.def.defendBonus) { mod += unit.def.defendBonus; add(`${unit.def.name} defense`, unit.def.defendBonus); }
     }
     // civ traits
     const civ = p.civ;
-    if (civ.roughBonus && here && (here.terrain === "HILLS" || here.feature === "FOREST")) mod += civ.roughBonus;
-    if (civ.homeBonus && here && here.owner === unit.owner) mod += civ.homeBonus;
-    if (civ.vsCityBonus && attacking && targetTile && targetTile.city) mod += civ.vsCityBonus;
-    if (civ.attackBonus && attacking) mod += civ.attackBonus;
-    if (civ.defendCiv && !attacking) mod += civ.defendCiv;
-    if (unit.def.terrainBonus && here && (here.terrain === "HILLS" || here.feature === "FOREST")) mod += unit.def.terrainBonus;
-    if (unit.def.siege && attacking && targetTile && targetTile.city) mod += 1.0; // siege vs cities
+    if (civ.roughBonus && here && (here.terrain === "HILLS" || here.feature === "FOREST")) {
+      mod += civ.roughBonus; add(civ.trait, civ.roughBonus);
+    }
+    if (civ.homeBonus && here && here.owner === unit.owner) { mod += civ.homeBonus; add(civ.trait, civ.homeBonus); }
+    if (civ.vsCityBonus && attacking && targetTile && targetTile.city) { mod += civ.vsCityBonus; add(civ.trait, civ.vsCityBonus); }
+    if (civ.attackBonus && attacking) { mod += civ.attackBonus; add(civ.trait, civ.attackBonus); }
+    if (civ.defendCiv && !attacking) { mod += civ.defendCiv; add(civ.trait, civ.defendCiv); }
+    if (unit.def.terrainBonus && here && (here.terrain === "HILLS" || here.feature === "FOREST")) {
+      mod += unit.def.terrainBonus; add(`${unit.def.name} terrain`, unit.def.terrainBonus);
+    }
+    if (unit.def.siege && attacking && targetTile && targetTile.city) {
+      mod += 1.0; add("Siege weapon", 1.0);
+    }
     // Holy Warriors: faith-fuelled fighting near follower cities
     if (!p.isMinor && p.religionId !== null && this.religions[p.religionId].belief === "ZEAL") {
       const rid = p.religionId;
       if (this.cities.some(c => c.religion === rid && HEX.distance(c.c, c.r, unit.c, unit.r) <= 2)) {
-        mod += 0.15;
+        mod += 0.15; add(BELIEFS.ZEAL.name, 0.15);
       }
     }
     // a miserable empire fights poorly
-    if (!p.isMinor && this.happinessOf(p.index) < HAPPINESS.strikeAt) mod -= 0.15;
+    if (!p.isMinor && this.happinessOf(p.index) < HAPPINESS.strikeAt) {
+      mod -= 0.15; add("Civil unrest", -0.15);
+    }
     // Great General aura
     if (!unit.def.great && this.units.some(g => g.owner === unit.owner && g.def.great === "gen" &&
         HEX.distance(g.c, g.r, unit.c, unit.r) <= 2)) {
-      mod += GP.generalAura;
+      mod += GP.generalAura; add("Great General", GP.generalAura);
     }
-    return str * mod;
+    let supplyModifier = 1;
+    if (unit.def.naval && (unit.unsuppliedTurns || 0) > NAVAL_SUPPLY.graceTurns &&
+        !this.navalSupply(unit).supplied) {
+      supplyModifier = NAVAL_SUPPLY.combatMultiplier;
+      mod *= supplyModifier;
+      multiply("Out of naval supply", supplyModifier);
+    }
+    return { base, modifier: mod, strength: base * mod, factors };
+  }
+
+  strengthOf(unit, context = {}) {
+    return this.strengthBreakdown(unit, context).strength;
+  }
+
+  cityStrengthBreakdown(city) {
+    const base = 8;
+    let str = base;
+    const factors = [];
+    const add = (label, value) => {
+      if (value) { str += value; factors.push({ label, value, operation: "flat" }); }
+    };
+    add(`Population (${city.pop})`, city.pop * 1.2);
+    for (const b of city.buildings) add(BUILDINGS[b].name, BUILDINGS[b].cityStr || 0);
+    const garrison = this.combatUnitAt(city.c, city.r);
+    if (garrison) add(`Garrison (${garrison.def.name})`, this.strengthOf(garrison, {}) * 0.25);
+    const era = this.players[city.owner].era();
+    add(`Era (${ERAS[era]})`, era * 3);
+    if (this.players[city.owner].isMinor) add("City-state defenses", 6);
+    return { base, strength: str, factors };
   }
 
   cityStrength(city) {
-    let str = 8 + city.pop * 1.2;
-    for (const b of city.buildings) str += BUILDINGS[b].cityStr || 0;
-    const garrison = this.combatUnitAt(city.c, city.r);
-    if (garrison) str += this.strengthOf(garrison, {}) * 0.25;
-    const era = this.players[city.owner].era();
-    str += era * 3;
-    if (this.players[city.owner].isMinor) str += 6; // city-states dig in
-    return str;
+    return this.cityStrengthBreakdown(city).strength;
   }
 
   damageRoll(attStr, defStr) {
@@ -998,9 +1552,9 @@ class Game {
   // unit attacks tile (c,r): enemy unit or city
   attack(unit, c, r) {
     if (unit.attacked || unit.moves <= 0 || unit.isCivilian) return false;
-    if (this.isEmbarked(unit)) return false; // no fighting from transports
     const t = this.tile(c, r);
     if (!t) return false;
+    if (this.isEmbarked(unit) && !this.canAttackFromEmbarked(unit, t)) return false;
     const dist = HEX.distance(unit.c, unit.r, c, r);
     const ranged = unit.isRanged;
     const range = ranged ? unit.def.range : 1;
@@ -1026,17 +1580,50 @@ class Game {
     }
 
     const attStr = this.strengthOf(unit, { attacking: true, targetTile: t, ranged });
+    const flankSupport = this.flankingSupport(unit, t).length;
+    const flankBonus = Math.min(TACTICS.maxFlank, flankSupport * TACTICS.flankPerSupport);
+    const hitsCity = !!(targetCity && (!targetUnit || !ranged));
+    const defender = hitsCity ? targetCity : targetUnit;
+    const report = {
+      turn: this.turn,
+      attackerId: unit.id,
+      attackerOwner: unit.owner,
+      attackerType: unit.type,
+      attackerName: unit.def.name,
+      attackerHpBefore: unit.hp,
+      attackerHpAfter: unit.hp,
+      attackerDestroyed: false,
+      targetKind: hitsCity ? "city" : "unit",
+      targetId: defender.id,
+      targetOwner: defender.owner,
+      targetType: hitsCity ? null : defender.type,
+      targetName: hitsCity ? defender.name : defender.def.name,
+      targetHpBefore: defender.hp,
+      targetHpAfter: defender.hp,
+      targetMaxHp: hitsCity ? defender.maxHp : 100,
+      targetDestroyed: false,
+      cityCaptured: false,
+      damage: 0,
+      counterDamage: 0,
+      flankSupport,
+      flankBonus,
+      ranged,
+      c, r,
+      ts: Date.now(),
+    };
     unit.fortified = false;
     this.addStrike(unit, c, r, ranged);
 
-    if (targetCity && (!targetUnit || !ranged)) {
+    if (hitsCity) {
       // attack the city itself (garrison protects a city only vs ranged pokes)
       const defStr = this.cityStrength(targetCity);
       const dmg = this.damageRoll(attStr, defStr);
+      report.damage = dmg;
       targetCity.hp -= dmg;
       this.addEffect(c, r, "-" + dmg);
       if (!ranged) {
         const back = this.damageRoll(defStr, attStr);
+        report.counterDamage = back;
         unit.hp -= back;
         this.addEffect(unit.c, unit.r, "-" + back, "#ffaa33");
         if (unit.hp <= 0) {
@@ -1047,15 +1634,20 @@ class Game {
       if (this.units.includes(unit)) unit.gainXp(ranged ? 3 : 5);
       if (targetCity.hp <= 0 && this.units.includes(unit)) {
         if (ranged) targetCity.hp = 1; // ranged can't capture
-        else this.captureCity(targetCity, unit);
+        else {
+          this.captureCity(targetCity, unit);
+          report.cityCaptured = true;
+        }
       }
     } else if (targetUnit) {
       const defStr = this.strengthOf(targetUnit, { attacking: false });
       const dmg = this.damageRoll(attStr, defStr);
+      report.damage = dmg;
       targetUnit.hp -= dmg;
       this.addEffect(c, r, "-" + dmg);
       if (!ranged) {
         const back = this.damageRoll(defStr, attStr);
+        report.counterDamage = back;
         unit.hp -= back;
         this.addEffect(unit.c, unit.r, "-" + back, "#ffaa33");
       }
@@ -1082,6 +1674,21 @@ class Game {
       if (unit.hp <= 0) this.removeUnit(unit);
     }
 
+    report.attackerHpAfter = Math.max(0, unit.hp);
+    report.attackerDestroyed = !this.units.includes(unit);
+    report.targetHpAfter = report.cityCaptured ? 0 : Math.max(0, defender.hp);
+    report.targetDestroyed = report.cityCaptured || (report.targetKind === "unit" && !this.units.includes(defender));
+    this.lastCombat = report;
+
+    const targetPlayer = this.players[report.targetOwner];
+    if (targetPlayer && targetPlayer.isHuman && report.attackerOwner !== report.targetOwner) {
+      const attackerCiv = this.players[report.attackerOwner].civ.name;
+      const outcome = report.cityCaptured ? ` and captured ${report.targetName}`
+        : report.targetDestroyed ? ` and destroyed ${report.targetName}` : "";
+      const counter = report.counterDamage ? ` Your counterattack dealt ${report.counterDamage}.` : "";
+      this.notify(`⚔️ ${attackerCiv} ${report.attackerName} dealt ${report.damage} damage${outcome}.${counter}`, report.targetOwner);
+    }
+
     unit.attacked = true;
     unit.moves = 0;
     return true;
@@ -1099,6 +1706,8 @@ class Game {
     city.hp = Math.floor(city.maxHp * 0.4);
     city.pop = Math.max(1, city.pop - 1);
     city.producing = null;
+    city.queue = [];
+    city.prodStored = 0;
     // reassign tile ownership
     for (const tile of this.map.tiles) if (tile.workedBy === city.id) tile.workedBy = null;
     for (const tile of this.map.tiles) {
@@ -1127,10 +1736,45 @@ class Game {
     if (!hasCities && !hasSettlers) {
       p.alive = false;
       this.units = this.units.filter(u => u.owner !== playerIdx);
+      this.retirePlayerState(playerIdx);
       this.notify(p.isMinor ? `The city-state of ${p.civ.name} has been destroyed!`
                             : `${p.civ.name} has been destroyed!`, -1);
       this.checkVictory();
     }
+  }
+
+  retirePlayerState(playerIdx) {
+    const retired = this.players[playerIdx];
+    for (const p of this.players) {
+      p.atWarWith.delete(playerIdx);
+      p.pacts.delete(playerIdx);
+      p.deals = p.deals.filter(d => d.other !== playerIdx);
+      delete p.warWeariness[playerIdx];
+      delete p.attitude[playerIdx];
+      delete p.attitudeReasons[playerIdx];
+      delete p.truces[playerIdx];
+      delete p.influence[playerIdx];
+    }
+    retired.atWarWith.clear();
+    retired.pacts.clear();
+    retired.deals = [];
+    retired.warWeariness = {};
+    retired.attitude = {};
+    retired.attitudeReasons = {};
+    retired.truces = {};
+    retired.influence = {};
+    retired.researching = null;
+    retired.researchGoal = null;
+    retired.researchQueue = [];
+    this.pendingEvents = this.pendingEvents.filter(event => event.player !== playerIdx);
+    for (const tile of this.map.tiles) {
+      if (tile.owner !== playerIdx) continue;
+      tile.owner = -1;
+      tile.workedBy = null;
+    }
+    this.routes = this.routes.filter(r => r.owner !== playerIdx);
+    this.peaceOffers = this.peaceOffers.filter(o => o.from !== playerIdx && o.to !== playerIdx);
+    this.dirtyHappiness();
   }
 
   // ---------- movement API ----------
@@ -1143,14 +1787,36 @@ class Game {
   }
 
   // ---------- cities ----------
-  foundCity(settler) {
-    const t = this.tile(settler.c, settler.r);
-    if (!t || t.city || !TERRAIN[t.terrain].passable) return null;
-    // not adjacent to another city
-    for (const [nc, nr] of HEX.ring(settler.c, settler.r, 2)) {
-      const nt = this.tile(nc, nr);
-      if (nt && nt.city) return null;
+  citySiteStatus(c, r, owner) {
+    const t = this.tile(c, r);
+    if (!t) return { ok: false, code: "OFF_MAP", reason: "Outside the map." };
+    if (!TERRAIN[t.terrain].passable)
+      return { ok: false, code: "IMPASSABLE", reason: "Cities require passable land." };
+    if (t.city)
+      return { ok: false, code: "OCCUPIED", reason: `${t.city.name} already occupies this tile.` };
+    const claimant = this.players[owner];
+    if (!claimant || !claimant.alive)
+      return { ok: false, code: "INVALID_OWNER", reason: "No civilization can claim this site." };
+    if (t.owner !== -1 && t.owner !== owner) {
+      const foreign = this.players[t.owner];
+      if (!foreign || foreign.alive)
+        return { ok: false, code: "FOREIGN_TERRITORY",
+          reason: `${foreign ? foreign.civ.name : "Another civilization"} controls this territory.` };
     }
+    const nearby = this.cities.find(city => HEX.distance(c, r, city.c, city.r) <= 2);
+    if (nearby)
+      return { ok: false, code: "TOO_CLOSE", blockingCityId: nearby.id,
+        reason: `Too close to ${nearby.name}; city centres must be at least three hexes apart.` };
+    return { ok: true, code: "OK", reason: "A city can be founded here." };
+  }
+
+  foundCity(settler, actorIdx = null) {
+    if (!settler || settler.type !== "SETTLER" || !this.units.includes(settler) || settler.moves <= 0)
+      return null;
+    if (actorIdx !== null && !this.unitActorStatus(settler, actorIdx).ok) return null;
+    const status = this.citySiteStatus(settler.c, settler.r, settler.owner);
+    if (!status.ok) return null;
+    const t = this.tile(settler.c, settler.r);
     const p = this.players[settler.owner];
     const city = new City(p.nextCityName(), settler.owner, settler.c, settler.r);
     const isFirst = !this.cities.some(c => c.owner === settler.owner);
@@ -1178,9 +1844,48 @@ class Game {
     const out = [];
     for (const [c, r] of HEX.ring(city.c, city.r, 3)) {
       const t = this.tile(c, r);
-      if (t && t.owner === city.owner && !(t.c === city.c && t.r === city.r)) out.push(t);
+      if (t && t.owner === city.owner && !t.city && !(t.c === city.c && t.r === city.r)) out.push(t);
     }
     return out;
+  }
+
+  assignWorkedTiles(owner) {
+    const cities = this.cities.filter(c => c.owner === owner).sort((a, b) => a.id - b.id);
+    const cityIds = new Set(cities.map(c => c.id));
+    for (const t of this.map.tiles) {
+      if (t.owner === owner || cityIds.has(t.workedBy)) t.workedBy = null;
+    }
+    const choices = new Map();
+    for (const city of cities) {
+      const focus = CITY_FOCUS[city.focus] || CITY_FOCUS.balanced;
+      const ranked = this.cityWorkableTiles(city).map(t => {
+        const y = this.tileYield(t);
+        return { t, score: y.food * focus.food + y.prod * focus.prod + y.gold * focus.gold };
+      }).sort((a, b) => b.score - a.score ||
+        HEX.distance(city.c, city.r, a.t.c, a.t.r) - HEX.distance(city.c, city.r, b.t.c, b.t.r) ||
+        a.t.r - b.t.r || a.t.c - b.t.c);
+      choices.set(city.id, ranked.map(x => x.t));
+    }
+    const maxPop = cities.reduce((m, c) => Math.max(m, c.pop), 0);
+    for (let slot = 0; slot < maxPop; slot++) {
+      for (const city of cities) {
+        if (slot >= city.pop) continue;
+        const tile = choices.get(city.id).find(t => t.workedBy === null);
+        if (tile) tile.workedBy = city.id;
+      }
+    }
+  }
+
+  workedTiles(city) {
+    this.assignWorkedTiles(city.owner);
+    return this.map.tiles.filter(t => t.workedBy === city.id);
+  }
+
+  setCityFocus(city, focus, actorIdx) {
+    if (!city || city.owner !== actorIdx || !CITY_FOCUS[focus] || !this.cities.includes(city)) return false;
+    city.focus = focus;
+    this.assignWorkedTiles(city.owner);
+    return true;
   }
 
   tileYield(t) {
@@ -1192,6 +1897,7 @@ class Game {
       const imp = IMPROVEMENT[t.improvement];
       food += imp.food || 0; prod += imp.prod || 0; gold += imp.gold || 0;
     }
+    if (t.river) gold += RIVERS.tileGold;
     return { food, prod, gold };
   }
 
@@ -1201,12 +1907,10 @@ class Game {
     // centre tile minimum yield
     const centre = this.tileYield(this.tile(city.c, city.r));
     let food = Math.max(2, centre.food), prod = Math.max(2, centre.prod), gold = Math.max(1, centre.gold);
-    // work best tiles up to pop
-    const tiles = this.cityWorkableTiles(city)
-      .map(t => ({ t, y: this.tileYield(t) }))
-      .sort((a, b) => (b.y.food * 1.3 + b.y.prod + b.y.gold * 0.5) - (a.y.food * 1.3 + a.y.prod + a.y.gold * 0.5));
-    for (let i = 0; i < Math.min(city.pop, tiles.length); i++) {
-      food += tiles[i].y.food; prod += tiles[i].y.prod; gold += tiles[i].y.gold;
+    if (this.tile(city.c, city.r).river) food += RIVERS.cityFood;
+    for (const t of this.workedTiles(city)) {
+      const y = this.tileYield(t);
+      food += y.food; prod += y.prod; gold += y.gold;
     }
     let sci = 2 + city.pop * 0.5;
     let culture = 1;
@@ -1253,45 +1957,82 @@ class Game {
       prod = Math.floor(prod * mult); gold = Math.floor(gold * mult);
       sci = sci * mult;
     }
+    if (this.cityBlockade(city).active) gold = Math.floor(gold * BLOCKADE.cityGoldMultiplier);
     return { food, prod, gold, sci: Math.floor(sci), culture, faith };
   }
 
-  // Drop queue entries that became invalid (e.g. building completed elsewhere)
-  validQueueItem(city, item) {
-    if (!item) return false;
-    if (item.kind === "building") {
-      if (city.buildings.includes(item.key)) return false;
-      const b = BUILDINGS[item.key];
-      if (b.wonder && this.cities.some(c => c.buildings.includes(item.key))) return false;
+  cityFoodSurplus(city, yields = null) {
+    const p = this.players[city.owner];
+    const y = yields || this.cityYields(city);
+    let surplus = y.food - city.pop * 2;
+    if (!p.isMinor && surplus > 0) {
+      const happiness = this.happinessOf(p.index);
+      if (happiness < HAPPINESS.strikeAt) surplus = 0;
+      else if (happiness < 0) surplus = Math.floor(surplus / 2);
     }
-    return true;
+    return surplus;
   }
 
-  productionOptions(city) {
+  cityProductionRate(city, item = null, yields = null) {
     const p = this.players[city.owner];
+    const y = yields || this.cityYields(city);
+    let prod = y.prod;
+    const current = item || city.producing;
+    if (current && current.kind === "building" && p.civ.buildingProdBonus)
+      prod = Math.floor(prod * (1 + p.civ.buildingProdBonus));
+    if (current && current.kind === "unit" && p.civ.unitProdBonus)
+      prod = Math.floor(prod * (1 + p.civ.unitProdBonus));
+    if (p.goldenAgeTurns > 0) prod = Math.floor(prod * (1 + GOLDEN_AGE.bonus));
+    return prod;
+  }
+
+  productionStatus(city, item) {
+    if (!city || !this.cities.includes(city) || !item)
+      return { ok: false, code: "INVALID_CITY" };
+    const p = this.players[city.owner];
+    if (!p || !p.alive) return { ok: false, code: "INVALID_OWNER" };
+    if (item.kind === "unit") {
+      const u = UNITS[item.key];
+      if (!u) return { ok: false, code: "UNKNOWN_ITEM" };
+      if (u.faithCost || u.great) return { ok: false, code: "NOT_PRODUCIBLE" };
+      if (u.uu && u.uu !== p.civId) return { ok: false, code: "WRONG_CIV" };
+      if (u.replaces && p.civId !== u.uu) return { ok: false, code: "WRONG_CIV" };
+      if (Object.entries(UNITS).some(([, v]) => v.uu === p.civId && v.replaces === item.key))
+        return { ok: false, code: "REPLACED_UNIT" };
+      if (u.tech && !p.hasTech(u.tech)) return { ok: false, code: "MISSING_TECH" };
+      if (u.needs && !this.playerHasResource(p.index, u.needs))
+        return { ok: false, code: "MISSING_RESOURCE" };
+      if (u.naval && !city.coastal) return { ok: false, code: "INLAND_CITY" };
+      return { ok: true, code: "OK", def: u };
+    }
+    if (item.kind !== "building") return { ok: false, code: "UNKNOWN_KIND" };
+    const b = BUILDINGS[item.key];
+    if (!b) return { ok: false, code: "UNKNOWN_ITEM" };
+    if (city.buildings.includes(item.key)) return { ok: false, code: "ALREADY_BUILT" };
+    if (b.tech && !p.hasTech(b.tech)) return { ok: false, code: "MISSING_TECH" };
+    if (b.requires && !city.buildings.includes(b.requires)) return { ok: false, code: "MISSING_BUILDING" };
+    if (b.wonder) {
+      if (p.isMinor) return { ok: false, code: "MINOR_WONDER" };
+      if (this.cities.some(c => c.buildings.includes(item.key)))
+        return { ok: false, code: "WONDER_BUILT" };
+      const reservedElsewhere = this.cities.some(c => c.owner === city.owner && c !== city &&
+        ((c.producing && c.producing.key === item.key) || c.queue.some(q => q.key === item.key)));
+      if (reservedElsewhere) return { ok: false, code: "WONDER_RESERVED" };
+    }
+    return { ok: true, code: "OK", def: b };
+  }
+
+  // Drop queue entries that became invalid (e.g. a wonder completed elsewhere).
+  validQueueItem(city, item) { return this.productionStatus(city, item).ok; }
+
+  productionOptions(city) {
     const opts = [];
     for (const [key, u] of Object.entries(UNITS)) {
-      if (u.faithCost || u.great) continue; // faith-bought or earned, never built
-      if (u.uu && u.uu !== p.civId) continue;
-      if (u.replaces && p.civId !== u.uu) continue;
-      // if civ has a UU replacing this unit, hide the base unit
-      const replacedBy = Object.entries(UNITS).find(([, v]) => v.uu === p.civId && v.replaces === key);
-      if (replacedBy) continue;
-      if (u.tech && !p.hasTech(u.tech)) continue;
-      if (u.needs && !this.playerHasResource(p.index, u.needs)) continue;
-      if (u.naval && !city.coastal) continue; // shipyards need the sea
+      if (!this.productionStatus(city, { kind: "unit", key }).ok) continue;
       opts.push({ kind: "unit", key, cost: u.cost, name: u.name, icon: u.icon, naval: u.naval });
     }
     for (const [key, b] of Object.entries(BUILDINGS)) {
-      if (city.buildings.includes(key)) continue;
-      if (b.tech && !p.hasTech(b.tech)) continue;
-      if (b.requires && !city.buildings.includes(b.requires)) continue;
-      if (b.wonder) {
-        if (p.isMinor) continue; // city-states don't race for wonders
-        const builtAnywhere = this.cities.some(c => c.buildings.includes(key)) ||
-          this.cities.some(c => c !== city && c.producing && c.producing.key === key && c.owner === city.owner);
-        if (builtAnywhere) continue;
-      }
+      if (!this.productionStatus(city, { kind: "building", key }).ok) continue;
       opts.push({ kind: "building", key, cost: b.cost, name: b.name, icon: b.icon, wonder: b.wonder });
     }
     return opts;
@@ -1307,27 +2048,89 @@ class Game {
     return price;
   }
 
-  purchase(city, opt) {
-    const p = this.players[city.owner];
-    const price = this.buyCost(opt.cost, city.owner);
-    if (p.gold < price) return false;
-    p.gold -= price;
-    this.completeProduction(city, opt);
+  setCityProduction(city, item, queue, actorIdx) {
+    if (!city || city.owner !== actorIdx || !this.productionStatus(city, item).ok) return false;
+    const normalized = { kind: item.kind, key: item.key };
+    if (queue && city.producing) {
+      if (city.queue.length >= 6 || city.producing.key === item.key || city.queue.some(q => q.key === item.key))
+        return false;
+      city.queue.push(normalized);
+      return true;
+    }
+    if (city.producing && city.producing.kind === item.kind && city.producing.key === item.key) return true;
+    city.queue = city.queue.filter(q => q.kind !== item.kind || q.key !== item.key);
+    city.producing = normalized;
     return true;
   }
 
-  completeProduction(city, item) {
-    if (item.kind === "unit") {
-      let spot;
-      if (UNITS[item.key].naval) {
-        spot = this.freeAdjacent(city.c, city.r, true); // launch onto water
-      } else {
-        spot = this.combatUnitAt(city.c, city.r) && !UNITS[item.key].civilian
-          ? this.freeAdjacent(city.c, city.r) : [city.c, city.r];
+  advanceCityQueue(city) {
+    do {
+      city.producing = city.queue.length ? city.queue.shift() : null;
+    } while (city.producing && !this.validQueueItem(city, city.producing));
+    return city.producing;
+  }
+
+  cancelCityProduction(city, actorIdx) {
+    if (!city || city.owner !== actorIdx || !this.cities.includes(city)) return false;
+    this.advanceCityQueue(city);
+    if (!city.producing) city.prodStored = 0;
+    return true;
+  }
+
+  removeQueuedProduction(city, index, actorIdx) {
+    if (!city || city.owner !== actorIdx || !Number.isInteger(index) || index < 0 || index >= city.queue.length)
+      return false;
+    city.queue.splice(index, 1);
+    return true;
+  }
+
+  productionUnitSpot(city, unitKey) {
+    const def = UNITS[unitKey];
+    if (!def) return null;
+    const open = (c, r) => {
+      const t = this.tile(c, r);
+      if (!t) return false;
+      if (this.unitsAt(c, r).some(u => u.owner !== city.owner)) return false;
+      if (def.naval) {
+        if (!this.isWater(t) || (def.coastOnly && t.terrain !== "COAST")) return false;
+        return !this.combatUnitAt(c, r);
       }
-      if (!spot) { city.prodStored = UNITS[item.key].cost; return; } // wait for space
+      if (!TERRAIN[t.terrain].passable) return false;
+      return def.civilian ? !this.civilianAt(c, r) : !this.combatUnitAt(c, r);
+    };
+    if (!def.naval && open(city.c, city.r)) return [city.c, city.r];
+    for (const [c, r] of HEX.neighbors(city.c, city.r)) if (open(c, r)) return [c, r];
+    return null;
+  }
+
+  purchase(city, item, buyerIdx) {
+    if (!city || city.owner !== buyerIdx) return false;
+    const status = this.productionStatus(city, item);
+    if (!status.ok) return false;
+    const spot = item.kind === "unit" ? this.productionUnitSpot(city, item.key) : null;
+    if (item.kind === "unit" && !spot) return false;
+    const p = this.players[city.owner];
+    const price = this.buyCost(status.def.cost, city.owner);
+    if (p.gold < price || !this.completeProduction(city, item, spot)) return false;
+    p.gold -= price;
+    if (item.kind === "building") {
+      city.queue = city.queue.filter(q => q.kind !== item.kind || q.key !== item.key);
+      if (city.producing && city.producing.kind === item.kind && city.producing.key === item.key) {
+        city.prodStored = 0;
+        this.advanceCityQueue(city);
+      }
+    }
+    return true;
+  }
+
+  completeProduction(city, item, unitSpot = null) {
+    if (item.kind === "unit") {
+      const spot = unitSpot || this.productionUnitSpot(city, item.key);
+      if (!spot) return false;
       this.addUnit(item.key, city.owner, spot[0], spot[1]);
     } else {
+      if (!BUILDINGS[item.key] || city.buildings.includes(item.key)) return false;
+      if (BUILDINGS[item.key].wonder && this.cities.some(c => c.buildings.includes(item.key))) return false;
       city.buildings.push(item.key);
       this.dirtyHappiness();
       if (BUILDINGS[item.key].cityHp) city.hp += BUILDINGS[item.key].cityHp;
@@ -1335,6 +2138,7 @@ class Game {
         this.notify(`${BUILDINGS[item.key].name} has been completed in ${city.name}!`, -1);
       }
     }
+    return true;
   }
 
   // ---------- visibility ----------
@@ -1375,13 +2179,36 @@ class Game {
   }
 
   // ---------- diplomacy ----------
-  declareWar(a, b) {
+  truceTurnsRemaining(a, b) {
     const pa = this.players[a], pb = this.players[b];
-    if (pa.atWarWith.has(b)) return;
+    if (!pa || !pb) return 0;
+    return Math.max(0, Math.max(pa.truces[b] || 0, pb.truces[a] || 0) - this.turn);
+  }
+
+  canDeclareWar(a, b, { ignoreTruce = false } = {}) {
+    const pa = this.players[a], pb = this.players[b];
+    if (!pa || !pb || a === b || !pa.alive || !pb.alive || pa.atWarWith.has(b)) return false;
+    if (!pa.met.has(b) || !pb.met.has(a) || pa.pacts.has(b) || pb.pacts.has(a)) return false;
+    if (!ignoreTruce && this.truceTurnsRemaining(a, b) > 0) return false;
+    return true;
+  }
+
+  declareWar(a, b, { force = false, cause = "aggression" } = {}) {
+    const pa = this.players[a], pb = this.players[b];
+    if (!pa || !pb || a === b || !pa.alive || !pb.alive || pa.atWarWith.has(b)) return false;
+    if (!force && !this.canDeclareWar(a, b)) return false;
+    this.meet(a, b);
+    delete pa.truces[b]; delete pb.truces[a];
     pa.atWarWith.add(b); pb.atWarWith.add(a);
     pa.warWeariness[b] = 0; pb.warWeariness[a] = 0;
     this.notify(`⚔️ ${pa.civ.name} declares war on ${pb.civ.name}!`, -1);
-    this.changeAttitude(a, b, -40); this.changeAttitude(b, a, -40);
+    if (cause === "pact") {
+      this.changeAttitude(a, b, -40, { key: "PACT_WAR", label: "Honouring a defensive pact" });
+      this.changeAttitude(b, a, -40, { key: "ALLY_JOINED", label: "They joined an ally's war" });
+    } else {
+      this.changeAttitude(a, b, -40, { key: "WAR", label: "War against them" });
+      this.changeAttitude(b, a, -40, { key: "DECLARED_ON_US", label: "They declared war on us" });
+    }
     // war dissolves any pact between the two, and cancels their deals
     pa.pacts.delete(b); pb.pacts.delete(a);
     pa.deals = pa.deals.filter(d => d.other !== b);
@@ -1391,31 +2218,36 @@ class Game {
       if (!q.alive || q.isMinor || q.isBarb) continue;
       if (q.index !== a && q.index !== b && q.pacts.has(b) && !q.atWarWith.has(a)) {
         this.notify(`🤝 ${q.civ.name} honours its defensive pact with ${pb.civ.name}!`, -1);
-        this.declareWar(q.index, a);
+        this.declareWar(q.index, a, { force: true, cause: "pact" });
       }
     }
+    return true;
   }
 
   makePeace(a, b) {
     const pa = this.players[a], pb = this.players[b];
-    if (pa.isBarb || pb.isBarb) return; // no peace with the horde
-    if (!pa.atWarWith.has(b)) return;
+    if (!pa || !pb || pa.isBarb || pb.isBarb || !pa.atWarWith.has(b)) return false;
     pa.atWarWith.delete(b); pb.atWarWith.delete(a);
     delete pa.warWeariness[b]; delete pb.warWeariness[a];
+    const truceEnds = this.turn + DIPLO.truceTurns;
+    pa.truces[b] = truceEnds; pb.truces[a] = truceEnds;
     this.peaceOffers = this.peaceOffers.filter(o =>
       !((o.from === a && o.to === b) || (o.from === b && o.to === a)));
     this.notify(`☮️ Peace between ${pa.civ.name} and ${pb.civ.name}.`, -1);
-    this.changeAttitude(a, b, 10); this.changeAttitude(b, a, 10);
+    this.changeAttitude(a, b, 10, { key: "PEACE", label: "Peace treaty" });
+    this.changeAttitude(b, a, 10, { key: "PEACE", label: "Peace treaty" });
+    return true;
   }
 
-  // An AI proposes peace to a human. It doesn't take effect until the player
-  // accepts, so a war can never end without the human's say-so.
+  // A peace proposal to a human waits for an explicit decision, so hotseat and
+  // network wars can never end without the responding player's say-so.
   offerPeace(from, to) {
     const pf = this.players[from], pt = this.players[to];
-    if (!pf || !pt || pf.isBarb || pt.isBarb || !pf.atWarWith.has(to)) return;
-    if (this.peaceOffers.some(o => o.from === from && o.to === to)) return;
+    if (!pf || !pt || pf.isBarb || pt.isBarb || !pf.atWarWith.has(to)) return false;
+    if (this.peaceOffers.some(o => o.from === from && o.to === to)) return false;
     this.peaceOffers.push({ from, to });
     this.notify(`☮️ ${pf.civ.name} proposes peace.`, to);
+    return true;
   }
   pendingPeaceOffers(to) {
     return this.peaceOffers.filter(o => o.to === to &&
@@ -1423,22 +2255,73 @@ class Game {
   }
   acceptPeaceOffer(to, from) {
     if (!this.peaceOffers.some(o => o.from === from && o.to === to)) return false;
-    this.makePeace(from, to); // also prunes the offer
-    return true;
+    return this.makePeace(from, to); // also prunes the offer
   }
   declinePeaceOffer(to, from) {
+    if (!this.peaceOffers.some(o => o.from === from && o.to === to)) return false;
     this.peaceOffers = this.peaceOffers.filter(o => !(o.from === from && o.to === to));
     // spurning peace sours them a little
-    this.changeAttitude(from, to, -4);
+    this.changeAttitude(from, to, -4, { key: "PEACE_REFUSED", label: "Peace offer refused" });
+    return true;
+  }
+
+  peaceAcceptance(from, to) {
+    const requester = this.players[from], responder = this.players[to];
+    if (!requester || !responder || !requester.atWarWith.has(to))
+      return { accepted: false, weary: false, losing: false, humanDecision: false };
+    if (responder.isHuman)
+      return { accepted: false, weary: false, losing: false, humanDecision: true };
+    const weary = (responder.warWeariness[from] || 0) > 12;
+    const losing = this.militaryPower(to) < this.militaryPower(from) * 0.8;
+    return { accepted: weary || losing, weary, losing, humanDecision: false };
   }
 
   // ---------- attitude, deals & pacts ----------
   attitudeOf(a, b) { return Math.round(this.players[a].attitude[b] || 0); }
 
-  changeAttitude(a, b, delta) {
+  _attitudeReasonList(p, b) {
+    if (!p.attitudeReasons) p.attitudeReasons = {};
+    if (!Array.isArray(p.attitudeReasons[b])) p.attitudeReasons[b] = [];
+    const list = p.attitudeReasons[b];
+    const score = p.attitude[b] || 0;
+    const explained = list.reduce((sum, reason) => sum + reason.value, 0);
+    const gap = score - explained;
+    if (Math.abs(gap) > 0.001) {
+      list.push({ key: "HISTORY", label: "Prior diplomatic history", value: gap, turn: this.turn });
+    }
+    return list;
+  }
+
+  changeAttitude(a, b, delta, reason = null) {
     const p = this.players[a];
-    if (p.isMinor || p.isBarb) return;
-    p.attitude[b] = Math.max(-100, Math.min(100, (p.attitude[b] || 0) + delta));
+    if (!p || p.isMinor || p.isBarb || !this.players[b]) return 0;
+    const list = this._attitudeReasonList(p, b);
+    const old = p.attitude[b] || 0;
+    const next = Math.max(-100, Math.min(100, old + delta));
+    const applied = next - old;
+    p.attitude[b] = next;
+    if (!applied) return 0;
+    const detail = reason || { key: "HISTORY", label: "Diplomatic history" };
+    const existing = list.find(entry => entry.key === detail.key);
+    if (existing) {
+      existing.value += applied;
+      existing.label = detail.label;
+      existing.turn = this.turn;
+    } else {
+      list.push({ key: detail.key, label: detail.label, value: applied, turn: this.turn });
+    }
+    p.attitudeReasons[b] = list.filter(entry => Math.abs(entry.value) > 0.001);
+    return applied;
+  }
+
+  attitudeBreakdown(a, b) {
+    const p = this.players[a];
+    if (!p) return { value: 0, label: "Neutral", components: [] };
+    const components = this._attitudeReasonList(p, b)
+      .filter(reason => Math.abs(reason.value) >= 0.05)
+      .map(reason => ({ ...reason }))
+      .sort((x, y) => Math.abs(y.value) - Math.abs(x.value) || y.turn - x.turn || x.key.localeCompare(y.key));
+    return { value: this.attitudeOf(a, b), label: this.attitudeLabel(a, b), components };
   }
 
   attitudeLabel(a, b) {
@@ -1460,7 +2343,7 @@ class Game {
 
   canLuxuryDeal(a, b) {
     const pa = this.players[a], pb = this.players[b];
-    if (pa.isMinor || pb.isMinor || pa.isBarb || pb.isBarb) return false;
+    if (!pa || !pb || a === b || pa.isMinor || pb.isMinor || pa.isBarb || pb.isBarb) return false;
     if (!pa.alive || !pb.alive || pa.atWarWith.has(b) || !pa.met.has(b)) return false;
     if (this.activeDealBetween(a, b)) return false;
     return this.tradableLuxes(a, b).length > 0 && this.tradableLuxes(b, a).length > 0;
@@ -1472,26 +2355,34 @@ class Game {
     const ends = this.turn + DIPLO.luxuryDealTurns;
     this.players[a].deals.push({ give, get, other: b, ends });
     this.players[b].deals.push({ give: get, get: give, other: a, ends });
-    this.changeAttitude(a, b, 10); this.changeAttitude(b, a, 10);
+    this.changeAttitude(a, b, 10, { key: "TRADE", label: "Luxury trade" });
+    this.changeAttitude(b, a, 10, { key: "TRADE", label: "Luxury trade" });
     this.dirtyHappiness();
     this.notify(`🤝 ${this.players[a].civ.name} and ${this.players[b].civ.name} trade ` +
       `${RESOURCE[give].name} for ${RESOURCE[get].name} (${DIPLO.luxuryDealTurns} turns).`, -1);
     return true;
   }
 
+  canGiftGold(a, b) {
+    const pa = this.players[a], pb = this.players[b];
+    if (!pa || !pb || a === b || !pa.alive || !pb.alive || pa.isMinor || pb.isMinor || pa.isBarb || pb.isBarb)
+      return false;
+    return pa.gold >= DIPLO.giftGold && pa.met.has(b) && !pa.atWarWith.has(b);
+  }
+
   giftGold(a, b) {
+    if (!this.canGiftGold(a, b)) return false;
     const pa = this.players[a];
-    if (pa.gold < DIPLO.giftGold || pa.atWarWith.has(b)) return false;
     pa.gold -= DIPLO.giftGold;
     this.players[b].gold += DIPLO.giftGold;
-    this.changeAttitude(b, a, DIPLO.giftAttitude);
+    this.changeAttitude(b, a, DIPLO.giftAttitude, { key: "GIFT", label: "Gold gifts" });
     this.notify(`🎁 ${pa.civ.name} sends ${DIPLO.giftGold} gold to ${this.players[b].civ.name}.`, -1);
     return true;
   }
 
   canPact(a, b) {
     const pa = this.players[a], pb = this.players[b];
-    if (pa.isMinor || pb.isMinor || pa.isBarb || pb.isBarb) return false;
+    if (!pa || !pb || a === b || pa.isMinor || pb.isMinor || pa.isBarb || pb.isBarb) return false;
     if (!pa.alive || !pb.alive || pa.atWarWith.has(b) || !pa.met.has(b)) return false;
     if (pa.pacts.has(b)) return false;
     return this.attitudeOf(a, b) >= DIPLO.pactThreshold && this.attitudeOf(b, a) >= DIPLO.pactThreshold;
@@ -1501,7 +2392,8 @@ class Game {
     if (!this.canPact(a, b)) return false;
     this.players[a].pacts.add(b);
     this.players[b].pacts.add(a);
-    this.changeAttitude(a, b, 15); this.changeAttitude(b, a, 15);
+    this.changeAttitude(a, b, 15, { key: "PACT", label: "Defensive pact" });
+    this.changeAttitude(b, a, 15, { key: "PACT", label: "Defensive pact" });
     this.notify(`🛡️ Defensive pact: ${this.players[a].civ.name} and ${this.players[b].civ.name}!`, -1);
     return true;
   }
@@ -1510,10 +2402,18 @@ class Game {
     for (const p of this.players) {
       if (p.isMinor || p.isBarb || !p.alive) continue;
       for (const k of Object.keys(p.attitude)) {
-        const v = p.attitude[k];
-        p.attitude[k] = Math.abs(v) <= DIPLO.attitudeDecay ? 0
-          : v - Math.sign(v) * DIPLO.attitudeDecay;
+        const old = p.attitude[k];
+        const list = this._attitudeReasonList(p, k);
+        const next = Math.abs(old) <= DIPLO.attitudeDecay ? 0
+          : old - Math.sign(old) * DIPLO.attitudeDecay;
+        p.attitude[k] = next;
+        if (!next || !old) p.attitudeReasons[k] = [];
+        else {
+          const scale = next / old;
+          for (const reason of list) reason.value *= scale;
+        }
       }
+      for (const k of Object.keys(p.truces || {})) if (p.truces[k] <= this.turn) delete p.truces[k];
       const before = p.deals.length;
       p.deals = p.deals.filter(d => d.ends > this.turn);
       if (p.deals.length < before) this.dirtyHappiness();
@@ -1710,13 +2610,16 @@ class Game {
     return null;
   }
 
-  spreadFromMissionary(unit) {
+  spreadFromMissionary(unit, actorIdx = null) {
+    if (!unit || !this.units.includes(unit) || !unit.def.missionary || unit.moves <= 0) return false;
+    if (actorIdx !== null && !this.unitActorStatus(unit, actorIdx).ok) return false;
     const p = this.players[unit.owner];
     if (p.religionId === null || unit.charges <= 0) return false;
     const city = this.missionaryTarget(unit);
     if (!city) return false;
     city.pressure[p.religionId] = (city.pressure[p.religionId] || 0) + MISSIONARY_PRESSURE;
     this.updateCityReligion(city);
+    p.missionarySpreads++;
     unit.charges--;
     unit.moves = 0;
     if (unit.charges <= 0) this.removeUnit(unit);
@@ -1820,6 +2723,7 @@ class Game {
             p.techs.add(t);
             this.stats.steals++;
             if (p.researching && p.techs.has(p.researching)) p.researching = null;
+            this.advanceResearchPlan(p, true);
             this.notify(`🕵️ ${spy.name} stole ${TECHS[t].name} from ${owner.civ.name}!`, p.index);
             this.notify(`🕵️ Technology was stolen from ${city.name}! Station a spy there to catch thieves.`, city.owner);
           } else {
@@ -1933,12 +2837,7 @@ class Game {
     const y = this.cityYields(city);
 
     // growth (unhappy empires grow slowly; miserable ones not at all)
-    let surplus = y.food - city.pop * 2;
-    if (!p.isMinor && surplus > 0) {
-      const hap = this.happinessOf(p.index);
-      if (hap < HAPPINESS.strikeAt) surplus = 0;
-      else if (hap < 0) surplus = Math.floor(surplus / 2);
-    }
+    const surplus = this.cityFoodSurplus(city, y);
     city.food += surplus;
     if (city.food >= city.foodNeeded()) { city.food -= city.foodNeeded(); city.pop++; this.notify(`${city.name} grew to ${city.pop}.`, city.owner); }
     else if (city.food < 0) { city.food = 0; if (city.pop > 1) { city.pop--; this.notify(`${city.name} is starving!`, city.owner); } }
@@ -1952,27 +2851,30 @@ class Game {
       if (!def) { city.producing = null; }
     }
     if (city.producing) {
-      let prod = y.prod;
       const item = city.producing;
-      if (item.kind === "building" && p.civ.buildingProdBonus) prod = Math.floor(prod * (1 + p.civ.buildingProdBonus));
-      if (item.kind === "unit" && p.civ.unitProdBonus) prod = Math.floor(prod * (1 + p.civ.unitProdBonus));
-      if (p.goldenAgeTurns > 0) prod = Math.floor(prod * (1 + GOLDEN_AGE.bonus));
+      const prod = this.cityProductionRate(city, item, y);
       city.prodStored += prod;
       const cost = item.kind === "unit" ? UNITS[item.key].cost : BUILDINGS[item.key].cost;
       if (city.prodStored >= cost) {
+        let resolved = true;
         // wonder race check
         if (item.kind === "building" && BUILDINGS[item.key].wonder &&
             this.cities.some(c => c.buildings.includes(item.key))) {
           city.prodStored = Math.floor(city.prodStored * 0.5);
           this.notify(`${BUILDINGS[item.key].name} was completed elsewhere first!`, city.owner);
         } else {
-          city.prodStored -= cost;
-          this.completeProduction(city, item);
-          this.notify(`${city.name} finished ${item.kind === "unit" ? UNITS[item.key].name : BUILDINGS[item.key].name}.`, city.owner);
+          const complete = this.completeProduction(city, item);
+          if (complete) {
+            city.prodStored -= cost;
+            this.notify(`${city.name} finished ${item.kind === "unit" ? UNITS[item.key].name : BUILDINGS[item.key].name}.`, city.owner);
+          } else {
+            city.prodStored = cost;
+            resolved = false;
+          }
         }
-        do {
-          city.producing = city.queue.length ? city.queue.shift() : null;
-        } while (city.producing && !this.validQueueItem(city, city.producing));
+        if (resolved) {
+          this.advanceCityQueue(city);
+        }
       }
     }
 
@@ -1986,8 +2888,10 @@ class Game {
       if (target) { target.owner = city.owner; city.expansions++; }
     }
 
-    // heal city
-    if (city.hp < city.maxHp) city.hp = Math.min(city.maxHp, city.hp + 15);
+    // A fleet that controls the port prevents supplies and repairs from arriving.
+    if (city.hp < city.maxHp && (!BLOCKADE.preventsRepair || !this.cityBlockade(city).active)) {
+      city.hp = Math.min(city.maxHp, city.hp + 15);
+    }
 
     return y;
   }
@@ -2011,29 +2915,78 @@ class Game {
     return best;
   }
 
+  // One authoritative forecast for the economy UI and end-of-turn accounting.
+  // A turn may pass already-resolved city yields so growth and production are
+  // processed only once while every gold modifier still uses the same rules.
+  empireEconomy(playerIdx, yieldsByCity = null) {
+    const p = this.players[playerIdx];
+    if (!p || p.isBarb) return null;
+    const out = {
+      cities: 0, population: 0, units: 0, freeUnits: 0,
+      food: 0, production: 0, science: 0, culture: 0, faith: 0,
+      cityGold: 0, goldenAgeGold: 0, connectionGold: 0, tradeGold: 0, guildGold: 0,
+      carsijaGold: 0, cityStateGold: 0, titheGold: 0,
+      connectedCities: 0, connectableCities: 0,
+      maintenance: 0, grossGold: 0, netGold: 0,
+    };
+    for (const city of this.cities) {
+      if (city.owner !== playerIdx) continue;
+      const supplied = yieldsByCity instanceof Map ? yieldsByCity.get(city.id) : null;
+      const y = supplied || this.cityYields(city);
+      out.cities++;
+      out.population += city.pop;
+      out.food += y.food;
+      out.production += y.prod;
+      out.cityGold += y.gold;
+      out.science += y.sci;
+      out.culture += y.culture || 0;
+      out.faith += y.faith;
+    }
+    if (p.goldenAgeTurns > 0 && out.cityGold > 0) {
+      out.goldenAgeGold = Math.floor(out.cityGold * (1 + GOLDEN_AGE.bonus)) - out.cityGold;
+    }
+    out.units = this.units.filter(u => u.owner === playerIdx).length;
+    out.freeUnits = 4 + (p.policies.has("FRONTIERSMEN") ? 4 : 0);
+    out.maintenance = Math.max(0, out.units - out.freeUnits);
+    const roadNetwork = this.roadNetwork(playerIdx);
+    out.connectionGold = roadNetwork.income;
+    out.connectedCities = Math.max(0, roadNetwork.connectedCities.length - (roadNetwork.capital ? 1 : 0));
+    out.connectableCities = Math.max(0, out.cities - (roadNetwork.capital ? 1 : 0));
+    if (!p.isMinor) {
+      out.tradeGold = this.tradeIncome(playerIdx);
+      if (p.policies.has("GUILDS")) out.guildGold = this.luxuryTypesOf(playerIdx).length;
+      if (this.policyBranchDone(playerIdx, "CARSIJA")) out.carsijaGold = 2 * out.cities;
+      out.cityStateGold = this.minorBonuses(playerIdx).gold;
+      const religion = p.religionId !== null ? this.religions[p.religionId] : null;
+      if (religion && religion.belief === "TITHE") {
+        out.titheGold = this.religionFollowers(p.religionId);
+      }
+    }
+    out.grossGold = out.cityGold + out.goldenAgeGold + out.connectionGold + out.tradeGold + out.guildGold +
+      out.carsijaGold + out.cityStateGold + out.titheGold;
+    out.netGold = out.grossGold - out.maintenance;
+    return out;
+  }
+
   processPlayerEconomy(p) {
     if (!p.alive || p.isBarb) return;
     this.dirtyHappiness(); // borders/pop may have changed since last compute
-    let gold = 0, sci = 0, faith = 0, cult = 0;
+    const yieldsByCity = new Map();
     for (const city of this.cities) {
       if (city.owner !== p.index) continue;
       const y = this.processCityTurn(city);
-      gold += y.gold; sci += y.sci; faith += y.faith; cult += y.culture || 0;
+      yieldsByCity.set(city.id, y);
     }
+    const economy = this.empireEconomy(p.index, yieldsByCity);
     if (!p.isMinor) {
-      p.culture += cult;
-      p._cpt = cult; // shown in the top bar
+      p.culture += economy.culture;
+      p._cpt = economy.culture;
       const can = this.canAdoptPolicy(p.index);
       if (can && !p._couldAdopt && p.isHuman) {
         this.notify(`📜 Enough culture for a social policy — open the Policies screen!`, p.index);
       }
       p._couldAdopt = can;
     }
-    if (p.goldenAgeTurns > 0 && gold > 0) gold = Math.floor(gold * (1 + GOLDEN_AGE.bonus));
-    // unit maintenance: first 4 free (Frontiersmen raises that to 8)
-    const freeUnits = 4 + (p.policies.has("FRONTIERSMEN") ? 4 : 0);
-    const nUnits = this.units.filter(u => u.owner === p.index).length;
-    gold -= Math.max(0, nUnits - freeUnits);
     if (!p.isMinor) {
       // golden age bookkeeping: surplus happiness fills the meter
       const hap = this.happinessOf(p.index);
@@ -2058,18 +3011,10 @@ class Game {
       p._lastHap = hap;
     }
     if (!p.isMinor) {
-      gold += this.tradeIncome(p.index);
-      if (p.policies.has("GUILDS")) gold += this.luxuryTypesOf(p.index).length;
-      if (this.policyBranchDone(p.index, "CARSIJA")) gold += 2 * this.cities.filter(c => c.owner === p.index).length;
       this.accrueGreatPeople(p);
-      gold += this.minorBonuses(p.index).gold;
-      // Tithe: gold from every follower city in the world
-      if (p.religionId !== null && this.religions[p.religionId].belief === "TITHE") {
-        gold += this.religionFollowers(p.religionId);
-      }
-      p.faith += faith;
+      p.faith += economy.faith;
     }
-    p.gold += gold;
+    p.gold += economy.netGold;
     if (p.gold < 0) {
       p.gold = 0;
       const armies = this.units.filter(u => u.owner === p.index && !u.isCivilian);
@@ -2081,13 +3026,17 @@ class Game {
     }
 
     // research
-    if (p.researching && p.techs.has(p.researching)) p.researching = null; // e.g. stolen by spies
+    if (p.researching && p.techs.has(p.researching)) {
+      p.researching = null; // e.g. stolen by spies
+      this.advanceResearchPlan(p, true);
+    }
     if (!p.researching) {
+      this.advanceResearchPlan(p);
       const av = p.availableTechs();
       if (av.length && !p.isHuman) p.researching = av.sort((x, y2) => TECHS[x].cost - TECHS[y2].cost)[0];
     }
     if (p.researching) {
-      p.scienceStored += sci;
+      p.scienceStored += economy.science;
       const t = TECHS[p.researching];
       if (p.scienceStored >= this.techCost(p.researching)) {
         const done = p.researching;
@@ -2096,9 +3045,10 @@ class Game {
         this.notify(`🔬 Research complete: ${t.name}!`, p.index);
         p.researching = null;
         this.questEvent("FIRST_TECH", p.index, { tech: done });
+        this.advanceResearchPlan(p, true);
       }
     } else if (p.isHuman) {
-      p.scienceStored += sci; // banks until a tech is chosen
+      p.scienceStored += economy.science; // banks until a tech is chosen
     }
   }
 
@@ -2130,8 +3080,9 @@ class Game {
     for (const u of this.units) {
       if (u.owner !== p.index || u.hp >= 100) continue;
       const t = this.tile(u.c, u.r);
-      const moved = u.moves < u.def.moves || u.attacked;
+      const moved = u.moves < u.maxMoves || u.attacked;
       if (moved) continue;
+      if (u.def.naval && !this.navalSupply(u).supplied) continue;
       let heal = 5;
       if (this.isWater(t)) heal = u.def.naval && t.owner === p.index ? 10 : 0; // ships mend in home waters
       else if (t.owner === p.index) heal = 10;
@@ -2147,13 +3098,39 @@ class Game {
     }
   }
 
+  processNavalSupply(p) {
+    for (const u of [...this.units]) {
+      if (u.owner !== p.index || !u.def.naval) continue;
+      const state = this.navalSupply(u);
+      if (state.supplied) {
+        u.unsuppliedTurns = 0;
+        continue;
+      }
+      u.unsuppliedTurns = (u.unsuppliedTurns || 0) + 1;
+      if (u.unsuppliedTurns === 1) {
+        this.notify(`${u.def.name} has left naval supply; attrition begins after ` +
+          `${NAVAL_SUPPLY.graceTurns} turns unless it reaches a friendly port.`, u.owner);
+      }
+      if (u.unsuppliedTurns <= NAVAL_SUPPLY.graceTurns) continue;
+      u.hp -= NAVAL_SUPPLY.attritionDamage;
+      this.addEffect(u.c, u.r, `-${NAVAL_SUPPLY.attritionDamage} supply`, "#e27b4d");
+      if (u.hp <= 0) {
+        this.notify(`${u.def.name} was lost after operating too long without naval supply.`, u.owner);
+        this.removeUnit(u);
+      } else {
+        this.notify(`${u.def.name} suffers ${NAVAL_SUPPLY.attritionDamage} damage from naval attrition.`, u.owner);
+      }
+    }
+  }
+
   // Ends the ACTIVE human's turn. With multiple humans (hotseat) this
   // advances to the next human; after the last one the AI phase runs
   // and the world clock advances.
   endTurn() {
-    if (this.over) return;
+    if (this.over || this.pendingEventFor(this.activeHuman)) return false;
     const human = this.players[this.activeHuman];
     this.cityStrikes(human);
+    this.processNavalSupply(human);
     this.healUnits(human);
     this.progressWorkers(human);
     this.processPlayerEconomy(human);
@@ -2165,7 +3142,7 @@ class Game {
     if (next < this.humans) {
       this.activeHuman = next;
       this.beginHumanTurn(next);
-      return;
+      return true;
     }
 
     // AI phase (majors beyond the humans, then city-states)
@@ -2174,6 +3151,7 @@ class Game {
       if (!p.alive) continue;
       AI.takeTurn(this, p);
       this.cityStrikes(p);
+      this.processNavalSupply(p);
       this.healUnits(p);
       this.progressWorkers(p);
       this.processPlayerEconomy(p);
@@ -2213,6 +3191,7 @@ class Game {
     this.activeHuman = first;
     this.beginHumanTurn(first);
     this.checkVictory();
+    return true;
   }
 
   // Housekeeping when a human's turn starts: queued paths + auto-explore
@@ -2227,10 +3206,199 @@ class Game {
   }
 
   // ---------- random events ----------
+  pendingEventFor(playerIdx) {
+    if (!Array.isArray(this.pendingEvents)) this.pendingEvents = [];
+    this.pendingEvents = this.pendingEvents.filter(event => {
+      const p = event && this.players[event.player], def = event && RANDOM_EVENTS[event.key];
+      return !!(p && p.alive && def && (!def.needsCity || this.eventCity(event)));
+    });
+    return this.pendingEvents.find(event => event.player === playerIdx) || null;
+  }
+
+  eventCity(event) {
+    if (!event) return null;
+    const p = this.players[event.player];
+    if (!p) return null;
+    return this.cities.find(city => city.id === event.cityId && city.owner === p.index) ||
+      this.cities.find(city => city.id === p.originalCapitalId && city.owner === p.index) ||
+      this.cities.find(city => city.owner === p.index) || null;
+  }
+
+  eventDecision(playerIdx, eventId = null) {
+    const event = eventId === null ? this.pendingEventFor(playerIdx)
+      : (this.pendingEvents || []).find(item => item.id === eventId && item.player === playerIdx);
+    const def = event && RANDOM_EVENTS[event.key];
+    if (!event || !def) return null;
+    const city = this.eventCity(event);
+    return { ...event, name: def.name, icon: def.icon, kind: def.kind, prompt: def.prompt,
+      city: city ? { id: city.id, name: city.name, c: city.c, r: city.r } : null,
+      choices: this.eventChoices(playerIdx, event) };
+  }
+
+  eventChoices(playerIdx, eventRef) {
+    const event = typeof eventRef === "object" ? eventRef
+      : (this.pendingEvents || []).find(item => item.id === eventRef);
+    const p = this.players[playerIdx], def = event && RANDOM_EVENTS[event.key];
+    if (!p || !event || event.player !== playerIdx || !def || !Array.isArray(def.choices)) return [];
+    const city = this.eventCity(event), era = p.era();
+    const values = {
+      harvestFood: city ? Math.floor(city.foodNeeded() * 0.6) : 0,
+      harvestGold: 40 + era * 20,
+      migrationCulture: 35 + era * 15,
+      relicFaith: 25 + era * 15,
+      relicCulture: 25 + era * 15,
+      scholarScience: 30 + era * 25,
+      scholarCulture: 30 + era * 20,
+      tradeGold: 40 + era * 30,
+      workshopProduction: 30 + era * 20,
+      festivalCulture: 35 + era * 20,
+      quarantineCost: 40 + era * 20,
+      reformCost: 45 + era * 20,
+      fireCost: 35 + era * 20,
+      raiderGold: 25 + era * 15,
+      droughtCost: 35 + era * 15,
+    };
+    const cityName = city ? city.name : "your capital";
+    const detail = (choiceKey) => {
+      switch (`${event.key}:${choiceKey}`) {
+        case "HARVEST:GRANARIES": return { description: `Gain ${values.harvestFood} food in ${cityName}.`, available: !!city };
+        case "HARVEST:MARKET": return { description: `Gain ${values.harvestGold} gold.`, available: true };
+        case "MIGRATION:WELCOME": return { description: `${cityName} gains 1 population.`, available: !!city };
+        case "MIGRATION:CHARTER": return { description: `${cityName} gains ${values.migrationCulture} border culture.`, available: !!city };
+        case "RELICS:VENERATE": return { description: `Gain ${values.relicFaith} faith.`, available: true };
+        case "RELICS:PRESERVE": return { description: `Gain ${values.relicCulture} culture toward your next policy.`, available: true };
+        case "SCHOLARS:ACADEMY": return { description: `Gain ${values.scholarScience} science toward current research.`, available: true };
+        case "SCHOLARS:COURT": return { description: `Gain ${values.scholarCulture} culture toward your next policy.`, available: true };
+        case "TRADE_WINDS:TREASURY": return { description: `Gain ${values.tradeGold} gold.`, available: true };
+        case "TRADE_WINDS:WORKSHOPS": return { description: `${cityName} gains ${values.workshopProduction} stored production.`, available: !!city };
+        case "FESTIVAL:CELEBRATE": return { description: "+3 happiness for 8 turns.", available: true };
+        case "FESTIVAL:PATRONIZE": return { description: `Gain ${values.festivalCulture} culture and +1 happiness for 4 turns.`, available: true };
+        case "PLAGUE:QUARANTINE": return { description: `Pay ${values.quarantineCost} gold; lose at most 1 population and suffer -1 happiness for 4 turns.`,
+          available: !!city && p.gold >= values.quarantineCost, reason: `Requires ${values.quarantineCost} gold` };
+        case "PLAGUE:ENDURE": return { description: `Lose up to 2 population in ${cityName} and suffer -3 happiness for 6 turns.`, available: !!city };
+        case "UNREST:REFORMS": return { description: `Pay ${values.reformCost} gold; reduce unrest to -1 happiness for 3 turns.`,
+          available: p.gold >= values.reformCost, reason: `Requires ${values.reformCost} gold` };
+        case "UNREST:SUPPRESS": return { description: "Suffer -4 happiness for 8 turns.", available: true };
+        case "FIRE:REBUILD": return { description: `Pay ${values.fireCost} gold; retain 90% of stored production and take 15 city damage.`,
+          available: !!city && p.gold >= values.fireCost, reason: `Requires ${values.fireCost} gold` };
+        case "FIRE:LET_BURN": return { description: `${cityName} retains 30% of stored production and takes 40 city damage.`, available: !!city };
+        case "RAIDERS:RANSOM": return { description: `Lose up to ${values.raiderGold} gold.`, available: true };
+        case "RAIDERS:CLOSE_ROADS": return { description: "Keep the treasury, but suffer -2 happiness for 4 turns.", available: true };
+        case "DROUGHT:IMPORT": return { description: `Pay ${values.droughtCost} gold; preserve stored food and suffer -1 happiness for 3 turns.`,
+          available: !!city && p.gold >= values.droughtCost, reason: `Requires ${values.droughtCost} gold` };
+        case "DROUGHT:RATION": return { description: `${cityName} retains 40% of stored food and suffers -2 happiness for 6 turns.`, available: !!city };
+        default: return { description: "Unavailable event response.", available: false };
+      }
+    };
+    return def.choices.map(choice => ({ ...choice, ...detail(choice.key) }));
+  }
+
+  chooseEvent(playerIdx, eventId, choiceKey, { force = false } = {}) {
+    const p = this.players[playerIdx];
+    const event = (this.pendingEvents || []).find(item => item.id === eventId && item.player === playerIdx);
+    if (!p || !p.alive || !event || (!force && (!p.isHuman || this.activeHuman !== playerIdx))) return false;
+    const choice = this.eventChoices(playerIdx, event).find(option => option.key === choiceKey);
+    if (!choice || !choice.available) return false;
+    const city = this.eventCity(event), def = RANDOM_EVENTS[event.key];
+    const message = this._applyEventChoice(p, event, choice.key, city);
+    this.pendingEvents = this.pendingEvents.filter(item => item !== event);
+    const color = def.kind === "bad" ? (choice.tone === "risk" ? "#e74c3c" : "#f1c40f") : "#2ecc71";
+    if (city) this.addEffect(city.c, city.r, def.icon, color);
+    this.notify(`${def.icon} <b>${def.name} - ${choice.label}:</b> ${message}.`, p.index);
+    return { eventId, choice: choice.key, label: choice.label, message };
+  }
+
+  _applyEventChoice(p, event, choiceKey, city) {
+    const era = p.era();
+    const mood = (turns, delta) => {
+      p.moodTurns = turns; p.moodDelta = delta; this.dirtyHappiness();
+    };
+    switch (`${event.key}:${choiceKey}`) {
+      case "HARVEST:GRANARIES": {
+        const food = Math.floor(city.foodNeeded() * 0.6); city.food += food;
+        return `${city.name}'s granaries receive ${food} food`;
+      }
+      case "HARVEST:MARKET": {
+        const gold = 40 + era * 20; p.gold += gold; return `the surplus brings ${gold} gold`;
+      }
+      case "MIGRATION:WELCOME":
+        city.pop++; this.dirtyHappiness(); return `${city.name} gains 1 population`;
+      case "MIGRATION:CHARTER": {
+        const culture = 35 + era * 15; city.cultureStored += culture;
+        return `${city.name}'s frontier gains ${culture} border culture`;
+      }
+      case "RELICS:VENERATE": {
+        const faith = 25 + era * 15; p.faith += faith; return `the shrines receive ${faith} faith`;
+      }
+      case "RELICS:PRESERVE": {
+        const culture = 25 + era * 15; p.culture += culture; return `the realm gains ${culture} culture`;
+      }
+      case "SCHOLARS:ACADEMY": {
+        const science = 30 + era * 25; p.scienceStored += science; return `current research gains ${science} science`;
+      }
+      case "SCHOLARS:COURT": {
+        const culture = 30 + era * 20; p.culture += culture; return `the court gains ${culture} culture`;
+      }
+      case "TRADE_WINDS:TREASURY": {
+        const gold = 40 + era * 30; p.gold += gold; return `the treasury gains ${gold} gold`;
+      }
+      case "TRADE_WINDS:WORKSHOPS": {
+        const production = 30 + era * 20; city.prodStored += production;
+        return `${city.name} gains ${production} stored production`;
+      }
+      case "FESTIVAL:CELEBRATE":
+        mood(8, 3); return `the realm gains 3 happiness for 8 turns`;
+      case "FESTIVAL:PATRONIZE": {
+        const culture = 35 + era * 20; p.culture += culture; mood(4, 1);
+        return `the realm gains ${culture} culture and 1 happiness for 4 turns`;
+      }
+      case "PLAGUE:QUARANTINE": {
+        const cost = 40 + era * 20; p.gold -= cost;
+        const loss = city.pop > 1 ? 1 : 0; city.pop = Math.max(1, city.pop - loss); mood(4, -1);
+        return `quarantine costs ${cost} gold; ${city.name} loses ${loss} population`;
+      }
+      case "PLAGUE:ENDURE": {
+        const loss = city.pop > 3 ? 2 : (city.pop > 1 ? 1 : 0);
+        city.pop = Math.max(1, city.pop - loss); mood(6, -3);
+        return `${city.name} loses ${loss} population and the realm suffers unrest`;
+      }
+      case "UNREST:REFORMS": {
+        const cost = 45 + era * 20; p.gold -= cost; mood(3, -1);
+        return `local reforms cost ${cost} gold and contain the unrest`;
+      }
+      case "UNREST:SUPPRESS":
+        mood(8, -4); return `suppression causes 4 unhappiness for 8 turns`;
+      case "FIRE:REBUILD": {
+        const cost = 35 + era * 20; p.gold -= cost;
+        city.prodStored = Math.floor(city.prodStored * 0.9); city.hp = Math.max(1, city.hp - 15);
+        return `emergency crews cost ${cost} gold and limit the damage in ${city.name}`;
+      }
+      case "FIRE:LET_BURN":
+        city.prodStored = Math.floor(city.prodStored * 0.3); city.hp = Math.max(1, city.hp - 40);
+        return `${city.name}'s production and defenses are badly damaged`;
+      case "RAIDERS:RANSOM": {
+        const gold = Math.min(p.gold, 25 + era * 15); p.gold -= gold;
+        return `the seized cargo costs ${gold} gold`;
+      }
+      case "RAIDERS:CLOSE_ROADS":
+        mood(4, -2); return `closed roads cause 2 unhappiness for 4 turns`;
+      case "DROUGHT:IMPORT": {
+        const cost = 35 + era * 15; p.gold -= cost; mood(3, -1);
+        return `emergency grain costs ${cost} gold and preserves ${city.name}'s stores`;
+      }
+      case "DROUGHT:RATION":
+        city.food = Math.floor(city.food * 0.4); mood(6, -2);
+        return `${city.name}'s food stores shrink under rationing`;
+      default:
+        return "the court records no outcome";
+    }
+  }
+
   processRandomEvents() {
     for (const p of this.players) {
       if (!p.alive || p.isMinor || p.isBarb) continue;
       if (p.moodTurns > 0) p.moodTurns--;
+      if (this.pendingEventFor(p.index)) continue;
       if (this.turn < EVENTS.graceTurns) continue;
       if (this.turn - p.lastEventTurn < EVENTS.cooldown) continue;
       if (this.rng() > EVENTS.chancePerTurn) continue;
@@ -2241,81 +3409,17 @@ class Game {
       const total = pool.reduce((a, [, e]) => a + e.weight, 0);
       let roll = this.rng() * total, pick = pool[0][0];
       for (const [k, e] of pool) { roll -= e.weight; if (roll <= 0) { pick = k; break; } }
+      const city = myCities.length ? myCities[Math.floor(this.rng() * myCities.length)] : null;
+      const event = { id: `${this.turn}:${p.index}`, player: p.index, key: pick,
+        cityId: city ? city.id : null, turn: this.turn };
       p.lastEventTurn = this.turn;
-      this.applyEvent(p, pick, myCities);
+      this.pendingEvents.push(event);
+      if (!p.isHuman) {
+        const choices = this.eventChoices(p.index, event);
+        const choice = AI.chooseEventChoice(this, p, event, choices);
+        this.chooseEvent(p.index, event.id, choice, { force: true });
+      }
     }
-  }
-
-  applyEvent(p, key, myCities) {
-    const ev = RANDOM_EVENTS[key];
-    const era = p.era();
-    const rc = myCities.length ? myCities[Math.floor(this.rng() * myCities.length)] : null;
-    const cap = this.cities.find(c => c.id === p.originalCapitalId && c.owner === p.index) || rc;
-    let msg = "";
-    switch (key) {
-      case "HARVEST":
-        rc.food += Math.floor(rc.foodNeeded() * 0.6);
-        msg = `a bumper harvest fills the granaries of ${rc.name}`;
-        break;
-      case "MIGRATION":
-        rc.pop += 1;
-        this.dirtyHappiness();
-        msg = `migrants settle in ${rc.name} (+1 population)`;
-        break;
-      case "RELICS": {
-        const f = 25 + era * 15;
-        p.faith += f;
-        msg = `sacred relics are unearthed near ${rc.name} (+${f} faith)`;
-        break;
-      }
-      case "SCHOLARS": {
-        const s = 30 + era * 25;
-        p.scienceStored += s;
-        msg = `wandering scholars share their learning (+${s} science)`;
-        break;
-      }
-      case "TRADE_WINDS": {
-        const g = 40 + era * 30;
-        p.gold += g;
-        msg = `favourable winds bring a windfall of trade (+${g} gold)`;
-        break;
-      }
-      case "FESTIVAL":
-        p.moodTurns = 8; p.moodDelta = 3; this.dirtyHappiness();
-        msg = `a spontaneous festival lifts spirits (+3 happiness for 8 turns)`;
-        break;
-      case "PLAGUE": {
-        const loss = rc.pop > 3 ? 2 : 1;
-        rc.pop = Math.max(1, rc.pop - loss);
-        p.moodTurns = 6; p.moodDelta = -3; this.dirtyHappiness();
-        msg = `plague sweeps through ${rc.name} (-${loss} population, unrest)`;
-        break;
-      }
-      case "UNREST":
-        p.moodTurns = 8; p.moodDelta = -4; this.dirtyHappiness();
-        msg = `civil unrest spreads through your empire (-4 happiness for 8 turns)`;
-        break;
-      case "FIRE":
-        rc.prodStored = Math.floor(rc.prodStored * 0.3);
-        rc.hp = Math.max(1, rc.hp - 40);
-        msg = `a great fire ravages ${rc.name} (production and defences set back)`;
-        break;
-      case "RAIDERS": {
-        const g = Math.min(p.gold, 25 + era * 15);
-        p.gold -= g;
-        msg = `brigands raid your caravans (-${g} gold)`;
-        break;
-      }
-      case "DROUGHT":
-        rc.food = Math.floor(rc.food * 0.4);
-        p.moodTurns = 6; p.moodDelta = -2; this.dirtyHappiness();
-        msg = `drought withers the fields around ${rc.name}`;
-        break;
-    }
-    const at = rc || cap;
-    if (at && ev.kind !== "good") this.addEffect(at.c, at.r, ev.icon, ev.kind === "bad" ? "#e74c3c" : "#f1c40f");
-    else if (at) this.addEffect(at.c, at.r, ev.icon, "#2ecc71");
-    this.notify(`${ev.icon} <b>${ev.name}:</b> ${msg}.`, p.index);
   }
 
   // ---------- World Congress ----------
@@ -2343,6 +3447,73 @@ class Game {
 
   congressCandidates() {
     return this.players.filter(p => !p.isMinor && !p.isBarb && p.alive).map(p => p.index);
+  }
+
+  religiousVictoryProgress(playerIdx) {
+    const p = this.players[playerIdx];
+    const alive = this.players.filter(o => !o.isMinor && !o.isBarb && o.alive);
+    const majorOwners = new Set(alive.map(o => o.index));
+    const majorCities = this.cities.filter(c => majorOwners.has(c.owner));
+    const religion = p && p.religionId !== null ? this.religions[p.religionId] : null;
+    const converted = religion ? majorCities.filter(c => c.religion === religion.id) : [];
+    const dominatedCivs = religion ? alive.filter(o => {
+      const owned = majorCities.filter(c => c.owner === o.index);
+      const convertedOwned = owned.filter(c => c.religion === religion.id).length;
+      return owned.length > 0 && convertedOwned > owned.length / 2;
+    }) : [];
+    const target = Math.floor(majorCities.length * RELIGION_VICTORY.share) + 1;
+    const enoughCities = majorCities.length >= Math.max(RELIGION_VICTORY.minCities, alive.length);
+    const enoughReligions = this.religions.length >= RELIGION_VICTORY.minReligions;
+    return {
+      founded: !!religion,
+      religionId: religion ? religion.id : null,
+      name: religion ? religion.name : null,
+      icon: religion ? religion.icon : null,
+      current: converted.length,
+      target,
+      totalCities: majorCities.length,
+      civs: dominatedCivs.length,
+      civTarget: alive.length,
+      religions: this.religions.length,
+      religionTarget: RELIGION_VICTORY.minReligions,
+      spreads: p ? p.missionarySpreads : 0,
+      spreadTarget: RELIGION_VICTORY.minSpreads,
+      complete: !!religion && enoughCities && enoughReligions &&
+        p.missionarySpreads >= RELIGION_VICTORY.minSpreads && converted.length >= target && dominatedCivs.length === alive.length,
+    };
+  }
+
+  victoryProgress(playerIdx) {
+    const p = this.players[playerIdx];
+    const majors = this.players.filter(o => !o.isMinor && !o.isBarb);
+    const alive = majors.filter(o => o.alive);
+    const capitalIds = new Set(majors.map(o => o.originalCapitalId).filter(id => id !== null));
+    const capitals = this.cities.filter(c => capitalIds.has(c.id));
+    const delegatesTotal = alive.reduce((sum, o) => sum + this.congressDelegates(o.index), 0);
+    const scoreOrder = alive.slice().sort((a, b) => this.score(b.index) - this.score(a.index));
+    return {
+      domination: {
+        current: capitals.filter(c => c.owner === playerIdx).length,
+        // All major civilizations will eventually found or receive an original
+        // capital; show the full race target even during the opening Settler turn.
+        target: majors.length,
+      },
+      science: { current: p.techs.size, target: Object.keys(TECHS).length },
+      culture: { current: this.branchesDone(playerIdx), target: CULTURE_VICTORY_BRANCHES },
+      religion: this.religiousVictoryProgress(playerIdx),
+      diplomacy: {
+        current: this.congressDelegates(playerIdx),
+        target: Math.ceil(delegatesTotal * WCONGRESS.winFraction),
+        total: delegatesTotal,
+        unlocked: this.congressUnlocked(),
+      },
+      score: {
+        current: this.score(playerIdx),
+        rank: Math.max(1, scoreOrder.findIndex(o => o.index === playerIdx) + 1),
+        field: alive.length,
+        turnsLeft: Math.max(0, this.maxTurns - this.turn + 1),
+      },
+    };
   }
 
   // AI ballot: back yourself if you lead, otherwise the friendliest major
@@ -2432,6 +3603,13 @@ class Game {
           else if (timeUp) won = false;
           break;
         }
+        case "resistance": {
+          const myCap = this.cities.find(c => c.id === me.originalCapitalId);
+          if (this.turn > 3 && (!myCap || myCap.owner !== 0)) won = false;
+          else if (myCap && myCap.owner === 0 && this.scenarioKills >= v.count) won = true;
+          else if (timeUp) won = false;
+          break;
+        }
         case "cities": {
           if (this.cities.filter(c => c.owner === 0).length >= v.count) won = true;
           else if (timeUp) won = false;
@@ -2459,6 +3637,24 @@ class Game {
     for (const p of majors) {
       if (p.alive && this.branchesDone(p.index) >= CULTURE_VICTORY_BRANCHES) {
         this.over = true; this.winner = p.index; this.victoryType = "Culture";
+        return;
+      }
+    }
+    // scientific victory: master the complete technology tree
+    for (const p of majors) {
+      if (p.alive && p.techs.size >= Object.keys(TECHS).length) {
+        this.over = true; this.winner = p.index; this.victoryType = "Scientific";
+        this.notify(`🔬 ${p.civ.name} has mastered every technology — a Scientific Victory!`, -1);
+        return;
+      }
+    }
+    // religious victory: a majority of major cities and every surviving
+    // civilization. The minimum city count prevents opening rush wins.
+    for (const p of majors) {
+      const progress = this.religiousVictoryProgress(p.index);
+      if (p.alive && progress.complete) {
+        this.over = true; this.winner = p.index; this.victoryType = "Religious";
+        this.notify(`${progress.icon} ${progress.name} has become the faith of the Balkans — a Religious Victory for ${p.civ.name}!`, -1);
         return;
       }
     }
@@ -2491,22 +3687,25 @@ class Game {
   // ---------- save / load ----------
   serialize() {
     return JSON.stringify({
-      v: 1, turn: this.turn, seed: this.seed, mapType: this.mapType,
+      v: 7, turn: this.turn, seed: this.seed,
+      rngState: typeof this.rng.getState === "function" ? this.rng.getState() : null,
+      mapType: this.mapType,
       difficulty: this.difficulty, humans: this.humans, activeHuman: this.activeHuman,
       scenario: this.scenario, scenarioKills: this.scenarioKills,
       noBarbs: this.noBarbs, barbIndex: this.barbIndex, maxCamps: this.maxCamps || 0,
       camps: this.camps, speed: this.speed, routes: this.routes, history: this.history,
       congressTurn: this.congressTurn, congressLast: this.congressLast,
-      peaceOffers: this.peaceOffers, over: this.over,
+      peaceOffers: this.peaceOffers, pendingEvents: this.pendingEvents, over: this.over,
       winner: this.winner, victoryType: this.victoryType, nextId: NEXT_ID,
-      religions: this.religions,
+      religions: this.religions, stats: this.stats,
       map: { w: this.map.w, h: this.map.h, tiles: this.map.tiles.map(t => ({
         c: t.c, r: t.r, terrain: t.terrain, feature: t.feature, resource: t.resource,
-        improvement: t.improvement, ruin: t.ruin || false,
+        improvement: t.improvement, road: !!t.road, river: !!t.river, ruin: t.ruin || false,
         owner: t.owner, cityId: t.city ? t.city.id : null })) },
       players: this.players.map(p => ({
         index: p.index, civId: p.civId, isHuman: p.isHuman, alive: p.alive,
         gold: p.gold, scienceStored: p.scienceStored, researching: p.researching,
+        researchGoal: p.researchGoal, researchQueue: p.researchQueue,
         techs: [...p.techs], atWarWith: [...p.atWarWith], met: [...p.met],
         warWeariness: p.warWeariness, cityNameCursor: p.cityNameCursor,
         visible: Array.from(p.visible), originalCapitalId: p.originalCapitalId,
@@ -2514,15 +3713,18 @@ class Game {
         gaMeter: p.gaMeter, goldenAgeTurns: p.goldenAgeTurns, gaCount: p.gaCount,
         spies: p.spies, gpPoints: p.gpPoints, gpBorn: p.gpBorn,
         culture: p.culture, policies: [...p.policies], attitude: p.attitude,
+        attitudeReasons: p.attitudeReasons, truces: p.truces,
         pacts: [...p.pacts], deals: p.deals, quest: p.quest,
         moodTurns: p.moodTurns, moodDelta: p.moodDelta, lastEventTurn: p.lastEventTurn,
-        leaderIdx: p.leaderIdx, congressVote: p.congressVote, congressVoteTurn: p.congressVoteTurn })),
+        leaderIdx: p.leaderIdx, congressVote: p.congressVote, congressVoteTurn: p.congressVoteTurn,
+        missionarySpreads: p.missionarySpreads })),
       cities: this.cities.map(c => ({ ...c })),
       units: this.units.map(u => ({ id: u.id, type: u.type, owner: u.owner, c: u.c, r: u.r,
         hp: u.hp, moves: u.moves, fortified: u.fortified, attacked: u.attacked, path: u.path,
         xp: u.xp, level: u.level, promos: u.promos, promoPts: u.promoPts,
         building: u.building, charges: u.charges,
         autoExplore: u.autoExplore || false, healFortify: u.healFortify || false,
+        unsuppliedTurns: u.unsuppliedTurns || 0, resupplying: u.resupplying || false,
         gpName: u.gpName || null })),
       notifications: this.notifications.slice(-30),
     });
@@ -2548,21 +3750,28 @@ class Game {
     g.congressTurn = d.congressTurn ?? -999;
     g.congressLast = d.congressLast || null;
     g.peaceOffers = d.peaceOffers || [];
+    g.pendingEvents = Array.isArray(d.pendingEvents) ? d.pendingEvents : [];
     if (g.scenario && SCENARIOS[g.scenario]) g.maxTurns = SCENARIOS[g.scenario].victory.turns;
     g.effects = [];
     g.anims = [];
     g.strikes = [];
+    g.lastCombat = null;
     g.winner = d.winner; g.victoryType = d.victoryType;
     if (!g.scenario) g.maxTurns = SPEEDS[g.speed].turns;
-    g.rng = mulberry32((d.seed + d.turn * 7919) >>> 0);
+    // Version 2+ persists the exact PRNG state. Version 1 saves retain their
+    // historical turn-derived fallback so existing local saves still load.
+    const fallbackRngState = (d.seed + d.turn * 7919) >>> 0;
+    g.rng = mulberry32(d.rngState ?? fallbackRngState);
     g.notifications = d.notifications || [];
     g.religions = d.religions || [];
-    NEXT_ID = d.nextId;
+    g.stats = d.stats || { steals: 0, catches: 0 };
 
     g.map = { w: d.map.w, h: d.map.h, tiles: [], idx: (c, r) => r * d.map.w + c, seed: d.seed };
     for (const td of d.map.tiles) {
+      const legacyRoad = td.improvement === "ROAD";
       g.map.tiles.push({ c: td.c, r: td.r, terrain: td.terrain, feature: td.feature,
-        resource: td.resource, improvement: td.improvement ?? null, ruin: td.ruin || false,
+        resource: td.resource, improvement: legacyRoad ? null : (td.improvement ?? null),
+        road: !!td.road || legacyRoad, river: !!td.river, ruin: td.ruin || false,
         owner: td.owner, city: null, workedBy: null, _cityId: td.cityId });
     }
     g.cities = d.cities.map(cd => Object.assign(new City(cd.name, cd.owner, cd.c, cd.r), cd));
@@ -2575,11 +3784,16 @@ class Game {
       if (!Array.isArray(u.promos)) u.promos = [];
       // pre-promotion saves: bank the earned levels as pending picks
       if (typeof u.promoPts !== "number") u.promoPts = Math.max(0, (u.level || 0) - u.promos.length);
+      if (typeof u.unsuppliedTurns !== "number") u.unsuppliedTurns = 0;
+      if (typeof u.resupplying !== "boolean") u.resupplying = false;
     }
     g.players = d.players.map(pd => {
       const p = new Player(pd.index, pd.civId, pd.isHuman);
       p.alive = pd.alive; p.gold = pd.gold; p.scienceStored = pd.scienceStored;
       p.researching = pd.researching; p.techs = new Set(pd.techs);
+      p.researchGoal = TECHS[pd.researchGoal] && !p.techs.has(pd.researchGoal) ? pd.researchGoal : null;
+      p.researchQueue = Array.isArray(pd.researchQueue)
+        ? pd.researchQueue.filter(key => TECHS[key] && !p.techs.has(key)) : [];
       p.atWarWith = new Set(pd.atWarWith); p.met = new Set(pd.met);
       p.warWeariness = pd.warWeariness || {}; p.cityNameCursor = pd.cityNameCursor;
       p.visible = Uint8Array.from(pd.visible); p.originalCapitalId = pd.originalCapitalId;
@@ -2592,6 +3806,8 @@ class Game {
       p.culture = pd.culture || 0;
       p.policies = new Set(pd.policies || []);
       p.attitude = pd.attitude || {};
+      p.attitudeReasons = pd.attitudeReasons || {};
+      p.truces = pd.truces || {};
       p.pacts = new Set(pd.pacts || []);
       p.deals = pd.deals || [];
       p.quest = pd.quest || null;
@@ -2601,8 +3817,15 @@ class Game {
       p.leaderIdx = pd.leaderIdx || 0;
       p.congressVote = pd.congressVote ?? null;
       p.congressVoteTurn = pd.congressVoteTurn ?? -1;
+      p.missionarySpreads = pd.missionarySpreads || 0;
       return p;
     });
+    // City and Unit constructors allocate temporary IDs while rebuilding
+    // prototypes. Reset the global allocator only after hydration so loading a
+    // save cannot skip IDs and diverge from uninterrupted deterministic play.
+    const existingIds = [...g.cities.map(c => c.id), ...g.units.map(u => u.id),
+      ...g.players.flatMap(p => p.spies.map(s => s.id))].filter(Number.isFinite);
+    NEXT_ID = Math.max(Number(d.nextId) || 1, (existingIds.length ? Math.max(...existingIds) : 0) + 1);
     return g;
   }
 }

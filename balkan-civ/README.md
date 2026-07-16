@@ -25,7 +25,23 @@ hex to move, long-press for move orders, drag to pan, pinch to zoom — so
 they can join from phones and tablets.
 
 Your game **auto-saves every turn** (browser localStorage) — use *Continue Saved
-Game* on the title screen to pick up where you left off.
+Game* on the title screen to pick up where you left off. Saves preserve the
+exact deterministic random stream, so reloading does not reroll future combat,
+events, or AI choices.
+
+The skirmish screen remembers the selected realm, leader, and game options. Set
+an unsigned 32-bit **map seed** to reproduce the same world and AI roster, or
+leave it blank for a fresh random seed. The active seed is available from the
+in-game menu for sharing and rematches.
+
+## Development checks
+
+The deterministic engine suite runs with `npm test`. The browser contract uses
+Playwright and Chromium to exercise the real desktop and mobile UI, including
+keyboard-only decisions, modal focus trapping and restoration, responsive
+overflow, accessibility scans, Classic 2D canvas pixels, and a nonblank WebGL
+frame. Install its pinned dependencies with `npm install`, install Chromium with
+`npx playwright install chromium`, then run `npm run test:browser`.
 
 ## The nine civilizations
 
@@ -44,21 +60,29 @@ Game* on the title screen to pick up where you left off.
 ## Features
 
 - **Multiple leaders per civilization**: each of the nine civs offers
-  three historical leaders — 27 in all — with distinct traits, chosen on
+  at least three historical leaders — 29 in all — with distinct traits, chosen on
   the start screen. Play Serbia under Stefan Dušan's builders, Stefan
   Nemanja's culture, or Lazar's stubborn defense; the unique unit stays
   the same, the strategy changes
 - **Five eras** of technology, now reaching the **Industrial era**:
   Rifling, Steam Power, and Military Science unlock Riflemen, Cannon,
   Cavalry, and the Ironclad, plus Factories, Hospitals, Stock Exchanges,
-  and two new wonders (the Iron Gates Works and the Orient Express)
-- **Six ways to win**: Domination, Score, Cultural, and now a
-  **Diplomatic Victory** — once a civ researches Civil Service, the
-  **World Congress** convenes every few turns to elect a World Leader.
-  Delegates come from your empire and, above all, your **city-state
-  allies**; win a supermajority of the vote to be elected and win
-- **Campaign mode** — *A Thousand Years of the Balkans* strings all nine
-  scenarios into one chronological arc from 893 to 1462 AD. Chapters
+  and two new wonders (the Iron Gates Works and the Orient Express). Select
+  any locked technology as a strategic goal and the dependency tree builds,
+  saves, highlights, and automatically advances through its exact prerequisite
+  route; the plan can be cleared without cancelling current research
+- **Six ways to win**: conquer every original capital (**Domination**),
+  master all 32 technologies (**Scientific**), complete three policy branches
+  (**Cultural**), spread your founded religion across every surviving empire
+  and over 60% of major cities after six active Missionary spreads against at
+  least one rival faith (**Religious**), lead the final standings
+  (**Score**), or win a **Diplomatic Victory**. Once a civ researches Civil
+  Service, the **World Congress** convenes every few turns to elect a World
+  Leader. Delegates come from your empire and, above all, your **city-state
+  allies**; win a supermajority of the vote to be elected and win. Click the
+  score in the top bar or press `V` for a live overview of all six paths
+- **Campaign mode** — *A Thousand Years of the Balkans* strings all ten
+  scenarios into one chronological arc from 893 to 1804 AD. Chapters
   unlock in sequence and a running **Glory** score is carried across the
   whole campaign, saved between sessions
 - **Civilopedia** (📖 button or `?`): a searchable in-game reference —
@@ -66,30 +90,72 @@ Game* on the title screen to pick up where you left off.
   belief, city-state type, civilization, and victory condition, with a
   live search box and category tabs. Generated straight from the game's
   data tables, so it always matches the actual rules
-- **Advisor tips**: dismissible contextual hints for newcomers that appear
-  the first time each situation arises (found your first city, choose
-  research, met a rival, a policy is affordable, and so on) — with a
-  one-click opt-out
-- **Random events**: harvests, migrations, relics, and trade windfalls on
-  the upside; plagues, unrest, fires, drought, and brigands on the down —
-  each with real mechanical effects and occasional temporary happiness
-  swings, so no two games play out the same
+- **Consolidated guidance**: a one-time advisor explains new milestones while
+  actionable research, production, policy, religion, and promotion decisions
+  live only in the clickable attention queue. Completed advice clears
+  immediately, production offers one state-aware strategic suggestion, and all
+  guidance has a one-click opt-out
+- **Strategic event dilemmas**: harvests, migrations, relics, and trade
+  windfalls on the upside; plagues, unrest, fires, drought, and brigands on
+  the down. Every event presents two exact, materially different responses —
+  invest gold to contain a crisis, accept its damage, or redirect an
+  opportunity toward growth, research, faith, culture, production, or the
+  treasury. Decisions are saved mid-turn and enforced per player in hotseat
+  and online games; AI rulers evaluate the same options deterministically
 - **Accessibility settings** (Menu → ⚙️): a colorblind-friendly civ
   palette, a reduce-motion toggle (stops the animated sea, drifting sun,
   and attack lunges), and an advisor-tips switch — all remembered between
-  sessions
+  sessions. Every dismissible planning dialog also has a persistent keyboard-
+  and touch-accessible close control with focus restoration
 - **3D graphics** (default): a WebGL diorama built with Three.js — extruded
   hex terrain with cliff faces, cone mountains with snow caps, stepped
   hills, tree-covered forests, a translucent sea over a depth-shaded
   seabed, and dark "uncharted" prisms hiding the unexplored world. Rotate
-  the camera with `Q` / `W`. Switch to the original **Classic 2D** renderer
-  any time from the ☰ Menu — the game autosaves and resumes seamlessly,
+  the camera with `Q` / `W`; `Home` or the crosshair control recenters the
+  selected unit or capital in the unobstructed viewport. Switch to the original
+  **Classic 2D** renderer any time from the ☰ Menu — the game autosaves and resumes seamlessly,
   and both styles show the exact same match (Three.js is vendored locally,
   so the game still works fully offline)
+- **Shared unit silhouettes** replace platform-dependent unit emoji on the map,
+  civilization picker, production lists, combat forecast, military ledger, and
+  Civilopedia. The same code-native atlas remains crisp in 2D, 3D, desktop,
+  mobile, and offline play
+- **Living city skylines** in both renderers: settlements grow denser with
+  population and advance through five architectural eras. Constructed walls,
+  religious landmarks, factories, and world wonders visibly change the map,
+  while cities outside current vision use a fog-safe redacted silhouette
+- **Seeded river systems** in both renderers: inland headwaters follow
+  connected corridors to the coast and merge into tributaries. Worked river
+  tiles earn +1 gold, river cities gain +1 food, roads cross above the water as
+  bridges, and mirror worlds reflect the actual hex graph for symmetric terrain
+  and river economies
+- **Strategic tile-yield lens** in both renderers: press `Y` or use the
+  wheat control to reveal food, production, and gold directly on every
+  currently visible hex. The setting persists between sessions and uses
+  distinct circle, square, and diamond markers for colour-independent reading
+- **Surveyed Settler guidance**: selecting a Settler compares every visible
+  site it can reach this turn, marks excellent, promising, and marginal city
+  locations, and distinguishes sites that require waiting until next turn to
+  found. Hovering a candidate reports its potential and survey coverage
+- **City focus and production planning**: every city can prioritize balanced
+  output, growth, production, or gold. Citizens claim unique worked tiles,
+  highlighted on the map in both graphics modes, while the city panel shows
+  exact growth and production forecasts. Purchases and queued projects enforce
+  technology, resource, ownership, wonder, and unit-placement rules
+- **Empire overview** (`O` or the 🏛️ command): sortable city administration,
+  a complete military roster, direct map-jump actions, and an auditable gold
+  ledger in one compact screen. City focus can be changed in place, while the
+  ledger exposes Golden Age, trade, policy, city-state, tithe, and maintenance
+  modifiers from the same forecast used by the turn engine
+- **Guarded unit orders**: a tactical unit panel combines health, movement,
+  strength, veteran status, and current orders with grouped commands. Every
+  player action is checked against ownership and the active turn; cancelling a
+  Worker job cannot refund movement, and the only Settler cannot be disbanded
+  before a capital exists
 - Procedurally generated hex maps with smooth coastlines, different every
   game — choose a rugged **Peninsula**, an island-dotted **Archipelago**,
   or a **custom map** you painted yourself in the built-in **Map Editor**
-  (terrain, forests, and resources, saved locally)
+  (terrain, rivers, forests, and resources, saved locally)
 - **Hotseat multiplayer**: 2–3 humans share the device — each gets their
   own fog of war, notifications, and a pass-the-device screen between turns
 - **Online multiplayer** (up to 4 humans, each with their own civilization):
@@ -97,8 +163,9 @@ Game* on the title screen to pick up where you left off.
   invite code over any chat app, pastes back their replies, and starts —
   after that the connection is direct between browsers. Each player picks
   their civ on their own start screen, sees only their own fog of war, and
-  plays in turn while the others watch a waiting banner
-- **Campaign scenarios — one for every civilization**, each with its own
+  plays in turn while the others watch a waiting banner. The host verifies
+  every versioned turn update and rejects stale or out-of-turn state
+- **Ten campaign scenarios across all nine civilizations**, each with its own
   victory rule and a live objective tracker in the top bar:
   - *The Rise of Samuil* (Macedonia, 976) — take Constantinople in 150 turns
   - *The Golden Age of Simeon* (Bulgaria, 893) — first to master every
@@ -113,28 +180,43 @@ Game* on the title screen to pick up where you left off.
     Walls in 60 turns
   - *Skanderbeg's Rebellion* (Albania, 1443) — hold Krujë for 100 turns,
     on hard difficulty
+  - *The Serbian Revolution* (Serbia, 1804) — as Karađorđe, hold Beograd
+    and destroy 10 Ottoman units in a fully Industrial opening
 - **Social policies** — four Balkan-flavoured branches you unlock with
   accumulated culture: **Zadruga** (the family homestead — growth and land),
   **Junak** (the hero's path — war and glory), **Čaršija** (the bazaar
   quarter — trade and coin), and **Sabor** (the church council — faith and
   art). Each policy costs more than the last; completing every policy in a
   branch grants a powerful finisher. Complete **three branches** to win a
-  **Cultural Victory** — the fifth way to win, alongside Domination and Score
+  **Cultural Victory**
 - **Deeper diplomacy** between major civs: swap surplus **luxuries** for a
   fixed term (both sides gain happiness), send **gold gifts** to warm a
   rival's attitude, and sign **defensive pacts** with friends — if either
-  signatory is attacked, the other joins the war. Every rival tracks an
-  attitude toward you, shown on the diplomacy screen
-- **Unit promotions**: veterans that earn a level let you *choose* an
-  upgrade — **Might** (+attack), **Bulwark** (+defense), **Field Medic**
-  (heals itself and nearby units), or **Pathfinder** (ignores rough terrain)
+  signatory is attacked, the other joins the war. The diplomacy screen shows
+  each side's exact attitude ledger, active agreements, war state, and
+  peace-treaty truce. AI leaders respect those truces, while hotseat and
+  network peace proposals always wait for the responding player's decision
+- **Role-aware unit promotions**: every veteran can specialize in attack,
+  defense, or field medicine; land troops add Pathfinder and Amphibious
+  Assault options, while fleets unlock Boarding Parties, Bombardment, and
+  Navigation. Promoted melee troops can attack directly from transports
 - **City-state quests**: minors periodically ask a favour — burn a specific
   barbarian camp, slay raiders, or be first to a technology — and reward the
   civ that delivers with a burst of influence
 - Naval warfare: research Sailing to embark land units onto the coast and
-  build Galleys; Compass opens the deep sea and the ranged War Galleass.
-  Ships hunt transports, bombard shores, and can capture coastal cities;
-  embarked units are nearly defenseless — escort them
+  build Galleys; Compass opens the deep sea and the ranged War Galleass,
+  followed by Gunpowder Frigates and Steam-powered Ironclads. Ships hunt
+  transports, bombard shores, and can capture coastal cities;
+  embarked units are nearly defenseless — escort them. AI fleets chart unknown
+  seas, modernize in home waters, screen transports, and coordinate bombardment.
+  A stronger adjacent fleet **blockades** a hostile port, halving city gold,
+  suspending endpoint trade routes, and stopping repairs until defending
+  warships restore local naval control. AI fleets impose and break these
+  blockades as part of their coastal campaigns. Fleets also depend on
+  connected supply projected by owned coastal cities: Compass and Steam Power
+  extend its reach, while ships that remain beyond coverage exhaust a two-turn
+  grace period, then suffer attrition and reduced combat effectiveness. AI
+  admirals return endangered ships to port and recover before redeploying
 - Fog of war with explored/visible states
 - Cities: population growth, worked tiles, culture-driven border expansion,
   production queues, gold purchasing, 16 buildings and 10 world wonders
@@ -143,8 +225,16 @@ Game* on the title screen to pick up where you left off.
 - 32-technology research tree across five eras (Ancient → Industrial)
 - Civ V-style combat: hit points, ranged vs melee, terrain defense bonuses,
   fortification, floating damage numbers, and sieges — cities bombard one
-  besieger every turn, so bring catapults. Hover a target for a **combat
-  forecast** (damage dealt and taken) before you commit
+  besieger every turn, so bring catapults. Select a target for a **combat
+  forecast** with damage ranges and a risk verdict before confirming the
+  strike. Expand its strength ledger to inspect health, experience, terrain,
+  formations, promotions, policies, leader traits, faith, generals, garrisons,
+  fortifications, and naval supply from the same formula that resolves the
+  attack; a battle report records the outcome, and attacks suffered during
+  the AI turn appear in the defender's turn recap. Enemy land melee formations
+  control adjacent ground and end movement on entry; visible controlled hexes
+  are outlined in amber. Surround a land target with up to two additional
+  melee units for a capped **+20% flanking bonus**
 - **Barbarians** (optional toggle): camps seed the wilds and spawn raiders
   that scale with the era; burn a camp for a 40-gold bounty. **Ancient
   ruins** reward explorers with gold, faith, science, veteran experience,
@@ -153,7 +243,7 @@ Game* on the title screen to pick up where you left off.
   their line (Warrior → Swordsman → Longswordsman → Musketman, and so on),
   keeping their promotions — unique units included
 - Unit promotions: combat earns XP; veterans gain up to three ⭐ levels,
-  each worth +10% strength (and a morale heal on promotion)
+  each worth +5% strength (and a morale heal plus a specialization pick)
 - **Religion**: Shrines, Temples and monasteries generate faith. Found one
   of six historical faiths — Orthodoxy, Catholicism, Islam, Bogomilism,
   Tengrism, Hellenism — pick a founder belief (food, science, gold tithe,
@@ -176,8 +266,13 @@ Game* on the title screen to pick up where you left off.
   files) for combat, research, golden ages, spies and more, plus an ambient
   score — a low drone under a wandering melody in the double-harmonic
   "Balkan" scale. Toggle effects (🔊) and music (🎵) separately
-- Workers and tile improvements: farms, mines, and roads (roads cut movement
-  cost to 1 on any terrain)
+- Workers and tile improvements: farms, mines, and roads. Roads coexist with
+  productive improvements, cut movement cost to 1, and form visible capital
+  networks; each linked city earns population-scaled connection gold. AI
+  Workers coordinate deterministic intercity corridors before routine tile jobs
+- Permanent river corridors enrich worked tiles and fresh-water city sites;
+  procedural systems are deterministic, coast-connected, save-safe, fog-safe,
+  and paintable in the map editor
 - Strategic resources (horses, iron) gating unit types; luxury resources
   feeding happiness
 - 3–8 AI opponents that scout, settle (across the sea, too), improve their
@@ -193,21 +288,26 @@ Game* on the title screen to pick up where you left off.
   Balkan names (yes, Tesla is in there)
 - **Game speed** (Quick / Standard / Epic) scales research pace and game
   length; **Mirror** world type gives fair symmetric maps for multiplayer
-- **Smarter AI warfare**: settlers get escorts, melee waits for siege
-  engines to breach walls before assaulting, armies chase off raiders,
-  and gold is spent modernizing veterans
+- **Goal-aware AI strategy**: leaders derive a preferred victory route from
+  their traits, then align research, buildings, policy branches, missionaries,
+  city-state gifts, trade routes, and army composition with that plan. War
+  targets are scored by distance, attitude, allied fronts, and relative power;
+  armies share a campaign objective, reserve separate assault positions, and
+  maintain frontline, ranged, and siege support. Settlers get escorts, melee
+  waits for bombardment to breach walls, and gold modernizes veterans. Island
+  empires prepare Compass and an expedition fleet before opening overseas wars
 - Cities support a **production queue** (queue up to 6 items) and a full
   clickable **message log**; wounded units can fortify until healed
 - **Undo** a simple move (before anything eventful happens); **3 manual
   save slots** plus **export/import of save files** — email a save to a
-  friend to continue an online match later
+  friend to continue the match offline or move it between machines
 - An **end-game replay graph** charts every civilization's score across
   the whole game
 - Diplomacy screen: declare war, propose peace, compare scores
 - Three difficulty levels (Prince / King / Emperor) scaling AI output
 - Hover any hex for a movement path preview with turn count; scouts can
   **auto-explore**; units glide between hexes instead of teleporting
-- Victory by **Domination** (control every capital) or **Score** at turn 300
+- Six standard victory routes with live progress and known-rival standings
 - Autosave + continue
 
 ## Controls
@@ -219,9 +319,12 @@ Game* on the title screen to pick up where you left off.
 | Drag | Pan the map |
 | Mouse wheel | Zoom |
 | `Q` / `W` | Rotate the camera (3D mode) |
+| `Home` | Center the selected unit, selected city, or capital |
+| `Y` | Toggle the tile-yield lens |
 | `Enter` | End turn |
 | `N` / `.` | Next idle unit |
 | `F` | Fortify selected unit |
+| `O` | Empire overview: cities, military, and economy |
 | `T` | Technology tree |
 | `P` | Social policies |
 | `?` | Civilopedia (searchable reference) |
@@ -238,17 +341,27 @@ Plain HTML/CSS/JavaScript — no frameworks, no build step.
 index.html        page shell
 css/style.css     all styling
 js/data.js        civs, units, buildings, techs, terrain tables
+js/cityart.js     shared era, population, and landmark city visuals
 js/sound.js       procedural WebAudio sound effects
 js/hex.js         hex-grid math (odd-r offset, cube distance, pixel transforms)
+js/riverart.js    shared fog-safe river topology for both renderers
 js/mapgen.js      seeded value-noise map generation + start placement
 js/model.js       game engine: cities, units, combat, research, turns, save/load
 js/ai.js          AI: settling, production, research, diplomacy, tactics
+js/unitart.js     shared code-native unit silhouettes for both map renderers
 js/render.js      classic 2D canvas renderer + minimap
 js/render3d.js    3D WebGL renderer (extruded hex terrain, sprite units)
 js/vendor/        three.min.js (r147, vendored so the game works offline)
 js/editor.js      map editor
-js/net.js         serverless WebRTC multiplayer (invite codes, state relay)
+js/net.js         serverless WebRTC multiplayer (signaling, authoritative state relay)
 js/ui.js          panels, modals, input handling
+```
+
+Run the deterministic gameplay, balance, save-state, and AI regressions with:
+
+```sh
+node --test tests/*.test.mjs
+npm run test:browser
 ```
 
 ## Performance
@@ -267,9 +380,13 @@ slower devices.
 The invite/reply codes are standard WebRTC session descriptions — exchange
 them over any messenger. A STUN server (Google's public one) is used for
 NAT traversal; on very restrictive networks a direct connection may fail.
-The full game state is auto-saved locally on every turn, so if a connection
-drops mid-game the host can continue against the AI or re-host later.
+The host assigns only verified connected players, owns the authoritative
+state revision, and rejects stale or out-of-turn updates. If a connection
+drops mid-game, turns pause instead of silently becoming a local game and
+the current authoritative state is saved locally. That recovery save can be
+resumed offline as hotseat or exported from the game menu.
 
 ## Ideas for future expansion
 
-Unit artwork, save-transfer for resuming online games, scenario chains.
+Longer historical campaign chains, further Industrial-era scenarios, and
+localized interface text.

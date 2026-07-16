@@ -8,7 +8,12 @@
 const UNIT_ART = (() => {
   function kind(def) {
     const n = def.name.toLowerCase();
-    if (def.naval) return n.includes("ironclad") ? "steamship" : "ship";
+    if (def.naval) {
+      if (n.includes("ironclad")) return "steamship";
+      if (n.includes("frigate")) return "frigate";
+      if (n.includes("galleass")) return "galleass";
+      return "galley";
+    }
     if (def.siege) return n.includes("cannon") ? "cannon" : "siege";
     if (def.caravan) return "caravan";
     if (def.missionary) return "missionary";
@@ -118,12 +123,33 @@ const UNIT_ART = (() => {
       ctx.lineWidth = 14; ctx.beginPath(); ctx.moveTo(25, 52); ctx.lineTo(72, 48); ctx.stroke();
       ctx.lineWidth = 9; ctx.beginPath(); ctx.moveTo(68, 48); ctx.lineTo(87, 38); ctx.stroke();
       ctx.beginPath(); ctx.arc(23, 52, 8, 0, Math.PI * 2); ctx.fill();
-    } else if (k === "ship" || k === "steamship") {
+    } else if (["galley", "galleass", "frigate", "steamship"].includes(k)) {
       ctx.beginPath(); ctx.moveTo(12, 64); ctx.lineTo(88, 64); ctx.lineTo(75, 80); ctx.lineTo(29, 80); ctx.closePath(); ctx.fill();
-      ctx.fillRect(48, 19, 5, 48);
-      if (k === "ship") {
+      if (k === "galley") {
+        ctx.fillRect(48, 24, 5, 43);
         ctx.beginPath(); ctx.moveTo(47, 23); ctx.lineTo(20, 58); ctx.lineTo(47, 58); ctx.closePath(); ctx.fill();
-        ctx.beginPath(); ctx.moveTo(55, 29); ctx.lineTo(78, 58); ctx.lineTo(55, 58); ctx.closePath(); ctx.fill();
+        ctx.lineWidth = 4;
+        for (const x of [25, 36, 47, 58, 69, 80]) {
+          ctx.beginPath(); ctx.moveTo(x, 69); ctx.lineTo(x - 8, 87); ctx.stroke();
+        }
+      } else if (k === "galleass") {
+        ctx.fillRect(46, 18, 5, 49); ctx.fillRect(68, 31, 4, 36);
+        ctx.beginPath(); ctx.moveTo(45, 22); ctx.lineTo(20, 56); ctx.lineTo(45, 56); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(52, 27); ctx.lineTo(66, 55); ctx.lineTo(52, 55); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(73, 34); ctx.lineTo(84, 56); ctx.lineTo(73, 56); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = "rgba(20,20,20,0.55)";
+        for (const x of [36, 50, 64]) { ctx.beginPath(); ctx.arc(x, 68, 3, 0, Math.PI * 2); ctx.fill(); }
+      } else if (k === "frigate") {
+        ctx.lineWidth = 4;
+        for (const x of [30, 50, 70]) ctx.fillRect(x, 13 + Math.abs(50 - x) * 0.18, 4, 54);
+        ctx.beginPath(); ctx.moveTo(29, 20); ctx.lineTo(16, 38); ctx.lineTo(29, 38); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(35, 22); ctx.lineTo(47, 40); ctx.lineTo(35, 40); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(49, 16); ctx.lineTo(34, 37); ctx.lineTo(49, 37); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(55, 19); ctx.lineTo(68, 39); ctx.lineTo(55, 39); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(69, 24); ctx.lineTo(57, 43); ctx.lineTo(69, 43); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(75, 27); ctx.lineTo(85, 43); ctx.lineTo(75, 43); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = "rgba(20,20,20,0.58)";
+        for (const x of [28, 40, 52, 64, 76]) { ctx.beginPath(); ctx.arc(x, 68, 3, 0, Math.PI * 2); ctx.fill(); }
       } else {
         ctx.fillRect(29, 48, 43, 17); ctx.fillRect(39, 31, 12, 18); ctx.fillRect(58, 25, 10, 24);
         ctx.beginPath(); ctx.moveTo(62, 19); ctx.bezierCurveTo(74, 12, 77, 28, 84, 18); ctx.stroke();

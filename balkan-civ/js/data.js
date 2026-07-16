@@ -43,6 +43,17 @@ const GOLDEN_AGE = {
   bonus: 0.2,          // +20% gold and production
 };
 
+const CITY_FOCUS = {
+  balanced: { name: "Balanced", icon: "⚖️", food: 1.3, prod: 1, gold: 0.5,
+    hint: "Balance growth, production, and income." },
+  growth: { name: "Growth", icon: "🍞", food: 2.4, prod: 0.65, gold: 0.3,
+    hint: "Work the strongest food tiles first." },
+  production: { name: "Production", icon: "⚙️", food: 0.65, prod: 2.4, gold: 0.3,
+    hint: "Work the strongest production tiles first." },
+  gold: { name: "Gold", icon: "💰", food: 0.7, prod: 0.55, gold: 2.5,
+    hint: "Work the strongest income tiles first." },
+};
+
 // ------------------------------------------------------------
 // Technology tree
 // ------------------------------------------------------------
@@ -110,8 +121,9 @@ const UNITS = {
   CAVALRY:    { name: "Cavalry",       icon: "🐎", cost: 200, cs: 30, moves: 5, tech: "MILITARY_SCIENCE", needs: "HORSES" },
   // ---- Naval units (built in coastal cities only) ----
   GALLEY:     { name: "Galley",        icon: "⛵", cost: 60,  cs: 10, moves: 4, tech: "SAILING", naval: true, coastOnly: true, upgrade: "GALLEASS", },
-  GALLEASS:   { name: "War Galleass",  icon: "🚢", cost: 110, cs: 12, rs: 17, range: 2, moves: 5, tech: "COMPASS", naval: true, upgrade: "IRONCLAD", },
-  IRONCLAD:   { name: "Ironclad",      icon: "🛳️", cost: 200, cs: 24, rs: 30, range: 2, moves: 5, tech: "STEAM_POWER", naval: true },
+  GALLEASS:   { name: "War Galleass",  icon: "🚢", cost: 110, cs: 12, rs: 17, range: 2, moves: 5, tech: "COMPASS", naval: true, upgrade: "FRIGATE", },
+  FRIGATE:    { name: "Frigate",       icon: "⛵", cost: 170, cs: 18, rs: 24, range: 2, moves: 6, tech: "GUNPOWDER", naval: true, upgrade: "IRONCLAD", },
+  IRONCLAD:   { name: "Ironclad",      icon: "🛳️", cost: 220, cs: 28, rs: 32, range: 2, moves: 5, tech: "STEAM_POWER", naval: true },
   // ---- Trade ----
   CARAVAN:    { name: "Caravan",       icon: "🐫", cost: 70, cs: 0, moves: 2, civilian: true, caravan: true, tech: "CURRENCY" },
   // ---- Religious units (purchased with faith, not production) ----
@@ -216,6 +228,7 @@ const CIVS = {
       { leader: "Stefan Dušan", trait: "Tsar of Serbs and Greeks", traitDesc: "+25% production toward buildings in every city.", buildingProdBonus: 0.25 },
       { leader: "Stefan Nemanja", trait: "Founder of the Nemanjić", traitDesc: "+2 culture in every city.", cityCulture: 2 },
       { leader: "Lazar of Kosovo", trait: "Martyr's Resolve", traitDesc: "+25% combat strength when defending.", defendCiv: 0.25 },
+      { leader: "Karađorđe Petrović", trait: "Leader of the Uprising", traitDesc: "+20% combat strength in home territory and +10% production toward units.", homeBonus: 0.2, unitProdBonus: 0.1, randomAI: false },
     ],
   },
   BULGARIA: {
@@ -243,6 +256,7 @@ const CIVS = {
       { leader: "Mehmed II", trait: "Ghazi Warriors", traitDesc: "+20% combat strength when attacking cities.", vsCityBonus: 0.2 },
       { leader: "Suleiman the Magnificent", trait: "The Lawgiver", traitDesc: "+2 gold in every city.", cityGold: 2 },
       { leader: "Osman I", trait: "Founder of the Dynasty", traitDesc: "+25% production toward units.", unitProdBonus: 0.25 },
+      { leader: "Selim III", trait: "The New Order", traitDesc: "+1 science in every city and +15% production toward units.", cityScience: 1, unitProdBonus: 0.15, randomAI: false },
     ],
   },
   ALBANIA: {
@@ -336,8 +350,14 @@ const BELIEFS = {
   ZEAL:    { name: "Holy Warriors",  desc: "+15% combat strength within 2 tiles of a city following your religion" },
 };
 
-const RELIGION_FOUND_COST = (nFounded) => 120 + 140 * nFounded;
+const RELIGION_FOUND_COST = (nFounded) => 120 + 90 * nFounded;
 const MAX_RELIGIONS = 4;
+const RELIGION_VICTORY = {
+  share: 0.6,             // strictly more than 60% of all major-civ cities
+  minCities: 6,           // prevents an opening conversion from ending tiny games
+  minReligions: 2,        // a victory requires at least one competing faith
+  minSpreads: 6,          // the founder must actively preach, not win passively
+};
 const MISSIONARY_PRESSURE = 150;
 
 // ------------------------------------------------------------
@@ -388,6 +408,51 @@ const TRADE = {
   duration: 40,        // turns before a route expires
   maxDist: 14,         // hex distance limit
   plunderGold: 30,     // reward for plundering a route
+};
+
+// Hostile warships adjacent to a coastal city contest its port. A blockade
+// takes hold only when their combined pressure beats the local defending fleet.
+const BLOCKADE = {
+  radius: 1,
+  cityGoldMultiplier: 0.5,
+  preventsRepair: true,
+};
+
+// Coastal cities project supply through connected water. Fleets can briefly
+// sortie beyond that coverage, but sustained blue-water operations need a
+// forward port and increasingly capable navigation technology.
+const NAVAL_SUPPLY = {
+  baseRange: 5,
+  compassRange: 8,
+  steamRange: 11,
+  graceTurns: 2,
+  attritionDamage: 12,
+  combatMultiplier: 0.85,
+  recoverHp: 75,
+};
+
+// Land tactics: enemy land melee formations control adjacent ground;
+// coordinated melee attacks gain a capped bonus from adjacent supporters.
+const TACTICS = {
+  flankPerSupport: 0.10,
+  maxFlank: 0.20,
+};
+
+// Continuous road links to the capital turn Worker time into recurring
+// commerce without replacing the farm or mine already on a tile.
+const INFRASTRUCTURE = {
+  connectionBaseGold: 1,
+  populationPerGold: 2,
+};
+
+// River corridors are permanent terrain. They enrich worked tiles and make
+// fresh-water city sites stronger without blocking improvements or roads.
+const RIVERS = {
+  tileGold: 1,
+  cityFood: 1,
+  tilesPerSource: 130,
+  minLength: 3,
+  sourceSpacing: 5,
 };
 
 // ------------------------------------------------------------
@@ -570,6 +635,22 @@ const SCENARIOS = {
       winText: "Twenty-five years, and Krujë never fell. The mountain eagle outlasted the empire.",
       loseText: "Krujë burns. The Albanian highlands fall silent under the crescent." },
   },
+  REVOLUTION_1804: {
+    name: "The Serbian Revolution", year: "1804 AD", icon: "⚑",
+    blurb: "Karađorđe's rebels have driven the dahije from Šumadija, but Selim III's field army is marching north. Hold Beograd and break the imperial offensive: destroy 10 Ottoman units before the capital falls, within 70 turns.",
+    playerCiv: "SERBIA", opponents: ["OTTOMAN", "BULGARIA", "WALLACHIA"],
+    leaders: { SERBIA: 3, OTTOMAN: 3 },
+    seed: 1804001, mapType: "peninsula", difficulty: "hard",
+    techEra: 4, gold: 700,
+    armies: {
+      SERBIA: ["RIFLEMAN", "RIFLEMAN", "RIFLEMAN", "RIFLEMAN", "CANNON", "CAVALRY", "WORKER"],
+      OTTOMAN: ["RIFLEMAN", "RIFLEMAN", "RIFLEMAN", "RIFLEMAN", "CANNON", "CANNON", "CAVALRY", "CAVALRY", "SETTLER"],
+    },
+    warsAtStart: [["SERBIA", "OTTOMAN"]],
+    victory: { type: "resistance", target: "OTTOMAN", count: 10, turns: 70,
+      winText: "Beograd is free and the imperial field army is broken. The uprising has become a nation.",
+      loseText: "Beograd falls and the uprising fragments. The pashalik closes around Šumadija once more." },
+  },
 };
 
 // Barbarian-free game; players fight each other.
@@ -632,8 +713,25 @@ const PROMOS = {
   MIGHT:      { name: "Might",       icon: "⚔️", desc: "+15% strength when attacking" },
   BULWARK:    { name: "Bulwark",     icon: "🛡️", desc: "+15% strength when defending" },
   MEDIC:      { name: "Field Medic", icon: "💊", desc: "Heals +5 HP per turn, nearby friends +3" },
-  PATHFINDER: { name: "Pathfinder",  icon: "🥾", desc: "Moves through forest and hills without slowing" },
+  PATHFINDER: { name: "Pathfinder",  icon: "🥾", desc: "Moves through forest and hills without slowing", domain: "land" },
+  AMPHIBIOUS: { name: "Amphibious Assault", icon: "⚓", desc: "Melee units can attack directly from embarked transport at -15% strength", domain: "land", melee: true },
+  BOARDING:   { name: "Boarding Parties", icon: "🪝", desc: "+20% strength against ships and embarked units", domain: "naval" },
+  BOMBARDMENT:{ name: "Bombardment", icon: "💣", desc: "+20% strength when attacking cities", domain: "naval" },
+  NAVIGATION: { name: "Navigation",  icon: "🧭", desc: "+1 movement", domain: "naval" },
 };
+
+function promotionAvailable(unit, key) {
+  const promo = PROMOS[key];
+  if (!promo || !unit || unit.isCivilian) return false;
+  if (promo.domain === "naval" && !unit.def.naval) return false;
+  if (promo.domain === "land" && unit.def.naval) return false;
+  if (promo.melee && unit.isRanged) return false;
+  return true;
+}
+
+function promotionChoices(unit) {
+  return Object.keys(PROMOS).filter(key => promotionAvailable(unit, key));
+}
 
 // ------------------------------------------------------------
 // Diplomacy deals
@@ -644,6 +742,7 @@ const DIPLO = {
   giftAttitude: 15,      // attitude gained by the recipient
   pactThreshold: 25,     // attitude needed for a defensive pact
   attitudeDecay: 0.5,    // per-turn drift toward neutral
+  truceTurns: 15,        // peace treaty blocks a fresh declaration
 };
 
 // ------------------------------------------------------------
@@ -657,22 +756,77 @@ const QUESTS = {
 };
 
 // ------------------------------------------------------------
-// Random events — periodic flavour with real mechanical bite.
+// Random events — periodic dilemmas with two strategic responses.
 // kind: "good" | "bad" | "neutral". weight biases how often each fires.
-// Effects live in Game.applyEvent(); this table is content + balance.
+// Dynamic outcomes and availability live in Game.eventChoices().
 // ------------------------------------------------------------
 const RANDOM_EVENTS = {
-  HARVEST:     { name: "Bumper Harvest",       icon: "🌾", kind: "good", weight: 10, needsCity: true },
-  MIGRATION:   { name: "Migrants Arrive",      icon: "🧳", kind: "good", weight: 8,  needsCity: true },
-  RELICS:      { name: "Sacred Relics Found",  icon: "🕯️", kind: "good", weight: 7,  needsCity: true },
-  SCHOLARS:    { name: "Wandering Scholars",   icon: "📜", kind: "good", weight: 7,  needsCity: true },
-  TRADE_WINDS: { name: "Favourable Trade",     icon: "💰", kind: "good", weight: 9 },
-  FESTIVAL:    { name: "Spontaneous Festival", icon: "🎉", kind: "good", weight: 6 },
-  PLAGUE:      { name: "Plague",               icon: "🤢", kind: "bad",  weight: 8,  needsCity: true, minTurn: 20 },
-  UNREST:      { name: "Civil Unrest",         icon: "😠", kind: "bad",  weight: 7,  minTurn: 20 },
-  FIRE:        { name: "Great Fire",           icon: "🔥", kind: "bad",  weight: 5,  needsCity: true, minTurn: 25 },
-  RAIDERS:     { name: "Brigands on the Roads", icon: "🗡️", kind: "bad", weight: 6,  minTurn: 15 },
-  DROUGHT:     { name: "Drought",              icon: "🏜️", kind: "bad",  weight: 5,  needsCity: true, minTurn: 25 },
+  HARVEST: { name: "Bumper Harvest", icon: "🌾", kind: "good", weight: 10, needsCity: true,
+    prompt: "The storehouses overflow after an exceptional growing season. The court must decide where the surplus will do the most good.",
+    choices: [
+      { key: "GRANARIES", label: "Fill the granaries", tone: "growth" },
+      { key: "MARKET", label: "Sell the surplus", tone: "commerce" },
+    ] },
+  MIGRATION: { name: "Migrants Arrive", icon: "🧳", kind: "good", weight: 8, needsCity: true,
+    prompt: "Families from beyond the frontier ask to settle under your protection. They can strengthen a city or help secure its borderlands.",
+    choices: [
+      { key: "WELCOME", label: "Welcome new citizens", tone: "growth" },
+      { key: "CHARTER", label: "Charter the frontier", tone: "culture" },
+    ] },
+  RELICS: { name: "Sacred Relics Found", icon: "🕯️", kind: "good", weight: 7, needsCity: true,
+    prompt: "Workers uncover a reliquary beneath old foundations. Clergy and chroniclers both claim it for the realm.",
+    choices: [
+      { key: "VENERATE", label: "Enshrine the relics", tone: "faith" },
+      { key: "PRESERVE", label: "Preserve them for posterity", tone: "culture" },
+    ] },
+  SCHOLARS: { name: "Wandering Scholars", icon: "📜", kind: "good", weight: 7, needsCity: true,
+    prompt: "A learned company seeks patronage. They can advance current research or record the achievements of your dynasty.",
+    choices: [
+      { key: "ACADEMY", label: "Fund their research", tone: "science" },
+      { key: "COURT", label: "Bring them to court", tone: "culture" },
+    ] },
+  TRADE_WINDS: { name: "Favourable Trade", icon: "💰", kind: "good", weight: 9,
+    prompt: "Merchants report unusually profitable routes. Their gains can replenish the treasury or supply an ambitious building programme.",
+    choices: [
+      { key: "TREASURY", label: "Collect the windfall", tone: "commerce" },
+      { key: "WORKSHOPS", label: "Supply the workshops", tone: "industry" },
+    ] },
+  FESTIVAL: { name: "Spontaneous Festival", icon: "🎉", kind: "good", weight: 6,
+    prompt: "Celebrations have filled the streets. The palace can prolong the revelry or turn this enthusiasm toward art and ceremony.",
+    choices: [
+      { key: "CELEBRATE", label: "Let the realm celebrate", tone: "stability" },
+      { key: "PATRONIZE", label: "Patronize the festivities", tone: "culture" },
+    ] },
+  PLAGUE: { name: "Plague", icon: "🤢", kind: "bad", weight: 8, needsCity: true, minTurn: 20,
+    prompt: "Sickness spreads through crowded quarters. A costly quarantine may contain it, but delay will leave the city to endure the full outbreak.",
+    choices: [
+      { key: "QUARANTINE", label: "Fund a quarantine", tone: "stability" },
+      { key: "ENDURE", label: "Endure the outbreak", tone: "risk" },
+    ] },
+  UNREST: { name: "Civil Unrest", icon: "😠", kind: "bad", weight: 7, minTurn: 20,
+    prompt: "Petitions and angry crowds challenge the court. Concessions are expensive, while refusing them risks prolonged disorder.",
+    choices: [
+      { key: "REFORMS", label: "Fund local reforms", tone: "stability" },
+      { key: "SUPPRESS", label: "Suppress the unrest", tone: "risk" },
+    ] },
+  FIRE: { name: "Great Fire", icon: "🔥", kind: "bad", weight: 5, needsCity: true, minTurn: 25,
+    prompt: "Flames race through workshops and fortifications. Emergency crews can save much of the city, at a heavy cost to the treasury.",
+    choices: [
+      { key: "REBUILD", label: "Mobilize emergency crews", tone: "stability" },
+      { key: "LET_BURN", label: "Save the treasury", tone: "risk" },
+    ] },
+  RAIDERS: { name: "Brigands on the Roads", icon: "🗡️", kind: "bad", weight: 6, minTurn: 15,
+    prompt: "Brigands seize caravans and demand payment. Refusing their terms will close the roads and unsettle the realm.",
+    choices: [
+      { key: "RANSOM", label: "Pay for the cargo", tone: "commerce" },
+      { key: "CLOSE_ROADS", label: "Close the roads", tone: "risk" },
+    ] },
+  DROUGHT: { name: "Drought", icon: "🏜️", kind: "bad", weight: 5, needsCity: true, minTurn: 25,
+    prompt: "The rains fail and fields wither. Imported grain can protect the harvest, but only if the treasury can carry the burden.",
+    choices: [
+      { key: "IMPORT", label: "Import emergency grain", tone: "stability" },
+      { key: "RATION", label: "Order strict rationing", tone: "risk" },
+    ] },
 };
 const EVENTS = {
   chancePerTurn: 0.10,   // per living major, per turn
@@ -696,16 +850,16 @@ const WCONGRESS = {
 };
 
 // ------------------------------------------------------------
-// Campaign — the nine scenarios strung into one chronological arc
+// Campaign — the ten scenarios strung into one chronological arc
 // through Balkan history, unlocked in sequence, with a running glory
 // score carried across chapters. Progress persists in localStorage.
 // ------------------------------------------------------------
 const CAMPAIGN = {
   title: "A Thousand Years of the Balkans",
-  intro: "From the scriptoria of Preslav to Vlad's midnight raid, relive a thousand years of Balkan glory — nine chapters, nine peoples, one unbroken story. Win each to unlock the next and build your legend.",
-  outro: "Nine crowns, nine ages, one story told. From the First Bulgarian Empire to the walls of Târgoviște, you have carried the Balkans through a thousand years. The chronicle is complete — and it bears your name.",
+  intro: "From the scriptoria of Preslav to Karađorđe's uprising, relive a thousand years of Balkan struggle — ten chapters, nine peoples, one unbroken story. Win each to unlock the next and build your legend.",
+  outro: "Ten chapters, nine peoples, one story told. From the First Bulgarian Empire to the liberation of Beograd, you have carried the Balkans through a thousand years. The chronicle is complete — and it bears your name.",
   chapters: [
     "SIMEON_893", "TOMISLAV_925", "SAMUIL_976", "BASIL_1014", "DUSHAN_1346",
-    "TVRTKO_1377", "SKANDERBEG_1443", "FALL_1453", "VLAD_1462",
+    "TVRTKO_1377", "SKANDERBEG_1443", "FALL_1453", "VLAD_1462", "REVOLUTION_1804",
   ],
 };

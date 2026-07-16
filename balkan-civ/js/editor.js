@@ -1,5 +1,5 @@
 // ============================================================
-// Map editor: paint terrain, forests and resources, then save
+// Map editor: paint terrain, rivers, forests and resources, then save
 // the map for use as a "Custom" world on the start screen.
 // ============================================================
 "use strict";
@@ -15,6 +15,7 @@ const EDITOR = (() => {
   const PALETTE = [
     ["GRASSLAND", "🌿 Grass"], ["PLAINS", "🌾 Plains"], ["HILLS", "⛰ Hills"],
     ["MOUNTAIN", "🏔 Mountain"], ["OCEAN", "🌊 Sea"],
+    ["RIVER", "💧 River"], ["NO_RIVER", "✂ Clear river"],
     ["FOREST", "🌲 Forest"], ["NO_FEATURE", "✂ Clear forest"],
     ["WHEAT", "🌾"], ["SHEEP", "🐑"], ["HORSES", "🐎"], ["IRON", "⚒️"],
     ["WINE", "🍇"], ["SILVER", "🪙"], ["OLIVES", "🫒"], ["SALT", "🧂"], ["FISH", "🐟"],
@@ -38,7 +39,8 @@ const EDITOR = (() => {
     for (let r = 0; r < H; r++) {
       for (let c = 0; c < W; c++) {
         tiles.push({ c, r, terrain: "OCEAN", feature: null, resource: null,
-          improvement: null, owner: -1, city: null, workedBy: null });
+          improvement: null, road: false, river: false,
+          owner: -1, city: null, workedBy: null });
       }
     }
     return { w: W, h: H, tiles, idx: (c, r) => r * W + c, seed: 0 };
@@ -61,10 +63,16 @@ const EDITOR = (() => {
     if (!t) return;
     if (TERRAIN[brush]) {
       t.terrain = brush === "OCEAN" ? "OCEAN" : brush;
-      if (brush === "OCEAN" || brush === "MOUNTAIN") { t.feature = null; t.resource = null; }
+      if (brush === "OCEAN" || brush === "MOUNTAIN") {
+        t.feature = null; t.resource = null; t.river = false;
+      }
       if (t.resource && !RESOURCE[t.resource].terrains.includes(t.terrain)) t.resource = null;
       if (t.feature === "FOREST" && !["GRASSLAND", "PLAINS", "HILLS"].includes(t.terrain)) t.feature = null;
       recomputeCoast();
+    } else if (brush === "RIVER") {
+      if (TERRAIN[t.terrain].passable) t.river = true;
+    } else if (brush === "NO_RIVER") {
+      t.river = false;
     } else if (brush === "FOREST") {
       if (["GRASSLAND", "PLAINS", "HILLS"].includes(t.terrain)) t.feature = "FOREST";
     } else if (brush === "NO_FEATURE") {
@@ -185,7 +193,8 @@ const EDITOR = (() => {
       const land = map.tiles.filter(t => TERRAIN[t.terrain].passable).length;
       if (land < 120) { alert(`Only ${land} land tiles — paint more land (120+ recommended) so all civs fit.`); return; }
       const data = { w: map.w, h: map.h,
-        tiles: map.tiles.map(t => ({ terrain: t.terrain, feature: t.feature, resource: t.resource })) };
+        tiles: map.tiles.map(t => ({ terrain: t.terrain, feature: t.feature,
+          resource: t.resource, river: !!t.river })) };
       try { localStorage.setItem("balkan-civ-custommap", JSON.stringify(data)); } catch (e) { alert("Could not save map."); return; }
       alert("Map saved! Pick World: “Custom (from editor)” on the start screen.");
       exit();

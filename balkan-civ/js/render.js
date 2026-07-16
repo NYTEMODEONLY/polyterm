@@ -14,6 +14,11 @@ function tileJitter(c, r) {
 }
 
 const _shadeCache = {};
+const SETTLEMENT_COLORS_2D = {
+  excellent: ["#8fd18a", "rgba(92,162,92,0.2)"],
+  good: ["#e0c77d", "rgba(190,156,68,0.18)"],
+  marginal: ["#a8b1ad", "rgba(125,139,134,0.14)"],
+};
 function shade(color, f) {
   const key = color + "|" + f.toFixed(2);
   if (_shadeCache[key]) return _shadeCache[key];
@@ -38,9 +43,13 @@ class Renderer {
     this.selected = null;        // selected unit
     this.selectedCity = null;
     this.reachable = [];         // [[c,r],...] move highlights
+    this.controlled = [];        // reachable tiles inside visible enemy ZOC
     this.attackable = [];        // [[c,r],...] attack highlights
+    this.settlementSites = [];   // surveyed one-turn sites for a selected Settler
     this.hoverTile = null;   // [c, r] under the cursor
     this.previewPath = null; // path preview for the selected unit
+    this.showYields = false;
+    this.connectedRoads = new Set();
     this.dirty = true;
   }
 
@@ -55,10 +64,12 @@ class Renderer {
     return HEX.fromPixel(sx + this.cam.x - 30, sy + this.cam.y - 30, this.size);
   }
 
-  centerOn(game, c, r) {
+  centerOn(game, c, r, screenPoint = null) {
     const [x, y] = HEX.toPixel(c, r, this.size);
-    this.cam.x = x - this.canvas.width / 2;
-    this.cam.y = y - this.canvas.height / 2;
+    const targetX = screenPoint?.x ?? this.canvas.width / 2;
+    const targetY = screenPoint?.y ?? this.canvas.height / 2;
+    this.cam.x = x + 30 - targetX;
+    this.cam.y = y + 30 - targetY;
     this.dirty = true;
   }
 
@@ -69,6 +80,7 @@ class Renderer {
     ctx.fillRect(0, 0, W, H);
     const vis = game.players[game.viewer].visible;
     const s = this.size;
+    this.connectedRoads = game.roadNetwork ? game.roadNetwork(game.viewer).tiles : new Set();
 
     // visible tile range
     for (let r = 0; r < game.map.h; r++) {
@@ -95,6 +107,18 @@ class Renderer {
       }
     }
 
+    // Strategic yield lens. Current visibility is required so an improvement
+    // built inside the fog cannot leak information to the viewer.
+    if (this.showYields && s >= 18) {
+      const badgeSize = Math.max(12, Math.min(19, s * 0.44));
+      for (const t of game.map.tiles) {
+        if (vis[game.map.idx(t.c, t.r)] !== 2) continue;
+        const [sx, sy] = this.worldToScreen(t.c, t.r);
+        if (sx < -2 * s || sy < -2 * s || sx > W + 2 * s || sy > H + 2 * s) continue;
+        WORLD_ART.yields(ctx, game.tileYield(t), sx, sy + s * 0.47, badgeSize);
+      }
+    }
+
     // movement / attack highlights
     if (this.selected) {
       ctx.save();
@@ -104,6 +128,15 @@ class Renderer {
         ctx.fillStyle = "rgba(255,255,255,0.16)";
         ctx.fill();
       }
+      for (const [c, r] of this.controlled) {
+        const [sx, sy] = this.worldToScreen(c, r);
+        this.hexPath(ctx, sx, sy, s * 0.76);
+        ctx.strokeStyle = "rgba(241,196,15,0.95)";
+        ctx.lineWidth = Math.max(2, s * 0.07);
+        ctx.setLineDash([Math.max(3, s * 0.12), Math.max(2, s * 0.08)]);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
       for (const [c, r] of this.attackable) {
         const [sx, sy] = this.worldToScreen(c, r);
         this.hexPath(ctx, sx, sy, s * 0.92);
@@ -111,6 +144,42 @@ class Renderer {
         ctx.fill();
         ctx.strokeStyle = "rgba(231,76,60,0.9)";
         ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // Surveyed city sites sit above movement fills but below pieces and cities.
+    if (this.settlementSites.length) {
+      ctx.save();
+      for (const site of this.settlementSites) {
+        const [sx, sy] = this.worldToScreen(site.c, site.r);
+        if (sx < -2 * s || sy < -2 * s || sx > W + 2 * s || sy > H + 2 * s) continue;
+        const [stroke, fill] = SETTLEMENT_COLORS_2D[site.tier];
+        ctx.globalAlpha = site.canFoundThisTurn ? 1 : 0.62;
+        this.hexPath(ctx, sx, sy, s * 0.72);
+        ctx.fillStyle = fill;
+        ctx.fill();
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = Math.max(2, s * 0.075);
+        ctx.setLineDash(site.canFoundThisTurn ? [] : [Math.max(3, s * 0.13), Math.max(2, s * 0.09)]);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    if (this.selectedCity && this.selectedCity.owner === game.viewer) {
+      ctx.save();
+      for (const t of game.workedTiles(this.selectedCity)) {
+        if (!vis[game.map.idx(t.c, t.r)]) continue;
+        const [sx, sy] = this.worldToScreen(t.c, t.r);
+        if (sx < -2 * s || sy < -2 * s || sx > W + 2 * s || sy > H + 2 * s) continue;
+        this.hexPath(ctx, sx, sy, s * 0.78);
+        ctx.fillStyle = "rgba(240,216,144,0.1)";
+        ctx.fill();
+        ctx.strokeStyle = "rgba(240,216,144,0.86)";
+        ctx.lineWidth = Math.max(1.5, s * 0.055);
+        ctx.setLineDash([Math.max(2, s * 0.08), Math.max(2, s * 0.08)]);
         ctx.stroke();
       }
       ctx.restore();
@@ -172,10 +241,11 @@ class Renderer {
     // trade routes of the viewing player (dashed gold roads)
     for (const route of game.routes || []) {
       if (route.owner !== game.viewer) continue;
+      const suspended = !game.tradeRouteStatus(route).active;
       ctx.save();
-      ctx.strokeStyle = "rgba(241,196,15,0.5)";
+      ctx.strokeStyle = suspended ? "rgba(222,104,75,0.72)" : "rgba(241,196,15,0.5)";
       ctx.lineWidth = Math.max(1.5, s * 0.07);
-      ctx.setLineDash([s * 0.2, s * 0.25]);
+      ctx.setLineDash(suspended ? [s * 0.08, s * 0.18] : [s * 0.2, s * 0.25]);
       ctx.beginPath();
       route.path.forEach(([pc, pr], i) => {
         const [px, py] = this.worldToScreen(pc, pr);
@@ -216,7 +286,7 @@ class Renderer {
       ctx.beginPath();
       ctx.arc(px, py, Math.max(3, s * 0.12), 0, Math.PI * 2);
       ctx.fill();
-      const turns = Math.max(1, Math.ceil(this.previewPath.length / Math.max(1, this.selected.def.moves)));
+      const turns = Math.max(1, Math.ceil(this.previewPath.length / Math.max(1, this.selected.maxMoves)));
       if (turns > 1) {
         ctx.fillStyle = "#fff";
         ctx.font = `bold ${Math.max(11, Math.floor(s * 0.35))}px sans-serif`;
@@ -307,6 +377,43 @@ class Renderer {
     ctx.moveTo(pts[0][0], pts[0][1]);
     for (let i = 1; i < 6; i++) ctx.lineTo(pts[i][0], pts[i][1]);
     ctx.closePath();
+  }
+
+  drawRiver(ctx, game, t, sx, sy, s, v) {
+    const branches = RIVER_ART.branches(game, t);
+    const paths = branches.map(branch => {
+      const [nx, ny] = this.worldToScreen(branch.tile.c, branch.tile.r);
+      const ex = (sx + nx) / 2, ey = (sy + ny) / 2;
+      const dx = ex - sx, dy = ey - sy, len = Math.hypot(dx, dy) || 1;
+      return { x1: sx, y1: sy, x2: ex, y2: ey,
+        cx: (sx + ex) / 2 - dy / len * branch.bend * s,
+        cy: (sy + ey) / 2 + dx / len * branch.bend * s };
+    });
+    if (!paths.length) {
+      const [dx, dy] = RIVER_ART.stubVector(t);
+      paths.push({ x1: sx - dx * s * 0.24, y1: sy - dy * s * 0.24,
+        x2: sx + dx * s * 0.24, y2: sy + dy * s * 0.24,
+        cx: sx - dy * s * 0.05, cy: sy + dx * s * 0.05 });
+    }
+
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (const [width, color] of [
+      [0.22, v === 1 ? "rgba(19,48,55,0.62)" : "rgba(20,57,67,0.92)"],
+      [0.125, v === 1 ? "rgba(46,112,128,0.68)" : "rgba(71,174,202,0.98)"],
+      [0.035, v === 1 ? "rgba(146,188,193,0.3)" : "rgba(197,239,241,0.62)"],
+    ]) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(1, s * width);
+      for (const path of paths) {
+        ctx.beginPath();
+        ctx.moveTo(path.x1, path.y1);
+        ctx.quadraticCurveTo(path.cx, path.cy, path.x2, path.y2);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
   }
 
   drawTile(ctx, game, t, sx, sy, s, v) {
@@ -404,15 +511,17 @@ class Renderer {
         ctx.closePath(); ctx.fill();
       }
     }
-    if (t.improvement === "ROAD") {
+    if (t.river) this.drawRiver(ctx, game, t, sx, sy, s, v);
+    if (t.road) {
       // connect toward neighbouring roads/cities
-      ctx.strokeStyle = "rgba(90,60,30,0.85)";
+      const connected = this.connectedRoads.has(game.map.idx(t.c, t.r));
+      ctx.strokeStyle = connected ? "rgba(181,125,55,0.96)" : "rgba(90,60,30,0.82)";
       ctx.lineWidth = Math.max(2, s * 0.12);
       ctx.lineCap = "round";
       let drewAny = false;
       for (const [nc, nr] of HEX.neighbors(t.c, t.r)) {
         const n = game.tile(nc, nr);
-        if (!n || (n.improvement !== "ROAD" && !n.city)) continue;
+        if (!n || !game.players[game.viewer].visible[game.map.idx(nc, nr)] || (!n.road && !n.city)) continue;
         const [nx, ny] = this.worldToScreen(nc, nr);
         ctx.beginPath();
         ctx.moveTo(sx, sy);
@@ -425,7 +534,8 @@ class Renderer {
         ctx.arc(sx, sy, s * 0.14, 0, Math.PI * 2);
         ctx.stroke();
       }
-    } else if (t.improvement === "FARM") {
+    }
+    if (t.improvement === "FARM") {
       ctx.strokeStyle = "rgba(240,220,120,0.75)";
       ctx.lineWidth = Math.max(1, s * 0.05);
       for (const dy of [-0.18, 0, 0.18]) {
@@ -435,28 +545,16 @@ class Renderer {
         ctx.stroke();
       }
     } else if (t.improvement === "MINE" && s > 14) {
-      ctx.font = `${Math.floor(s * 0.45)}px serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("⛏️", sx + s * 0.45, sy + s * 0.4);
+      WORLD_ART.site(ctx, "MINE", sx + s * 0.42, sy + s * 0.34, s * 0.62);
     }
     if (t.ruin && s > 12) {
-      ctx.font = `${Math.floor(s * 0.6)}px serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("🏺", sx, sy + s * 0.05);
+      WORLD_ART.site(ctx, "RUIN", sx, sy + s * 0.06, s * 0.72);
     }
     if (game.campAt && game.campAt(t.c, t.r) && s > 12) {
-      ctx.font = `${Math.floor(s * 0.7)}px serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("🏕️", sx, sy + s * 0.05);
+      WORLD_ART.site(ctx, "CAMP", sx, sy + s * 0.05, s * 0.76);
     }
     if (t.resource && s > 14) {
-      ctx.font = `${Math.floor(s * 0.55)}px serif`;
-      ctx.textAlign = "left";
-      ctx.textBaseline = "middle";
-      ctx.fillText(RESOURCE[t.resource].icon, sx - s * 0.75, sy - s * 0.45);
+      WORLD_ART.resource(ctx, t.resource, sx - s * 0.53, sy - s * 0.4, s * 0.58);
     }
 
     // fog: explored but not visible
@@ -491,29 +589,26 @@ class Renderer {
   }
 
   drawCity(ctx, game, city, sx, sy, s) {
-    const civ = CIVS[game.players[city.owner].civId];
+    const player = game.players[city.owner];
+    const civ = CIVS[player.civId];
+    const visibility = game.players[game.viewer].visible[game.map.idx(city.c, city.r)];
+    const seenNow = visibility === 2;
+    const obscured = !seenNow && city.owner !== game.viewer;
+    const appearance = CITY_ART.profile(city, player, obscured);
     // city hex base
+    ctx.save();
     this.hexPath(ctx, sx, sy, s * 0.8);
-    ctx.fillStyle = "#3a3530";
+    ctx.fillStyle = appearance.palette.ground;
+    if (obscured) ctx.globalAlpha *= 0.58;
     ctx.fill();
-    // buildings silhouette
-    ctx.fillStyle = "#d8cbb0";
-    const bw = s * 0.22;
-    for (const [dx, hMul] of [[-1.3, 0.5], [-0.4, 0.85], [0.5, 0.6]]) {
-      ctx.fillRect(sx + dx * bw, sy - s * 0.35 * hMul, bw * 0.8, s * 0.35 * hMul + s * 0.25);
-    }
-    ctx.fillStyle = "#8a2f20";
-    for (const [dx, hMul] of [[-1.3, 0.5], [-0.4, 0.85], [0.5, 0.6]]) {
-      ctx.beginPath();
-      ctx.moveTo(sx + dx * bw - bw * 0.15, sy - s * 0.35 * hMul);
-      ctx.lineTo(sx + dx * bw + bw * 0.4, sy - s * 0.35 * hMul - s * 0.18);
-      ctx.lineTo(sx + dx * bw + bw * 0.95, sy - s * 0.35 * hMul);
-      ctx.closePath(); ctx.fill();
-    }
+    ctx.restore();
+    CITY_ART.draw(ctx, appearance, sx, sy, s);
 
     // banner
-    const rel = city.religion !== null && game.religions[city.religion];
-    const label = `${city.pop}  ${rel ? rel.icon + " " : ""}${city.name}${city.isCapital ? " ★" : ""}`;
+    const reportDetails = city.owner === game.viewer || seenNow;
+    const rel = reportDetails && city.religion !== null && game.religions[city.religion];
+    const blockaded = (city.owner === game.viewer || seenNow) && game.cityBlockade(city).active;
+    const label = `${blockaded ? "⚓ " : ""}${reportDetails ? city.pop : "?"}  ${rel ? rel.icon + " " : ""}${city.name}${city.isCapital ? " ★" : ""}`;
     ctx.font = `bold ${Math.max(11, Math.floor(s * 0.34))}px 'Segoe UI', sans-serif`;
     const tw = ctx.measureText(label).width;
     const bx = sx - tw / 2 - 8, by = sy - s * 1.05, bh = Math.max(16, s * 0.46);
@@ -521,10 +616,10 @@ class Renderer {
     ctx.beginPath();
     ctx.roundRect(bx, by - bh / 2, tw + 16, bh, 4);
     ctx.fill();
-    ctx.strokeStyle = civ.color;
+    ctx.strokeStyle = blockaded ? "#de684b" : civ.color;
     ctx.lineWidth = 2;
     ctx.stroke();
-    ctx.fillStyle = civ.color;
+    ctx.fillStyle = blockaded ? "#de684b" : civ.color;
     ctx.fillRect(bx + 3, by - bh / 2 + 3, 5, bh - 6);
     ctx.fillStyle = "#fff";
     ctx.textAlign = "center";
@@ -532,7 +627,7 @@ class Renderer {
     ctx.fillText(label, sx + 2, by + 1);
 
     // HP bar when damaged
-    if (city.hp < city.maxHp) {
+    if (reportDetails && city.hp < city.maxHp) {
       const w = s * 1.4;
       ctx.fillStyle = "#222";
       ctx.fillRect(sx - w / 2, by + bh / 2 + 2, w, 4);
@@ -567,6 +662,26 @@ class Renderer {
       ctx.fillRect(sx - rad, sy - rad - 7, w, 4);
       ctx.fillStyle = u.hp > 60 ? "#2ecc71" : u.hp > 30 ? "#f39c12" : "#e74c3c";
       ctx.fillRect(sx - rad, sy - rad - 7, w * (u.hp / 100), 4);
+    }
+    if (u.owner === game.viewer && u.def.naval) {
+      const supply = game.navalSupply(u);
+      if (!supply.supplied) {
+        const warning = supply.attritionActive ? "#d94f3d" : "#e7a447";
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(sx - rad * 0.95, sy - rad * 0.88);
+        ctx.lineTo(sx - rad * 0.18, sy - rad * 0.88);
+        ctx.lineTo(sx - rad * 0.95, sy - rad * 0.10);
+        ctx.closePath();
+        ctx.fillStyle = warning;
+        ctx.fill();
+        ctx.fillStyle = "#17120c";
+        ctx.font = `bold ${Math.max(8, Math.floor(rad * 0.55))}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("!", sx - rad * 0.69, sy - rad * 0.62);
+        ctx.restore();
+      }
     }
     // fortified marker
     if (u.fortified) {
