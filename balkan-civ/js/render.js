@@ -32,6 +32,64 @@ function shade(color, f) {
   return out;
 }
 
+function drawMapStar(ctx, x, y, radius, color = "#f4cf55") {
+  ctx.save();
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + i * Math.PI / 5;
+    const r = i % 2 ? radius * 0.43 : radius;
+    const px = x + Math.cos(a) * r, py = y + Math.sin(a) * r;
+    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.strokeStyle = "rgba(28,22,12,0.85)";
+  ctx.lineWidth = Math.max(1, radius * 0.18);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawMapShield(ctx, x, y, size) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(x, y - size * 0.55);
+  ctx.lineTo(x + size * 0.46, y - size * 0.34);
+  ctx.lineTo(x + size * 0.34, y + size * 0.24);
+  ctx.quadraticCurveTo(x, y + size * 0.62, x - size * 0.34, y + size * 0.24);
+  ctx.lineTo(x - size * 0.46, y - size * 0.34);
+  ctx.closePath();
+  ctx.fillStyle = "#e8dfc9";
+  ctx.fill();
+  ctx.strokeStyle = "#202724";
+  ctx.lineWidth = Math.max(1.2, size * 0.15);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawMapBoat(ctx, x, y, size) {
+  ctx.save();
+  ctx.fillStyle = "#e8dfc9";
+  ctx.strokeStyle = "#202724";
+  ctx.lineWidth = Math.max(1.2, size * 0.14);
+  ctx.beginPath();
+  ctx.moveTo(x - size * 0.58, y + size * 0.18);
+  ctx.lineTo(x + size * 0.58, y + size * 0.18);
+  ctx.lineTo(x + size * 0.34, y + size * 0.48);
+  ctx.lineTo(x - size * 0.34, y + size * 0.48);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x, y + size * 0.16);
+  ctx.lineTo(x, y - size * 0.58);
+  ctx.lineTo(x + size * 0.42, y - size * 0.05);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
 class Renderer {
   constructor(canvas, minimap) {
     this.canvas = canvas;
@@ -332,13 +390,19 @@ class Renderer {
     // selection ring
     if (this.selected && game.units.includes(this.selected)) {
       const [sx, sy] = this.worldToScreen(this.selected.c, this.selected.r);
+      const pulse = this.reduceMotion ? 0 : (Math.sin(Date.now() * 0.007) + 1) / 2;
+      ctx.save();
       ctx.beginPath();
-      ctx.arc(sx, sy, s * 0.62, 0, Math.PI * 2);
-      ctx.strokeStyle = "#fff";
-      ctx.lineWidth = 3;
-      ctx.setLineDash([6, 4]);
+      ctx.ellipse(sx, sy + s * 0.22, s * (0.55 + pulse * 0.045), s * (0.28 + pulse * 0.025), 0, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255,255,255,${this.reduceMotion ? 1 : 0.72 + pulse * 0.28})`;
+      ctx.lineWidth = Math.max(3, s * 0.075);
       ctx.stroke();
-      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.ellipse(sx, sy + s * 0.22, s * 0.45, s * 0.21, 0, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(20,28,28,0.9)";
+      ctx.lineWidth = Math.max(1.5, s * 0.035);
+      ctx.stroke();
+      ctx.restore();
     }
     if (this.selectedCity) {
       const [sx, sy] = this.worldToScreen(this.selectedCity.c, this.selectedCity.r);
@@ -349,6 +413,7 @@ class Renderer {
     }
 
     this.drawMinimap(game);
+    this._lastDraw = Date.now();
     this.dirty = false;
   }
 
@@ -638,71 +703,69 @@ class Renderer {
 
   drawUnit(ctx, game, u, sx, sy, s) {
     const civ = CIVS[game.players[u.owner].civId];
-    const rad = s * 0.42;
+    const baseX = s * 0.40, baseY = s * 0.18;
+    const artSize = s * 0.70;
     const spent = u.owner === game.viewer && u.moves <= 0;
-    if (spent) ctx.globalAlpha = 0.6;
-    // shadow + disc
+    ctx.save();
+    if (spent) ctx.globalAlpha = 0.58;
+
+    // A low, owner-coloured plinth grounds the piece without covering the tile.
     ctx.beginPath();
-    ctx.arc(sx, sy + 2, rad, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    ctx.ellipse(sx, sy + s * 0.25, baseX * 1.08, baseY * 1.12, 0, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(0,0,0,0.44)";
     ctx.fill();
     ctx.beginPath();
-    ctx.arc(sx, sy, rad, 0, Math.PI * 2);
+    ctx.ellipse(sx, sy + s * 0.20, baseX, baseY, 0, 0, Math.PI * 2);
     ctx.fillStyle = civ.color;
     ctx.fill();
-    ctx.strokeStyle = u.owner === game.viewer ? "#fff" : civ.color2;
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = u.owner === game.viewer ? "#f7f0dc" : civ.color2;
+    ctx.lineWidth = Math.max(2, s * 0.055);
     ctx.stroke();
-    // shared code-native silhouette (the UI keeps compact emoji labels)
-    UNIT_ART.draw(ctx, u.def, sx, sy + 1, rad * 1.62);
+    ctx.beginPath();
+    ctx.ellipse(sx, sy + s * 0.19, baseX * 0.72, baseY * 0.62, 0, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(24,30,28,0.78)";
+    ctx.fill();
+
+    // Upright shared silhouette: dark offset gives it a readable edge at range.
+    UNIT_ART.draw(ctx, u.def, sx + s * 0.022, sy - s * 0.075 + s * 0.022, artSize, "rgba(12,18,17,0.9)");
+    UNIT_ART.draw(ctx, u.def, sx, sy - s * 0.075, artSize, "#f4ead3");
+
     // HP bar
     if (u.hp < 100) {
-      const w = rad * 2;
-      ctx.fillStyle = "#222";
-      ctx.fillRect(sx - rad, sy - rad - 7, w, 4);
+      const w = s * 0.82, h = Math.max(4, s * 0.075);
+      const x = sx - w / 2, y = sy - s * 0.53;
+      ctx.fillStyle = "rgba(16,20,19,0.94)";
+      ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
       ctx.fillStyle = u.hp > 60 ? "#2ecc71" : u.hp > 30 ? "#f39c12" : "#e74c3c";
-      ctx.fillRect(sx - rad, sy - rad - 7, w * (u.hp / 100), 4);
+      ctx.fillRect(x, y, w * (u.hp / 100), h);
     }
     if (u.owner === game.viewer && u.def.naval) {
       const supply = game.navalSupply(u);
       if (!supply.supplied) {
         const warning = supply.attritionActive ? "#d94f3d" : "#e7a447";
-        ctx.save();
         ctx.beginPath();
-        ctx.moveTo(sx - rad * 0.95, sy - rad * 0.88);
-        ctx.lineTo(sx - rad * 0.18, sy - rad * 0.88);
-        ctx.lineTo(sx - rad * 0.95, sy - rad * 0.10);
+        ctx.moveTo(sx - s * 0.39, sy - s * 0.43);
+        ctx.lineTo(sx - s * 0.11, sy - s * 0.43);
+        ctx.lineTo(sx - s * 0.39, sy - s * 0.15);
         ctx.closePath();
         ctx.fillStyle = warning;
         ctx.fill();
         ctx.fillStyle = "#17120c";
-        ctx.font = `bold ${Math.max(8, Math.floor(rad * 0.55))}px sans-serif`;
+        ctx.font = `bold ${Math.max(8, Math.floor(s * 0.18))}px sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText("!", sx - rad * 0.69, sy - rad * 0.62);
-        ctx.restore();
+        ctx.fillText("!", sx - s * 0.30, sy - s * 0.34);
       }
     }
-    // fortified marker
-    if (u.fortified) {
-      ctx.font = `${Math.floor(rad * 0.8)}px serif`;
-      ctx.fillText("🛡", sx + rad * 0.9, sy - rad * 0.9);
-    }
-    // embarked land unit rides a little boat
-    if (game.isEmbarked(u)) {
-      ctx.font = `${Math.floor(rad * 0.9)}px serif`;
-      ctx.fillText("⛵", sx - rad * 0.9, sy - rad * 0.9);
-    }
-    // veteran pips
+    if (u.fortified) drawMapShield(ctx, sx + s * 0.39, sy - s * 0.37, s * 0.23);
+    if (game.isEmbarked(u)) drawMapBoat(ctx, sx - s * 0.39, sy - s * 0.37, s * 0.22);
+    // Veteran stars are shape-coded and remain legible without colour.
     if (u.level > 0) {
-      ctx.fillStyle = "#f1c40f";
-      for (let i = 0; i < u.level; i++) {
-        ctx.beginPath();
-        ctx.arc(sx - rad * 0.5 + i * rad * 0.5, sy + rad + 5, Math.max(1.6, rad * 0.12), 0, Math.PI * 2);
-        ctx.fill();
-      }
+      const gap = s * 0.15;
+      for (let i = 0; i < Math.min(3, u.level); i++)
+        drawMapStar(ctx, sx + (i - (Math.min(3, u.level) - 1) / 2) * gap, sy + s * 0.46, Math.max(3.2, s * 0.075));
     }
-    if (spent) ctx.globalAlpha = 1;
+    ctx.restore();
   }
 
   drawMinimap(game) {

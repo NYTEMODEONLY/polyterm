@@ -3884,10 +3884,13 @@ const UI = (() => {
       }
     }
     (function loop() {
+      const selectionPulse = rend && rend.selected && !rend.reduceMotion &&
+        Date.now() - (rend._lastDraw || 0) > 80;
       if (game && $("start-screen").style.display === "none" &&
           $("editor-screen").style.display !== "flex" &&
           (rend.dirty || game.effects.length || game.anims.length ||
            (game.strikes && game.strikes.length) ||
+           selectionPulse ||
            // 3D water swell: a slow ambient tick when otherwise idle
            (rend.three && !rend.reduceMotion && Date.now() - (rend._lastDraw || 0) > 140))) {
         rend.draw(game);

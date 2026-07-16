@@ -101,7 +101,7 @@ class Renderer3D {
       side: THREE.DoubleSide, depthWrite: false });
     this._hexFillGeo = null;   // shared flat hexagon, built with map
     this._pool = { move: [], zoc: [], atk: [], site: [], worked: [], decor: [], fx: [], routes: [], flash: [], rings: [] };
-    this._units = new Map();   // unit id -> sprite
+    this._units = new Map();   // unit id -> grounded piece group
     this._cities = new Map();  // city object -> group
     this._builtFor = null;     // map object the static geometry was built for
     this._visSnap = null;
@@ -112,6 +112,13 @@ class Renderer3D {
     this._vw = 0; this._vh = 0;
 
     this._hover = null; this._selRing = null; this._citySel = null; this._preview = null;
+
+    const S = this.hexSize;
+    this._unitGeo = {
+      outer: new THREE.CylinderGeometry(S * 0.39, S * 0.41, S * 0.10, 28),
+      inner: new THREE.CylinderGeometry(S * 0.33, S * 0.35, S * 0.12, 28),
+      center: new THREE.CylinderGeometry(S * 0.22, S * 0.24, S * 0.14, 28),
+    };
   }
 
   get size() { return this.hexSize * this.cam.zoom; }
@@ -285,69 +292,87 @@ class Renderer3D {
   }
 
   _unitTex(u, game) {
-    const civ = CIVS[game.players[u.owner].civId];
-    const outline = u.owner === game.viewer ? "#ffffff" : civ.color2;
     const hpB = u.hp >= 100 ? 100 : Math.ceil(u.hp / 5) * 5;
-    const spent = u.owner === game.viewer && u.moves <= 0;
     const emb = game.isEmbarked(u);
     const art = UNIT_ART.kind(u.def);
     const supply = u.owner === game.viewer && u.def.naval ? game.navalSupply(u) : null;
     const supplyStatus = !supply || supply.supplied ? 0 : supply.attritionActive ? 2 : 1;
-    const key = `u|${art}|${civ.color}|${outline}|${hpB}|${u.level}|${u.fortified ? 1 : 0}|${emb ? 1 : 0}|${spent ? 1 : 0}|${supplyStatus}`;
-    return this._tex(key, 128, 152, (ctx) => {
-      if (spent) ctx.globalAlpha = 0.58;
-      // Civ-style strategic badge: shadow, civ rim, parchment field.
-      ctx.fillStyle = "rgba(0,0,0,0.42)";
-      ctx.beginPath();
-      ctx.ellipse(64, 90, 49, 42, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(64, 80, 47, 0, Math.PI * 2);
-      ctx.fillStyle = "#171d1b";
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(64, 80, 43, 0, Math.PI * 2);
-      ctx.fillStyle = civ.color;
-      ctx.fill();
-      ctx.lineWidth = 5;
-      ctx.strokeStyle = outline;
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(64, 80, 34, 0, Math.PI * 2);
-      ctx.fillStyle = "#e8dfc9";
-      ctx.fill();
-      UNIT_ART.draw(ctx, u.def, 64, 81, 57, "#202724");
+    const key = `u-grounded-v2|${art}|${hpB}|${u.level}|${u.fortified ? 1 : 0}|${emb ? 1 : 0}|${supplyStatus}`;
+    return this._tex(key, 128, 156, (ctx) => {
+      const star = (x, y, radius) => {
+        ctx.beginPath();
+        for (let i = 0; i < 10; i++) {
+          const a = -Math.PI / 2 + i * Math.PI / 5;
+          const r = i % 2 ? radius * 0.43 : radius;
+          const px = x + Math.cos(a) * r, py = y + Math.sin(a) * r;
+          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fillStyle = "#f4cf55";
+        ctx.fill();
+        ctx.strokeStyle = "#211b10";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      };
+      const shield = (x, y, size) => {
+        ctx.beginPath();
+        ctx.moveTo(x, y - size * 0.55);
+        ctx.lineTo(x + size * 0.46, y - size * 0.34);
+        ctx.lineTo(x + size * 0.34, y + size * 0.24);
+        ctx.quadraticCurveTo(x, y + size * 0.62, x - size * 0.34, y + size * 0.24);
+        ctx.lineTo(x - size * 0.46, y - size * 0.34);
+        ctx.closePath();
+        ctx.fillStyle = "#f0e6ce";
+        ctx.fill();
+        ctx.strokeStyle = "#202724";
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      };
+      const boat = (x, y, size) => {
+        ctx.fillStyle = "#f0e6ce";
+        ctx.strokeStyle = "#202724";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(x - size * 0.58, y + size * 0.18);
+        ctx.lineTo(x + size * 0.58, y + size * 0.18);
+        ctx.lineTo(x + size * 0.34, y + size * 0.48);
+        ctx.lineTo(x - size * 0.34, y + size * 0.48);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x, y + size * 0.16);
+        ctx.lineTo(x, y - size * 0.58);
+        ctx.lineTo(x + size * 0.42, y - size * 0.05);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      };
+
+      UNIT_ART.draw(ctx, u.def, 67, 84, 83, "rgba(8,14,13,0.9)");
+      UNIT_ART.draw(ctx, u.def, 64, 81, 83, "#f2e7cf");
       // HP bar
       if (hpB < 100) {
-        ctx.fillStyle = "#222";
-        ctx.fillRect(20, 16, 88, 11);
+        ctx.fillStyle = "rgba(18,22,21,0.96)";
+        ctx.fillRect(12, 7, 104, 13);
         ctx.fillStyle = hpB > 60 ? "#2ecc71" : hpB > 30 ? "#f39c12" : "#e74c3c";
-        ctx.fillRect(20, 16, 88 * hpB / 100, 11);
+        ctx.fillRect(14, 9, 100 * hpB / 100, 9);
       }
       if (supplyStatus) {
-        ctx.save();
         ctx.beginPath();
-        ctx.moveTo(11, 37); ctx.lineTo(42, 37); ctx.lineTo(11, 68); ctx.closePath();
+        ctx.moveTo(4, 29); ctx.lineTo(36, 29); ctx.lineTo(4, 61); ctx.closePath();
         ctx.fillStyle = supplyStatus === 2 ? "#d94f3d" : "#e7a447";
         ctx.fill();
         ctx.fillStyle = "#17120c";
         ctx.font = "bold 22px sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText("!", 22, 48);
-        ctx.restore();
+        ctx.fillText("!", 15, 40);
       }
-      // badges
-      ctx.font = "30px serif";
-      if (u.fortified) ctx.fillText("🛡", 110, 40);
-      if (emb) ctx.fillText("⛵", 18, 40);
-      // veteran pips
-      ctx.fillStyle = "#f1c40f";
-      for (let i = 0; i < u.level; i++) {
-        ctx.beginPath();
-        ctx.arc(46 + i * 18, 140, 7, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      if (u.fortified) shield(109, 40, 26);
+      if (emb) boat(19, 40, 25);
+      const level = Math.min(3, u.level);
+      for (let i = 0; i < level; i++) star(64 + (i - (level - 1) / 2) * 22, 145, 9);
     });
   }
 
@@ -1003,16 +1028,49 @@ class Renderer3D {
       if (u.owner !== game.viewer && vis[i] !== 2) continue;
       if (u.owner === game.viewer && vis[i] === 0) continue;
       seen.add(u.id);
-      let sp = this._units.get(u.id);
-      if (!sp) {
-        sp = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false }));
-        sp.center.set(0.5, 0.32);
-        this._units.set(u.id, sp);
-        this.gDyn.add(sp);
+      let piece = this._units.get(u.id);
+      if (!piece) {
+        piece = new THREE.Group();
+        const outer = new THREE.Mesh(this._unitGeo.outer,
+          new THREE.MeshStandardMaterial({ roughness: 0.76, metalness: 0.05, transparent: true }));
+        outer.name = "base-outer";
+        outer.position.y = S * 0.05;
+        outer.castShadow = true;
+        const inner = new THREE.Mesh(this._unitGeo.inner,
+          new THREE.MeshStandardMaterial({ roughness: 0.72, metalness: 0.04, transparent: true }));
+        inner.name = "base-inner";
+        inner.position.y = S * 0.09;
+        inner.castShadow = true;
+        const center = new THREE.Mesh(this._unitGeo.center,
+          new THREE.MeshStandardMaterial({ color: 0x202724, roughness: 0.9, transparent: true }));
+        center.name = "base-center";
+        center.position.y = S * 0.13;
+        const art = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false }));
+        art.name = "art";
+        art.center.set(0.5, 0.12);
+        art.position.set(0, S * 0.25, 0);
+        art.scale.set(S * 0.82, S, 1);
+        art.renderOrder = 5;
+        piece.add(outer, inner, center, art);
+        this._units.set(u.id, piece);
+        this.gDyn.add(piece);
       }
-      sp.visible = true;
-      sp.material.map = this._unitTex(u, game);
-      sp.material.opacity = 1;
+      piece.visible = true;
+      const civ = CIVS[game.players[u.owner].civId];
+      const spent = u.owner === game.viewer && u.moves <= 0;
+      const opacity = spent ? 0.58 : 1;
+      const outer = piece.getObjectByName("base-outer");
+      const inner = piece.getObjectByName("base-inner");
+      const center = piece.getObjectByName("base-center");
+      const art = piece.getObjectByName("art");
+      outer.material.color.set(u.owner === game.viewer ? "#f7f0dc" : civ.color2);
+      inner.material.color.set(civ.color);
+      for (const mesh of [outer, inner, center]) {
+        mesh.material.opacity = opacity;
+        mesh.material.depthWrite = opacity === 1;
+      }
+      art.material.map = this._unitTex(u, game);
+      art.material.opacity = opacity;
       let [wx, wz] = HEX.toPixel(u.c, u.r, S);
       let y = surfY3D(game.tile(u.c, u.r));
       const anim = game.anims.find(a => a.id === u.id);
@@ -1034,12 +1092,10 @@ class Renderer3D {
         const [tx, tz] = HEX.toPixel(strike.tc, strike.tr, S);
         wx += (tx - wx) * k; wz += (tz - wz) * k;
       }
-      sp.position.set(wx, y + 1.2, wz);
-      sp.scale.set(S * 1.35, S * 1.6, 1);
-      sp.renderOrder = 5;
+      piece.position.set(wx, y + 0.35, wz);
     }
-    for (const [id, sp] of this._units) {
-      if (!seen.has(id)) sp.visible = false;
+    for (const [id, piece] of this._units) {
+      if (!seen.has(id)) piece.visible = false;
     }
   }
 
@@ -1192,7 +1248,7 @@ class Renderer3D {
     // selection ring / selected city outline
     if (!this._selRing) {
       this._selRing = new THREE.Mesh(
-        new THREE.RingGeometry(S * 0.5, S * 0.6, 24),
+        new THREE.RingGeometry(S * 0.47, S * 0.58, 32),
         new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }));
       this._selRing.rotation.x = -Math.PI / 2;
       this._selRing.renderOrder = 3;
@@ -1207,7 +1263,11 @@ class Renderer3D {
     this._selRing.visible = this._citySel.visible = false;
     if (this.selected && game.units.includes(this.selected)) {
       const [wx, wz] = HEX.toPixel(this.selected.c, this.selected.r, S);
-      this._selRing.position.set(wx, surfY3D(game.tile(this.selected.c, this.selected.r)) + 0.7, wz);
+      const pulse = this.reduceMotion ? 0 : (Math.sin(Date.now() * 0.007) + 1) / 2;
+      const scale = 1 + pulse * 0.075;
+      this._selRing.scale.set(scale, scale, scale);
+      this._selRing.material.opacity = this.reduceMotion ? 1 : 0.68 + pulse * 0.32;
+      this._selRing.position.set(wx, surfY3D(game.tile(this.selected.c, this.selected.r)) + 0.62, wz);
       this._selRing.visible = true;
     }
     if (this.selectedCity) {
