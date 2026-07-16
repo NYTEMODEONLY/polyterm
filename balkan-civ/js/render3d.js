@@ -56,9 +56,11 @@ class Renderer3D {
     this.scene.fog = new THREE.Fog(0x17363d, 1100, 3000);
     this.camera = new THREE.PerspectiveCamera(45, 1, 5, 8000);
     this.pitch = 0.94; // radians above the horizon
-    this.scene.add(new THREE.HemisphereLight(0xddebf0, 0x514734, 0.56));
-    this.scene.add(new THREE.AmbientLight(0xffefd0, 0.24));
-    this.sun = new THREE.DirectionalLight(0xffe6bc, 0.72);
+    this.hemi = new THREE.HemisphereLight(0xe5f0f2, 0x5c523e, 0.68);
+    this.ambient = new THREE.AmbientLight(0xfff1d7, 0.32);
+    this.scene.add(this.hemi);
+    this.scene.add(this.ambient);
+    this.sun = new THREE.DirectionalLight(0xffe6bc, 0.78);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(1024, 1024);
     this.sun.shadow.camera.near = 20;
@@ -101,7 +103,7 @@ class Renderer3D {
       side: THREE.DoubleSide, depthWrite: false });
     this._hexFillGeo = null;   // shared flat hexagon, built with map
     this._pool = { move: [], zoc: [], atk: [], site: [], worked: [], decor: [], fx: [], routes: [], flash: [], rings: [] };
-    this._units = new Map();   // unit id -> sprite
+    this._units = new Map();   // unit id -> grounded piece group
     this._cities = new Map();  // city object -> group
     this._builtFor = null;     // map object the static geometry was built for
     this._visSnap = null;
@@ -112,6 +114,13 @@ class Renderer3D {
     this._vw = 0; this._vh = 0;
 
     this._hover = null; this._selRing = null; this._citySel = null; this._preview = null;
+
+    const S = this.hexSize;
+    this._unitGeo = {
+      outer: new THREE.CylinderGeometry(S * 0.39, S * 0.41, S * 0.10, 28),
+      inner: new THREE.CylinderGeometry(S * 0.33, S * 0.35, S * 0.12, 28),
+      center: new THREE.CylinderGeometry(S * 0.22, S * 0.24, S * 0.14, 28),
+    };
   }
 
   get size() { return this.hexSize * this.cam.zoom; }
@@ -285,69 +294,87 @@ class Renderer3D {
   }
 
   _unitTex(u, game) {
-    const civ = CIVS[game.players[u.owner].civId];
-    const outline = u.owner === game.viewer ? "#ffffff" : civ.color2;
     const hpB = u.hp >= 100 ? 100 : Math.ceil(u.hp / 5) * 5;
-    const spent = u.owner === game.viewer && u.moves <= 0;
     const emb = game.isEmbarked(u);
     const art = UNIT_ART.kind(u.def);
     const supply = u.owner === game.viewer && u.def.naval ? game.navalSupply(u) : null;
     const supplyStatus = !supply || supply.supplied ? 0 : supply.attritionActive ? 2 : 1;
-    const key = `u|${art}|${civ.color}|${outline}|${hpB}|${u.level}|${u.fortified ? 1 : 0}|${emb ? 1 : 0}|${spent ? 1 : 0}|${supplyStatus}`;
-    return this._tex(key, 128, 152, (ctx) => {
-      if (spent) ctx.globalAlpha = 0.58;
-      // Civ-style strategic badge: shadow, civ rim, parchment field.
-      ctx.fillStyle = "rgba(0,0,0,0.42)";
-      ctx.beginPath();
-      ctx.ellipse(64, 90, 49, 42, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(64, 80, 47, 0, Math.PI * 2);
-      ctx.fillStyle = "#171d1b";
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(64, 80, 43, 0, Math.PI * 2);
-      ctx.fillStyle = civ.color;
-      ctx.fill();
-      ctx.lineWidth = 5;
-      ctx.strokeStyle = outline;
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(64, 80, 34, 0, Math.PI * 2);
-      ctx.fillStyle = "#e8dfc9";
-      ctx.fill();
-      UNIT_ART.draw(ctx, u.def, 64, 81, 57, "#202724");
+    const key = `u-grounded-v2|${art}|${hpB}|${u.level}|${u.fortified ? 1 : 0}|${emb ? 1 : 0}|${supplyStatus}`;
+    return this._tex(key, 128, 156, (ctx) => {
+      const star = (x, y, radius) => {
+        ctx.beginPath();
+        for (let i = 0; i < 10; i++) {
+          const a = -Math.PI / 2 + i * Math.PI / 5;
+          const r = i % 2 ? radius * 0.43 : radius;
+          const px = x + Math.cos(a) * r, py = y + Math.sin(a) * r;
+          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fillStyle = "#f4cf55";
+        ctx.fill();
+        ctx.strokeStyle = "#211b10";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      };
+      const shield = (x, y, size) => {
+        ctx.beginPath();
+        ctx.moveTo(x, y - size * 0.55);
+        ctx.lineTo(x + size * 0.46, y - size * 0.34);
+        ctx.lineTo(x + size * 0.34, y + size * 0.24);
+        ctx.quadraticCurveTo(x, y + size * 0.62, x - size * 0.34, y + size * 0.24);
+        ctx.lineTo(x - size * 0.46, y - size * 0.34);
+        ctx.closePath();
+        ctx.fillStyle = "#f0e6ce";
+        ctx.fill();
+        ctx.strokeStyle = "#202724";
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      };
+      const boat = (x, y, size) => {
+        ctx.fillStyle = "#f0e6ce";
+        ctx.strokeStyle = "#202724";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(x - size * 0.58, y + size * 0.18);
+        ctx.lineTo(x + size * 0.58, y + size * 0.18);
+        ctx.lineTo(x + size * 0.34, y + size * 0.48);
+        ctx.lineTo(x - size * 0.34, y + size * 0.48);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x, y + size * 0.16);
+        ctx.lineTo(x, y - size * 0.58);
+        ctx.lineTo(x + size * 0.42, y - size * 0.05);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      };
+
+      UNIT_ART.draw(ctx, u.def, 67, 84, 83, "rgba(8,14,13,0.9)");
+      UNIT_ART.draw(ctx, u.def, 64, 81, 83, "#f2e7cf");
       // HP bar
       if (hpB < 100) {
-        ctx.fillStyle = "#222";
-        ctx.fillRect(20, 16, 88, 11);
+        ctx.fillStyle = "rgba(18,22,21,0.96)";
+        ctx.fillRect(12, 7, 104, 13);
         ctx.fillStyle = hpB > 60 ? "#2ecc71" : hpB > 30 ? "#f39c12" : "#e74c3c";
-        ctx.fillRect(20, 16, 88 * hpB / 100, 11);
+        ctx.fillRect(14, 9, 100 * hpB / 100, 9);
       }
       if (supplyStatus) {
-        ctx.save();
         ctx.beginPath();
-        ctx.moveTo(11, 37); ctx.lineTo(42, 37); ctx.lineTo(11, 68); ctx.closePath();
+        ctx.moveTo(4, 29); ctx.lineTo(36, 29); ctx.lineTo(4, 61); ctx.closePath();
         ctx.fillStyle = supplyStatus === 2 ? "#d94f3d" : "#e7a447";
         ctx.fill();
         ctx.fillStyle = "#17120c";
         ctx.font = "bold 22px sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText("!", 22, 48);
-        ctx.restore();
+        ctx.fillText("!", 15, 40);
       }
-      // badges
-      ctx.font = "30px serif";
-      if (u.fortified) ctx.fillText("🛡", 110, 40);
-      if (emb) ctx.fillText("⛵", 18, 40);
-      // veteran pips
-      ctx.fillStyle = "#f1c40f";
-      for (let i = 0; i < u.level; i++) {
-        ctx.beginPath();
-        ctx.arc(46 + i * 18, 140, 7, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      if (u.fortified) shield(109, 40, 26);
+      if (emb) boat(19, 40, 25);
+      const level = Math.min(3, u.level);
+      for (let i = 0; i < level; i++) star(64 + (i - (level - 1) / 2) * 22, 145, 9);
     });
   }
 
@@ -454,6 +481,35 @@ class Renderer3D {
     }
   }
 
+  _pushMound(pos, col, wx, wz, baseY, topY, r, color, segs = 10) {
+    const outer = [], inner = [];
+    for (let i = 0; i < segs; i++) {
+      const a = Math.PI * 2 * i / segs;
+      const wobble = 0.94 + ((i * 17 + Math.round(wx + wz)) % 5) * 0.025;
+      outer.push([wx + Math.cos(a) * r * wobble, baseY, wz + Math.sin(a) * r * wobble]);
+      inner.push([wx + Math.cos(a) * r * 0.43, topY, wz + Math.sin(a) * r * 0.43]);
+    }
+    for (let i = 0; i < segs; i++) {
+      const n = (i + 1) % segs;
+      const side = color.clone().multiplyScalar(0.91 + (i % 3) * 0.035);
+      this._pushTri(pos, col, outer[i], outer[n], inner[n], side);
+      this._pushTri(pos, col, outer[i], inner[n], inner[i], side);
+      this._pushTri(pos, col, [wx, topY + 0.16, wz], inner[n], inner[i],
+        color.clone().multiplyScalar(1.04 + (i % 2) * 0.025));
+    }
+  }
+
+  _pushColumn(pos, col, wx, wz, baseY, topY, r, color, segs = 6) {
+    for (let i = 0; i < segs; i++) {
+      const a1 = Math.PI * 2 * i / segs, a2 = Math.PI * 2 * (i + 1) / segs;
+      const p1 = [wx + r * Math.cos(a1), baseY, wz + r * Math.sin(a1)];
+      const p2 = [wx + r * Math.cos(a2), baseY, wz + r * Math.sin(a2)];
+      const p3 = [p2[0], topY, p2[2]], p4 = [p1[0], topY, p1[2]];
+      this._pushTri(pos, col, p1, p2, p3, color);
+      this._pushTri(pos, col, p1, p3, p4, color);
+    }
+  }
+
   _buildStatic(game) {
     // wipe everything tied to the previous map
     for (const group of this._cities.values()) this._disposeCityGroup(group);
@@ -469,6 +525,7 @@ class Renderer3D {
     this._units.clear(); this._cities.clear();
     this._pool = { move: [], zoc: [], atk: [], site: [], worked: [], decor: [], fx: [], routes: [], flash: [], rings: [] };
     this._hover = this._selRing = this._citySel = this._preview = null;
+    this._sea = this._foam = null;
     this._visSnap = this._ownSnap = null;
     this._impHash = null;
     this._yieldShown = null;
@@ -481,7 +538,7 @@ class Renderer3D {
       return ((h2 % 100) / 100 - 0.5) * 0.14;
     };
     const pos = [], col = [];
-    const waterPos = [], waterCol = [], shorePos = [], shoreCol = [];
+    const waterPos = [], waterCol = [], shorePos = [], shoreCol = [], foamPos = [], foamCol = [];
     this._tileRange = new Array(map.tiles.length);
     const tmp = new THREE.Color();
 
@@ -492,8 +549,8 @@ class Renderer3D {
       const j = isWater3D(t) ? jitterOf(t.c, t.r) * 0.5 : jitterOf(t.c, t.r);
       tmp.set(TERRAIN[t.terrain].color).multiplyScalar(1 + j);
       const base = tmp.clone();
-      if (!isWater3D(t)) base.multiplyScalar(0.72);
-      const wall = base.clone().multiplyScalar(0.66);
+      if (!isWater3D(t)) base.multiplyScalar(0.86);
+      const wall = base.clone().multiplyScalar(0.72);
       const pts = this._corners(wx, wz, S);
 
       this._pushHexTopVaried(pos, col, wx, wz, top, S, base, map.idx(t.c, t.r));
@@ -513,16 +570,23 @@ class Renderer3D {
         this._pushCone(pos, col, wx + S * 0.32, wz - S * 0.03, top, top + 13, S * 0.46, rock.clone().multiplyScalar(1.11), 7);
         this._pushCone(pos, col, wx - S * 0.18, wz + S * 0.1, top + 12.5, top + 21.2, S * 0.27, snow, 8);
       } else if (t.terrain === "HILLS") {
-        // a stepped bump on top of the raised hex
-        const bump = base.clone().multiplyScalar(0.92);
-        const bpts = this._corners(wx + S * 0.08, wz + S * 0.05, S * 0.55);
-        this._pushHexTop(pos, col, wx + S * 0.08, wz + S * 0.05, top + 3, S * 0.55, bump);
-        for (let i = 0; i < 6; i++) this._pushWall(pos, col, bpts[i], bpts[(i + 1) % 6], top + 3, top, bump.clone().multiplyScalar(0.8));
+        const bump = base.clone().multiplyScalar(0.95);
+        this._pushMound(pos, col, wx - S * 0.18, wz + S * 0.08, top, top + 3.6,
+          S * 0.56, bump, 11);
+        this._pushMound(pos, col, wx + S * 0.30, wz - S * 0.06, top, top + 2.7,
+          S * 0.39, bump.clone().multiplyScalar(1.06), 10);
       }
       if (t.feature === "FOREST") {
-        const green = new THREE.Color(FEATURE.FOREST.color).multiplyScalar(1.55 + j * 0.7);
-        for (const [dx, dz, sc, tone] of [[-0.34, 0.12, 0.92, 0.88], [0.06, -0.2, 1.22, 1.08], [0.34, 0.2, 0.82, 0.96], [0.02, 0.3, 0.74, 1.18]]) {
-          this._pushCone(pos, col, wx + dx * S, wz + dz * S, top, top + S * 0.64 * sc, S * 0.25 * sc, green.clone().multiplyScalar(tone), 7);
+        const green = new THREE.Color(FEATURE.FOREST.color).multiplyScalar(1.38 + j * 0.45);
+        const trunk = new THREE.Color("#6f4d2f");
+        for (const [dx, dz, sc, tone] of [[-0.31, 0.13, 0.88, 0.90], [0.04, -0.17, 1.12, 1.08], [0.34, 0.19, 0.78, 1.0]]) {
+          const x = wx + dx * S, z = wz + dz * S;
+          const trunkTop = top + S * 0.16 * sc;
+          this._pushColumn(pos, col, x, z, top, trunkTop, S * 0.045 * sc, trunk, 6);
+          this._pushCone(pos, col, x, z, trunkTop - S * 0.025, top + S * 0.48 * sc,
+            S * 0.32 * sc, green.clone().multiplyScalar(tone * 0.82), 8);
+          this._pushCone(pos, col, x, z, top + S * 0.24 * sc, top + S * 0.72 * sc,
+            S * 0.22 * sc, green.clone().multiplyScalar(tone * 1.08), 8);
         }
       }
 
@@ -545,6 +609,12 @@ class Renderer3D {
           const y = SEA_Y + 0.18;
           this._pushTri(shorePos, shoreCol, [p1[0], y, p1[1]], [p2[0], y, p2[1]], [p2[0] + ix, y, p2[1] + iz], sand);
           this._pushTri(shorePos, shoreCol, [p1[0], y, p1[1]], [p2[0] + ix, y, p2[1] + iz], [p1[0] + ix, y, p1[1] + iz], sand);
+          const foam = new THREE.Color("#e3f6ed");
+          const fx = ix * 0.18, fz = iz * 0.18, fy = SEA_Y + 0.235;
+          this._pushTri(foamPos, foamCol, [p1[0], fy, p1[1]], [p2[0], fy, p2[1]],
+            [p2[0] + fx, fy, p2[1] + fz], foam);
+          this._pushTri(foamPos, foamCol, [p1[0], fy, p1[1]], [p2[0] + fx, fy, p2[1] + fz],
+            [p1[0] + fx, fy, p1[1] + fz], foam);
         });
       }
       this._tileRange[map.idx(t.c, t.r)] = [start, pos.length / 3 - start];
@@ -575,6 +645,18 @@ class Renderer3D {
       shores.renderOrder = 2;
       this.gTerrain.add(shores);
     }
+    if (foamPos.length) {
+      const foamGeo = new THREE.BufferGeometry();
+      foamGeo.setAttribute("position", new THREE.Float32BufferAttribute(foamPos, 3));
+      foamGeo.setAttribute("color", new THREE.Float32BufferAttribute(foamCol, 3));
+      const foam = new THREE.Mesh(foamGeo, new THREE.MeshBasicMaterial({
+        vertexColors: true, transparent: true, opacity: 0.55, depthWrite: false,
+        side: THREE.DoubleSide,
+      }));
+      foam.renderOrder = 3;
+      this.gTerrain.add(foam);
+      this._foam = foam;
+    }
 
     // translucent sea surface over the whole map, gently wave-animated
     const [maxX] = HEX.toPixel(map.w, 0, S), [, maxZ] = HEX.toPixel(0, map.h, S);
@@ -583,7 +665,7 @@ class Renderer3D {
     waterTex.repeat.set(Math.max(4, map.w / 5), Math.max(3, map.h / 5));
     const sea = new THREE.Mesh(
       new THREE.PlaneGeometry(maxX + S * 14, maxZ + S * 14, 48, 36),
-      new THREE.MeshStandardMaterial({ map: waterTex, color: 0x4f92a4, roughness: 0.4, metalness: 0.02, transparent: true, opacity: 0.62, depthWrite: false }));
+      new THREE.MeshStandardMaterial({ map: waterTex, color: 0x4d9cb0, roughness: 0.4, metalness: 0.02, transparent: true, opacity: 0.66, depthWrite: false }));
     sea.rotation.x = -Math.PI / 2;
     sea.position.set(maxX / 2 - S, SEA_Y, maxZ / 2 - S * 0.75);
     this.gTerrain.add(sea);
@@ -610,12 +692,22 @@ class Renderer3D {
       const [start, count] = this._tileRange[i];
       const v = vis[i];
       const t = game.map.tiles[i];
-      let f = v === 2 ? 1 : v === 1 ? 0.48 : 0.14;
       let tint = null;
       if (t.owner !== -1 && v > 0) tint = tmp.set(CIVS[game.players[t.owner].civId].color);
       for (let k = start * 3; k < (start + count) * 3; k += 3) {
-        let r = base[k] * f, g = base[k + 1] * f, b = base[k + 2] * f;
-        if (tint) { r += (tint.r - r) * 0.13; g += (tint.g - g) * 0.13; b += (tint.b - b) * 0.13; }
+        const lum = base[k] * 0.299 + base[k + 1] * 0.587 + base[k + 2] * 0.114;
+        let r, g, b;
+        if (v === 2) {
+          r = base[k]; g = base[k + 1]; b = base[k + 2];
+        } else if (v === 1) {
+          const saturation = 0.46, brightness = 0.72;
+          r = (lum + (base[k] - lum) * saturation) * brightness;
+          g = (lum + (base[k + 1] - lum) * saturation) * brightness;
+          b = (lum + (base[k + 2] - lum) * saturation) * brightness;
+        } else {
+          r = g = b = lum * 0.30;
+        }
+        if (tint) { r += (tint.r - r) * 0.08; g += (tint.g - g) * 0.08; b += (tint.b - b) * 0.08; }
         arr[k] = r; arr[k + 1] = g; arr[k + 2] = b;
       }
     }
@@ -630,7 +722,7 @@ class Renderer3D {
     const vis = game.players[game.viewer].visible;
     const S = this.hexSize;
     const pos = [], col = [];
-    const dark = new THREE.Color(0x263b40);
+    const dark = new THREE.Color(0x2b4145);
     for (const t of game.map.tiles) {
       if (vis[game.map.idx(t.c, t.r)] !== 0) continue;
       const [wx, wz] = HEX.toPixel(t.c, t.r, S);
@@ -643,7 +735,7 @@ class Renderer3D {
     geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
     geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
     geo.computeVertexNormals();
-    const shroud = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.97 }));
+    const shroud = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.94 }));
     this.gShroud.add(shroud);
   }
 
@@ -672,7 +764,7 @@ class Renderer3D {
         const mx = (p1[0] + p2[0]) / 2, mz = (p1[1] + p2[1]) / 2;
         let ix = wx - mx, iz = wz - mz;
         const il = Math.hypot(ix, iz) || 1;
-        ix = ix / il * S * 0.22; iz = iz / il * S * 0.22;
+        ix = ix / il * S * 0.075; iz = iz / il * S * 0.075;
         this._pushTri(pos, col, [p1[0], y, p1[1]], [p2[0], y, p2[1]], [p2[0] + ix, y, p2[1] + iz], tmp);
         this._pushTri(pos, col, [p1[0], y, p1[1]], [p2[0] + ix, y, p2[1] + iz], [p1[0] + ix, y, p1[1] + iz], tmp);
       });
@@ -681,7 +773,9 @@ class Renderer3D {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
     geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
-    this.gBorders.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide })));
+    this.gBorders.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+      vertexColors: true, transparent: true, opacity: 0.94, side: THREE.DoubleSide,
+    })));
   }
 
   _rebuildImprovements(game) {
@@ -802,10 +896,11 @@ class Renderer3D {
 
   _hidePool(pool) { for (const o of pool) o.visible = false; }
 
-  _spriteAt(pool, tex, wx, y, wz, w, h, opacity = 1) {
+  _spriteAt(pool, tex, wx, y, wz, w, h, opacity = 1, tint = 0xffffff) {
     const s = this._getPooled(pool, () => new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false })));
     s.material.map = tex;
     s.material.opacity = opacity;
+    s.material.color.set(tint);
     s.position.set(wx, y, wz);
     s.scale.set(w, h, 1);
     return s;
@@ -1003,16 +1098,49 @@ class Renderer3D {
       if (u.owner !== game.viewer && vis[i] !== 2) continue;
       if (u.owner === game.viewer && vis[i] === 0) continue;
       seen.add(u.id);
-      let sp = this._units.get(u.id);
-      if (!sp) {
-        sp = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false }));
-        sp.center.set(0.5, 0.32);
-        this._units.set(u.id, sp);
-        this.gDyn.add(sp);
+      let piece = this._units.get(u.id);
+      if (!piece) {
+        piece = new THREE.Group();
+        const outer = new THREE.Mesh(this._unitGeo.outer,
+          new THREE.MeshStandardMaterial({ roughness: 0.76, metalness: 0.05, transparent: true }));
+        outer.name = "base-outer";
+        outer.position.y = S * 0.05;
+        outer.castShadow = true;
+        const inner = new THREE.Mesh(this._unitGeo.inner,
+          new THREE.MeshStandardMaterial({ roughness: 0.72, metalness: 0.04, transparent: true }));
+        inner.name = "base-inner";
+        inner.position.y = S * 0.09;
+        inner.castShadow = true;
+        const center = new THREE.Mesh(this._unitGeo.center,
+          new THREE.MeshStandardMaterial({ color: 0x202724, roughness: 0.9, transparent: true }));
+        center.name = "base-center";
+        center.position.y = S * 0.13;
+        const art = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false }));
+        art.name = "art";
+        art.center.set(0.5, 0.12);
+        art.position.set(0, S * 0.25, 0);
+        art.scale.set(S * 0.82, S, 1);
+        art.renderOrder = 5;
+        piece.add(outer, inner, center, art);
+        this._units.set(u.id, piece);
+        this.gDyn.add(piece);
       }
-      sp.visible = true;
-      sp.material.map = this._unitTex(u, game);
-      sp.material.opacity = 1;
+      piece.visible = true;
+      const civ = CIVS[game.players[u.owner].civId];
+      const spent = u.owner === game.viewer && u.moves <= 0;
+      const opacity = spent ? 0.58 : 1;
+      const outer = piece.getObjectByName("base-outer");
+      const inner = piece.getObjectByName("base-inner");
+      const center = piece.getObjectByName("base-center");
+      const art = piece.getObjectByName("art");
+      outer.material.color.set(u.owner === game.viewer ? "#f7f0dc" : civ.color2);
+      inner.material.color.set(civ.color);
+      for (const mesh of [outer, inner, center]) {
+        mesh.material.opacity = opacity;
+        mesh.material.depthWrite = opacity === 1;
+      }
+      art.material.map = this._unitTex(u, game);
+      art.material.opacity = opacity;
       let [wx, wz] = HEX.toPixel(u.c, u.r, S);
       let y = surfY3D(game.tile(u.c, u.r));
       const anim = game.anims.find(a => a.id === u.id);
@@ -1034,12 +1162,10 @@ class Renderer3D {
         const [tx, tz] = HEX.toPixel(strike.tc, strike.tr, S);
         wx += (tx - wx) * k; wz += (tz - wz) * k;
       }
-      sp.position.set(wx, y + 1.2, wz);
-      sp.scale.set(S * 1.35, S * 1.6, 1);
-      sp.renderOrder = 5;
+      piece.position.set(wx, y + 0.35, wz);
     }
-    for (const [id, sp] of this._units) {
-      if (!seen.has(id)) sp.visible = false;
+    for (const [id, piece] of this._units) {
+      if (!seen.has(id)) piece.visible = false;
     }
   }
 
@@ -1052,11 +1178,12 @@ class Renderer3D {
       if (v === 0) continue;
       const [wx, wz] = HEX.toPixel(t.c, t.r, S);
       const y = surfY3D(t);
-      const op = v === 1 ? 0.45 : 1;
-      if (t.resource) this._spriteAt(this._pool.decor, this._worldTex("resource", t.resource), wx - S * 0.48, y + S * 0.34, wz - S * 0.34, S * 0.54, S * 0.54, op);
-      if (t.ruin) this._spriteAt(this._pool.decor, this._worldTex("site", "RUIN"), wx, y + S * 0.34, wz, S * 0.66, S * 0.66, op);
-      if (game.campAt && game.campAt(t.c, t.r)) this._spriteAt(this._pool.decor, this._worldTex("site", "CAMP"), wx, y + S * 0.39, wz, S * 0.78, S * 0.78, op);
-      if (t.improvement === "MINE") this._spriteAt(this._pool.decor, this._worldTex("site", "MINE"), wx + S * 0.38, y + S * 0.28, wz + S * 0.3, S * 0.48, S * 0.48, op);
+      const op = v === 1 ? 0.62 : 1;
+      const tint = v === 1 ? 0x9ba9a4 : 0xffffff;
+      if (t.resource) this._spriteAt(this._pool.decor, this._worldTex("resource", t.resource), wx - S * 0.48, y + S * 0.34, wz - S * 0.34, S * 0.54, S * 0.54, op, tint);
+      if (t.ruin) this._spriteAt(this._pool.decor, this._worldTex("site", "RUIN"), wx, y + S * 0.34, wz, S * 0.66, S * 0.66, op, tint);
+      if (game.campAt && game.campAt(t.c, t.r)) this._spriteAt(this._pool.decor, this._worldTex("site", "CAMP"), wx, y + S * 0.39, wz, S * 0.78, S * 0.78, op, tint);
+      if (t.improvement === "MINE") this._spriteAt(this._pool.decor, this._worldTex("site", "MINE"), wx + S * 0.38, y + S * 0.28, wz + S * 0.3, S * 0.48, S * 0.48, op, tint);
     }
   }
 
@@ -1192,7 +1319,7 @@ class Renderer3D {
     // selection ring / selected city outline
     if (!this._selRing) {
       this._selRing = new THREE.Mesh(
-        new THREE.RingGeometry(S * 0.5, S * 0.6, 24),
+        new THREE.RingGeometry(S * 0.47, S * 0.58, 32),
         new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }));
       this._selRing.rotation.x = -Math.PI / 2;
       this._selRing.renderOrder = 3;
@@ -1207,7 +1334,11 @@ class Renderer3D {
     this._selRing.visible = this._citySel.visible = false;
     if (this.selected && game.units.includes(this.selected)) {
       const [wx, wz] = HEX.toPixel(this.selected.c, this.selected.r, S);
-      this._selRing.position.set(wx, surfY3D(game.tile(this.selected.c, this.selected.r)) + 0.7, wz);
+      const pulse = this.reduceMotion ? 0 : (Math.sin(Date.now() * 0.007) + 1) / 2;
+      const scale = 1 + pulse * 0.075;
+      this._selRing.scale.set(scale, scale, scale);
+      this._selRing.material.opacity = this.reduceMotion ? 1 : 0.68 + pulse * 0.32;
+      this._selRing.position.set(wx, surfY3D(game.tile(this.selected.c, this.selected.r)) + 0.62, wz);
       this._selRing.visible = true;
     }
     if (this.selectedCity) {
@@ -1334,6 +1465,7 @@ class Renderer3D {
 
   // gentle rolling swell on the sea plane
   _animateWater(now) {
+    if (this._foam) this._foam.visible = !this.reduceMotion;
     if (!this._sea || this.reduceMotion) return;
     const t = now * 0.0012;
     const posAttr = this._sea.geometry.getAttribute("position");
@@ -1343,6 +1475,7 @@ class Renderer3D {
     }
     posAttr.needsUpdate = true;
     this._sea.geometry.computeVertexNormals();
+    if (this._foam) this._foam.material.opacity = 0.40 + (Math.sin(t * 2.2) + 1) * 0.12;
   }
 
   // the sun drifts slowly around the map as turns pass
@@ -1351,50 +1484,27 @@ class Renderer3D {
     const az = ((game.turn % 80) / 80) * Math.PI * 2 + 0.6;
     this.sun.position.copy(this._center)
       .add(new THREE.Vector3(Math.cos(az) * 1300, 1500, Math.sin(az) * 1300));
-    const warm = (Math.sin(az * 2) + 1) / 2; // subtle temperature swing
-    this.sun.color.setRGB(1, 0.95 - warm * 0.06, 0.85 - warm * 0.12);
+    const warm = (Math.sin(az * 2) + 1) / 2;
+    // The cycle may change temperature and direction, never strategic legibility.
+    this.sun.intensity = 0.74 + (1 - warm) * 0.10;
+    this.sun.color.setRGB(1, 0.97 - warm * 0.04, 0.91 - warm * 0.08);
   }
 
   drawMinimap(game) {
     const m = this.mctx;
-    const W = this.mini.width, H = this.mini.height;
-    m.fillStyle = "#0d1b2a";
-    m.fillRect(0, 0, W, H);
-    const sx = W / game.map.w, sy = H / game.map.h;
-    const vis = game.players[game.viewer].visible;
-    for (const t of game.map.tiles) {
-      const v = vis[game.map.idx(t.c, t.r)];
-      if (!v) continue;
-      let color = TERRAIN[t.terrain].color;
-      if (t.owner !== -1) color = CIVS[game.players[t.owner].civId].color;
-      m.fillStyle = color;
-      m.globalAlpha = v === 1 ? 0.5 : 1;
-      m.fillRect(t.c * sx, t.r * sy, Math.ceil(sx), Math.ceil(sy));
-    }
-    m.globalAlpha = 1;
-    for (const c of game.cities) {
-      if (!vis[game.map.idx(c.c, c.r)]) continue;
-      m.fillStyle = "#fff";
-      m.fillRect(c.c * sx - 1, c.r * sy - 1, 3, 3);
-    }
-    // viewport outline: unproject the screen corners onto the ground so the
-    // shape stays correct when the camera is rotated
-    const hexW = this.hexSize * Math.sqrt(3), hexH = this.hexSize * 1.5;
+    const fit = MINIMAP_ART.draw(m, this.mini, game);
+    // Unproject the screen corners so rotation and perspective are reflected.
     const cw = this.canvas.width, ch = this.canvas.height;
     const pts = [[0, 0], [cw, 0], [cw, ch], [0, ch]].map(([px, py]) => {
       const hit = this._groundPoint(this._rayAt(px, py), 2.4);
-      return hit ? [(hit.x / hexW) * sx, (hit.z / hexH) * sy] : null;
+      return hit ? fit.worldToMini(hit.x / this.hexSize, hit.z / this.hexSize) : null;
     });
-    if (pts.every(p => p)) {
-      m.save();
-      m.beginPath(); m.rect(0, 0, W, H); m.clip();
-      m.strokeStyle = "rgba(255,255,255,0.8)";
-      m.lineWidth = 1;
-      m.beginPath();
-      pts.forEach(([px, py], i) => i === 0 ? m.moveTo(px, py) : m.lineTo(px, py));
-      m.closePath();
-      m.stroke();
-      m.restore();
-    }
+    MINIMAP_ART.viewport(m, fit, pts);
+    this._miniLayout = fit;
+  }
+
+  minimapToHex(game, x, y) {
+    const fit = this._miniLayout || MINIMAP_ART.layout(game.map, this.mini.width, this.mini.height);
+    return fit.miniToTile(x, y);
   }
 }

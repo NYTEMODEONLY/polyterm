@@ -2595,7 +2595,10 @@ const UI = (() => {
   }
 
   function applyReduceMotion(on) {
-    if (rend) rend.reduceMotion = on;
+    if (rend) {
+      rend.reduceMotion = on;
+      rend.dirty = true;
+    }
   }
 
   // apply saved accessibility prefs; called at boot and after a renderer swap
@@ -3640,8 +3643,11 @@ const UI = (() => {
     // minimap click
     $("minimap").addEventListener("mousedown", (e) => {
       const rect = e.target.getBoundingClientRect();
-      const c = Math.floor((e.clientX - rect.left) / rect.width * game.map.w);
-      const r = Math.floor((e.clientY - rect.top) / rect.height * game.map.h);
+      const px = (e.clientX - rect.left) / rect.width * e.target.width;
+      const py = (e.clientY - rect.top) / rect.height * e.target.height;
+      const [c, r] = rend.minimapToHex
+        ? rend.minimapToHex(game, px, py)
+        : [Math.floor(px / e.target.width * game.map.w), Math.floor(py / e.target.height * game.map.h)];
       centerMapOn({ c, r });
     });
 
@@ -3884,10 +3890,16 @@ const UI = (() => {
       }
     }
     (function loop() {
+      const selectionPulse = rend && rend.selected && !rend.reduceMotion &&
+        Date.now() - (rend._lastDraw || 0) > 80;
+      const foamTick = rend && rend.foamAnimated && !rend.reduceMotion &&
+        Date.now() - (rend._lastDraw || 0) > 160;
       if (game && $("start-screen").style.display === "none" &&
           $("editor-screen").style.display !== "flex" &&
           (rend.dirty || game.effects.length || game.anims.length ||
            (game.strikes && game.strikes.length) ||
+           selectionPulse ||
+           foamTick ||
            // 3D water swell: a slow ambient tick when otherwise idle
            (rend.three && !rend.reduceMotion && Date.now() - (rend._lastDraw || 0) > 140))) {
         rend.draw(game);
