@@ -67,7 +67,10 @@ frame. Install its pinned dependencies with `npm install`, install Chromium with
 - **Five eras** of technology, now reaching the **Industrial era**:
   Rifling, Steam Power, and Military Science unlock Riflemen, Cannon,
   Cavalry, and the Ironclad, plus Factories, Hospitals, Stock Exchanges,
-  and two new wonders (the Iron Gates Works and the Orient Express)
+  and two new wonders (the Iron Gates Works and the Orient Express). Select
+  any locked technology as a strategic goal and the dependency tree builds,
+  saves, highlights, and automatically advances through its exact prerequisite
+  route; the plan can be cleared without cancelling current research
 - **Six ways to win**: conquer every original capital (**Domination**),
   master all 32 technologies (**Scientific**), complete three policy branches
   (**Cultural**), spread your founded religion across every surviving empire
@@ -102,7 +105,8 @@ frame. Install its pinned dependencies with `npm install`, install Chromium with
 - **Accessibility settings** (Menu → ⚙️): a colorblind-friendly civ
   palette, a reduce-motion toggle (stops the animated sea, drifting sun,
   and attack lunges), and an advisor-tips switch — all remembered between
-  sessions
+  sessions. Every dismissible planning dialog also has a persistent keyboard-
+  and touch-accessible close control with focus restoration
 - **3D graphics** (default): a WebGL diorama built with Three.js — extruded
   hex terrain with cliff faces, cone mountains with snow caps, stepped
   hills, tree-covered forests, a translucent sea over a depth-shaded

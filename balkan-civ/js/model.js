@@ -103,6 +103,8 @@ class Player {
     this.gold = 40;
     this.scienceStored = 0;
     this.researching = null;
+    this.researchGoal = null;
+    this.researchQueue = [];
     this.techs = new Set(["AGRICULTURE"]);
     this.atWarWith = new Set();  // player indexes
     this.met = new Set();
@@ -420,6 +422,74 @@ class Game {
     return Math.round(TECHS[key].cost * SPEEDS[this.speed].tech);
   }
 
+  researchPath(playerIdx, goalKey) {
+    const p = this.players[playerIdx];
+    if (!p || !TECHS[goalKey] || p.techs.has(goalKey)) return [];
+    const seen = new Set();
+    const path = [];
+    const visit = (key) => {
+      if (p.techs.has(key) || seen.has(key)) return;
+      seen.add(key);
+      for (const req of TECHS[key].req) visit(req);
+      if (key !== p.researching) path.push(key);
+    };
+    visit(goalKey);
+    return path;
+  }
+
+  advanceResearchPlan(p, announce = false) {
+    if (!p) return false;
+    const unique = new Set();
+    p.researchQueue = (Array.isArray(p.researchQueue) ? p.researchQueue : [])
+      .filter(key => {
+        if (!TECHS[key] || p.techs.has(key) || unique.has(key)) return false;
+        unique.add(key);
+        return true;
+      });
+    if (p.researchGoal && (!TECHS[p.researchGoal] || p.techs.has(p.researchGoal))) {
+      p.researchGoal = null;
+      p.researchQueue = [];
+    }
+    if (p.researching && !p.techs.has(p.researching)) return false;
+    p.researching = null;
+    const next = p.researchQueue[0];
+    if (!next || !TECHS[next].req.every(req => p.techs.has(req))) return false;
+    p.researchQueue.shift();
+    p.researching = next;
+    if (announce) this.notify(`🔬 Research plan continues: ${TECHS[next].name}.`, p.index);
+    return true;
+  }
+
+  setResearchGoal(playerIdx, goalKey) {
+    const p = this.players[playerIdx];
+    if (!p || !p.alive || !TECHS[goalKey] || p.techs.has(goalKey) || p.researching === goalKey)
+      return false;
+    const path = this.researchPath(playerIdx, goalKey);
+    if (!path.length) return false;
+    p.researchGoal = goalKey;
+    p.researchQueue = path;
+    if (!p.researching) this.advanceResearchPlan(p);
+    return true;
+  }
+
+  chooseResearch(playerIdx, key) {
+    const p = this.players[playerIdx];
+    if (!p || !p.alive || !TECHS[key] || p.techs.has(key) ||
+        !TECHS[key].req.every(req => p.techs.has(req))) return false;
+    p.researching = key;
+    p.researchGoal = null;
+    p.researchQueue = [];
+    return true;
+  }
+
+  clearResearchPlan(playerIdx) {
+    const p = this.players[playerIdx];
+    if (!p) return false;
+    p.researchGoal = null;
+    p.researchQueue = [];
+    return true;
+  }
+
   // ---------- trade routes ----------
   routeIncome(fromCity, toCity) {
     const dist = HEX.distance(fromCity.c, fromCity.r, toCity.c, toCity.r);
@@ -662,9 +732,12 @@ class Game {
     const kind = unit.def.great;
     if (kind === "sci") {
       if (p.researching) {
-        p.techs.add(p.researching);
-        this.notify(`🔭 ${unit.gpName || "The scientist"} completes ${TECHS[p.researching].name}!`, p.index);
+        const done = p.researching;
+        p.techs.add(done);
+        this.notify(`🔭 ${unit.gpName || "The scientist"} completes ${TECHS[done].name}!`, p.index);
         p.researching = null;
+        this.questEvent("FIRST_TECH", p.index, { tech: done });
+        this.advanceResearchPlan(p, true);
       } else {
         const av = p.availableTechs();
         if (!av.length) return false;
@@ -1690,6 +1763,9 @@ class Game {
     retired.attitudeReasons = {};
     retired.truces = {};
     retired.influence = {};
+    retired.researching = null;
+    retired.researchGoal = null;
+    retired.researchQueue = [];
     this.pendingEvents = this.pendingEvents.filter(event => event.player !== playerIdx);
     for (const tile of this.map.tiles) {
       if (tile.owner !== playerIdx) continue;
@@ -2647,6 +2723,7 @@ class Game {
             p.techs.add(t);
             this.stats.steals++;
             if (p.researching && p.techs.has(p.researching)) p.researching = null;
+            this.advanceResearchPlan(p, true);
             this.notify(`🕵️ ${spy.name} stole ${TECHS[t].name} from ${owner.civ.name}!`, p.index);
             this.notify(`🕵️ Technology was stolen from ${city.name}! Station a spy there to catch thieves.`, city.owner);
           } else {
@@ -2949,8 +3026,12 @@ class Game {
     }
 
     // research
-    if (p.researching && p.techs.has(p.researching)) p.researching = null; // e.g. stolen by spies
+    if (p.researching && p.techs.has(p.researching)) {
+      p.researching = null; // e.g. stolen by spies
+      this.advanceResearchPlan(p, true);
+    }
     if (!p.researching) {
+      this.advanceResearchPlan(p);
       const av = p.availableTechs();
       if (av.length && !p.isHuman) p.researching = av.sort((x, y2) => TECHS[x].cost - TECHS[y2].cost)[0];
     }
@@ -2964,6 +3045,7 @@ class Game {
         this.notify(`🔬 Research complete: ${t.name}!`, p.index);
         p.researching = null;
         this.questEvent("FIRST_TECH", p.index, { tech: done });
+        this.advanceResearchPlan(p, true);
       }
     } else if (p.isHuman) {
       p.scienceStored += economy.science; // banks until a tech is chosen
@@ -3605,7 +3687,7 @@ class Game {
   // ---------- save / load ----------
   serialize() {
     return JSON.stringify({
-      v: 6, turn: this.turn, seed: this.seed,
+      v: 7, turn: this.turn, seed: this.seed,
       rngState: typeof this.rng.getState === "function" ? this.rng.getState() : null,
       mapType: this.mapType,
       difficulty: this.difficulty, humans: this.humans, activeHuman: this.activeHuman,
@@ -3623,6 +3705,7 @@ class Game {
       players: this.players.map(p => ({
         index: p.index, civId: p.civId, isHuman: p.isHuman, alive: p.alive,
         gold: p.gold, scienceStored: p.scienceStored, researching: p.researching,
+        researchGoal: p.researchGoal, researchQueue: p.researchQueue,
         techs: [...p.techs], atWarWith: [...p.atWarWith], met: [...p.met],
         warWeariness: p.warWeariness, cityNameCursor: p.cityNameCursor,
         visible: Array.from(p.visible), originalCapitalId: p.originalCapitalId,
@@ -3708,6 +3791,9 @@ class Game {
       const p = new Player(pd.index, pd.civId, pd.isHuman);
       p.alive = pd.alive; p.gold = pd.gold; p.scienceStored = pd.scienceStored;
       p.researching = pd.researching; p.techs = new Set(pd.techs);
+      p.researchGoal = TECHS[pd.researchGoal] && !p.techs.has(pd.researchGoal) ? pd.researchGoal : null;
+      p.researchQueue = Array.isArray(pd.researchQueue)
+        ? pd.researchQueue.filter(key => TECHS[key] && !p.techs.has(key)) : [];
       p.atWarWith = new Set(pd.atWarWith); p.met = new Set(pd.met);
       p.warWeariness = pd.warWeariness || {}; p.cityNameCursor = pd.cityNameCursor;
       p.visible = Uint8Array.from(pd.visible); p.originalCapitalId = pd.originalCapitalId;

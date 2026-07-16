@@ -301,7 +301,7 @@ test("diplomacy contracts explain attitudes, enforce truces, and preserve human 
   assert.equal(result.ai.declared, true);
   assert.deepEqual(result.ai.decision,
     { accepted: true, weary: true, losing: false, humanDecision: false });
-  assert.deepEqual(result.roundTrip, { version: 6, remaining: 15, sameBreakdown: true });
+  assert.deepEqual(result.roundTrip, { version: 7, remaining: 15, sameBreakdown: true });
   assert.equal(result.legacy.remaining, 0);
   assert.ok(result.legacy.reasons.includes("Prior diplomatic history"));
   assert.equal(result.legacy.explained, result.legacy.raw);
@@ -408,7 +408,7 @@ test("event dilemmas expose two deterministic outcomes, reject invalid choices, 
     quarantineAvailable: false, gold: 0, pending: 1,
     outOfTurn: false, hotseatPending: 1,
   });
-  assert.deepEqual(result.save, { version: 6, same: true, legacyPending: 0 });
+  assert.deepEqual(result.save, { version: 7, same: true, legacyPending: 0 });
 });
 
 test("random events defer human decisions, block the turn, and resolve AI policy deterministically", () => {
@@ -2102,6 +2102,7 @@ test("capturing the last city resets production and retires defeated-player stat
     g.players[1].pacts.add(2); g.players[2].pacts.add(1);
     g.players[1].deals.push({ give: "WINE", get: "SALT", other: 2, ends: 30 });
     g.players[2].deals.push({ give: "SALT", get: "WINE", other: 1, ends: 30 });
+    g.setResearchGoal(1, "CHIVALRY");
     g.offerPeace(1, 0);
     g.routes.push({ owner: 1, fromId: captured.id, toId: survivor.id, path: [], ends: 30 });
     g.routes.push({ owner: 2, fromId: survivor.id, toId: captured.id, path: [], ends: 30 });
@@ -2114,7 +2115,8 @@ test("capturing the last city resets production and retires defeated-player stat
         queue: captured.queue, prodStored: captured.prodStored },
       pendingCityIds: g.pendingOrders(0).cities.map(c => c.id),
       defeated: { alive: defeated.alive, wars: [...defeated.atWarWith],
-        pacts: [...defeated.pacts], deals: defeated.deals },
+        pacts: [...defeated.pacts], deals: defeated.deals, researching: defeated.researching,
+        researchGoal: defeated.researchGoal, researchQueue: defeated.researchQueue },
       survivor: { atWar: g.players[0].atWarWith.has(1), pact: g.players[2].pacts.has(1),
         deal: g.players[2].deals.some(d => d.other === 1) },
       routes: g.routes.map(r => ({ owner: r.owner, fromId: r.fromId, toId: r.toId })),
@@ -2127,7 +2129,8 @@ test("capturing the last city resets production and retires defeated-player stat
 
   assert.deepEqual(result.captured, { owner: 0, producing: null, queue: [], prodStored: 0 });
   assert.deepEqual(result.pendingCityIds, [result.capturedId]);
-  assert.deepEqual(result.defeated, { alive: false, wars: [], pacts: [], deals: [] });
+  assert.deepEqual(result.defeated, { alive: false, wars: [], pacts: [], deals: [],
+    researching: null, researchGoal: null, researchQueue: [] });
   assert.deepEqual(result.survivor, { atWar: false, pact: false, deal: false });
   assert.deepEqual(result.routes, [{ owner: 2,
     fromId: result.survivorId, toId: result.capturedId }]);
@@ -2458,6 +2461,72 @@ test("pending-order snapshots track research, production, and unit decisions", (
   assert.deepEqual(result.ready, { research: false, cities: 0, units: 0 });
 });
 
+test("research goals queue a deterministic prerequisite path and survive save migration", () => {
+  const result = JSON.parse(evaluate(loadGameContext(), `
+    const make = () => new Game({ playerCiv: "SERBIA", numOpponents: 1, seed: 9292,
+      mapW: 24, mapH: 18, mapType: "peninsula", difficulty: "normal" });
+    const g = make();
+    const p = g.players[0];
+    const planned = g.setResearchGoal(0, "CHIVALRY");
+    const route = [p.researching, ...p.researchQueue];
+    const known = new Set(p.techs);
+    const topology = route.every(key => {
+      const ready = TECHS[key].req.every(req => known.has(req));
+      known.add(key);
+      return ready;
+    });
+    const saved = Game.deserialize(g.serialize());
+    const restored = saved.players[0];
+
+    const first = p.researching;
+    const queueBeforeTurn = p.researchQueue.length;
+    p.scienceStored = g.techCost(first);
+    g.processPlayerEconomy(p);
+    const advanced = { completed: p.techs.has(first), next: p.researching,
+      queueDelta: queueBeforeTurn - p.researchQueue.length,
+      announced: g.notifications.some(n => n.msg.includes("Research plan continues")) };
+    while (p.researching) {
+      p.techs.add(p.researching);
+      p.researching = null;
+      g.advanceResearchPlan(p);
+    }
+
+    const changed = make();
+    changed.setResearchGoal(0, "CHIVALRY");
+    const manual = changed.chooseResearch(0, "POTTERY");
+
+    const legacyData = JSON.parse(changed.serialize());
+    delete legacyData.players[0].researchGoal;
+    delete legacyData.players[0].researchQueue;
+    legacyData.v = 6;
+    const legacy = Game.deserialize(JSON.stringify(legacyData)).players[0];
+    return JSON.stringify({ planned, route, topology, first,
+      restored: { goal: restored.researchGoal, current: restored.researching,
+        queue: restored.researchQueue },
+      advanced, completed: p.techs.has("CHIVALRY"), goal: p.researchGoal, queue: p.researchQueue,
+      manual: { ok: manual, current: changed.players[0].researching,
+        goal: changed.players[0].researchGoal, queue: changed.players[0].researchQueue },
+      legacy: { goal: legacy.researchGoal, queue: legacy.researchQueue },
+    });
+  `));
+
+  assert.equal(result.planned, true);
+  assert.equal(result.topology, true);
+  assert.equal(result.first, "ANIMAL_HUSBANDRY");
+  assert.equal(result.route.at(-1), "CHIVALRY");
+  assert.deepEqual(result.restored, {
+    goal: "CHIVALRY", current: result.first, queue: result.route.slice(1),
+  });
+  assert.deepEqual(result.advanced, {
+    completed: true, next: "THE_WHEEL", queueDelta: 1, announced: true,
+  });
+  assert.equal(result.completed, true);
+  assert.equal(result.goal, null);
+  assert.deepEqual(result.queue, []);
+  assert.deepEqual(result.manual, { ok: true, current: "POTTERY", goal: null, queue: [] });
+  assert.deepEqual(result.legacy, { goal: null, queue: [] });
+});
+
 test("save round-trips preserve the exact deterministic future", () => {
   const result = JSON.parse(evaluate(loadGameContext(), `
     const advance = (g, turns) => {
@@ -2494,7 +2563,7 @@ test("save round-trips preserve the exact deterministic future", () => {
     });
   `));
 
-  assert.equal(result.version, 6);
+  assert.equal(result.version, 7);
   assert.ok(Number.isInteger(result.rngState));
   assert.equal(result.stats.routes, 3);
   assert.equal(result.exact, true);

@@ -301,6 +301,77 @@ test("skirmish setup persists and launches the exact shared map seed", async ({ 
   expect(errors).toEqual([]);
 });
 
+test("technology goals build a persistent route and every planning dialog has a close control", async ({ page }, testInfo) => {
+  const errors = monitorRuntime(page);
+  await loadGame(page, "2d");
+
+  const closeControlAudit = await page.evaluate(() => [...document.querySelectorAll(".modal:not(.decision-modal)")]
+    .reduce((result, modal) => {
+      const count = modal.querySelectorAll(":scope > .modal-box > .modal-close").length;
+      if (count === 0) result.missing.push(modal.id);
+      if (count > 1) result.duplicates.push(modal.id);
+      return result;
+    }, { missing: [], duplicates: [] }));
+  expect(closeControlAudit).toEqual({ missing: [], duplicates: [] });
+  await expect(page.locator(".decision-modal .modal-close")).toHaveCount(0);
+
+  const techButton = page.locator("#btn-tech");
+  await techButton.focus();
+  await techButton.click();
+  const dialog = page.getByRole("dialog", { name: /Technology/ });
+  const close = page.locator("#tech-modal > .modal-box > .modal-close");
+  await expect(dialog).toBeVisible();
+  await expect(close).toBeVisible();
+  await expect(close).toHaveAttribute("aria-label", "Close Technology");
+  await expect(close).toBeFocused();
+  const closeBox = await close.boundingBox();
+  expect(closeBox.width).toBeGreaterThanOrEqual(34);
+  expect(closeBox.height).toBeGreaterThanOrEqual(34);
+  await expect(page.locator("#tech-plan-summary")).toContainText("5 technologies available");
+
+  await page.evaluate(() => { UI.game.players[UI.game.viewer].scienceStored = 50; });
+  await page.locator('.tech[data-tech="CHIVALRY"]').click();
+  await expect(page.locator("#tech-plan-summary")).toContainText("Strategic goal");
+  await expect(page.locator("#tech-plan-summary")).toContainText("Chivalry");
+  await expect(page.locator("#tech-plan-summary")).toContainText("1140 science remaining");
+  await expect(page.locator('.tech[data-tech="CHIVALRY"]')).toHaveClass(/goal/);
+  await expect(page.locator('.tech[data-tech="CHIVALRY"]')).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator('.tech[data-tech="ANIMAL_HUSBANDRY"] .tech-state')).toHaveText("Now");
+  await expect(page.locator("#tech-tree .tech-link.path")).not.toHaveCount(0);
+
+  const plan = await page.evaluate(() => {
+    const p = UI.game.players[UI.game.viewer];
+    const saved = Game.deserialize(UI.game.serialize()).players[UI.game.viewer];
+    return { goal: p.researchGoal, current: p.researching, queue: p.researchQueue,
+      savedGoal: saved.researchGoal, savedCurrent: saved.researching, savedQueue: saved.researchQueue };
+  });
+  expect(plan.goal).toBe("CHIVALRY");
+  expect(plan.current).toBe("ANIMAL_HUSBANDRY");
+  expect(plan.queue.at(-1)).toBe("CHIVALRY");
+  expect(plan.savedGoal).toBe(plan.goal);
+  expect(plan.savedCurrent).toBe(plan.current);
+  expect(plan.savedQueue).toEqual(plan.queue);
+  await expect(page.locator("#tech-plan-summary .tech-route-step")).toHaveCount(plan.queue.length + 1);
+  await expect(page.locator("#tech-modal > .modal-box > .modal-close")).toBeVisible();
+  await expectNoAxeViolations(page, "#tech-modal");
+  await expectNoViewportOverflow(page);
+  await page.screenshot({ path: testInfo.outputPath("research-plan.png") });
+
+  await page.locator("#tech-plan-summary .tech-plan-clear").click();
+  await expect(page.locator("#tech-plan-summary")).toContainText("Researching Animal Husbandry");
+  await expect(page.locator("#tech-plan-summary")).not.toContainText("Strategic goal");
+  await expect.poll(() => page.evaluate(() => {
+    const p = UI.game.players[UI.game.viewer];
+    return { current: p.researching, goal: p.researchGoal, queue: p.researchQueue };
+  })).toEqual({ current: "ANIMAL_HUSBANDRY", goal: null, queue: [] });
+  await expect(page.locator("#tech-modal > .modal-box > .modal-close")).toBeVisible();
+
+  await close.click();
+  await expect(dialog).toBeHidden();
+  await expect(techButton).toBeFocused();
+  expect(errors).toEqual([]);
+});
+
 test("first-turn guidance clears completed advice and preserves the usable map", async ({ page }) => {
   const errors = monitorRuntime(page);
   await page.goto("/index.html");

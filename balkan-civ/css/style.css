@@ -273,7 +273,11 @@ button:disabled { opacity: 0.4; cursor: default; }
 .modal { position: fixed; inset: 0; z-index: 60; background: rgba(5,8,14,0.7);
   display: none; align-items: center; justify-content: center; }
 .modal-box { background: #141c2a; border: 2px solid #8a7648; border-radius: 8px;
-  max-width: 900px; width: 92%; max-height: 84vh; overflow-y: auto; padding: 20px; }
+  position: relative; max-width: 900px; width: 92%; max-height: 84vh; overflow-y: auto; padding: 20px; }
+.modal-close { position: sticky; top: 0; z-index: 12; float: right; width: 34px; height: 34px;
+  margin: -8px -8px 4px 10px; padding: 0; display: grid; place-items: center;
+  background: #202b33; border-color: #68777a; color: #d8dfdc; font-size: 22px; line-height: 1; }
+.modal-close:hover:not(:disabled) { background: #3a2925; border-color: #d66a55; color: #fff0dc; }
 .modal-box h2 { color: #f0d890; margin-bottom: 12px; }
 .modal-box h3 { color: #c9a648; margin: 14px 0 6px; }
 #tech-modal .modal-box { max-width: min(1500px, 96vw); }
@@ -306,7 +310,27 @@ button:disabled { opacity: 0.4; cursor: default; }
 .event-choice[data-tone="risk"] { border-top-color: #c65d50; }
 .event-note { padding: 9px 22px 12px; border-top: 1px solid #303b3e; color: #818d8e;
   font-size: 10.5px; text-align: center; }
-.tech-help { color: #aebcc5; font-size: 12px; margin-bottom: 8px; }
+.tech-plan-summary { min-height: 58px; display: grid; grid-template-columns: minmax(150px, auto) minmax(0, 1fr) 34px;
+  align-items: center; gap: 12px; margin-bottom: 8px; padding: 8px 10px;
+  background: #101b20; border: 1px solid #40545a; border-left: 4px solid #d66a55; }
+.tech-plan-summary.idle { grid-template-columns: minmax(0, 1fr) auto; border-left-color: #5c8a77; }
+.tech-plan-summary.idle > span { color: #91a3a6; font-size: 11px; white-space: nowrap; }
+.tech-plan-copy { min-width: 0; }
+.tech-plan-copy > span, .tech-plan-copy > strong { display: block; }
+.tech-plan-kicker { color: #d66a55; font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.tech-plan-summary.idle .tech-plan-kicker { color: #73a48f; }
+.tech-plan-copy strong, .tech-plan-summary.idle strong { color: #f1dfaa; font-size: 14px; }
+.tech-plan-copy > span:last-child { color: #91a3a6; font-size: 10px; margin-top: 2px; }
+.tech-route { min-width: 0; display: flex; align-items: center; gap: 5px; overflow-x: auto;
+  padding: 4px 2px 6px; scrollbar-width: thin; scrollbar-color: #667d82 #101b20; }
+.tech-route > b { flex: 0 0 auto; color: #6f858a; font-size: 17px; font-weight: 400; }
+.tech-route-step { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px; min-height: 28px;
+  padding: 4px 7px; background: #17262b; border: 1px solid #4d6267; color: #c7d1ce; font-size: 10.5px; }
+.tech-route-step i { min-width: 22px; color: #8fa5aa; font-size: 8px; font-style: normal; font-weight: 800;
+  text-transform: uppercase; }
+.tech-route-step.current { border-color: #d5b85e; color: #f3e4b5; }
+.tech-route-step.goal { border-color: #d66a55; color: #ffd8c8; }
+.tech-plan-clear { width: 34px; height: 34px; padding: 0; font-size: 19px; background: #251e1d; border-color: #8f554a; }
 .tech-tree { position: relative; max-height: 66vh; overflow: auto; padding: 0 12px 20px;
   background: #0c1419; border: 1px solid #35464e; border-radius: 6px; }
 .tech-era-ruler, .tech-node-grid { display: grid; grid-template-columns: repeat(var(--tech-cols), 180px); column-gap: 42px; }
@@ -329,8 +353,16 @@ button:disabled { opacity: 0.4; cursor: default; }
 .tech.avail:hover { background: #383425; transform: translateY(-2px); }
 .tech.locked { opacity: 0.68; cursor: pointer; }
 .tech.active { opacity: 1; border-color: #f0d890; box-shadow: inset 3px 0 0 #d66a55, 0 0 10px rgba(240,216,144,0.3); }
+.tech.planned { opacity: 1; border-color: #5f98a4; box-shadow: inset 3px 0 0 #5f98a4; }
+.tech.goal { opacity: 1; border-color: #d66a55; box-shadow: inset 3px 0 0 #d66a55, 0 0 0 2px rgba(214,106,85,0.18); }
 .tech.path { opacity: 1; border-color: #b89d55; }
 .tech.strategy { opacity: 1; border-color: #ef765f; box-shadow: 0 0 0 2px rgba(214,106,85,0.25); }
+.tech-state, .tech-goal { position: absolute; top: -9px; z-index: 2; min-height: 18px; padding: 2px 6px;
+  background: #17303a; border: 1px solid #6d9eaa; color: #bfe0e5; font-size: 8px; font-weight: 900;
+  line-height: 12px; text-transform: uppercase; }
+.tech-state { left: 8px; }
+.tech-state.current { background: #3b321d; border-color: #d5b85e; color: #f5e6b3; }
+.tech-goal { right: 8px; background: #3a201d; border-color: #d66a55; color: #ffd4c5; }
 .tech .unlocks { font-size: 10.5px; color: #a8bdc5; margin-top: 6px; line-height: 1.25; }
 .tech .req { font-size: 9.5px; color: #758991; margin-top: 5px; line-height: 1.2; }
 .tech-progress { height: 3px; background: #26343a; margin-top: 5px; }
@@ -821,6 +853,7 @@ button:disabled { opacity: 0.4; cursor: default; }
   .combat-actions button { min-height: 36px; }
   .modal { align-items: flex-end; }
   .modal-box, .modal-box.wide { width: 100%; max-height: calc(100vh - 58px); border-radius: 8px 8px 0 0; padding: 16px 12px 74px; }
+  .modal-close { width: 40px; height: 40px; margin: -8px -4px 4px 8px; }
   .modal-box.event-box { padding: 0; }
   .modal-box.wide.empire-box { padding-inline: 8px; }
   .empire-box h2 { font-size: 18px; }
@@ -844,7 +877,11 @@ button:disabled { opacity: 0.4; cursor: default; }
   .standing-row { grid-template-columns: 28px minmax(110px, 1fr) repeat(2, minmax(50px, auto)); }
   .standing-row > :nth-child(5), .standing-row > :nth-child(6) { display: none; }
   #tech-modal .modal-box { max-height: calc(100vh - 58px); }
-  .tech-tree { max-height: calc(100vh - 160px); }
+  .tech-plan-summary { grid-template-columns: minmax(0, 1fr) 40px; gap: 7px; }
+  .tech-plan-summary.idle { grid-template-columns: minmax(0, 1fr) auto; }
+  .tech-route { grid-column: 1 / -1; grid-row: 2; }
+  .tech-plan-clear { grid-column: 2; grid-row: 1; width: 40px; height: 40px; }
+  .tech-tree { max-height: calc(100vh - 252px); }
   .tech-era-ruler, .tech-node-grid { grid-template-columns: repeat(var(--tech-cols), 164px); column-gap: 34px; }
   .tech { width: 164px; }
 }

@@ -626,6 +626,8 @@ const UI = (() => {
   }
 
   function startPlaying() {
+    techFocusKey = null;
+    techFocusOwner = null;
     $("start-screen").style.display = "none";
     $("game-ui").style.display = "block";
     notifSeen = game.notifications.length; // don't replay loaded history
@@ -1431,6 +1433,7 @@ const UI = (() => {
 
   // ---------------- tech dependency tree ----------------
   let techFocusKey = null;
+  let techFocusOwner = null;
 
   function techDepths() {
     const memo = {};
@@ -1496,8 +1499,36 @@ const UI = (() => {
     highlightTechPath(techFocusKey || game.players[game.viewer].researching);
   }
 
+  function researchPlanMarkup(p) {
+    const queue = Array.isArray(p.researchQueue) ? p.researchQueue : [];
+    const route = [p.researching, ...queue].filter(key => key && TECHS[key]);
+    if (!p.researchGoal || !TECHS[p.researchGoal]) {
+      const available = p.availableTechs().length;
+      const status = p.researching ? `Researching ${TECHS[p.researching].name}`
+        : `${available} technolog${available === 1 ? "y" : "ies"} available`;
+      return `<div id="tech-plan-summary" class="tech-plan-summary idle">
+        <div><span class="tech-plan-kicker">Research status</span><strong>${status}</strong></div>
+        <span>${Math.floor(p.scienceStored)} science banked</span>
+      </div>`;
+    }
+    let science = route.reduce((total, key) => total + game.techCost(key), 0);
+    science -= Math.min(p.scienceStored, science);
+    const routeHtml = route.map((key, index) => `<span class="tech-route-step ${key === p.researching ? "current" : ""} ${key === p.researchGoal ? "goal" : ""}">
+      <i>${key === p.researching ? "Now" : index + 1}</i>${TECHS[key].name}</span>`).join(`<b aria-hidden="true">›</b>`);
+    return `<div id="tech-plan-summary" class="tech-plan-summary">
+      <div class="tech-plan-copy"><span class="tech-plan-kicker">Strategic goal</span>
+        <strong>${TECHS[p.researchGoal].name}</strong><span>${route.length} step${route.length === 1 ? "" : "s"} · ${Math.max(0, Math.ceil(science))} science remaining</span></div>
+      <div class="tech-route" tabindex="0" aria-label="Research route to ${TECHS[p.researchGoal].name}">${routeHtml}</div>
+      <button class="tech-plan-clear" onclick="UI.clearResearchPlan()" title="Clear queued research path" aria-label="Clear queued research path">×</button>
+    </div>`;
+  }
+
   function showTechScreen() {
     const p = game.players[game.viewer];
+    if (techFocusOwner !== game.viewer || !techFocusKey || !TECHS[techFocusKey]) {
+      techFocusKey = p.researchGoal || p.researching;
+      techFocusOwner = game.viewer;
+    }
     const modal = $("tech-modal");
     modal.style.display = "flex";
     const body = $("tech-body");
@@ -1510,7 +1541,7 @@ const UI = (() => {
       const ds = Object.keys(TECHS).filter(k => TECHS[k].era === era).map(k => depth[k]);
       return [Math.min(...ds), Math.max(...ds)];
     });
-    let html = `<div class="tech-help">Select a gold technology to research. Select or hover any other technology to trace its prerequisite path.</div>
+    let html = `${researchPlanMarkup(p)}
       <div id="tech-tree" class="tech-tree" style="--tech-cols:${maxDepth + 1};--tech-rows:${rows}">
         <svg id="tech-links" class="tech-links" aria-hidden="true"></svg>
         <div class="tech-era-ruler">`;
@@ -1521,16 +1552,25 @@ const UI = (() => {
     layers.forEach((layer, d) => layer.forEach((key, i) => {
       const t = TECHS[key];
       const has = p.techs.has(key);
-      const avail = !has && t.req.every(r => p.techs.has(r));
       const researching = p.researching === key;
+      const avail = !has && !researching && t.req.every(r => p.techs.has(r));
+      const planStep = (p.researchQueue || []).indexOf(key);
+      const planNumber = planStep >= 0 ? planStep + (p.researching ? 2 : 1) : 0;
+      const goal = p.researchGoal === key;
       const unlocks = [];
       for (const u of Object.values(UNITS)) if (u.tech === key && (!u.uu || u.uu === p.civId)) unlocks.push(u.icon + " " + u.name);
       for (const b of Object.values(BUILDINGS)) if (b.tech === key) unlocks.push(b.icon + " " + b.name);
       const row = layer.length === 1 ? 1 + Math.floor((rows - 1) / 2)
         : 1 + Math.round(i * (rows - 1) / (layer.length - 1));
-      html += `<div class="tech ${has ? "done" : avail ? "avail" : "locked"} ${researching ? "active" : ""}"
-        data-tech="${key}" data-avail="${avail ? "1" : "0"}" role="button" tabindex="0"
-        style="grid-column:${d + 1};grid-row:${row}" aria-label="${t.name}, ${game.techCost(key)} science">
+      const state = has ? "researched" : researching ? "researching" : planStep >= 0
+        ? `planned step ${planNumber}` : avail ? "available now" : "locked; select to plan prerequisites";
+      html += `<div class="tech ${has ? "done" : avail ? "avail" : "locked"} ${researching ? "active" : ""} ${planStep >= 0 ? "planned" : ""} ${goal ? "goal" : ""}"
+        data-tech="${key}" data-avail="${avail ? "1" : "0"}" data-current="${researching ? "1" : "0"}" role="button" tabindex="0"
+        style="grid-column:${d + 1};grid-row:${row}" aria-label="${t.name}, ${game.techCost(key)} science, ${state}"
+        title="${has || researching ? `Inspect path to ${t.name}` : avail ? `Research ${t.name}` : `Plan path to ${t.name}`}"
+        aria-pressed="${techFocusKey === key ? "true" : "false"}">
+        ${researching ? `<span class="tech-state current">Now</span>` : planStep >= 0 ? `<span class="tech-state">${planNumber}</span>` : ""}
+        ${goal ? `<span class="tech-goal">Goal</span>` : ""}
         <div class="tech-name"><b>${t.name}</b><span>${game.techCost(key)}🔬</span></div>
         ${researching ? `<div class="tech-progress"><i style="width:${Math.min(100, p.scienceStored / game.techCost(key) * 100)}%"></i></div>` : ""}
         ${unlocks.length ? `<div class="unlocks">${unlocks.join(" · ")}</div>` : `<div class="unlocks dim">No direct unlock</div>`}
@@ -1544,6 +1584,8 @@ const UI = (() => {
       const key = node.dataset.tech;
       node.onclick = () => {
         if (node.dataset.avail === "1") pickTech(key);
+        else if (node.dataset.current === "1") { techFocusKey = key; highlightTechPath(key); }
+        else if (!game.players[game.viewer].techs.has(key)) planTech(key);
         else { techFocusKey = key; highlightTechPath(key); }
       };
       node.onkeydown = (e) => {
@@ -1554,15 +1596,39 @@ const UI = (() => {
       node.onfocus = () => highlightTechPath(key);
       node.onblur = () => highlightTechPath(techFocusKey || p.researching);
     });
-    requestAnimationFrame(drawTechConnections);
+    requestAnimationFrame(() => {
+      drawTechConnections();
+      const target = techFocusKey && tree.querySelector(`[data-tech="${techFocusKey}"]`);
+      if (target) tree.scrollLeft = Math.max(0, target.offsetLeft - tree.clientWidth / 2 + target.offsetWidth / 2);
+    });
   }
 
   function pickTech(key) {
     if (!myTurn()) return;
+    if (!game.chooseResearch(game.viewer, key)) return;
     SFX.play("click");
-    game.players[game.viewer].researching = key;
+    techFocusKey = key;
+    techFocusOwner = game.viewer;
     $("tech-modal").style.display = "none";
     refreshAll();
+  }
+
+  function planTech(key) {
+    if (!myTurn() || !game.setResearchGoal(game.viewer, key)) return;
+    SFX.play("click");
+    techFocusKey = key;
+    techFocusOwner = game.viewer;
+    refreshAll();
+    showTechScreen();
+  }
+
+  function clearResearchPlan() {
+    if (!myTurn() || !game.clearResearchPlan(game.viewer)) return;
+    SFX.play("click");
+    techFocusKey = game.players[game.viewer].researching;
+    techFocusOwner = game.viewer;
+    refreshAll();
+    showTechScreen();
   }
 
   // ---------------- religion ----------------
@@ -3358,7 +3424,8 @@ const UI = (() => {
   const ESCAPE_DISMISSIBLE_MODALS = new Set([
     "empire-modal", "tech-modal", "diplo-modal", "religion-modal", "founding-modal",
     "spy-modal", "policy-modal", "pedia-modal", "congress-modal", "campaign-modal",
-    "progress-modal", "settings-modal", "log-modal", "menu-modal",
+    "progress-modal", "settings-modal", "log-modal", "menu-modal", "peace-modal",
+    "war-modal", "victory-modal",
   ]);
   const modalOpenState = new WeakMap();
   const modalFocusOrigins = new WeakMap();
@@ -3378,12 +3445,36 @@ const UI = (() => {
     return modalStack[modalStack.length - 1] || null;
   }
 
+  function dismissModal(modal) {
+    if (!modal || modal.classList.contains("decision-modal") ||
+        !ESCAPE_DISMISSIBLE_MODALS.has(modal.id)) return false;
+    modal.style.display = "none";
+    return true;
+  }
+
   function configureModalSemantics(modal) {
     modal.setAttribute("role", "dialog");
     modal.setAttribute("aria-modal", "true");
     const box = modal.querySelector(".modal-box");
-    if (box && !box.hasAttribute("tabindex")) box.tabIndex = -1;
     const heading = modal.querySelector("h1, h2, h3");
+    if (box && !box.hasAttribute("tabindex")) box.tabIndex = -1;
+    if (box && ESCAPE_DISMISSIBLE_MODALS.has(modal.id) && !modal.classList.contains("decision-modal")) {
+      let close = box.querySelector(".modal-close[data-modal-close]");
+      if (!close) {
+        close = document.createElement("button");
+        close.type = "button";
+        close.className = "modal-close";
+        close.dataset.modalClose = "1";
+        close.textContent = "×";
+        const fallback = modal.id.replace(/-modal$/, "").replace(/-/g, " ");
+        const headingLabel = heading && heading.textContent.trim().replace(/^[^A-Za-z0-9]+/, "");
+        const label = headingLabel || fallback;
+        close.title = `Close ${label}`;
+        close.setAttribute("aria-label", `Close ${label}`);
+        close.onclick = () => dismissModal(modal);
+        box.insertBefore(close, box.firstChild);
+      }
+    }
     if (heading) {
       if (!heading.id) heading.id = `${modal.id}-title`;
       modal.setAttribute("aria-labelledby", heading.id);
@@ -3460,7 +3551,9 @@ const UI = (() => {
       const changed = new Set(records.map(record => record.target.closest(".modal")).filter(Boolean));
       for (const modal of changed) syncModalState(modal);
     });
-    for (const modal of modals) observer.observe(modal, { attributes: true, attributeFilter: ["style", "class"] });
+    for (const modal of modals) observer.observe(modal, {
+      attributes: true, attributeFilter: ["style", "class"], childList: true, subtree: true,
+    });
   }
 
   function handleModalKeydown(e) {
@@ -3483,8 +3576,7 @@ const UI = (() => {
     }
     if (e.key === "Escape") {
       e.preventDefault();
-      if (!modal.classList.contains("decision-modal") && ESCAPE_DISMISSIBLE_MODALS.has(modal.id))
-        modal.style.display = "none";
+      dismissModal(modal);
       return true;
     }
     // Let focused controls process Space/Enter, but suppress all map and turn shortcuts.
@@ -3647,7 +3739,7 @@ const UI = (() => {
     });
     document.querySelectorAll(".modal").forEach(m => {
       m.addEventListener("mousedown", (e) => {
-        if (e.target === m && !m.classList.contains("decision-modal")) m.style.display = "none";
+        if (e.target === m) dismissModal(m);
       });
     });
   }
@@ -3804,7 +3896,8 @@ const UI = (() => {
     })();
   }
 
-  return { init, setCityFocus, setProduction, buyItem, closeCity, pickTech, diploAction, newGame,
+  return { init, setCityFocus, setProduction, buyItem, closeCity, pickTech, clearResearchPlan,
+    diploAction, newGame,
     showFoundingModal, confirmFounding, buyMissionary, gift, assignSpy, beginHotseatTurn,
     hostAddSlot, hostConnect, hostStartOnline, joinCreateReply, cancelNetworkLobby, unqueue,
     saveSlot, loadSlot, exportSave, copyGameSeed, toMainMenu, toggleGraphics, showSettings: showSettingsModal,
