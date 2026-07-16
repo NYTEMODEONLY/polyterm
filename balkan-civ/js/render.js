@@ -5,6 +5,7 @@
 
 // which two neighbour directions flank each hex corner
 const CORNER_DIRS = [[0, 5], [4, 5], [3, 4], [2, 3], [1, 2], [0, 1]];
+const EDGE_CORNERS = [[5, 0], [4, 5], [3, 4], [2, 3], [1, 2], [0, 1]];
 
 // deterministic per-tile brightness variation
 function tileJitter(c, r) {
@@ -90,6 +91,125 @@ function drawMapBoat(ctx, x, y, size) {
   ctx.restore();
 }
 
+const MINIMAP_ART = (() => {
+  const layouts = new WeakMap();
+  const blendCache = new Map();
+
+  function blend(a, b, amount) {
+    const key = `${a}|${b}|${amount}`;
+    if (blendCache.has(key)) return blendCache.get(key);
+    const an = parseInt(a.slice(1), 16), bn = parseInt(b.slice(1), 16);
+    const channel = (shift) => Math.round(((an >> shift) & 255) * (1 - amount) + ((bn >> shift) & 255) * amount);
+    const out = `#${((channel(16) << 16) | (channel(8) << 8) | channel(0)).toString(16).padStart(6, "0")}`;
+    blendCache.set(key, out);
+    return out;
+  }
+
+  function layout(map, W, H) {
+    const cached = layouts.get(map);
+    if (cached && cached.W === W && cached.H === H) return cached;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    const rx = Math.cos(Math.PI / 6), ry = 1;
+    for (const t of map.tiles) {
+      const [x, y] = HEX.toPixel(t.c, t.r, 1);
+      minX = Math.min(minX, x - rx); maxX = Math.max(maxX, x + rx);
+      minY = Math.min(minY, y - ry); maxY = Math.max(maxY, y + ry);
+    }
+    const padding = 6;
+    const scale = Math.min((W - padding * 2) / Math.max(1, maxX - minX),
+      (H - padding * 2) / Math.max(1, maxY - minY));
+    const drawW = (maxX - minX) * scale, drawH = (maxY - minY) * scale;
+    const ox = (W - drawW) / 2 - minX * scale;
+    const oy = (H - drawH) / 2 - minY * scale;
+    const tileX = new Float32Array(map.tiles.length);
+    const tileY = new Float32Array(map.tiles.length);
+    for (let i = 0; i < map.tiles.length; i++) {
+      const t = map.tiles[i];
+      const x = Math.sqrt(3) * (t.c + 0.5 * (t.r & 1));
+      const y = 1.5 * t.r;
+      tileX[i] = ox + x * scale;
+      tileY[i] = oy + y * scale;
+    }
+    const result = {
+      W, H, scale, ox, oy, tileX, tileY,
+      worldToMini(x, y) { return [ox + x * scale, oy + y * scale]; },
+      tileToMini(c, r) {
+        const [x, y] = HEX.toPixel(c, r, 1);
+        return [ox + x * scale, oy + y * scale];
+      },
+      miniToTile(x, y) {
+        const [c, r] = HEX.fromPixel((x - ox) / scale, (y - oy) / scale, 1);
+        return [Math.max(0, Math.min(map.w - 1, c)), Math.max(0, Math.min(map.h - 1, r))];
+      },
+    };
+    layouts.set(map, result);
+    return result;
+  }
+
+  function draw(ctx, canvas, game) {
+    const W = canvas.width, H = canvas.height;
+    const fit = layout(game.map, W, H);
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = "#0d1b2a";
+    ctx.fillRect(0, 0, W, H);
+    const vis = game.players[game.viewer].visible;
+    const cellW = Math.max(1.25, fit.scale * 1.80);
+    const cellH = Math.max(1.25, fit.scale * 1.56);
+    for (let i = 0; i < game.map.tiles.length; i++) {
+      const t = game.map.tiles[i];
+      const v = vis[i];
+      let color = "#2a4045";
+      if (v > 0) {
+        color = TERRAIN[t.terrain].color;
+        if (t.owner !== -1) color = blend(color, CIVS[game.players[t.owner].civId].color, 0.46);
+      }
+      const x = fit.tileX[i], y = fit.tileY[i];
+      ctx.globalAlpha = v === 2 ? 1 : v === 1 ? 0.62 : 0.92;
+      ctx.fillStyle = color;
+      ctx.fillRect(Math.floor(x - cellW / 2), Math.floor(y - cellH / 2),
+        Math.ceil(cellW), Math.ceil(cellH));
+    }
+    ctx.globalAlpha = 1;
+    for (const city of game.cities) {
+      if (!vis[game.map.idx(city.c, city.r)]) continue;
+      const [x, y] = fit.tileToMini(city.c, city.r);
+      ctx.beginPath();
+      ctx.arc(x, y, Math.max(2, fit.scale * 0.78), 0, Math.PI * 2);
+      ctx.fillStyle = CIVS[game.players[city.owner].civId].color;
+      ctx.fill();
+      ctx.strokeStyle = "#fff7df";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    ctx.restore();
+    return fit;
+  }
+
+  function viewport(ctx, fit, points) {
+    if (!points || !points.every(Boolean)) return;
+    const clamped = points.map(([x, y]) => [
+      Math.max(1.5, Math.min(fit.W - 1.5, x)),
+      Math.max(1.5, Math.min(fit.H - 1.5, y)),
+    ]);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, fit.W, fit.H);
+    ctx.clip();
+    ctx.beginPath();
+    clamped.forEach(([x, y], i) => i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y));
+    ctx.closePath();
+    ctx.fillStyle = "rgba(255,255,255,0.055)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.92)";
+    ctx.lineWidth = 1.25;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  return { layout, draw, viewport };
+})();
+
 class Renderer {
   constructor(canvas, minimap) {
     this.canvas = canvas;
@@ -108,6 +228,7 @@ class Renderer {
     this.previewPath = null; // path preview for the selected unit
     this.showYields = false;
     this.connectedRoads = new Set();
+    this.foamAnimated = true;
     this.dirty = true;
   }
 
@@ -138,12 +259,15 @@ class Renderer {
     ctx.fillRect(0, 0, W, H);
     const vis = game.players[game.viewer].visible;
     const s = this.size;
+    const stepX = s * Math.sqrt(3), stepY = s * 1.5;
     this.connectedRoads = game.roadNetwork ? game.roadNetwork(game.viewer).tiles : new Set();
 
     // visible tile range
     for (let r = 0; r < game.map.h; r++) {
+      const sy = stepY * r - this.cam.y + 30;
+      const rowOffset = 0.5 * (r & 1);
       for (let c = 0; c < game.map.w; c++) {
-        const [sx, sy] = this.worldToScreen(c, r);
+        const sx = stepX * (c + rowOffset) - this.cam.x + 30;
         if (sx < -2 * s || sy < -2 * s || sx > W + 2 * s || sy > H + 2 * s) continue;
         const v = vis[game.map.idx(c, r)];
         if (v === 0) continue; // unseen
@@ -154,12 +278,14 @@ class Renderer {
 
     // borders (drawn over tiles)
     for (let r = 0; r < game.map.h; r++) {
+      const sy = stepY * r - this.cam.y + 30;
+      const rowOffset = 0.5 * (r & 1);
       for (let c = 0; c < game.map.w; c++) {
         const i = game.map.idx(c, r);
         if (vis[i] === 0) continue;
         const t = game.map.tiles[i];
         if (t.owner === -1) continue;
-        const [sx, sy] = this.worldToScreen(c, r);
+        const sx = stepX * (c + rowOffset) - this.cam.x + 30;
         if (sx < -2 * s || sy < -2 * s || sx > W + 2 * s || sy > H + 2 * s) continue;
         this.drawBorder(ctx, game, t, sx, sy, s);
       }
@@ -483,6 +609,10 @@ class Renderer {
 
   drawTile(ctx, game, t, sx, sy, s, v) {
     const water = t.terrain === "OCEAN" || t.terrain === "COAST";
+    const waterNeighbors = water ? HEX.neighbors(t.c, t.r).reduce((count, [c, r]) => {
+      const n = game.tile(c, r);
+      return count + (n && (n.terrain === "OCEAN" || n.terrain === "COAST") ? 1 : 0);
+    }, 0) : 0;
     // round the corners of land tiles that touch the sea
     let rounded = null;
     if (!water) {
@@ -507,16 +637,22 @@ class Renderer {
     } else {
       this.hexPath(ctx, sx, sy, s + 0.5);
     }
-    ctx.fillStyle = shade(TERRAIN[t.terrain].color, water ? tileJitter(t.c, t.r) * 0.5 : tileJitter(t.c, t.r));
+    const variation = water
+      ? tileJitter(t.c, t.r) * 0.12 + (t.terrain === "COAST"
+        ? 0.035 + (6 - waterNeighbors) * 0.012
+        : -0.025 - waterNeighbors * 0.004)
+      : tileJitter(t.c, t.r);
+    ctx.fillStyle = shade(TERRAIN[t.terrain].color, variation);
     ctx.fill();
-    ctx.strokeStyle = water ? "rgba(0,0,0,0.08)" : "rgba(0,0,0,0.15)";
-    ctx.lineWidth = 0.7;
+    this.hexPath(ctx, sx, sy, s + 0.5);
+    ctx.strokeStyle = water ? "rgba(4,39,58,0.008)" : "rgba(0,0,0,0.13)";
+    ctx.lineWidth = water ? 0.3 : 0.7;
     ctx.stroke();
     // gentle waves on some water tiles
     if (water && s > 12) {
       const h = ((t.c * 7 + t.r * 13) % 7);
-      if (h < 2) {
-        ctx.strokeStyle = "rgba(255,255,255,0.10)";
+      if (h === 0) {
+        ctx.strokeStyle = "rgba(255,255,255,0.075)";
         ctx.lineWidth = Math.max(1, s * 0.05);
         for (const [dx, dy] of h === 0 ? [[-0.25, -0.1], [0.1, 0.2]] : [[0.05, -0.2]]) {
           ctx.beginPath();
@@ -535,21 +671,57 @@ class Renderer {
       ctx.lineTo(pts[4][0], pts[4][1]);
       ctx.lineTo(pts[5][0], pts[5][1]);
       ctx.stroke();
+
+      // A narrow sand transition and animated broken foam line sit only on
+      // true land/water borders. Reduce-motion removes the foam entirely.
+      const edgePts = HEX.corners(sx, sy, s * 0.985);
+      ctx.save();
+      ctx.globalAlpha = v === 1 ? 0.55 : 1;
+      HEX.neighbors(t.c, t.r).forEach(([nc, nr], dir) => {
+        const n = game.tile(nc, nr);
+        if (!n || (n.terrain !== "OCEAN" && n.terrain !== "COAST")) return;
+        const edge = EDGE_CORNERS[dir];
+        const p1 = edgePts[edge[0]], p2 = edgePts[edge[1]];
+        ctx.beginPath();
+        ctx.moveTo(p1[0], p1[1]);
+        ctx.lineTo(p2[0], p2[1]);
+        ctx.strokeStyle = t.terrain === "PLAINS" ? "rgba(225,196,119,0.78)" : "rgba(216,204,145,0.72)";
+        ctx.lineWidth = Math.max(1.5, s * 0.055);
+        ctx.stroke();
+        if (!this.reduceMotion) {
+          ctx.beginPath();
+          ctx.moveTo(p1[0], p1[1]);
+          ctx.lineTo(p2[0], p2[1]);
+          ctx.strokeStyle = "rgba(231,248,239,0.72)";
+          ctx.lineWidth = Math.max(1, s * 0.022);
+          ctx.setLineDash([Math.max(3, s * 0.13), Math.max(3, s * 0.11)]);
+          ctx.lineDashOffset = -Date.now() * 0.012;
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      });
+      ctx.restore();
     }
 
     // feature / terrain decorations
     if (t.terrain === "MOUNTAIN") {
-      ctx.fillStyle = "#8d8d93";
+      ctx.fillStyle = "#777b7b";
       ctx.beginPath();
       ctx.moveTo(sx - s * 0.5, sy + s * 0.4);
       ctx.lineTo(sx - s * 0.1, sy - s * 0.45);
       ctx.lineTo(sx + s * 0.25, sy + s * 0.4);
       ctx.closePath(); ctx.fill();
-      ctx.fillStyle = "#b9b9c0";
+      ctx.fillStyle = "#aeb3b0";
       ctx.beginPath();
       ctx.moveTo(sx - s * 0.02, sy + s * 0.4);
       ctx.lineTo(sx + s * 0.3, sy - s * 0.3);
       ctx.lineTo(sx + s * 0.58, sy + s * 0.4);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#5e6464";
+      ctx.beginPath();
+      ctx.moveTo(sx - s * 0.52, sy + s * 0.4);
+      ctx.lineTo(sx - s * 0.29, sy - s * 0.05);
+      ctx.lineTo(sx - s * 0.08, sy + s * 0.4);
       ctx.closePath(); ctx.fill();
       ctx.fillStyle = "#f0f0f5";
       ctx.beginPath();
@@ -558,21 +730,33 @@ class Renderer {
       ctx.lineTo(sx - s * 0.02, sy - s * 0.25);
       ctx.closePath(); ctx.fill();
     } else if (t.terrain === "HILLS") {
-      ctx.strokeStyle = "rgba(60,50,30,0.5)";
-      ctx.lineWidth = Math.max(1.5, s * 0.06);
-      for (const dx of [-0.3, 0.15]) {
+      const tone = shade(TERRAIN.HILLS.color, tileJitter(t.c + 11, t.r + 7) - 0.08);
+      for (const [dx, width, height, alpha] of [[-0.24, 0.46, 0.24, 0.78], [0.22, 0.38, 0.19, 0.58]]) {
         ctx.beginPath();
-        ctx.arc(sx + dx * s, sy + s * 0.15, s * 0.28, Math.PI, 0);
-        ctx.stroke();
+        ctx.moveTo(sx + (dx - width) * s, sy + s * 0.29);
+        ctx.quadraticCurveTo(sx + dx * s, sy + (0.29 - height * 2) * s,
+          sx + (dx + width) * s, sy + s * 0.29);
+        ctx.quadraticCurveTo(sx + dx * s, sy + (0.29 + height * 0.34) * s,
+          sx + (dx - width) * s, sy + s * 0.29);
+        ctx.closePath();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = tone;
+        ctx.fill();
       }
+      ctx.globalAlpha = 1;
     }
     if (t.feature === "FOREST") {
-      ctx.fillStyle = FEATURE.FOREST.color;
-      for (const [dx, dy] of [[-0.3, 0.1], [0.1, -0.15], [0.35, 0.2]]) {
+      const variants = [[-0.30, 0.13, 0.82], [0.05, -0.13, 1.08], [0.34, 0.18, 0.76]];
+      for (let i = 0; i < variants.length; i++) {
+        const [dx, dy, sc] = variants[(i + Math.abs((t.c * 5 + t.r * 3) % 3)) % 3];
+        ctx.fillStyle = "rgba(91,61,35,0.9)";
+        ctx.fillRect(sx + dx * s - s * 0.035 * sc, sy + dy * s + s * 0.08,
+          s * 0.07 * sc, s * 0.24 * sc);
+        ctx.fillStyle = shade(FEATURE.FOREST.color, (i - 1) * 0.11 + tileJitter(t.c + i, t.r - i) * 0.5);
         ctx.beginPath();
-        ctx.moveTo(sx + dx * s - s * 0.2, sy + dy * s + s * 0.25);
-        ctx.lineTo(sx + dx * s, sy + dy * s - s * 0.3);
-        ctx.lineTo(sx + dx * s + s * 0.2, sy + dy * s + s * 0.25);
+        ctx.moveTo(sx + dx * s - s * 0.19 * sc, sy + dy * s + s * 0.19 * sc);
+        ctx.lineTo(sx + dx * s, sy + dy * s - s * 0.33 * sc);
+        ctx.lineTo(sx + dx * s + s * 0.19 * sc, sy + dy * s + s * 0.19 * sc);
         ctx.closePath(); ctx.fill();
       }
     }
@@ -625,23 +809,30 @@ class Renderer {
     // fog: explored but not visible
     if (v === 1) {
       this.hexPath(ctx, sx, sy, s + 0.5);
-      ctx.fillStyle = "rgba(10,15,30,0.55)";
+      ctx.fillStyle = "rgba(38,53,54,0.38)";
       ctx.fill();
+      this.hexPath(ctx, sx, sy, s * 0.91);
+      ctx.strokeStyle = "rgba(151,168,159,0.08)";
+      ctx.lineWidth = Math.max(1, s * 0.025);
+      ctx.stroke();
     }
   }
 
   drawBorder(ctx, game, t, sx, sy, s) {
     const color = CIVS[game.players[t.owner].civId].color;
+    const dim = game.players[game.viewer].visible[game.map.idx(t.c, t.r)] === 1;
     const pts = HEX.corners(sx, sy, s * 0.96);
+    ctx.save();
+    if (dim) ctx.globalAlpha = 0.52;
     ctx.strokeStyle = color;
-    ctx.lineWidth = Math.max(2, s * 0.09);
+    ctx.lineWidth = Math.max(1.5, s * 0.055);
     ctx.lineCap = "round";
     // draw only edges facing tiles NOT owned by same player
     HEX.neighbors(t.c, t.r).forEach(([nc, nr], dir) => {
       const n = game.tile ? game.tile(nc, nr) : null;
       if (n && n.owner === t.owner) return;
       // edge between corner dir and dir+1 (aligned with DIRS ordering below)
-      const EDGE = [[5, 0], [4, 5], [3, 4], [2, 3], [1, 2], [0, 1]][dir];
+      const EDGE = EDGE_CORNERS[dir];
       ctx.beginPath();
       ctx.moveTo(pts[EDGE[0]][0], pts[EDGE[0]][1]);
       ctx.lineTo(pts[EDGE[1]][0], pts[EDGE[1]][1]);
@@ -649,8 +840,9 @@ class Renderer {
     });
     // faint fill
     this.hexPath(ctx, sx, sy, s);
-    ctx.fillStyle = color + "18";
+    ctx.fillStyle = color + "12";
     ctx.fill();
+    ctx.restore();
   }
 
   drawCity(ctx, game, city, sx, sy, s) {
@@ -770,33 +962,17 @@ class Renderer {
 
   drawMinimap(game) {
     const m = this.mctx;
-    const W = this.mini.width, H = this.mini.height;
-    m.fillStyle = "#0d1b2a";
-    m.fillRect(0, 0, W, H);
-    const sx = W / game.map.w, sy = H / game.map.h;
-    const vis = game.players[game.viewer].visible;
-    for (const t of game.map.tiles) {
-      const v = vis[game.map.idx(t.c, t.r)];
-      if (!v) continue;
-      let color = TERRAIN[t.terrain].color;
-      if (t.owner !== -1) color = CIVS[game.players[t.owner].civId].color;
-      m.fillStyle = color;
-      m.globalAlpha = v === 1 ? 0.5 : 1;
-      m.fillRect(t.c * sx, t.r * sy, Math.ceil(sx), Math.ceil(sy));
-    }
-    m.globalAlpha = 1;
-    for (const c of game.cities) {
-      if (!vis[game.map.idx(c.c, c.r)]) continue;
-      m.fillStyle = "#fff";
-      m.fillRect(c.c * sx - 1, c.r * sy - 1, 3, 3);
-    }
-    // camera viewport box
     const s = this.size;
-    const hexW = s * Math.sqrt(3), hexH = s * 1.5;
-    m.strokeStyle = "rgba(255,255,255,0.8)";
-    m.lineWidth = 1;
-    m.strokeRect(
-      (this.cam.x / hexW) * sx, (this.cam.y / hexH) * sy,
-      (this.canvas.width / hexW) * sx, (this.canvas.height / hexH) * sy);
+    const fit = MINIMAP_ART.draw(m, this.mini, game);
+    const points = [[0, 0], [this.canvas.width, 0], [this.canvas.width, this.canvas.height],
+      [0, this.canvas.height]].map(([x, y]) =>
+      fit.worldToMini((x + this.cam.x - 30) / s, (y + this.cam.y - 30) / s));
+    MINIMAP_ART.viewport(m, fit, points);
+    this._miniLayout = fit;
+  }
+
+  minimapToHex(game, x, y) {
+    const fit = this._miniLayout || MINIMAP_ART.layout(game.map, this.mini.width, this.mini.height);
+    return fit.miniToTile(x, y);
   }
 }
