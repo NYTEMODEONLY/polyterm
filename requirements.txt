@@ -29,8 +29,7 @@ pytest-mock>=3.12.0
 responses>=0.24.1
 
 # Agent integrations
-mcp>=1.0.0
+mcp>=1.0.0,<2
 
 # Notifications
 plyer>=2.1.0
-
