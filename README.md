@@ -7,6 +7,7 @@ A powerful, terminal-based monitoring and analytics tool for PolyMarket predicti
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PyPI version](https://img.shields.io/pypi/v/polyterm.svg)](https://pypi.org/project/polyterm/)
+[![GitHub Sponsors](https://img.shields.io/github/sponsors/NYTEMODEONLY?label=Sponsor)](https://github.com/sponsors/NYTEMODEONLY)
 
 **[Full Documentation](docs/README.md)** — Comprehensive docs for every CLI command, TUI screen, API module, core engine, and agentic runtime integration.
 
