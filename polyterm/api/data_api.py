@@ -165,7 +165,6 @@ class DataAPIClient:
             "pnl": "PNL",
             "volume": "VOL",
             "vol": "VOL",
-            "winrate": "PNL",
             "active": "VOL",
         }
         params = {

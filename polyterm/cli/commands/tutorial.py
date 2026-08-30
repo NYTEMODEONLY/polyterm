@@ -85,12 +85,14 @@ A trader with large positions (typically $100,000+).
 - Following smart money can be profitable
 
 **PolyTerm detects:**
-- High-volume markets (whale activity)
+- High-volume markets (24h volume heuristic, not trader identity)
+- Wallet-level whale trades (`polyterm whales --wallets`)
 - Smart money (wallets with >70% win rate)
 - Suspicious patterns (potential insider trading)
 
 **Commands:**
-- `polyterm whales` - See high-volume markets
+- `polyterm whales --wallets` - Wallet-level public trades
+- `polyterm whales --volume` - High-volume markets (no trader identity)
 - `polyterm wallets --type whales` - Track whale wallets
 - `polyterm wallets --type smart` - Find smart money
 
