@@ -3,6 +3,7 @@
 import pytest
 from unittest.mock import Mock
 from polyterm.core.analytics import AnalyticsEngine, WhaleActivity
+from polyterm.utils.errors import FeatureUnavailable
 
 
 class TestWhaleActivity:
@@ -111,23 +112,23 @@ class TestAnalyticsEngine:
         assert impact["sell_volume"] == 1750.0
         assert impact["net_position"] == 4750.0
     
-    def test_analyze_historical_trends_returns_empty(self, analytics):
-        """Test historical trend analysis returns empty (no data source)"""
-        trends = analytics.analyze_historical_trends("market1", hours=24)
-        assert trends == {}
-    
-    def test_predict_price_movement(self, analytics, mock_clients):
-        """Test price prediction returns result (empty trends, volume-based whales)"""
-        gamma, clob = mock_clients
+    def test_placeholder_analytics_raise_unavailable(self, analytics):
+        """Placeholder analytics raise instead of returning empty/None/{}"""
+        with pytest.raises(FeatureUnavailable) as exc:
+            analytics.identify_whale_followers("0xabc")
+        assert "identify_whale_followers" in exc.value.message
 
-        # Mock whale tracking (uses Gamma markets, not subgraph)
-        gamma.get_markets.return_value = []
+        with pytest.raises(FeatureUnavailable):
+            analytics.calculate_market_correlation("m1", "m2")
 
-        prediction = analytics.predict_price_movement("market1", horizon_hours=24)
+        with pytest.raises(FeatureUnavailable):
+            analytics.find_correlated_markets("m1")
 
-        assert "prediction" in prediction
-        assert "confidence" in prediction
-        assert prediction["prediction"] in ["up", "down", "stable"]
+        with pytest.raises(FeatureUnavailable):
+            analytics.analyze_historical_trends("market1", hours=24)
+
+        with pytest.raises(FeatureUnavailable):
+            analytics.predict_price_movement("market1", horizon_hours=24)
     
     def test_get_portfolio_analytics_no_data_api(self, analytics):
         """Test portfolio analytics graceful degradation without data API"""
@@ -209,11 +210,8 @@ class TestAnalyticsEngine:
         assert portfolio["total_value"] == 5
         assert portfolio["total_invested"] == 5
     
-    def test_detect_market_manipulation_returns_unknown(self, analytics):
-        """Test market manipulation detection returns safe default (no data source)"""
-        risk = analytics.detect_market_manipulation("market1")
-
-        assert risk["market_id"] == "market1"
-        assert risk["risk_level"] == "unknown"
-        assert risk["risk_score"] == 0
-        assert risk["risk_factors"] == []
+    def test_detect_market_manipulation_raises_unavailable(self, analytics):
+        """Manipulation detection raises instead of a fake risk_score of 0"""
+        with pytest.raises(FeatureUnavailable) as exc:
+            analytics.detect_market_manipulation("market1")
+        assert "detect_market_manipulation" in exc.value.message
