@@ -1,10 +1,10 @@
 # SubgraphClient
 
-> Legacy GraphQL client for The Graph Protocol subgraph (deprecated).
+> Retired. Constructing `SubgraphClient` raises `APIError`.
 
 ## Overview
 
-The `SubgraphClient` class was the original client for querying on-chain Polymarket data via The Graph Protocol's GraphQL subgraph. The endpoint has been deprecated and removed by The Graph, so this client is kept solely for backward compatibility. It logs a deprecation warning on first instantiation and will fail on all queries against the original endpoint. New code should use `GammaClient` for market data or `DataAPIClient` for wallet data.
+The Graph removed the Polymarket subgraph. `SubgraphClient` is not a supported client. Instantiating it raises `APIError` immediately with guidance to use `GammaClient`, `CLOBClient`, or `DataAPIClient`. It is not exported from `polyterm.api`.
 
 ## Key Classes and Functions
 
@@ -16,7 +16,7 @@ The `SubgraphClient` class was the original client for querying on-chain Polymar
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `endpoint` | `str` | `""` | Empty by default. The Graph subgraph was removed. |
+| `endpoint` | `str` | `""` | Ignored. Constructor always raises. |
 
 A deprecation warning is logged once (module-level `_DEPRECATION_WARNED` flag) on first instantiation.
 
@@ -53,12 +53,12 @@ A deprecation warning is logged once (module-level `_DEPRECATION_WARNED` flag) o
 
 ## Configuration
 
-Default `api.subgraph_endpoint` is empty. SubgraphClient does not advertise the removed The Graph URL.
+Unsupported. There is no live subgraph configuration.
 
 ## Rate Limiting / Error Handling
 
 - No rate limiting is implemented (The Graph handled rate limits server-side).
-- All query failures raise `Exception` with the message `"GraphQL query failed: {error}"`. 
+- All query failures raise `Exception` with the message `"GraphQL query failed: {error}"`.
 - If the `gql` library is not installed, `query` raises `Exception` with install instructions.
 - The `_deprecated` attribute is set to `True` on initialization.
 
