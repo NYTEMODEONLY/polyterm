@@ -37,7 +37,7 @@ Each CLI command has its own documentation page with usage, options, and example
 | [analyze](cli/analyze.md) | Market analytics and trending | `polyterm analyze` |
 | [arbitrage](cli/arbitrage.md) | Arbitrage opportunity scanner | `polyterm arbitrage` |
 | [attribution](cli/attribution.md) | Trade attribution analysis | `polyterm attribution` |
-| [backtest](cli/backtest.md) | Strategy backtesting | `polyterm backtest` |
+| [backtest](cli/backtest.md) | DEMO strategy simulation (not historical) | `polyterm backtest --demo` |
 | [benchmark](cli/benchmark.md) | Performance benchmarking | `polyterm benchmark` |
 | [bookmarks](cli/bookmarks.md) | Save and manage favorite markets | `polyterm bookmarks` |
 | [calendar](cli/calendar.md) | Upcoming market resolutions | `polyterm calendar` |
@@ -65,7 +65,7 @@ Each CLI command has its own documentation page with usage, options, and example
 | [hot](cli/hot.md) | Hot / trending markets | `polyterm hot` |
 | [journal](cli/journal.md) | Trading journal | `polyterm journal` |
 | [ladder](cli/ladder.md) | Price ladder display | `polyterm ladder` |
-| [leaderboard](cli/leaderboard.md) | Trader leaderboard | `polyterm leaderboard` |
+| [leaderboard](cli/leaderboard.md) | Public Data API trader rankings | `polyterm leaderboard` |
 | [liquidity](cli/liquidity.md) | Liquidity analysis | `polyterm liquidity` |
 | [live-monitor](cli/live-monitor.md) | Real-time WebSocket market monitor | `polyterm live-monitor` |
 | [lookup](cli/lookup.md) | Market lookup by ID or slug | `polyterm lookup` |
@@ -130,7 +130,7 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 | [analyze_screen](tui/screens/analyze_screen.md) | Deep market analysis | an | TUI |
 | [arbitrage](tui/screens/arbitrage.md) | Arbitrage opportunities | 9/arb | TUI |
 | [attribution_screen](tui/screens/attribution_screen.md) | Trade attribution | - | TUI |
-| [backtest_screen](tui/screens/backtest_screen.md) | Strategy backtesting | - | TUI |
+| [backtest_screen](tui/screens/backtest_screen.md) | DEMO strategy simulation | - | TUI |
 | [benchmark_screen](tui/screens/benchmark_screen.md) | Performance benchmark | - | TUI |
 | [bookmarks_screen](tui/screens/bookmarks_screen.md) | Saved markets | 17/bm | TUI |
 | [calendar_screen](tui/screens/calendar_screen.md) | Resolution calendar | cal | TUI |
@@ -203,7 +203,7 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 | [wallets](tui/screens/wallets.md) | Wallet management | 11/wal | TUI |
 | [watch](tui/screens/watch.md) | Watchlist | 4 | TUI |
 | [watchdog_screen](tui/screens/watchdog_screen.md) | Market watchdog | - | TUI |
-| [whales](tui/screens/whales.md) | Whale tracker | 3/w | TUI |
+| [whales](tui/screens/whales.md) | High-volume market heuristic | 3/w | TUI |
 
 ### TUI Infrastructure
 
@@ -234,6 +234,9 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 | [alerts](core/alerts.md) | Alert generation and management | Alert engine |
 | [alert_engine](core/alert_engine.md) | Unified local alert rule engine | Rule evaluation |
 | [analytics](core/analytics.md) | Market analytics and trending analysis | Analytics engine |
+| [demo_strategy_sim](core/demo_strategy_sim.md) | Seeded random strategy simulation (not historical backtesting) | Demo simulator |
+| [leaderboard](core/leaderboard.md) | Data API leaderboard normalization without fabricated stats | Ranking helper |
+| [volume_spikes](core/volume_spikes.md) | Gamma 24h volume heuristic (not whale identity) | Volume heuristic |
 | [archive](core/archive.md) | Research archive snapshot collection and dataset manifests | Data collection |
 | [arbitrage](core/arbitrage.md) | Intra-market, correlated, and cross-platform arbitrage | Arb scanner |
 | [charts](core/charts.md) | ASCII chart generation (line, bar, sparkline) | Visualization |
