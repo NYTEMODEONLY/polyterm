@@ -6,6 +6,7 @@ import logging
 from .gamma import GammaClient
 from .clob import CLOBClient
 from .market_utils import get_primary_clob_token_id
+from ..utils.errors import APIError
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,9 @@ class APIAggregator:
         Returns:
             List of live market dictionaries
         """
+        gamma_error = None
+        clob_error = None
+
         # Try Gamma API first (primary - has volume)
         try:
             markets = self.gamma_client.get_markets(limit=limit, active=True, closed=False)
@@ -59,6 +63,7 @@ class APIAggregator:
             else:
                 logger.warning("Gamma API returned no fresh markets")
         except Exception as e:
+            gamma_error = e
             logger.error(f"Gamma API failed: {e}")
         
         # Fallback to CLOB sampling-markets
@@ -74,10 +79,18 @@ class APIAggregator:
                     logger.warning("CLOB markets may lack volume data, returning anyway as fallback")
                 return current_markets
         except Exception as e:
+            clob_error = e
             logger.error(f"CLOB API failed: {e}")
         
-        # If both fail, return empty list
-        logger.error("All API sources failed to return live markets")
+        if gamma_error is not None and clob_error is not None:
+            logger.error("All API sources failed to return live markets")
+            raise APIError(
+                "Gamma and CLOB both failed to return live markets.",
+                suggestion="Check your internet connection. The Polymarket APIs may be down.",
+                details=f"gamma={gamma_error}; clob={clob_error}",
+            )
+
+        # Successful calls that genuinely returned no markets
         return []
     
     def enrich_market_data(

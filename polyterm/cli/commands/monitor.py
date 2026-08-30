@@ -13,7 +13,7 @@ from ...api.clob import CLOBClient
 from ...api.aggregator import APIAggregator
 from ...utils.formatting import format_probability_rich, format_volume
 from ...utils.json_output import print_json, format_markets_json
-from ...utils.errors import handle_api_error, show_error
+from ...utils.errors import APIError, handle_api_error, show_error
 from ...core.wash_trade_detector import quick_wash_trade_score
 from datetime import datetime
 
@@ -355,6 +355,8 @@ def monitor(ctx, limit, category, refresh, active_only, sort, output_format, onc
                 markets = sorted(markets, key=lambda m: m.get('endDate', ''), reverse=False)
 
             return markets
+        except APIError:
+            raise
         except Exception as e:
             handle_api_error(console, e, "fetching markets")
             return []
@@ -370,6 +372,14 @@ def monitor(ctx, limit, category, refresh, active_only, sort, output_format, onc
                 'markets': format_markets_json(markets),
             }
             print_json(output)
+        except APIError as e:
+            print_json({
+                'success': False,
+                'error': e.message,
+                'mode': 'outage',
+                'source': 'none',
+                'details': e.details,
+            })
         except Exception as e:
             print_json({'success': False, 'error': str(e)})
         finally:
