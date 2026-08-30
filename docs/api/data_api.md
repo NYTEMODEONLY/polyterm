@@ -27,6 +27,7 @@ Client for Polymarket Data API providing wallet-level data.
 | `get_activity` | `(address, limit=100, offset=0)` | Get wallet activity feed |
 | `get_trades` | `(address, limit=100, market=None)` | Get wallet trades, optionally filtered by market |
 | `get_profit_summary` | `(address)` | Aggregate P&L summary across all positions |
+| `get_leaderboard` | `(period="7d", limit=50, sort_by="profit")` | Public `/v1/leaderboard`. `profit`/`volume`/`active` map to PNL/VOL. `winrate` is not mapped to PNL. |
 | `close` | `()` | Close the HTTP session |
 
 ## API Endpoints Used
@@ -38,6 +39,7 @@ All endpoints are on `https://data-api.polymarket.com`:
 | `/positions` | GET | `user`, `limit`, `offset`, `sortBy` | Wallet positions. Current sort keys include `CURRENT` and `CASHPNL` |
 | `/activity` | GET | `user`, `limit`, `offset` | Wallet activity feed |
 | `/trades` | GET | `user`, `limit`, `market` (optional) | Wallet trade history |
+| `/v1/leaderboard` | GET | `timePeriod`, `orderBy`, `limit` | Public trader rankings (`DAY`/`WEEK`/`MONTH`/`ALL`, `PNL`/`VOL`) |
 
 ## Configuration
 
@@ -89,7 +91,7 @@ client.get_closed_positions("0xabc...", limit=50)
 client.get_wallet_profile("0xabc...")
 ```
 
-These methods use the public Data API base URL, `https://data-api.polymarket.com`. Leaderboard calls use the current documented `/v1/leaderboard` endpoint with `timePeriod`, `orderBy`, `limit`, and pagination parameters. The helper maps PolyTerm's `24h`, `7d`, `30d`, and `all` periods to Polymarket's `DAY`, `WEEK`, `MONTH`, and `ALL` values, and maps `profit`/`volume` to `PNL`/`VOL`.
+These methods use the public Data API base URL, `https://data-api.polymarket.com`. Leaderboard calls use the current documented `/v1/leaderboard` endpoint with `timePeriod`, `orderBy`, `limit`, and pagination parameters. The helper maps PolyTerm's `24h`, `7d`, `30d`, and `all` periods to Polymarket's `DAY`, `WEEK`, `MONTH`, and `ALL` values, and maps `profit`/`volume`/`active` to `PNL`/`VOL`. It does not map `winrate` to `PNL`; the CLI refuses `--type winrate` on the Data API source.
 
 The exact holder and ranking surfaces have changed more often than `/positions`, `/closed-positions`, and `/trades`, so callers should handle empty responses or request errors gracefully.
 

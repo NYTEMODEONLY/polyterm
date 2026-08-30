@@ -1,10 +1,14 @@
 # Leaderboard Screen
 
-> View top traders ranked by profit, volume, win rate, or activity.
+> Public Data API trader rankings by profit or volume.
 
 ## Overview
 
-The Leaderboard Screen shows trader rankings across Polymarket. You can view leaderboards sorted by different metrics and filtered by time period, or check your own ranking if you have a connected wallet.
+The Leaderboard Screen shows Polymarket Data API `/v1/leaderboard` rows. It does not generate pseudo-addresses. Win rate is not provided by this endpoint; choosing win rate surfaces the CLI refusal instead of a fake ranking.
+
+`--me` compares locally tracked positions to the displayed board. That is not a live Polymarket rank.
+
+This workflow is view-only.
 
 ## Access
 
@@ -15,8 +19,10 @@ The Leaderboard Screen shows trader rankings across Polymarket. You can view lea
 
 A two-step selection flow:
 
-1. **Leaderboard type** -- Top by Profit, Volume, Win Rate, Most Active, or My Ranking
+1. **Leaderboard type** -- Top by Profit, Volume, Win Rate (unsupported on Data API), Most Active (volume ranking), or My Ranking (local)
 2. **Time period** (except for My Ranking) -- 24 hours, 7 days, 30 days, or All time
+
+The screen states the Data API source before launching the CLI.
 
 ## Navigation / Keyboard Shortcuts
 
@@ -30,13 +36,14 @@ A two-step selection flow:
 |--------|---------|
 | Top by profit (7d) | `polyterm leaderboard -t profit -p 7d` |
 | Top by volume (24h) | `polyterm leaderboard -t volume -p 24h` |
-| Top by win rate (30d) | `polyterm leaderboard -t winrate -p 30d` |
-| Most active (all time) | `polyterm leaderboard -t active -p all` |
+| Top by win rate (refused on Data API) | `polyterm leaderboard -t winrate -p 30d` |
+| Most active (volume ranking) | `polyterm leaderboard -t active -p all` |
 | My ranking | `polyterm leaderboard --me` |
 
 ## Data Sources
 
-- Polymarket API (trader statistics)
+- Polymarket Data API `GET /v1/leaderboard`
+- Local SQLite for `--me` and `--source local`
 
 ## Related Screens
 
