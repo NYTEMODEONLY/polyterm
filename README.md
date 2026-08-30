@@ -148,3 +148,894 @@ For a detailed comparison with the official Polymarket CLI, see [docs/COMPETITIV
 | Agentic Usage | `docs/AGENTIC_USAGE.md` | Agent query protocol, Hermes MCP names, OpenClaw JSON-lines usage, and whale-flow synthesis guidance |
 | Agent Cookbook | `docs/AGENT_COOKBOOK.md` | Reusable agent workflows for research, scan, archive, and wallets |
 | Config Examples | `docs/AGENT_CONFIG_EXAMPLES.md` | Hermes, Claude Desktop, Cursor, and JSON-lines setup examples |
+
+---
+
+## CLI Commands
+
+### Market Monitoring
+```bash
+# Monitor top markets
+polyterm monitor --limit 20
+
+# Monitor with JSON output (for scripting)
+polyterm monitor --format json --limit 10 --once
+
+# Sort by different criteria
+polyterm monitor --sort volume
+polyterm monitor --sort probability
+polyterm monitor --sort recent
+```
+
+### Whale Activity
+```bash
+# High-volume markets (Gamma 24h volume heuristic, not trader identity)
+polyterm whales --volume --min-amount 50000
+
+# Wallet-level whale trades from the public Data API
+polyterm whales --wallets --min-amount 100000 --format json
+```
+
+### Arbitrage Scanner
+```bash
+# Scan for arbitrage opportunities
+polyterm arbitrage --min-spread 0.025 --limit 10
+
+# Include Kalshi cross-platform arbitrage
+polyterm arbitrage --include-kalshi
+
+# JSON output for automation
+polyterm arbitrage --format json
+```
+
+**What it detects:**
+- **Intra-market**: YES + NO prices < $1.00 (guaranteed profit)
+- **Correlated markets**: Similar events with price discrepancies
+- **Cross-platform**: Polymarket vs Kalshi price differences
+
+### Signal-based Predictions
+```bash
+# Generate predictions for top markets
+polyterm predict --limit 10 --horizon 24
+
+# Predict specific market
+polyterm predict --market <market_id>
+
+# High-confidence predictions only
+polyterm predict --min-confidence 0.7
+
+# JSON output
+polyterm predict --format json
+```
+
+**Prediction signals include:**
+- Price momentum (trend analysis)
+- Volume acceleration
+- Whale behavior patterns
+- Smart money positioning
+- Technical indicators (RSI)
+- Time to resolution
+
+### Order Book Analysis
+```bash
+# Analyze order book
+polyterm orderbook <market_token_id>
+
+# Show ASCII depth chart
+polyterm orderbook <market_token_id> --chart
+
+# Calculate slippage for large order
+polyterm orderbook <market_token_id> --slippage 10000 --side buy
+
+# Full analysis with depth
+polyterm orderbook <market_token_id> --depth 50 --chart
+
+# Live WebSocket-fed order book (real-time updates)
+polyterm orderbook <market_token_id> --live
+
+# Live with custom refresh rate
+polyterm orderbook <market_token_id> --live --refresh 0.5
+```
+
+**What you get:**
+- Best bid/ask and spread
+- Bid/ask depth visualization
+- Support/resistance levels
+- Large order detection (icebergs)
+- Slippage calculations
+- Liquidity imbalance warnings
+- **Live mode**: Real-time WebSocket depth updates with keyboard controls (P=pause, D=cycle depth, Q=quit), automatic REST fallback, and instant settlement detection
+
+### Wallet Tracking
+```bash
+# View whale wallets (by volume)
+polyterm wallets --type whales
+
+# View smart money (>70% win rate)
+polyterm wallets --type smart
+
+# View suspicious wallets (high risk score)
+polyterm wallets --type suspicious
+
+# Analyze specific wallet
+polyterm wallets --analyze <wallet_address>
+
+# Track a wallet for alerts
+polyterm wallets --track <wallet_address>
+
+# JSON output
+polyterm wallets --format json
+```
+
+### Alert Management
+```bash
+# View recent alerts
+polyterm alerts --limit 20
+
+# View only unread alerts
+polyterm alerts --unread
+
+# Filter by type
+polyterm alerts --type whale
+polyterm alerts --type insider
+polyterm alerts --type arbitrage
+polyterm alerts --type smart_money
+
+# Acknowledge an alert
+polyterm alerts --ack <alert_id>
+
+# Test notification channels
+polyterm alerts --test-telegram
+polyterm alerts --test-discord
+```
+
+### 15-Minute Crypto Markets
+```bash
+# Monitor all 15M crypto markets
+polyterm crypto15m
+
+# Monitor specific crypto
+polyterm crypto15m -c BTC          # Bitcoin only
+polyterm crypto15m -c ETH          # Ethereum only
+
+# Interactive mode with trade analysis
+polyterm crypto15m -i
+
+# Get direct Polymarket links
+polyterm crypto15m --links
+
+# JSON output
+polyterm crypto15m --format json --once
+```
+
+**Direct Polymarket Crypto Links:**
+- 15-Minute: https://polymarket.com/crypto/15M
+- Hourly: https://polymarket.com/crypto/hourly
+- Daily: https://polymarket.com/crypto/daily
+- By Coin: /crypto/bitcoin, /crypto/ethereum, /crypto/solana, /crypto/xrp
+
+**Supported Cryptocurrencies:** BTC, ETH, SOL, XRP
+
+### My Wallet (VIEW-ONLY)
+```bash
+# Connect your wallet (VIEW-ONLY - no private keys)
+polyterm mywallet --connect
+
+# View open positions
+polyterm mywallet -p
+
+# View trade history
+polyterm mywallet -h
+
+# View P&L summary
+polyterm mywallet --pnl
+
+# Interactive mode
+polyterm mywallet -i
+
+# View any wallet
+polyterm mywallet -a 0x123...
+
+# Disconnect wallet
+polyterm mywallet --disconnect
+```
+
+**Important:** This is a VIEW-ONLY feature. No private keys are stored or required. You simply provide your wallet address to track your Polymarket activity.
+
+### Quick Trade Preparation
+```bash
+# Prepare a trade with analysis
+polyterm quicktrade -m "bitcoin" -a 200 -s yes
+
+# Prepare and open browser
+polyterm quicktrade -m "trump" -a 50 -s no -o
+
+# Interactive mode
+polyterm quicktrade -i
+
+# JSON output
+polyterm quicktrade -m "bitcoin" --format json
+```
+
+**What you get:**
+- Entry price and share calculation
+- Profit/loss scenarios (win vs lose)
+- Dynamic CLOB V2 protocol fee estimate
+- ROI and breakeven analysis
+- Expected value calculation
+- Direct link to trade on Polymarket
+
+### Watch Specific Markets
+```bash
+# Watch with price threshold alerts
+polyterm watch <market_id> --threshold 5
+
+# Watch with custom interval
+polyterm watch <market_id> --threshold 3 --interval 30
+```
+
+### Export Data
+```bash
+# Export to JSON
+polyterm export --market <market_id> --format json --output data.json
+
+# Export to CSV
+polyterm export --market <market_id> --format csv --output data.csv
+```
+
+### Configuration
+```bash
+# List all settings
+polyterm config --list
+
+# Get specific setting
+polyterm config --get alerts.probability_threshold
+
+# Set a value
+polyterm config --set alerts.probability_threshold 10.0
+```
+
+---
+
+## Interactive TUI
+
+Launch the interactive terminal interface:
+```bash
+polyterm
+```
+
+**First-time users** will be guided through an interactive tutorial covering prediction market basics, whale tracking, and arbitrage detection.
+
+### Main Menu
+```
+Page 1:                                  Page 2:
+1/mon  = monitor     9/arb  = arbitrage  d   = dashboard      t   = tutorial
+2/l    = live mon   10/pred = predictions sim = simulate       g   = glossary
+3/w    = whales     11/wal  = wallets    ch  = chart           cmp = compare
+4      = watch      12/alert= alerts     sz  = size            rec = recent
+5/a    = analytics  13/ob   = orderbook  pa  = pricealert      cal = calendar
+6/p    = portfolio  14/risk = risk       fee = fees            st  = stats
+7/e    = export     15/follow = copy     sr  = search          nt  = notes
+8/s    = settings   16/parlay = parlay   pr  = presets         sent= sentiment
+                    17/bm   = bookmarks  corr= correlate       dp  = depth
+                                         ex  = exitplan        tr  = trade
+c15 = 15m crypto     mw  = my wallet     qt  = quick trade
+hot = hot markets    pnl = profit/loss    u   = quick update
+nr  = negrisk arb    cl  = clusters      rw  = rewards
+nw  = news           tl  = timeline      an  = analyze
+                     jn  = journal
+
+h/? = help           m/+ = next page      q   = quit
+```
+
+### Navigation
+- **Numbers**: Press `1-17` for numbered features
+- **Shortcuts**: Use the abbreviation shortcuts shown above
+- **Pagination**: Press `m` or `+` to see more options, `b` or `-` to go back
+- **Trading**: `c15` for 15M crypto, `mw` for wallet, `qt` for quick trade
+- **Help**: Press `h` or `?` for documentation
+- **Tutorial**: Press `t` to launch the interactive tutorial
+- **Glossary**: Press `g` for prediction market terminology
+- **Quit**: Press `q` to exit
+
+---
+
+## Notification Setup
+
+### Telegram Notifications
+1. Create a bot via [@BotFather](https://t.me/botfather)
+2. Get your chat ID via [@userinfobot](https://t.me/userinfobot)
+3. Configure in PolyTerm:
+```bash
+polyterm config --set notification.telegram.enabled true
+polyterm config --set notification.telegram.bot_token "YOUR_BOT_TOKEN"
+polyterm config --set notification.telegram.chat_id "YOUR_CHAT_ID"
+```
+
+### Discord Notifications
+1. Create a webhook in your Discord server (Server Settings → Integrations → Webhooks)
+2. Configure in PolyTerm:
+```bash
+polyterm config --set notification.discord.enabled true
+polyterm config --set notification.discord.webhook_url "YOUR_WEBHOOK_URL"
+```
+
+### Test Notifications
+```bash
+polyterm alerts --test-telegram
+polyterm alerts --test-discord
+```
+
+---
+
+## JSON Output Mode
+
+Most analysis and data commands support `--format json` for scripting and automation:
+
+```bash
+# Get markets as JSON
+polyterm monitor --format json --limit 5 --once | jq '.markets[] | select(.probability > 0.8)'
+
+# Get arbitrage opportunities
+polyterm arbitrage --format json | jq '.opportunities[] | select(.net_profit > 2)'
+
+# Get predictions
+polyterm predict --format json | jq '.predictions[] | select(.confidence > 0.7)'
+
+# Get wallet data
+polyterm wallets --format json --type smart | jq '.wallets[] | select(.win_rate > 0.8)'
+```
+
+---
+
+## Agent Workflows
+
+PolyTerm includes an agent-safe surface for Hermes Agent, OpenClaw, Codex, and other automation systems:
+
+```bash
+# Discover tool metadata and safety flags
+polyterm agent manifest --format json
+
+# Print all output schemas
+polyterm agent schemas --format json
+
+# Run the real FastMCP stdio server for MCP clients
+polyterm agent mcp-server
+
+# Legacy JSON-lines request
+printf '{"tool":"market.search","args":{"query":"bitcoin","limit":3}}\n' | polyterm agent jsonl-server
+
+# Confirm markets whose YES price crossed 50% in the last 72 hours
+printf '{"tool":"market.flips","args":{"hours":72,"limit":3,"min_volume":500}}\n' | polyterm agent jsonl-server
+
+# Generate a read-only market thesis
+polyterm thesis -m bitcoin --format json
+
+# Inspect a wallet with public Data API context
+polyterm wallets --analyze 0xabc... --refresh --format json
+```
+
+Agent tools are documented in [docs/AGENT_MODE.md](docs/AGENT_MODE.md), indexed in [docs/tool-manifest.json](docs/tool-manifest.json), and summarized for LLM crawlers in [llms.txt](llms.txt). The manifest marks tools as read-only, local-state mutating, prompting, long-running, adapter-available, or live-data-backed, and includes an 88-command CLI catalog for the full PolyTerm suite.
+
+**Agent note:** Hermes, OpenClaw, Codex, and other agents still need to inspect this README, read `docs/AGENT_MODE.md`, or call `polyterm agent manifest --format json` before assuming they know how to use PolyTerm. The repo provides the agent-facing contracts and docs, but an agent only benefits from them if its workflow includes repo/document/tool-manifest inspection.
+
+PolyTerm stays no-custody: agent workflows do not place trades, manage private keys, approve contracts, or bridge funds.
+
+---
+
+## Database & Storage
+
+PolyTerm stores data locally in SQLite:
+- **Location**: `~/.polyterm/data.db`
+- **Tables**: wallets, trades, alerts, market_snapshots, arbitrage_opportunities, positions, price alerts, bookmarks, notes, and resolutions
+
+### Data Tracked
+- Wallet profiles with win rates and tags
+- Trade history with maker/taker addresses
+- Alert history with severity scoring
+- Market snapshots for historical analysis
+- Arbitrage opportunities log
+
+---
+
+## Configuration
+
+Configuration stored in `~/.polyterm/config.toml`:
+
+```toml
+[api]
+gamma_base_url = "https://gamma-api.polymarket.com"
+clob_rest_endpoint = "https://clob.polymarket.com"
+clob_endpoint = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
+
+[whale_tracking]
+min_whale_trade = 10000
+min_smart_money_win_rate = 0.70
+min_smart_money_trades = 10
+
+[arbitrage]
+min_spread = 0.025
+fee_rate = 0.02
+
+[notification]
+[notification.telegram]
+enabled = false
+bot_token = ""
+chat_id = ""
+
+[notification.discord]
+enabled = false
+webhook_url = ""
+
+[notification.system]
+enabled = true
+
+[notification.sound]
+enabled = true
+critical_only = true
+
+[alerts]
+probability_threshold = 5.0
+check_interval = 60
+
+[display]
+refresh_rate = 2
+max_markets = 20
+```
+
+---
+
+## Architecture
+
+```
+polyterm/
+├── api/              # API clients
+│   ├── gamma.py          # Gamma REST API (/events endpoint)
+│   ├── clob.py           # CLOB REST + WebSocket (order book, price history)
+│   ├── data_api.py       # Data API (wallet positions, activity, trades)
+│   └── aggregator.py     # Multi-source aggregator with fallback
+├── core/             # Business logic
+│   ├── whale_tracker.py  # Whale tracking + insider detection scoring
+│   ├── arbitrage.py      # Arbitrage scanner (intra-market, correlated, Kalshi)
+│   ├── negrisk.py        # NegRisk multi-outcome arbitrage detection
+│   ├── predictions.py    # Signal-based multi-factor predictions
+│   ├── risk_score.py     # Market risk scoring (A-F grades)
+│   ├── orderbook.py      # Order book analysis with ASCII charts
+│   ├── charts.py         # ASCII chart generation (line, bar, sparkline)
+│   ├── cluster_detector.py # Wallet cluster detection (same-entity)
+│   ├── rewards.py        # Holding & liquidity rewards calculator
+│   ├── news.py           # RSS news aggregation engine
+│   ├── wash_trade_detector.py # Wash trade detection indicators
+│   ├── uma_tracker.py    # UMA oracle dispute risk analysis
+│   └── notifications.py  # Multi-channel notifications
+├── db/               # Database layer
+│   ├── database.py       # SQLite manager
+│   └── models.py         # Data models
+├── cli/              # CLI commands
+│   ├── main.py           # Entry point (lazy-loaded 81 commands)
+│   └── commands/         # 80 individual command files
+├── tui/              # Terminal UI
+│   ├── controller.py     # Main loop with dispatch table
+│   ├── menu.py           # Main menu with update checking
+│   └── screens/          # 73+ TUI screens
+└── utils/            # Utilities
+    ├── config.py         # Config management (~/.polyterm/config.toml)
+    ├── json_output.py    # JSON output utilities
+    ├── errors.py         # Centralized error handling
+    └── contextual_help.py # Screen-specific help content
+```
+
+---
+
+## Testing
+
+Current collected count is not a hard-coded marketing total. Reproduce it with the same command CI uses:
+
+```bash
+# Collected count (CI-equivalent; this branch, 2026-08-30: 1145)
+python -m pytest --collect-only -q --ignore=tests/test_live_data --ignore=tests/test_tui/test_integration.py
+
+# CI-equivalent run
+python -m pytest tests --ignore=tests/test_live_data --ignore=tests/test_tui/test_integration.py
+
+# Live API tests (not in CI; may fail when markets move)
+pytest tests/test_live_data/ -v
+```
+
+Status badge: [![CI](https://github.com/NYTEMODEONLY/polyterm/actions/workflows/ci.yml/badge.svg)](https://github.com/NYTEMODEONLY/polyterm/actions/workflows/ci.yml)
+
+---
+
+## Development
+
+### Setup
+```bash
+git clone https://github.com/NYTEMODEONLY/polyterm.git
+cd polyterm
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+### Build & Publish
+```bash
+rm -rf dist/ build/ *.egg-info
+python -m build
+python -m twine upload dist/*
+```
+
+---
+
+## What's New in v0.10.0
+
+### Agent-Ready Polymarket Intelligence
+- **Agent manifest and schemas**: `polyterm agent manifest --format json` and `polyterm agent schemas --format json` expose machine-readable tool metadata, safety flags, input schemas, and stable output contracts.
+- **FastMCP stdio server**: `polyterm agent mcp-server` exposes PolyTerm as a real MCP protocol server for Hermes Agent, OpenClaw, Codex, and other MCP clients.
+- **Legacy JSON-lines adapter**: `polyterm agent jsonl-server` keeps simple pipe-based tool calls available for runtimes that do not speak MCP.
+- **Agent documentation**: `docs/AGENT_MODE.md`, `docs/tool-manifest.json`, `docs/schemas/*.schema.json`, and `llms.txt` give Hermes Agent, OpenClaw, Codex, and other agents a clear repo map.
+- **README agent caveat**: Agents are explicitly told to inspect the README, `docs/AGENT_MODE.md`, or the agent manifest before assuming they know how to use PolyTerm.
+
+### Trader, Researcher, and Whale-Watcher Tools
+- **Trade thesis**: `polyterm thesis -m <market>` generates an explainable market-level thesis with identifiers, evidence, risks, quality flags, and no-custody next actions.
+- **Wallet intelligence**: `polyterm wallets --analyze <address> --refresh --format json` uses public Data API context plus local state.
+- **Wallet-level whales**: `polyterm whales --wallets --format json` reports Data API-backed wallet-level whale trades instead of only market-volume proxies.
+- **Data-backed leaderboards**: `polyterm leaderboard --source data-api` uses public Data API rows; `--source local` ranks locally tracked wallets.
+
+### Research Archive, Alerts, and Cross-Venue Monitoring
+- **Research collection**: `polyterm collect -m <market>` stores repeatable local market snapshots for researchers and data collectors.
+- **Dataset exports**: `polyterm export --dataset latest --format json|csv` exposes local archive manifests without requiring agents to read SQLite directly.
+- **Local alert rules**: `polyterm alerts --add-rule price ...` creates local rules, with `--dry-run` for safe previews.
+- **Scheduled watch mode**: `polyterm watch --schedule 15m --runs N --format json` supports foreground agent scans.
+- **Cross-venue monitor**: `polyterm arbitrage --venues polymarket,kalshi --query <term>` reports matched spreads with match confidence and quality flags.
+
+### Release Verification
+- **Agent contract tests** cover manifest/static parity, schema artifacts, adapter handler coverage, safety flags, and live-tool normalization.
+- **88 registered commands expose help** through the command smoke suite.
+- **Documentation validation clean** with no missing docs, broken links, or stub pages.
+
+---
+
+## What's New in v0.9.1
+
+### Polymarket CLOB V2 Support
+- **CLOB V2 migration support** for Polymarket's April 28 cutover while keeping the production host `https://clob.polymarket.com`
+- **Gamma keyset pagination** replaces deprecated offset-style `/markets` usage, preserving PolyTerm's existing market list/search behavior
+- **Updated CLOB public data helpers** for current order book, price, spread, last-trade, sampling markets, and fee-rate endpoints
+- **Data API compatibility fixes** for current position and cash P&L sort keys
+
+### Fee Model Updates
+- **Dynamic protocol fee estimates** now use market fee schedules and the CLOB V2 fee curve instead of presenting a fixed 2% assumption
+- `fees`, `trade`, and `quicktrade` now surface the fee source used for each estimate
+
+### Verification
+- **Verification at v0.9.1 (archival, not current):** live production smoke tests against Polymarket's CLOB/Gamma/Data APIs and fixed-screen live surface coverage. See the CI badge above for current status.
+- Added full CLI command import/help inventory coverage for all 83 registered commands
+- Added TUI route inventory coverage for CLOB/Gamma-heavy screens
+
+---
+
+## What's New in v0.9.0
+
+### Branding & Positioning
+- **100% free and open source** — all premium/paid-tier language removed. PolyTerm has no paid features, no subscriptions, no gated functionality
+- **"Signal-based predictions"** — rebranded from "AI predictions" to accurately reflect the system. Predictions use momentum, volume, whale, smart money, and RSI signals — no LLM or AI model involved
+
+### Performance
+- **Lazy CLI loading** — 81 commands loaded on-demand instead of at startup, significantly reducing import time
+- Multiple bug fixes across CLI, TUI, and core modules
+
+### Test Suite
+- **Verification at v0.9.0 (archival, not current):** suite covered API, core, CLI, TUI, database, and utility layers. See the CI badge above for current status.
+
+---
+
+## What's New in v0.8.5
+
+### Final Sweep Fixes
+- **All 62 TUI screens fixed**: Every remaining screen using bare `subprocess.run(["polyterm", ...])` now uses `sys.executable -m polyterm.cli.main` — zero bare `polyterm` subprocess calls remain in the entire codebase. Prevents FileNotFoundError in virtualenv/pipx installs
+- **_get_price_change string-to-float**: 8 files with `priceChange24h`/`price24hAgo` API string values now properly convert to float — prevents TypeError on numeric comparisons and arithmetic
+- **Order book slippage div-by-zero**: `calculate_slippage(size=0)` now returns error dict instead of crashing with `ZeroDivisionError`
+- **Iceberg detection**: Now handles dict-format order book levels (the actual API format) in addition to list format — previously silently returned empty results
+- **Chart Y-axis labels**: `generate_price_chart` no longer shows labels 100x too large (was multiplying price percentage by 100 twice)
+- **Config shallow copy mutation**: `Config._load_config` now uses `copy.deepcopy(DEFAULT_CONFIG)` instead of `dict.copy()` — prevents user config from permanently mutating class defaults in the same process
+- **Aggregator CLOB fallback**: `get_live_markets(require_volume=True)` now returns CLOB data as fallback when Gamma is down — previously discarded valid data and returned empty list
+- **Whale tracker timezone crash**: Insider scoring datetime arithmetic now uses timezone-aware `datetime.now(timezone.utc)` — prevents TypeError when wallet `first_seen` is timezone-aware from API
+- **Rich markup escaping**: `display_error()` now escapes dynamic content with `rich.markup.escape()` — prevents MarkupError when error messages contain bracket characters
+- **Risk score color**: Changed `orange1` extended color to `bright_red` for terminal compatibility
+- **Correlation dead code**: Removed unused snapshot query with wrong `hours*24` multiplier
+
+---
+
+## What's New in v0.8.4
+
+### Critical TUI Fixes
+- **Watch screen crash fixed**: Subprocess passed market ID as positional arg (rejected by Click) and used `--refresh` instead of `--interval` — every Watch screen invocation was broken
+- **13 TUI screens fixed**: Alerts, wallets, risk, crypto15m, dashboard, quicktrade, orderbook, bookmarks, follow, parlay, chart, arbitrage, and mywallet screens all used bare `polyterm` command instead of `sys.executable -m polyterm.cli.main` — crashed when polyterm wasn't on system PATH (e.g., virtualenv installs)
+- **Watch screen input validation**: Non-numeric threshold/refresh values now fall back to defaults instead of crashing
+
+### _get_price String-to-Float Bug (21 files)
+- **Fixed across all CLI commands**: The `_get_price()` fallback returned raw API strings (e.g., `"0.65"`) instead of floats — caused `TypeError` on comparisons like `price > 0.7` and `ValueError` on format strings like `f"{price:.0%}"`. Fixed in: ladder, history, alertcenter, snapshot, similar, odds, timing, lookup, hot, exit, spread, summary, analytics, scenario, digest, pin, signals, sentiment, watchdog, trade, groups, correlate, timeline
+
+### Database P&L Fix
+- **Position side case sensitivity**: SQL queries in `get_position_summary` compared `side = 'no'` (lowercase) but positions are stored as `'NO'` (uppercase) — all NO position P&L was calculated inverted. Fixed with `LOWER(side)` and added `exit_price IS NOT NULL` guard
+
+### Other Fixes
+- **Correlation engine**: Removed dead code that fetched snapshots with wrong `hours*24` multiplier and never used the result
+- **Presets command**: Fixed bare `polyterm` subprocess call to use `sys.executable`
+
+---
+
+## What's New in v0.8.3
+
+### API Reliability
+- **CLOB retry/timeout on all endpoints**: `get_market_depth` and `get_current_markets` now use `_request()` with retry logic, exponential backoff, and 15s timeout — previously bypassed retries entirely via raw `session.get()`
+- **Retry-After header hardened**: Both CLOB and Gamma clients now safely parse the `Retry-After` HTTP header with `try/except (ValueError, TypeError)` — non-integer values (e.g. HTTP-date format) no longer crash the retry loop
+
+### Notification Fixes
+- **smtp_password preserved in config**: `NotificationConfig.to_dict()` now includes `smtp_password` — previously omitted, causing email notifications to fail after config save/restore round-trip
+- **Telegram Markdown escaping**: Title and message content now escape all Markdown special characters (`_*[]()~>#+-.!=|{}`) before sending — prevents `400 Bad Request` from Telegram API when market titles contain underscores or brackets
+- **Discord UTC timestamp**: Replaced deprecated `datetime.utcnow()` with `datetime.now(timezone.utc)` for timezone-aware ISO timestamps in Discord embeds
+
+### Tests
+- 154 new tests: CLOB client (53), Gamma client (54), notifications (47)
+- **Verification at this release (archival, not current).** See the CI badge above for current status.
+
+---
+
+## What's New in v0.8.2
+
+### Financial Calculation Fixes
+- **Kelly Criterion fee-aware sizing**: Position sizing tool (EV, edge, Kelly fraction, profit projections) now uses net payout ratios after protocol fees, preventing overbetting recommendations. v0.9.1 updates this path to the CLOB V2 dynamic fee curve.
+- **Breakeven formula corrected**: Quick trade breakeven now uses exact formula `price / (0.98 + 0.02 * price)` instead of the approximation `price * 1.02` which was up to 1.6pp wrong at high prices
+- **Crypto 15m trade analysis**: UP/DOWN scenario profits now deduct protocol fees instead of showing gross figures. v0.9.1 updates this path to the CLOB V2 dynamic fee curve.
+
+### Data Integrity Fixes
+- **JSON double-encoding fixed**: `Wallet.to_dict()` and `Alert.to_dict()` no longer `json.dumps()` nested fields — JSON output now shows proper arrays/objects instead of escaped strings
+- **Tips system**: Just-shown tip preserved after history clear instead of being forgotten
+- **Live monitor crash**: Fixed `TypeError` when `market_title` is None
+- **Market picker resource leak**: `GammaClient` HTTP session now always closed via `try/finally`
+
+### Tests
+- 20 new tests: breakeven formula (6), Kelly with fees (4), crypto fee deduction (2), model serialization (9)
+- **Verification at this release (archival, not current).** See the CI badge above for current status.
+
+## What's New in v0.8.1
+
+### Critical Bug Fixes
+- **Sentiment analysis broken**: Fixed wrong method name (`get_unacked_alerts` → `get_unacknowledged_alerts`) and dict access on Alert objects — whale signal was silently never working
+- **Quick update watch broken**: Fixed nonexistent `db.query()`/`db.execute()` methods and missing `watchlist` table — now uses bookmarks system
+- **Arbitrage division by zero**: Fixed `ZeroDivisionError` when market price is exactly $0.00 in correlated and cross-platform scans
+- **Arbitrage wrong fee calc**: Cross-platform fees now correctly calculated as percentage of winnings (not flat amounts)
+- **Arbitrage wrong market data**: Fixed NO prices assigned from wrong market when buy/sell sides swap in correlated scan
+- **Database P&L wrong for NO positions**: Position summary now correctly calculates profit/loss for NO-side positions (price falling = profit)
+- **Whale tracker FK violation**: Trade insert now happens after wallet creation to prevent foreign key constraint failures
+- **Depth chart crash**: Fixed `TypeError` when raw string order book data passed to slippage calculator
+- **Hot markets sort crash**: `volume_24h` now cast to `float()` to prevent string comparison errors
+
+### Logic Fixes
+- **Prediction momentum always zero**: Fixed self-comparison bug when dataset has 5-7 prices (minimum lookback now 2)
+- **Prediction accuracy too lenient**: Tightened neutral/correct threshold from 1.0 to 0.5 percentage points
+- **Momentum description missing**: `one_day_change` of exactly 0.0 now correctly shown in description
+- **P&L streak logic**: Breakeven trades now correctly produce zero streak instead of inflated negative streak
+- **Sentiment meter indicator hidden**: Fixed display bug where neutral score hid the position indicator
+
+### Security & Performance
+- **Live monitor code injection**: Sanitized market_id/category inputs in generated Python scripts
+- **Menu update check**: Cached PyPI update check (was blocking HTTP request on every menu display)
+- **Removed unnecessary importlib.reload**: Eliminated unnecessary module reloads that could cause mid-session import failures
+
+### Data Integrity
+- **Screener preset JSON guard**: Corrupt JSON in preset filters no longer crashes preset listing
+- **Whale tracker safe_float**: API data now uses `safe_float()` for defensive float conversion
+
+### Tests
+- 26 new tests: position P&L with side awareness (10), prediction accuracy (5), P&L streak logic (11)
+- **Verification at this release (archival, not current).** See the CI badge above for current status.
+
+## What's New in v0.8.0
+
+### Bug Fixes
+- **Stats duplicate momentum row** - Removed erroneous duplicate "Momentum" row in Volatility & Trend table that showed trend direction instead of actual momentum
+- **Recent markets quick actions** - Fixed missing f-string interpolation in quick action suggestions (showed literal `{title}` instead of market name)
+- **Bookmarks interactive probability** - Interactive bookmark mode now extracts real probability from market data instead of hardcoding 0%
+- **Compare input validation** - Hours input in interactive compare now handles non-numeric input gracefully instead of crashing
+- **Wash trade detector default score** - Changed default score when no indicators available from 20 (Low) to 40 (Medium/uncertain) to avoid false safety signals
+
+### Input Validation
+- **Position tracker price validation** - Entry and exit prices now validated (0.01-0.99) in interactive position mode
+- **Monitor title fallback** - Markets with missing titles now display "Unknown Market" instead of blank rows
+
+### Robustness
+- **Config set() type safety** - Fixed crash when config key path traverses a non-dict value
+- **Safe float conversion** - Added `safe_float()` helper for defensive API data parsing; applied across JSON output utilities
+
+### Code Quality
+- **Database dead code removed** - Removed always-false condition in `get_database_stats()`
+- **Tips tracker fixes** - Fixed empty string bug in tip file loading and replaced meaningless set trimming with proper reset logic
+- **Live monitor temp file** - Uses PID-based temp file path instead of hardcoded `/tmp/polyterm_live_monitor.py`
+
+### Test Suite
+- **Verification at this release (archival, not current).** See the CI badge above for current status.
+- Added 88 new tests: risk scoring (18), charts (17), wash trade detection (18), config (10), JSON output (25)
+
+---
+
+## What's New in v0.7.9
+
+### Bug Fixes
+- **Simulator crash prevention** - Interactive mode now validates price bounds (0.01-0.99) preventing ZeroDivisionError when users enter invalid prices
+- **Fee calculator crash prevention** - Added price validation in interactive mode and defense-in-depth guard in calculation function to prevent division by zero on NO-side trades
+
+### Test Suite
+- **Verification at this release (archival, not current).** See the CI badge above for current status.
+
+---
+
+## What's New in v0.7.8
+
+### Security
+- **Eliminated shell injection in notifications** - Replaced 4 `os.system()` calls with `subprocess.Popen()` using list arguments, preventing shell injection through sound file paths
+- **SQL injection hardening** - Added explicit VALID_TABLES whitelist in `get_database_stats()` before f-string SQL
+
+### Critical Fixes
+- **WebSocket callback crash fixed** - Live monitor callbacks were `await`ed but weren't async, causing `TypeError` at runtime. Now handles both sync and async callbacks
+- **Database race condition eliminated** - `track_market_view()` replaced SELECT+INSERT/UPDATE pattern with atomic `INSERT ... ON CONFLICT DO UPDATE`
+
+### Improvements
+- **WebSocket cleanup** - Subscriptions cleared on permanent connection failure to prevent stale state
+- **Cross-platform compatibility** - Replaced Unix-only `which` command with `shutil.which()` for path detection
+- **Removed unused typer dependency** - Project uses Click, not Typer; removed unnecessary install
+
+### Test Suite
+- **Verification at this release (archival, not current).** See the CI badge above for current status.
+
+---
+
+## What's New in v0.7.7
+
+### Critical Fixes
+- **Trending markets endpoint fixed** - `get_trending_markets()` was calling a non-existent `/markets/trending` API endpoint. Now correctly uses `/markets?order=volume24hr&ascending=false` to sort by 24hr volume
+
+### Features
+- **Tips system activated** - Context-aware tips now appear ~30% of the time after returning from TUI screens, helping users discover features and learn prediction market concepts
+- **Consistent error messages** - Predict and monitor commands now use centralized error panels with helpful suggestions instead of plain text messages
+
+### Test Suite
+- **Verification at this release (archival, not current).** See the CI badge above for current status.
+
+---
+
+## What's New in v0.7.6
+
+### Bug Fixes
+- **Notification config schema mismatch** - The `notify` command used flat config keys (`notifications.desktop`) that didn't match the default config structure. Added missing defaults so settings persist correctly across sessions
+- **Position command crash** - Missing try-except around JSON parsing of outcome prices in interactive position tracking
+- **Predictions RSI cleanup** - Removed misleading `0.001` fallback for avg_loss in RSI calculation; now correctly uses 0 with the existing guard clause
+
+### Test Suite
+- **Verification at this release (archival, not current).** See the CI badge above for current status.
+
+---
+
+## What's New in v0.7.5
+
+### Critical Fixes
+- **Arbitrage fee calculations corrected** - Intra-market arb was overcharging fees (2% on full $1 payout instead of 2% on winnings only). Correlated market arb was double-charging fees on both sides instead of just the winning position
+- **Correlation engine now functional** - `find_correlated_markets()` was completely broken due to an empty market_ids placeholder; now queries database for all tracked markets
+- **Prediction signals: buy/sell classification fixed** - Whale and smart money signals were misclassifying trades using OR logic (`side == 'BUY' or outcome == 'YES'`), counting every YES-outcome trade as a buy regardless of actual direction
+
+### Bug Fixes
+- **Charts Y-axis labels fixed** - Probabilities >= 100% were displayed as raw values (e.g., "1%" instead of "100%")
+- **Orderbook slippage division-by-zero** - Added guard when best_price is 0
+- **TUI screen crash protection** - Screen errors now return to menu instead of crashing the entire TUI
+- **Live monitor cleanup** - Replaced `os._exit(0)` with proper `sys.exit(0)` to prevent resource leaks and zombie processes
+- **Menu pagination** - Fixed unnecessary redraws when pressing next on last page or back on first page
+
+### Test Suite
+- **Verification at this release (archival, not current).** See the CI badge above for current status.
+
+---
+
+## What's New in v0.7.4
+
+### Critical Fixes
+- **MyWallet: Removed broken SubgraphClient dependency** - The PolyMarket Subgraph was deprecated by The Graph, leaving `mywallet` completely non-functional. Now uses local database for position/trade tracking instead
+- **Chart: Fixed misleading synthetic data** - When no price history exists, charts now show an honest flat line at current price instead of fabricating a fake dip-recovery pattern
+- **Market freshness: Fixed perpetual market detection** - Open-ended markets without end dates (e.g., "Will X happen?") were incorrectly flagged as stale; now checks the `active` flag as fallback
+
+### Test Suite
+- **Verification at this release (archival, not current).** See the CI badge above for current status.
+
+---
+
+## What's New in v0.7.3
+
+### Performance
+- **Added compound database indexes** - New indexes on trades(market_id,timestamp), market_snapshots(market_id,timestamp), positions(entry_date), and alerts(acknowledged) for faster queries
+
+### Reliability
+- **Config validation** - All threshold settings now have type checking and range validation (e.g., probability_threshold must be 0.1-100.0, min_smart_money_win_rate must be 0.0-1.0)
+- **Subgraph deprecation warning** - SubgraphClient now logs a clear deprecation warning directing users to GammaClient/CLOBClient
+
+### Test Suite
+- **Verification at this release (archival, not current).** See the CI badge above for current status.
+
+---
+
+## What's New in v0.7.2
+
+### Bug Fixes
+- **Fixed division-by-zero in whales command** - Empty whale trade results no longer crash when calculating average volume per market
+
+### Code Quality
+- **Eliminated all 44 bare `except:` handlers** - Replaced with `except Exception:` across 24 files (CLI commands, core modules, TUI screens, API layer, utilities) for better debugging and proper exception handling
+
+### Test Suite
+- **Verification at this release (archival, not current).** See the CI badge above for current status.
+
+---
+
+## What's New in v0.7.1
+
+### Architecture Improvements
+- **TUI dispatch table refactor** - Replaced 77-line elif chain with O(1) dictionary dispatch for all 80+ screen routes
+- **Database auto-cleanup** - Automatic pruning of old records (>30 days) when database exceeds 10,000 rows, preventing unbounded growth
+- **WebSocket auto-reconnection** - Live monitor reconnects automatically with exponential backoff (up to 5 attempts) and re-subscribes to trade feeds
+
+### Bug Fixes
+- **Fixed order book depth calculation** - Now correctly shows share depth (not notional value) in `bid_depth`/`ask_depth` fields, with separate notional tracking
+- **Fixed UMA tracker timezone crash** - Resolved `TypeError` when comparing timezone-aware and naive datetimes in resolution risk analysis
+
+### Test Suite
+- **Verification at this release (archival, not current).** See the CI badge above for current status.
+- Updated TUI integration tests to work with new dispatch table pattern
+
+---
+
+## What's New in v0.7.0
+
+### Bug Fixes
+- **Fixed arbitrage profit calculations** - Corrected percentage math and fee calculations for intra-market and correlated market arbitrage detection
+- **Fixed smart money signal accuracy** - Corrected average win rate calculation that was using wrong denominator
+- **Fixed all bare exception handlers** - Replaced `except:` with `except Exception:` across API and core layers for better debugging
+
+### Reliability Improvements
+- **API retry logic with exponential backoff** - Gamma and CLOB API clients now retry on 429 rate limits, 5xx server errors, timeouts, and connection failures (up to 3 attempts with backoff)
+- **SQLite foreign key enforcement** - Enabled `PRAGMA foreign_keys = ON` to prevent orphaned records and ensure data integrity
+- **Request timeouts** - All API requests now have 15-second timeouts to prevent indefinite hangs
+
+### Test Suite
+- **Verification at this release (archival, not current).** See the CI badge above for current status.
+- Fixed live data tests to handle markets with end dates spanning calendar years
+- Fixed TUI shortcut tests to match current menu pagination system
+- Added proper wallet record creation in test fixtures to satisfy foreign key constraints
+
+---
+
+## Known Limitations
+
+- **Portfolio tracking**: Limited due to Subgraph API deprecation (uses local trade history)
+- **Individual trades**: WebSocket required for real-time individual trade data
+- **Kalshi integration**: Requires Kalshi API key for cross-platform features
+
+---
+
+## Support
+
+- **Issues**: [GitHub Issues](https://github.com/NYTEMODEONLY/polyterm/issues)
+- **Documentation**: See this README and inline `--help`
+- **Updates**: `polyterm update` or `pipx upgrade polyterm`
+
+---
+
+## License
+
+MIT License - see [LICENSE](LICENSE) file.
+
+---
+
+**Built for the PolyMarket community**
+
+*Your terminal window to prediction market alpha*
+
+*a [nytemode](https://nytemode.com) project*
