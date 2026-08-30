@@ -61,7 +61,7 @@ Each CLI command has its own documentation page with usage, options, and example
 | [glossary](cli/glossary.md) | Prediction market terminology | `polyterm glossary` |
 | [groups](cli/groups.md) | Market grouping and organization | `polyterm groups` |
 | [health](cli/health.md) | Market health indicators | `polyterm health` |
-| [history](cli/history.md) | Trade and price history | `polyterm history` |
+| [history](cli/history.md) | CLOB price history (refuses if unavailable) | `polyterm history` |
 | [hot](cli/hot.md) | Hot / trending markets | `polyterm hot` |
 | [journal](cli/journal.md) | Trading journal | `polyterm journal` |
 | [ladder](cli/ladder.md) | Price ladder display | `polyterm ladder` |
@@ -152,7 +152,7 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 | [groups_screen](tui/screens/groups.md) | Market groups | - | TUI |
 | [health_screen](tui/screens/health.md) | Market health | - | TUI |
 | [help](tui/screens/help.md) | Help screen | h/? | TUI |
-| [history_screen](tui/screens/history.md) | Trade history | - | TUI |
+| [history_screen](tui/screens/history.md) | CLOB price history | hist | TUI |
 | [hot_screen](tui/screens/hot.md) | Hot markets | hot | TUI |
 | [journal_screen](tui/screens/journal_screen.md) | Trading journal | jn | TUI |
 | [ladder_screen](tui/screens/ladder_screen.md) | Price ladder | - | TUI |
@@ -245,6 +245,7 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 | [cross_venue](core/cross_venue.md) | Cross-venue hedge and arbitrage monitor | Venue matching |
 | [fees](core/fees.md) | CLOB V2 fee schedule parsing and protocol fee estimates | Fee model |
 | [historical](core/historical.md) | Historical data management | Data history |
+| [price_history](core/price_history.md) | CLOB price series builder (opt-in demo walk) | Price history |
 | [market_research](core/market_research.md) | Agent-native market research brief composer | Market research engine |
 | [market_move](core/market_move.md) | Recent market price movement explanation | Move explanation engine |
 | [market_compare](core/market_compare.md) | Agent-native market comparison and divergence analysis | Compare engine |
