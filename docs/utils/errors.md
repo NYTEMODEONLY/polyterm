@@ -94,7 +94,7 @@ The `ERROR_MESSAGES` dictionary provides reusable error definitions keyed by sce
 | Key | Title | Suggestion |
 |---|---|---|
 | `no_markets_found` | No Markets Found | Try broader search terms |
-| `no_whales_found` | No Whale Activity | Extend time period or lower threshold |
+| `no_whales_found` | No High-Volume Markets | Lower --min-amount, or use --wallets |
 | `no_arbitrage` | No Arbitrage Opportunities | Lower minimum spread or check back later |
 | `no_predictions` | No Predictions Available | Try different markets with more data |
 | `empty_portfolio` | Empty Portfolio | Add wallet addresses |
