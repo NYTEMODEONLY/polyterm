@@ -22,7 +22,7 @@ class Config:
             "gamma_markets_endpoint": "/events",  # Use /events for live data with volume
             "clob_endpoint": "wss://ws-subscriptions-clob.polymarket.com/ws/market",
             "clob_rest_endpoint": "https://clob.polymarket.com",
-            "subgraph_endpoint": "https://api.thegraph.com/subgraphs/name/polymarket/matic-markets",
+            "subgraph_endpoint": "",  # The Graph subgraph was removed; do not ship a dead URL
             "kalshi_api_key": "",
             "kalshi_base_url": "https://trading-api.kalshi.com/trade-api/v2",
         },
@@ -199,7 +199,7 @@ class Config:
     
     @property
     def subgraph_endpoint(self) -> str:
-        return self.get("api.subgraph_endpoint", "https://api.thegraph.com/subgraphs/name/polymarket/matic-markets")
+        return self.get("api.subgraph_endpoint", "")
     
     @property
     def probability_threshold(self) -> float:

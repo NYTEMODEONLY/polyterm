@@ -16,7 +16,7 @@ The `SubgraphClient` class was the original client for querying on-chain Polymar
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `endpoint` | `str` | `"https://api.thegraph.com/subgraphs/name/polymarket/matic-markets"` | GraphQL endpoint (no longer functional) |
+| `endpoint` | `str` | `""` | Empty by default. The Graph subgraph was removed. |
 
 A deprecation warning is logged once (module-level `_DEPRECATION_WARNED` flag) on first instantiation.
 
@@ -37,7 +37,7 @@ A deprecation warning is logged once (module-level `_DEPRECATION_WARNED` flag) o
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `https://api.thegraph.com/subgraphs/name/polymarket/matic-markets` | POST (GraphQL) | **DEPRECATED** -- The Graph has removed this subgraph |
+| *(none by default)* | POST (GraphQL) | **REMOVED** -- do not ship the old The Graph URL |
 
 ### GraphQL Queries
 
@@ -53,12 +53,12 @@ A deprecation warning is logged once (module-level `_DEPRECATION_WARNED` flag) o
 
 ## Configuration
 
-No configuration options. The endpoint URL is hardcoded and no longer functional.
+Default `api.subgraph_endpoint` is empty. SubgraphClient does not advertise the removed The Graph URL.
 
 ## Rate Limiting / Error Handling
 
 - No rate limiting is implemented (The Graph handled rate limits server-side).
-- All query failures raise `Exception` with the message `"GraphQL query failed: {error}"`.
+- All query failures raise `Exception` with the message `"GraphQL query failed: {error}"`. 
 - If the `gql` library is not installed, `query` raises `Exception` with install instructions.
 - The `_deprecated` attribute is set to `True` on initialization.
 

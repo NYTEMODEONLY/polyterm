@@ -50,7 +50,7 @@ The class exposes frequently accessed values as read-only properties to avoid do
 | `gamma_markets_endpoint` | `api.gamma_markets_endpoint` | `/events` |
 | `clob_endpoint` | `api.clob_endpoint` | `wss://ws-subscriptions-clob.polymarket.com/ws/market` |
 | `clob_rest_endpoint` | `api.clob_rest_endpoint` | `https://clob.polymarket.com` |
-| `subgraph_endpoint` | `api.subgraph_endpoint` | Thegraph URL |
+| `subgraph_endpoint` | `api.subgraph_endpoint` | `""` (The Graph subgraph was removed) |
 | `kalshi_api_key` | `api.kalshi_api_key` | `""` |
 | `kalshi_base_url` | `api.kalshi_base_url` | Kalshi trading API URL |
 | `probability_threshold` | `alerts.probability_threshold` | `10.0` |
