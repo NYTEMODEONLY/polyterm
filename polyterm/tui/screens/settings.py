@@ -20,7 +20,8 @@ def settings_screen(console: RichConsole):
     config = Config()
     
     # Display current config
-    console.print("[bold]Current Configuration:[/bold]
+    console.print("[bold]Current Configuration:[/bold]")
+    console.print()
     
     settings_table = Table(show_header=True, header_style="bold cyan")
     settings_table.add_column("Setting", style="cyan")
@@ -117,7 +118,7 @@ def settings_screen(console: RichConsole):
 
 
 def _get_installed_version_pipx() -> str:
-        """Get the currently installed version from pipx"""
+    """Get the currently installed version from pipx"""
     import subprocess
     try:
         result = subprocess.run(["pipx", "list"], capture_output=True, text=True)
