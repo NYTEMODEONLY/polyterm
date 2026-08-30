@@ -88,7 +88,11 @@ def config(ctx, set_value, get_key, list_all, reset):
     table.add_row("[bold]API[/bold]", "")
     table.add_row("  Gamma Base URL", cfg.gamma_base_url)
     table.add_row("  CLOB Endpoint", cfg.clob_endpoint)
-    table.add_row("  Subgraph Endpoint", cfg.subgraph_endpoint[:50] + "...")
+    subgraph = cfg.subgraph_endpoint
+    table.add_row(
+        "  Subgraph Endpoint",
+        subgraph if subgraph else "[dim]disabled (The Graph subgraph was removed)[/dim]",
+    )
     table.add_row("", "")
     table.add_row("[bold]Wallet[/bold]", "")
     table.add_row("  Address", cfg.wallet_address or "[dim]Not set[/dim]")
@@ -96,4 +100,3 @@ def config(ctx, set_value, get_key, list_all, reset):
     console.print(table)
     console.print(f"\n[dim]Use 'polyterm config --list' for full configuration[/dim]")
     console.print(f"[dim]Use 'polyterm config --set key value' to update settings[/dim]")
-

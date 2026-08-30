@@ -76,3 +76,11 @@ class TestConfig:
 
         config2 = Config(config_path=config_path)
         assert config2.get("test_key") == "persisted_value"
+
+
+    def test_default_subgraph_endpoint_is_empty(self, tmp_path):
+        """Default config must not advertise the removed The Graph URL"""
+        config = Config(config_path=tmp_path / "nonexistent.toml")
+        assert config.subgraph_endpoint == ""
+        assert "thegraph.com" not in config.subgraph_endpoint.lower()
+        assert "thegraph.com" not in str(config.DEFAULT_CONFIG["api"].get("subgraph_endpoint", "")).lower()

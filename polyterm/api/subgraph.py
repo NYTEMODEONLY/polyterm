@@ -29,7 +29,7 @@ class SubgraphClient:
 
     def __init__(
         self,
-        endpoint: str = "https://api.thegraph.com/subgraphs/name/polymarket/matic-markets",
+        endpoint: str = "",
     ):
         global _DEPRECATION_WARNED
         self.endpoint = endpoint
@@ -40,7 +40,7 @@ class SubgraphClient:
                 "has been removed. Use GammaClient or CLOBClient instead."
             )
             _DEPRECATION_WARNED = True
-        if HAS_GQL:
+        if HAS_GQL and endpoint:
             transport = RequestsHTTPTransport(url=endpoint)
             # Don't fetch schema - endpoint is deprecated
             self.client = Client(transport=transport, fetch_schema_from_transport=False)
@@ -57,6 +57,11 @@ class SubgraphClient:
         Returns:
             Query result dictionary
         """
+        if not self.endpoint:
+            raise Exception(
+                "SubgraphClient is disabled. The Graph subgraph was removed. "
+                "Use GammaClient or CLOBClient instead."
+            )
         if not HAS_GQL or not self.client:
             raise Exception("gql package not installed. Install with: pip install gql[all]")
         try:
@@ -358,4 +363,3 @@ class SubgraphClient:
         
         result = self.query(query_string, variables)
         return result.get("markets", [])
-
