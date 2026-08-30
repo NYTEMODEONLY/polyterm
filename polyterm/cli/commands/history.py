@@ -173,7 +173,7 @@ def _render_history(console: Console, payload: dict, show_chart: bool) -> None:
         header = (
             f"[bold]CLOB Price History[/bold]\n{title[:60]}\n"
             f"[dim]Source: CLOB GET /prices-history"
-            f"{f' (token {token_id[:16]}…)' if token_id else ''}"
+            f"{f' (token {token_id[:16]}…)' if token_id else ''}[/dim]"
         )
         border = "cyan"
     console.print(Panel(header, border_style=border))
