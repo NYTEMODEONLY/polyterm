@@ -130,7 +130,7 @@ The `get_statistics` method calculates:
 
 - **Database** (`db/database.py`):
   - `get_trades_by_market(market_id, limit)` -- trades filtered by market
-  - `get_trades_by_wallet(wallet_address=None, limit)` -- trades filtered by wallet
+  - `get_trades_by_wallet(wallet_address, limit)` -- trades filtered by wallet
   - `get_recent_trades(hours, limit)` -- recent trades across all markets
   - `get_market_history(market_id, hours, limit)` -- market snapshots
 - **Gamma API** (`api/gamma.py`): Market title lookup (optional)
