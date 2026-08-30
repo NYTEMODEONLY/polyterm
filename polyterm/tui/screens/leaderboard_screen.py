@@ -8,18 +8,19 @@ from rich.prompt import Prompt
 
 
 def run_leaderboard_screen(console: Console):
-    """Leaderboard screen"""
+    """Leaderboard screen backed by public Data API /v1/leaderboard."""
     console.print()
     console.print(Panel("[bold]Trader Leaderboard[/bold]", border_style="cyan"))
     console.print()
-    console.print("[bold]See top traders and your ranking[/bold]")
+    console.print("[bold]Public Polymarket Data API rankings (PNL / volume)[/bold]")
+    console.print("[dim]Source: GET /v1/leaderboard. Win rate is not provided by this endpoint.[/dim]")
     console.print()
     console.print("[cyan]Leaderboard Type:[/cyan]")
     console.print("  [yellow]1.[/yellow] Top by Profit")
     console.print("  [yellow]2.[/yellow] Top by Volume")
-    console.print("  [yellow]3.[/yellow] Top by Win Rate")
-    console.print("  [yellow]4.[/yellow] Most Active")
-    console.print("  [yellow]5.[/yellow] My Ranking")
+    console.print("  [yellow]3.[/yellow] Top by Win Rate (not available from public leaderboard)")
+    console.print("  [yellow]4.[/yellow] Most Active (volume ranking)")
+    console.print("  [yellow]5.[/yellow] My Ranking (local positions vs this board)")
     console.print("  [yellow]b.[/yellow] Back to menu")
     console.print()
 
@@ -47,7 +48,6 @@ def run_leaderboard_screen(console: Console):
 
     board_type = type_map.get(choice, "profit")
 
-    # Get period
     console.print("[cyan]Time Period:[/cyan]")
     console.print("  [yellow]1.[/yellow] 24 hours")
     console.print("  [yellow]2.[/yellow] 7 days")
