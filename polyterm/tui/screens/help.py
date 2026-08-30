@@ -122,7 +122,7 @@ def help_screen(console: RichConsole):
     features.add_row("📝", "[bold]Position:[/bold] Manual P&L tracking without wallet")
     features.add_row("📓", "[bold]Notes:[/bold] Personal research notes on markets")
     features.add_row("💾", "[bold]Presets:[/bold] Save and reuse search filters")
-    features.add_row("🂭", "[bold]Sentiment:[/bold] Multi-signal sentiment analysis")
+    features.add_row("🎭", "[bold]Sentiment:[/bold] Multi-signal sentiment analysis")
     features.add_row("🔗", "[bold]Correlate:[/bold] Find related markets for hedging")
     features.add_row("🎯", "[bold]Exit Plan:[/bold] Profit targets and stop losses")
     features.add_row("📊", "[bold]Depth:[/bold] Order book liquidity analysis")
