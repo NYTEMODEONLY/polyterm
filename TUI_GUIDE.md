@@ -112,7 +112,8 @@ Dedicated terminal window for focused real-time monitoring.
 
 ### 3. Whale Activity (3/w)
 
-Track high-volume markets and whale activity.
+List markets by Gamma 24h volume. This is a volume heuristic, not whale
+identity. For wallet-level trades use `polyterm whales --wallets`.
 
 **Prompts:**
 - Minimum 24hr volume

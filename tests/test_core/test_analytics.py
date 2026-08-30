@@ -73,11 +73,13 @@ class TestAnalyticsEngine:
             lookback_hours=24,
         )
 
-        # Should find 2 markets with significant volume (whale activity proxy)
+        # Should find 2 markets with significant volume (heuristic, not trader identity)
         assert len(whale_trades) == 2
-        # Whale trades are volume-based, verify structure (order may vary)
         market_ids = {wt.market_id for wt in whale_trades}
         assert market_ids == {"market1", "market2"}
+        assert all(wt.trader == "" for wt in whale_trades)
+        assert all(wt.trader != "Volume Spike" for wt in whale_trades)
+        assert all(wt.evidence_level == "gamma_volume24hr_heuristic" for wt in whale_trades)
     
     def test_get_whale_impact_on_market(self, analytics):
         """Test analyzing whale impact"""

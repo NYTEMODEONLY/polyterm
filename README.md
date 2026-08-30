@@ -51,7 +51,7 @@ PolyTerm is an analytics and intelligence layer for Polymarket — not just an A
 - **Terminal-native visualization**: ASCII line charts, sparklines, depth charts, and side-by-side market comparison — all without leaving the terminal.
 - **Stateful local database** (SQLite): bookmarks, price alerts, trade journal, position tracking, recently viewed markets, screener presets. Your research accumulates value over time.
 - **Zero custody risk**: PolyTerm never touches private keys. Wallet features are view-only. No attack surface for key theft.
-- **1133 tests** across API, core logic, CLI, TUI, agent, and database layers.
+- **CI-backed tests**: [![CI](https://github.com/NYTEMODEONLY/polyterm/actions/workflows/ci.yml/badge.svg)](https://github.com/NYTEMODEONLY/polyterm/actions/workflows/ci.yml). Reproduce the collected count with `python -m pytest --collect-only -q --ignore=tests/test_live_data --ignore=tests/test_tui/test_integration.py` (this branch, 2026-08-30: **1145 collected**; changelog totals below are archival).
 
 For a detailed comparison with the official Polymarket CLI, see [docs/COMPETITIVE_GAP.md](docs/COMPETITIVE_GAP.md).
 
@@ -64,8 +64,8 @@ For a detailed comparison with the official Polymarket CLI, see [docs/COMPETITIV
 |---------|---------|-------------|
 | Market Monitoring | `polyterm monitor` | Real-time market tracking with live updates |
 | Live Monitor | `polyterm live-monitor` | Dedicated terminal window for focused monitoring |
-| Whale Activity | `polyterm whales` | Volume-based whale detection |
-| Wallet-Level Whales | `polyterm whales --wallets` | Local wallet-level whale activity from observed trades |
+| High-Volume Markets | `polyterm whales` | Gamma 24h volume heuristic (not trader identity) |
+| Wallet-Level Whales | `polyterm whales --wallets` | Public Data API trades with wallet addresses |
 | Watch Markets | `polyterm watch` | Track specific markets with alerts |
 | Scheduled Watch | `polyterm watch --schedule 15m --format json` | Agent-safe scheduled scans |
 | Export Data | `polyterm export` | Export to JSON/CSV |
@@ -169,11 +169,11 @@ polyterm monitor --sort recent
 
 ### Whale Activity
 ```bash
-# Find high-volume markets
-polyterm whales --hours 24 --min-amount 50000
+# High-volume markets (Gamma 24h volume heuristic, not trader identity)
+polyterm whales --volume --min-amount 50000
 
-# JSON output
-polyterm whales --format json
+# Wallet-level whale trades from the public Data API
+polyterm whales --wallets --min-amount 100000 --format json
 ```
 
 ### Arbitrage Scanner
@@ -629,18 +629,20 @@ polyterm/
 
 ## Testing
 
-```bash
-# Full test suite
-pytest
+Current collected count is not a hard-coded marketing total. Reproduce it with the same command CI uses:
 
-# Specific test categories
-pytest tests/test_core/ -v          # Core logic tests
-pytest tests/test_db/ -v            # Database tests
-pytest tests/test_cli/ -v           # CLI tests
-pytest tests/test_tui/ -v           # TUI tests
-pytest tests/test_api/ -v           # API tests
-pytest tests/test_live_data/ -v     # Live API tests (may fail due to data changes)
+```bash
+# Collected count (CI-equivalent; this branch, 2026-08-30: 1145)
+python -m pytest --collect-only -q --ignore=tests/test_live_data --ignore=tests/test_tui/test_integration.py
+
+# CI-equivalent run
+python -m pytest tests --ignore=tests/test_live_data --ignore=tests/test_tui/test_integration.py
+
+# Live API tests (not in CI; may fail when markets move)
+pytest tests/test_live_data/ -v
 ```
+
+Status badge: [![CI](https://github.com/NYTEMODEONLY/polyterm/actions/workflows/ci.yml/badge.svg)](https://github.com/NYTEMODEONLY/polyterm/actions/workflows/ci.yml)
 
 ---
 
@@ -706,7 +708,7 @@ python -m twine upload dist/*
 - `fees`, `trade`, and `quicktrade` now surface the fee source used for each estimate
 
 ### Verification
-- **1076 tests passing**, including live production smoke tests against Polymarket's current CLOB/Gamma/Data APIs and fixed-screen live surface coverage
+- **Verification at v0.9.1 (archival, not current):** live production smoke tests against Polymarket's CLOB/Gamma/Data APIs and fixed-screen live surface coverage. See the CI badge above for current status.
 - Added full CLI command import/help inventory coverage for all 83 registered commands
 - Added TUI route inventory coverage for CLOB/Gamma-heavy screens
 
@@ -723,7 +725,7 @@ python -m twine upload dist/*
 - Multiple bug fixes across CLI, TUI, and core modules
 
 ### Test Suite
-- **660 tests passing** across API, core, CLI, TUI, database, and utility layers
+- **Verification at v0.9.0 (archival, not current):** suite covered API, core, CLI, TUI, database, and utility layers. See the CI badge above for current status.
 
 ---
 
@@ -776,7 +778,7 @@ python -m twine upload dist/*
 
 ### Tests
 - 154 new tests: CLOB client (53), Gamma client (54), notifications (47)
-- Total: 440 tests passing, 2 skipped
+- **Verification at this release (archival, not current).** See the CI badge above for current status.
 
 ---
 
@@ -795,7 +797,7 @@ python -m twine upload dist/*
 
 ### Tests
 - 20 new tests: breakeven formula (6), Kelly with fees (4), crypto fee deduction (2), model serialization (9)
-- Total: 317 tests passing
+- **Verification at this release (archival, not current).** See the CI badge above for current status.
 
 ## What's New in v0.8.1
 
@@ -828,7 +830,7 @@ python -m twine upload dist/*
 
 ### Tests
 - 26 new tests: position P&L with side awareness (10), prediction accuracy (5), P&L streak logic (11)
-- Total: 297 tests passing
+- **Verification at this release (archival, not current).** See the CI badge above for current status.
 
 ## What's New in v0.8.0
 
@@ -853,7 +855,7 @@ python -m twine upload dist/*
 - **Live monitor temp file** - Uses PID-based temp file path instead of hardcoded `/tmp/polyterm_live_monitor.py`
 
 ### Test Suite
-- **271/271 tests passing** (2 skipped for deprecated endpoints)
+- **Verification at this release (archival, not current).** See the CI badge above for current status.
 - Added 88 new tests: risk scoring (18), charts (17), wash trade detection (18), config (10), JSON output (25)
 
 ---
@@ -865,7 +867,7 @@ python -m twine upload dist/*
 - **Fee calculator crash prevention** - Added price validation in interactive mode and defense-in-depth guard in calculation function to prevent division by zero on NO-side trades
 
 ### Test Suite
-- **183/183 tests passing** (2 skipped for deprecated endpoints)
+- **Verification at this release (archival, not current).** See the CI badge above for current status.
 
 ---
 
@@ -885,7 +887,7 @@ python -m twine upload dist/*
 - **Removed unused typer dependency** - Project uses Click, not Typer; removed unnecessary install
 
 ### Test Suite
-- **183/183 tests passing** (2 skipped for deprecated endpoints)
+- **Verification at this release (archival, not current).** See the CI badge above for current status.
 
 ---
 
@@ -899,7 +901,7 @@ python -m twine upload dist/*
 - **Consistent error messages** - Predict and monitor commands now use centralized error panels with helpful suggestions instead of plain text messages
 
 ### Test Suite
-- **183/183 tests passing** (2 skipped for deprecated endpoints)
+- **Verification at this release (archival, not current).** See the CI badge above for current status.
 
 ---
 
@@ -911,7 +913,7 @@ python -m twine upload dist/*
 - **Predictions RSI cleanup** - Removed misleading `0.001` fallback for avg_loss in RSI calculation; now correctly uses 0 with the existing guard clause
 
 ### Test Suite
-- **183/183 tests passing** (2 skipped for deprecated endpoints)
+- **Verification at this release (archival, not current).** See the CI badge above for current status.
 
 ---
 
@@ -930,7 +932,7 @@ python -m twine upload dist/*
 - **Menu pagination** - Fixed unnecessary redraws when pressing next on last page or back on first page
 
 ### Test Suite
-- **183/183 tests passing** (2 skipped for deprecated endpoints)
+- **Verification at this release (archival, not current).** See the CI badge above for current status.
 
 ---
 
@@ -942,7 +944,7 @@ python -m twine upload dist/*
 - **Market freshness: Fixed perpetual market detection** - Open-ended markets without end dates (e.g., "Will X happen?") were incorrectly flagged as stale; now checks the `active` flag as fallback
 
 ### Test Suite
-- **183/183 tests passing** (2 skipped for deprecated endpoints)
+- **Verification at this release (archival, not current).** See the CI badge above for current status.
 
 ---
 
@@ -956,7 +958,7 @@ python -m twine upload dist/*
 - **Subgraph deprecation warning** - SubgraphClient now logs a clear deprecation warning directing users to GammaClient/CLOBClient
 
 ### Test Suite
-- **183/183 tests passing** (2 skipped for deprecated endpoints)
+- **Verification at this release (archival, not current).** See the CI badge above for current status.
 
 ---
 
@@ -969,7 +971,7 @@ python -m twine upload dist/*
 - **Eliminated all 44 bare `except:` handlers** - Replaced with `except Exception:` across 24 files (CLI commands, core modules, TUI screens, API layer, utilities) for better debugging and proper exception handling
 
 ### Test Suite
-- **183/183 tests passing** (2 skipped for deprecated endpoints)
+- **Verification at this release (archival, not current).** See the CI badge above for current status.
 
 ---
 
@@ -985,7 +987,7 @@ python -m twine upload dist/*
 - **Fixed UMA tracker timezone crash** - Resolved `TypeError` when comparing timezone-aware and naive datetimes in resolution risk analysis
 
 ### Test Suite
-- **183/183 tests passing** (2 skipped for deprecated endpoints)
+- **Verification at this release (archival, not current).** See the CI badge above for current status.
 - Updated TUI integration tests to work with new dispatch table pattern
 
 ---
@@ -1003,7 +1005,7 @@ python -m twine upload dist/*
 - **Request timeouts** - All API requests now have 15-second timeouts to prevent indefinite hangs
 
 ### Test Suite
-- **183/183 tests passing** (2 skipped for deprecated endpoints)
+- **Verification at this release (archival, not current).** See the CI badge above for current status.
 - Fixed live data tests to handle markets with end dates spanning calendar years
 - Fixed TUI shortcut tests to match current menu pagination system
 - Added proper wallet record creation in test fixtures to satisfy foreign key constraints

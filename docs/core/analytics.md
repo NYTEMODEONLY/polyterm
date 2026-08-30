@@ -22,7 +22,7 @@ WhaleActivity(trade_data: Dict[str, Any])
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
-| `trader` | `str` | Wallet address or `"Volume Spike"` for volume-based detection |
+| `trader` | `str` | Wallet address when known. Empty for volume heuristics. Never `"Volume Spike"`. |
 | `market_id` | `str` | Market identifier |
 | `outcome` | `str` | Market direction: `"YES"`, `"NO"`, `"MIXED"`, or `"Unknown"` |
 | `shares` | `float` | Estimated share count |
@@ -60,7 +60,7 @@ AnalyticsEngine(
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `track_whale_trades` | `(min_notional: float = 10000, lookback_hours: int = 24) -> List[WhaleActivity]` | Detect whale activity via volume spikes in top 50 active markets |
+| `track_whale_trades` | `(min_notional: float = 10000, lookback_hours: int = 24) -> List[WhaleActivity]` | Compatibility wrapper over `volume_spikes.detect_high_volume_markets`. Does not identify traders. Prefer `--wallets` for whale identity. |
 | `get_whale_impact_on_market` | `(market_id: str, whale_address: str) -> Dict[str, Any]` | Analyze a specific whale's impact on a market |
 | `identify_whale_followers` | `(whale_address: str) -> List[Dict[str, Any]]` | Identify traders following a whale (reserved implementation) |
 | `calculate_market_correlation` | `(market1_id: str, market2_id: str, window_hours: int = 24) -> Optional[MarketCorrelation]` | Calculate correlation between two markets (reserved implementation) |
@@ -74,15 +74,15 @@ AnalyticsEngine(
 
 ### Whale Detection
 
-Volume-based proxy detection using 24-hour volume data from the Gamma API:
+Volume-based **market** heuristic using 24-hour Gamma volume. This is not whale identity:
 
-1. Fetch top 50 active markets
+1. Delegate to `volume_spikes.detect_high_volume_markets`
 2. Markets with `volume24hr >= min_notional` (default $10,000) are flagged
-3. Outcome direction inferred from YES price thresholds:
-   - `> 0.65` = YES
-   - `< 0.35` = NO
-   - Otherwise = MIXED
-4. Results sorted by notional value (descending)
+3. `trader` is left empty; `evidence_level` is `gamma_volume24hr_heuristic`
+4. Outcome lean inferred from YES price thresholds (`> 0.65` YES, `< 0.35` NO, else MIXED)
+5. Results sorted by 24h volume descending
+
+For attributable whale trades use `WalletIntelligence.live_whales` or `polyterm whales --wallets`.
 
 ### Price Movement Prediction
 
@@ -138,7 +138,7 @@ List[WhaleActivity]  # sorted by notional, descending
     "signal_strength": float,
     "factors": {
         "price_momentum": float,
-        "whale_activity": float,
+        "volume_heuristic": float,
     },
 }
 ```
@@ -167,6 +167,6 @@ List[WhaleActivity]  # sorted by notional, descending
 
 ## Related
 
-- CLI commands: `polyterm whales`, `polyterm predict`, `polyterm dashboard`
+- CLI commands: `polyterm whales` (volume heuristic via `volume_spikes`; `--wallets` for identity), `polyterm predict`, `polyterm dashboard`
 - TUI screens: `3/w` (whales), `5/a` (analytics), `10/pred` (predictions)
 - Other modules: `core/whale_tracker.py` (more advanced whale tracking with insider detection), `core/predictions.py` (multi-factor prediction engine), `core/correlation.py` (dedicated correlation engine)

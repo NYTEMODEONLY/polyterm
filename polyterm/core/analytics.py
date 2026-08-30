@@ -1,14 +1,13 @@
 """Analytics engine for whale tracking, correlations, and predictions"""
 
-import time
-from typing import Dict, List, Optional, Any, Tuple
-from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Any
 from collections import defaultdict
 
 from ..api.gamma import GammaClient
 from ..api.clob import CLOBClient
 from ..api.data_api import DataAPIClient
 from ..utils.json_output import safe_float
+from .volume_spikes import EVIDENCE_LEVEL as VOLUME_SPIKE_EVIDENCE, detect_high_volume_markets
 
 
 class WhaleActivity:
@@ -24,6 +23,7 @@ class WhaleActivity:
         self.notional = safe_float(trade_data.get("notional", self.shares * self.price))
         self.timestamp = int(trade_data.get("timestamp", 0))
         self.tx_hash = trade_data.get("transactionHash", "")
+        self.evidence_level = trade_data.get("evidence_level", "")
     
     def __repr__(self):
         return f"WhaleActivity(trader={self.trader[:8]}..., notional=${self.notional:,.0f})"
@@ -65,110 +65,39 @@ class AnalyticsEngine:
         min_notional: float = 10000,
         lookback_hours: int = 24,
     ) -> List[WhaleActivity]:
-        """Track whale activity using volume spikes (individual trades not available from API)
-        
-        Args:
-            min_notional: Minimum volume spike to be considered whale activity
-            lookback_hours: Hours to look back
-        
-        Returns:
-            List of whale activities (volume-based detection)
+        """Return high-volume market heuristics, not attributable whale trades.
+
+        Prefer ``volume_spikes.detect_high_volume_markets`` or
+        ``WalletIntelligence.live_whales`` for wallet-level public trades.
+        ``lookback_hours`` is accepted for call-site compatibility; Gamma
+        ``volume24hr`` is a 24h market aggregate, not a trade window.
         """
         try:
-            # Get active markets from Gamma
-            markets = self.gamma_client.get_markets(limit=50, active=True, closed=False)
-            
+            markets = detect_high_volume_markets(
+                self.gamma_client,
+                min_volume=min_notional,
+            )
             activities = []
-            current_time = int(time.time())
-            
             for market in markets:
-                market_id = market.get('id')
-                if not market_id:
-                    continue
-                
-                # Check for volume spikes as proxy for whale activity
-                volume_24hr = float(market.get('volume24hr', 0) or 0)
-                
-                # If significant volume in last 24hrs, could indicate whale activity
-                if volume_24hr >= min_notional:
-                    # Get price info - check direct fields first (from /markets endpoint)
-                    # then fall back to nested markets (from /events endpoint)
-                    last_price = float(market.get('lastTradePrice', 0) or 0)
-                    prices = market.get('outcomePrices', [])
-                    outcome = "Unknown"
-
-                    # Handle outcomePrices which might be a JSON string
-                    if isinstance(prices, str):
-                        import json
-                        try:
-                            prices = json.loads(prices)
-                        except Exception:
-                            prices = []
-
-                    # Determine trend based on YES price (first outcome)
-                    if prices and len(prices) > 0:
-                        try:
-                            yes_price = float(prices[0])
-                            # Use price thresholds to determine market direction
-                            if yes_price > 0.65:
-                                outcome = "YES"  # Leaning YES
-                            elif yes_price < 0.35:
-                                outcome = "NO"   # Leaning NO
-                            else:
-                                outcome = "MIXED"  # Uncertain/competitive
-                            # Also use this as last_price if not already set
-                            if last_price == 0:
-                                last_price = yes_price
-                        except Exception:
-                            pass
-
-                    # Fall back to nested markets if no direct price data
-                    if last_price == 0 or outcome == "Unknown":
-                        nested_markets = market.get('markets', [])
-                        if nested_markets:
-                            nested = nested_markets[0]
-                            if last_price == 0:
-                                last_price = float(nested.get('lastTradePrice', 0) or 0)
-                            nested_prices = nested.get('outcomePrices', [])
-                            if isinstance(nested_prices, str):
-                                import json
-                                try:
-                                    nested_prices = json.loads(nested_prices)
-                                except Exception:
-                                    nested_prices = []
-                            if nested_prices and len(nested_prices) > 0 and outcome == "Unknown":
-                                try:
-                                    yes_price = float(nested_prices[0])
-                                    if yes_price > 0.65:
-                                        outcome = "YES"
-                                    elif yes_price < 0.35:
-                                        outcome = "NO"
-                                    else:
-                                        outcome = "MIXED"
-                                except Exception:
-                                    pass
-                    
-                    # Store market title for display
-                    market_title = market.get('title', market.get('question', 'Unknown'))
-                    
-                    # Create activity based on volume spike
-                    activity = WhaleActivity({
-                        'trader': 'Volume Spike',  # Can't determine individual trader
-                        'market': market_id,
-                        'outcome': outcome,
-                        'shares': volume_24hr / (last_price if last_price > 0 else 1),
-                        'price': last_price,
-                        'notional': volume_24hr,
-                        'timestamp': current_time,
-                        'transactionHash': '',
-                        '_market_title': market_title,  # Cache title
+                last_price = market.last_price if market.last_price > 0 else 1
+                activities.append(
+                    WhaleActivity({
+                        "trader": "",
+                        "market": market.market_id,
+                        "outcome": market.outcome_lean,
+                        "shares": market.volume_24hr / last_price,
+                        "price": market.last_price,
+                        "notional": market.volume_24hr,
+                        "timestamp": market.timestamp,
+                        "transactionHash": "",
+                        "evidence_level": VOLUME_SPIKE_EVIDENCE,
+                        "_market_title": market.market_title,
                     })
-                    activities.append(activity)
-            
-            return sorted(activities, key=lambda x: x.notional, reverse=True)
-            
+                )
+            _ = lookback_hours
+            return activities
         except Exception as e:
-            print(f"Error tracking whale trades: {e}")
+            print(f"Error tracking high-volume markets: {e}")
             return []
     
     def get_whale_impact_on_market(
@@ -294,19 +223,18 @@ class AnalyticsEngine:
             # Get recent trends
             trends = self.analyze_historical_trends(market_id, hours=168)
             
-            # Get current whale activity
-            whale_trades = self.track_whale_trades(lookback_hours=24)
-            market_whale_activity = [w for w in whale_trades if w.market_id == market_id]
-            
-            # Simple prediction based on momentum and whale activity
+            volume_markets = self.track_whale_trades(lookback_hours=24)
+            market_volume_activity = [w for w in volume_markets if w.market_id == market_id]
+
+            # Simple prediction based on momentum and high-volume market heuristic
             price_momentum = trends.get("price_change_percent", 0)
-            whale_net_position = sum(
+            volume_net_position = sum(
                 w.notional if w.outcome == "YES" else -w.notional
-                for w in market_whale_activity
+                for w in market_volume_activity
             )
-            
+
             # Combined signal
-            signal = (price_momentum * 0.6) + (whale_net_position / 10000 * 0.4)
+            signal = (price_momentum * 0.6) + (volume_net_position / 10000 * 0.4)
             
             if signal > 5:
                 prediction = "up"
@@ -325,7 +253,7 @@ class AnalyticsEngine:
                 "signal_strength": signal,
                 "factors": {
                     "price_momentum": price_momentum,
-                    "whale_activity": whale_net_position,
+                    "volume_heuristic": volume_net_position,
                 },
             }
             

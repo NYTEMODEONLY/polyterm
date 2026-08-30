@@ -288,6 +288,18 @@ class TestDataAPILeaderboardAndClosedPositions:
         assert "limit=25" in url
 
     @responses.activate
+    def test_get_leaderboard_does_not_map_winrate_to_pnl(self, client):
+        responses.add(
+            responses.GET,
+            f"{BASE_URL}/v1/leaderboard",
+            json=[],
+            status=200,
+        )
+        client.get_leaderboard(period="7d", limit=5, sort_by="winrate")
+        url = responses.calls[0].request.url
+        assert "orderBy=PNL" not in url
+
+    @responses.activate
     def test_get_closed_positions_success(self, client):
         responses.add(
             responses.GET,

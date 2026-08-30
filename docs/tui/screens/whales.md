@@ -1,10 +1,12 @@
 # Whale Tracker
 
-> Monitor high-volume trading activity across Polymarket.
+> Monitor high-volume markets (Gamma 24h volume heuristic, not trader identity).
 
 ## Overview
 
-The Whales screen detects and displays large trades and high-volume activity on Polymarket. It helps identify whale movements that may signal informed trading or market-moving positions. Configurable by minimum amount, lookback period, and result count.
+The Whales screen lists markets by Gamma 24h volume. It does not identify whale wallets or invent trader names. Configurable by minimum 24h volume, lookback prompt (kept for CLI compatibility), and result count.
+
+For wallet-level public trades, run `polyterm whales --wallets`.
 
 ## Access
 
@@ -13,10 +15,10 @@ The Whales screen detects and displays large trades and high-volume activity on 
 
 ## What It Shows
 
-A list of high-volume trades and whale activity, filtered by configurable parameters:
+A list of high-volume **markets** (not whale trades), filtered by:
 
-- Minimum 24-hour volume threshold
-- Lookback period in hours
+- Minimum 24-hour Gamma volume threshold
+- Lookback period in hours (CLI flag; heuristic itself uses Gamma `volume24hr`)
 - Maximum number of results
 
 ## Navigation / Keyboard Shortcuts
@@ -32,14 +34,15 @@ Press `Ctrl+C` to stop and return to the menu.
 ## CLI Command
 
 ```bash
-polyterm whales --min-amount 10000 --hours 24 --limit 20
+polyterm whales --volume --min-amount 10000 --hours 24 --limit 20
+polyterm whales --wallets --min-amount 100000 --hours 72
 ```
 
 ## Data Sources
 
-- Gamma REST API for market and trade data
-- CLOB WebSocket for real-time trade feeds (when available)
-- REST polling fallback via `whale_tracker._run_rest_polling()`
+- Gamma REST API `volume24hr` for the default TUI heuristic
+- Data API `/trades` for `polyterm whales --wallets`
+- CLOB WebSocket / REST polling live in `core/whale_tracker.py`, not this screen
 
 ## Related Screens
 
