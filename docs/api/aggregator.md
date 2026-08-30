@@ -38,7 +38,7 @@ No dedicated configuration. Behavior is determined by the `GammaClient` and `CLO
 
 ## Rate Limiting / Error Handling
 
-- **Fallback pattern**: `get_live_markets` tries Gamma first. If Gamma raises any exception or returns no fresh markets, it falls back to CLOB. If both fail, it returns an empty list.
+- **Fallback pattern**: `get_live_markets` tries Gamma first. If Gamma raises any exception or returns no fresh markets, it falls back to CLOB. If both sources raise, it raises `APIError` (an outage, not an empty market list). An empty list is reserved for successful calls that genuinely returned no markets.
 - **Enrichment failures are silent**: `enrich_market_data` wraps each data-source call in a bare `except Exception: pass`, so missing enrichment data never causes an error.
 - **Data source metadata**: Enriched market dicts include a `_data_sources` list (e.g., `['gamma', 'clob']`) indicating which sources contributed data.
 
