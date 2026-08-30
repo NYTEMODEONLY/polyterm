@@ -195,7 +195,7 @@ class MainMenu:
         page1_items = [
             ("1", "📊 Monitor Markets", "Real-time market tracking"),
             ("2", "🔴 Live Monitor", "Live trades in new window"),
-            ("3", "🐋 Whale Activity", "High-volume market moves"),
+            ("3", "🐋 Whale Activity", "Volume heuristic; --wallets for traders"),
             ("4", "👁  Watch Market", "Track specific market"),
             ("5", "📈 Market Analytics", "Trends and predictions"),
             ("6", "💼 Portfolio", "View your positions"),
