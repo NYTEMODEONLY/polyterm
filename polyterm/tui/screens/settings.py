@@ -72,7 +72,7 @@ def settings_screen(console: RichConsole):
         api_key = console.input(f"Gamma API Key [cyan][current: {'***' if config.gamma_api_key else 'Not set'}][/cyan] ").strip()
         if api_key:
             console.print(f"[yellow]API key would be set[/yellow]")
-            console.print("[dim]Note: Config editing coming soon. Edit config.toml manually for now.[/dim]")
+            console.print("[dim]Prefer POLYTERM_GAMMA_API_KEY. config.toml is plaintext; save() sets mode 0600.[/dim]")
     
     elif choice == '3':
         # Edit Display Settings
