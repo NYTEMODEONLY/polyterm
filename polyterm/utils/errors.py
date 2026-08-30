@@ -31,6 +31,11 @@ class ValidationError(PolyTermError):
     pass
 
 
+class FeatureUnavailable(PolyTermError):
+    """Called a feature that has no data source yet"""
+    pass
+
+
 class NetworkError(PolyTermError):
     """Network connectivity errors"""
     pass

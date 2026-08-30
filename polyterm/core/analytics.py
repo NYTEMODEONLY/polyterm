@@ -1,12 +1,13 @@
 """Analytics engine for whale tracking, correlations, and predictions"""
 
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, NoReturn
 from collections import defaultdict
 
 from ..api.gamma import GammaClient
 from ..api.clob import CLOBClient
 from ..api.data_api import DataAPIClient
 from ..utils.json_output import safe_float
+from ..utils.errors import FeatureUnavailable
 from .volume_spikes import EVIDENCE_LEVEL as VOLUME_SPIKE_EVIDENCE, detect_high_volume_markets
 
 
@@ -135,18 +136,22 @@ class AnalyticsEngine:
             "trades": trades,
         }
     
+    def _unavailable(self, feature: str) -> NoReturn:
+        raise FeatureUnavailable(
+            f"{feature} is not implemented and has no data source.",
+            suggestion=(
+                "Use CorrelationEngine with real CLOB price history, "
+                "or polyterm chart / polyterm replay."
+            ),
+            details=feature,
+        )
+
     def identify_whale_followers(self, whale_address: str) -> List[Dict[str, Any]]:
-        """Identify traders who follow whale activity
-        
-        Args:
-            whale_address: Whale wallet address
-        
-        Returns:
-            List of potential follower addresses with statistics
+        """Identify traders who follow whale activity.
+
+        Not implemented. Raises instead of returning [].
         """
-        # This would require more sophisticated analysis
-        # For now, return a placeholder
-        return []
+        self._unavailable("identify_whale_followers")
     
     def calculate_market_correlation(
         self,
@@ -154,18 +159,11 @@ class AnalyticsEngine:
         market2_id: str,
         window_hours: int = 24,
     ) -> Optional[MarketCorrelation]:
-        """Calculate correlation between two markets
+        """Calculate correlation between two markets.
 
-        Args:
-            market1_id: First market ID
-            market2_id: Second market ID
-            window_hours: Time window for correlation
-
-        Returns:
-            Correlation object or None
+        Not implemented. Raises instead of returning None.
         """
-        # Placeholder — requires time-series data source
-        return None
+        self._unavailable("calculate_market_correlation")
     
     def find_correlated_markets(
         self,
@@ -173,97 +171,34 @@ class AnalyticsEngine:
         min_correlation: float = 0.7,
         limit: int = 5,
     ) -> List[MarketCorrelation]:
-        """Find markets correlated with given market
-        
-        Args:
-            market_id: Market to find correlations for
-            min_correlation: Minimum correlation threshold
-            limit: Maximum number of results
-        
-        Returns:
-            List of correlated markets
+        """Find markets correlated with given market.
+
+        Not implemented. Raises instead of returning [].
         """
-        # Placeholder - would need to calculate against all markets
-        return []
+        self._unavailable("find_correlated_markets")
     
     def analyze_historical_trends(
         self,
         market_id: str,
         hours: int = 168,  # 1 week
     ) -> Dict[str, Any]:
-        """Analyze historical trends for a market
+        """Analyze historical trends for a market.
 
-        Args:
-            market_id: Market ID
-            hours: Hours of history to analyze
-
-        Returns:
-            Trend statistics
+        Not implemented. Raises instead of returning {}.
         """
-        # Historical trend analysis requires a time-series data source.
-        # The Subgraph endpoint has been removed; return empty until a
-        # replacement (e.g. CLOB price history) is wired in.
-        return {}
+        self._unavailable("analyze_historical_trends")
     
     def predict_price_movement(
         self,
         market_id: str,
         horizon_hours: int = 24,
     ) -> Dict[str, Any]:
-        """Predict price movement using basic signals
-        
-        Args:
-            market_id: Market ID
-            horizon_hours: Prediction horizon
-        
-        Returns:
-            Prediction with confidence
+        """Predict price movement using trend plus volume signals.
+
+        Not implemented: it depended on analyze_historical_trends,
+        which has no data source. Raises instead of inventing a signal.
         """
-        try:
-            # Get recent trends
-            trends = self.analyze_historical_trends(market_id, hours=168)
-            
-            volume_markets = self.track_whale_trades(lookback_hours=24)
-            market_volume_activity = [w for w in volume_markets if w.market_id == market_id]
-
-            # Simple prediction based on momentum and high-volume market heuristic
-            price_momentum = trends.get("price_change_percent", 0)
-            volume_net_position = sum(
-                w.notional if w.outcome == "YES" else -w.notional
-                for w in market_volume_activity
-            )
-
-            # Combined signal
-            signal = (price_momentum * 0.6) + (volume_net_position / 10000 * 0.4)
-            
-            if signal > 5:
-                prediction = "up"
-                confidence = min(abs(signal) / 20, 1.0)
-            elif signal < -5:
-                prediction = "down"
-                confidence = min(abs(signal) / 20, 1.0)
-            else:
-                prediction = "stable"
-                confidence = 0.5
-            
-            return {
-                "market_id": market_id,
-                "prediction": prediction,
-                "confidence": confidence,
-                "signal_strength": signal,
-                "factors": {
-                    "price_momentum": price_momentum,
-                    "volume_heuristic": volume_net_position,
-                },
-            }
-            
-        except Exception as e:
-            print(f"Error predicting price movement: {e}")
-            return {
-                "prediction": "unknown",
-                "confidence": 0.0,
-                "error": str(e),
-            }
+        self._unavailable("predict_price_movement")
     
     def get_portfolio_analytics(self, wallet_address: str) -> Dict[str, Any]:
         """Get analytics for a user's portfolio.
@@ -361,20 +296,8 @@ class AnalyticsEngine:
             }
     
     def detect_market_manipulation(self, market_id: str) -> Dict[str, Any]:
-        """Detect potential market manipulation patterns
+        """Detect potential market manipulation patterns.
 
-        Args:
-            market_id: Market ID
-
-        Returns:
-            Manipulation risk analysis
+        Not implemented. Raises instead of returning a fake risk_score of 0.
         """
-        # Manipulation detection required on-chain Subgraph data which is no
-        # longer available.  Return a safe default until a replacement source
-        # (e.g. CLOB trade history) is wired in.
-        return {
-            "market_id": market_id,
-            "risk_level": "unknown",
-            "risk_score": 0,
-            "risk_factors": [],
-        }
+        self._unavailable("detect_market_manipulation")

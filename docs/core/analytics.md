@@ -62,13 +62,13 @@ AnalyticsEngine(
 |--------|-----------|-------------|
 | `track_whale_trades` | `(min_notional: float = 10000, lookback_hours: int = 24) -> List[WhaleActivity]` | Compatibility wrapper over `volume_spikes.detect_high_volume_markets`. Does not identify traders. Prefer `--wallets` for whale identity. |
 | `get_whale_impact_on_market` | `(market_id: str, whale_address: str) -> Dict[str, Any]` | Analyze a specific whale's impact on a market |
-| `identify_whale_followers` | `(whale_address: str) -> List[Dict[str, Any]]` | Identify traders following a whale (reserved implementation) |
-| `calculate_market_correlation` | `(market1_id: str, market2_id: str, window_hours: int = 24) -> Optional[MarketCorrelation]` | Calculate correlation between two markets (reserved implementation) |
-| `find_correlated_markets` | `(market_id: str, min_correlation: float = 0.7, limit: int = 5) -> List[MarketCorrelation]` | Find markets correlated with a given market (reserved implementation) |
-| `analyze_historical_trends` | `(market_id: str, hours: int = 168) -> Dict[str, Any]` | Analyze historical price trends (requires time-series source) |
-| `predict_price_movement` | `(market_id: str, horizon_hours: int = 24) -> Dict[str, Any]` | Predict price direction using momentum and whale signals |
+| `identify_whale_followers` | `(whale_address: str) -> List[Dict[str, Any]]` | Raises `FeatureUnavailable`. Not implemented. |
+| `calculate_market_correlation` | `(market1_id: str, market2_id: str, window_hours: int = 24) -> Optional[MarketCorrelation]` | Raises `FeatureUnavailable`. Use `CorrelationEngine` for real correlations. |
+| `find_correlated_markets` | `(market_id: str, min_correlation: float = 0.7, limit: int = 5) -> List[MarketCorrelation]` | Raises `FeatureUnavailable`. Use `CorrelationEngine.find_correlated_markets`. |
+| `analyze_historical_trends` | `(market_id: str, hours: int = 168) -> Dict[str, Any]` | Raises `FeatureUnavailable`. No time-series source is wired. |
+| `predict_price_movement` | `(market_id: str, horizon_hours: int = 24) -> Dict[str, Any]` | Raises `FeatureUnavailable`. Would invent a signal from missing trends. |
 | `get_portfolio_analytics` | `(wallet_address: str) -> Dict[str, Any]` | Calculate portfolio value, P&L, and ROI from Data API positions |
-| `detect_market_manipulation` | `(market_id: str) -> Dict[str, Any]` | Detect manipulation patterns (reserved until a stable public data source is available) |
+| `detect_market_manipulation` | `(market_id: str) -> Dict[str, Any]` | Raises `FeatureUnavailable`. No on-chain source is wired. |
 
 ## Scoring / Algorithms
 
@@ -86,17 +86,9 @@ For attributable whale trades use `WalletIntelligence.live_whales` or `polyterm 
 
 ### Price Movement Prediction
 
-Combined signal from momentum and whale activity:
-
-```
-signal = (price_momentum * 0.6) + (whale_net_position / 10000 * 0.4)
-```
-
-| Signal | Prediction | Confidence |
-|--------|------------|------------|
-| `> 5` | `"up"` | `min(abs(signal) / 20, 1.0)` |
-| `< -5` | `"down"` | `min(abs(signal) / 20, 1.0)` |
-| `-5` to `5` | `"stable"` | `0.5` |
+`predict_price_movement` raises `FeatureUnavailable`. It used to treat missing
+historical trends as zero momentum and emit a `stable` prediction, which is
+not a real signal. Use `PredictionEngine` (local snapshots) when you have data.
 
 ### Portfolio Analytics
 
@@ -128,20 +120,20 @@ Aggregates position data from the Data API:
 List[WhaleActivity]  # sorted by notional, descending
 ```
 
-### `predict_price_movement` returns
+### Unimplemented analytics
 
-```python
-{
-    "market_id": str,
-    "prediction": "up" | "down" | "stable" | "unknown",
-    "confidence": float,       # 0.0 to 1.0
-    "signal_strength": float,
-    "factors": {
-        "price_momentum": float,
-        "volume_heuristic": float,
-    },
-}
-```
+These methods raise `polyterm.utils.errors.FeatureUnavailable` instead of
+returning `[]`, `None`, or `{}`:
+
+- `identify_whale_followers`
+- `calculate_market_correlation`
+- `find_correlated_markets`
+- `analyze_historical_trends`
+- `predict_price_movement`
+- `detect_market_manipulation`
+
+Empty collections are reserved for real "no results" from live sources
+(`track_whale_trades`, `get_portfolio_analytics`).
 
 ### `get_portfolio_analytics` returns
 
