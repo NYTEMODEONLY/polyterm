@@ -1,14 +1,19 @@
 """Subgraph GraphQL API client for on-chain data
 
-NOTE: The PolyMarket Subgraph endpoint has been deprecated by The Graph.
-This client is kept for backward compatibility but will return empty results
-for most queries. Use GammaClient or CLOBClient instead.
+NOTE: The PolyMarket Subgraph endpoint was removed by The Graph.
+SubgraphClient raises on construct. Use GammaClient or CLOBClient instead.
 """
 
 import logging
 from typing import Dict, List, Optional, Any
 
+from ..utils.errors import APIError
+
 logger = logging.getLogger(__name__)
+
+REMOVED = (
+    "SubgraphClient is not supported. The Graph removed the Polymarket subgraph."
+)
 
 try:
     from gql import gql, Client
@@ -31,21 +36,11 @@ class SubgraphClient:
         self,
         endpoint: str = "",
     ):
-        global _DEPRECATION_WARNED
-        self.endpoint = endpoint
-        self._deprecated = True
-        if not _DEPRECATION_WARNED:
-            logger.warning(
-                "SubgraphClient is deprecated: The PolyMarket Subgraph endpoint "
-                "has been removed. Use GammaClient or CLOBClient instead."
-            )
-            _DEPRECATION_WARNED = True
-        if HAS_GQL and endpoint:
-            transport = RequestsHTTPTransport(url=endpoint)
-            # Don't fetch schema - endpoint is deprecated
-            self.client = Client(transport=transport, fetch_schema_from_transport=False)
-        else:
-            self.client = None
+        raise APIError(
+            REMOVED,
+            suggestion="Use GammaClient for markets or CLOBClient / DataAPIClient for book and wallet data.",
+            details=endpoint or "no endpoint",
+        )
     
     def query(self, query_string: str, variables: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Execute GraphQL query
@@ -57,11 +52,6 @@ class SubgraphClient:
         Returns:
             Query result dictionary
         """
-        if not self.endpoint:
-            raise Exception(
-                "SubgraphClient is disabled. The Graph subgraph was removed. "
-                "Use GammaClient or CLOBClient instead."
-            )
         if not HAS_GQL or not self.client:
             raise Exception("gql package not installed. Install with: pip install gql[all]")
         try:
@@ -363,3 +353,4 @@ class SubgraphClient:
         
         result = self.query(query_string, variables)
         return result.get("markets", [])
+
