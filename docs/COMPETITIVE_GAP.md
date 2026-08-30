@@ -25,7 +25,7 @@ Polymarket released their official CLI on Feb 24, 2026. It gained 1,016 GitHub s
 |---|---|---|---|
 | **Market browsing** | monitor, search, hot | markets list/get/search, events, tags, series | Parity |
 | **Order book** | ASCII depth charts, iceberg detection, slippage calc | Full CLOB read (book, books, spreads, midpoints) | Polymarket CLI |
-| **Price history** | DB snapshots, ASCII line/sparkline charts | CLOB price-history (1m/1h/6h/1d/1w/max intervals) | Polymarket CLI |
+| **Price history** | CLOB `/prices-history` via `history`/`chart`, ASCII charts | CLOB price-history (1m/1h/6h/1d/1w/max intervals) | Parity (read) |
 | **Trade execution** | None (links to Polymarket web) | Limit, market, batch, FOK, GTD, FAK, post-only | Polymarket CLI |
 | **Wallet management** | View-only address tracking | Create, import, proxy, Gnosis Safe | Polymarket CLI |
 | **On-chain ops** | None | CTF split/merge/redeem, contract approvals, bridge | Polymarket CLI |
@@ -105,7 +105,7 @@ Polymarket released their official CLI on Feb 24, 2026. It gained 1,016 GitHub s
 - Volume quality indicators (wash trade detection)
 - Cross-platform data (Kalshi comparison)
 
-**Gap assessment:** Our price history depends on accumulated snapshots (cold start problem). We should add CLOB price-history API support to provide instant historical data without requiring local accumulation.
+**Gap assessment:** `polyterm history` and `polyterm chart` call CLOB `GET /prices-history` using the market's CLOB token ID, so cold start no longer depends on local snapshots. History refuses instead of inventing a path when CLOB data is missing. Remaining gap is interval UX polish versus the official CLI's explicit 1m/1h/6h/1d/1w/max flags.
 
 ### 3. UX
 

@@ -1,10 +1,12 @@
 # Market History
 
-> View price and volume history for any market.
+> View CLOB price history for a market. Refuses instead of inventing a path.
 
 ## Overview
 
-The History screen lets you look up historical price and volume data for a specific market over configurable time periods. It displays the data as a chart in the terminal. You enter a market name or ID and select a time range, then the screen renders a visual history.
+The History screen looks up a market, asks for a time period, and launches `polyterm history` against CLOB `GET /prices-history`. It is view-only.
+
+The screen does not pass `--demo`. If CLOB token IDs or history points are missing, the CLI refuses instead of drawing a random walk.
 
 ## Access
 
@@ -13,16 +15,12 @@ The History screen lets you look up historical price and volume data for a speci
 
 ## What It Shows
 
-A two-step prompt flow:
+A two-step prompt flow, then the CLI output:
 
-1. **Market selection** -- enter a market name or ID
-2. **Time period** -- choose from:
-   - Last day
-   - Last week (default)
-   - Last month
-   - All time
+1. **Market selection** -- enter a Gamma search term, slug, or id
+2. **Time period** -- last day, last week (default), last month, or all time
 
-The result is an ASCII chart showing price history for the selected period.
+The screen states that it uses CLOB `/prices-history` before the CLI runs. Table output includes source flags (`uses_historical_data`, `source`) and an ASCII chart of the real series when available.
 
 ## Navigation / Keyboard Shortcuts
 
@@ -38,15 +36,22 @@ polyterm history <market> --period month --chart
 polyterm history <market> --period all --chart
 ```
 
+Labeled demo is CLI-only:
+
+```bash
+polyterm history <market> --demo --format json
+```
+
 ## Data Sources
 
-- CLOB API price history endpoint (`/prices-history`)
-- Falls back to local SQLite database snapshots if CLOB data is unavailable
+- Gamma Markets REST API for search and CLOB token IDs
+- CLOB REST `GET /prices-history` with `market=<CLOB token ID>`
+- No local snapshot fallback and no synthetic default path
 
 ## Related Screens
 
-- [Export](../screens/export.md) -- export the historical data to a file
-- [Hot Markets](../screens/hot.md) -- find markets with significant recent movement
+- [Chart](chart_screen.md) -- ASCII charts that also prefer CLOB history
+- [Hot Markets](hot.md) -- markets with significant recent movement
 
 ## Documentation Maintenance
 
@@ -54,18 +59,14 @@ This page is part of the generated PolyTerm documentation set and should stay al
 
 When updating this feature:
 
-- Confirm the linked source file still exists and the module name has not changed.
-- Update command examples, TUI shortcuts, and option names when Click or controller routing changes.
-- Keep data-source notes current with the active Polymarket API contracts.
-- Prefer concrete endpoint names, identifier types, and output fields over broad marketing language.
-- Run `./test_all_commands.sh` when a CLI command or shortcut is affected.
-- Run `.venv/bin/python scripts/validate_docs.py` before committing documentation changes.
+- Confirm `polyterm/tui/screens/history_screen.py` still exists.
+- Keep the TUI from auto-enabling `--demo`.
+- Keep data-source notes on CLOB token IDs versus Gamma market IDs.
+- Run `./test_all_commands.sh` and `.venv/bin/python scripts/validate_docs.py`.
 
 Validation expectations:
 
 - Internal links should resolve inside the `docs/` tree.
 - Examples should be copy-pasteable from the repository root unless stated otherwise.
-- Pages for view-only workflows should say so when wallet or trading context is involved.
-- Pages that depend on live market data should name Gamma, Data API, or CLOB as the source.
-- Alias pages should point to the canonical page and explain why the alias exists.
-- New modules should have a dedicated page rather than relying only on the index.
+- Pages for view-only workflows should say so.
+- Pages that depend on live market data should name Gamma and CLOB as the source.
