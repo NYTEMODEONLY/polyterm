@@ -7,6 +7,18 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 
+# Env vars win over plaintext config.toml for secrets.
+SECRET_ENV = {
+    "api.gamma_api_key": "POLYTERM_GAMMA_API_KEY",
+    "api.kalshi_api_key": "POLYTERM_KALSHI_API_KEY",
+    "notifications.webhook_url": "POLYTERM_WEBHOOK_URL",
+    "notifications.telegram.bot_token": "POLYTERM_TELEGRAM_BOT_TOKEN",
+    "notifications.telegram.chat_id": "POLYTERM_TELEGRAM_CHAT_ID",
+    "notifications.discord.webhook_url": "POLYTERM_DISCORD_WEBHOOK",
+    "notifications.email.smtp_password": "POLYTERM_SMTP_PASSWORD",
+}
+
+
 class Config:
     """Manages PolyTerm configuration"""
     
@@ -123,13 +135,19 @@ class Config:
                 base[key] = value
     
     def save(self) -> None:
-        """Save configuration to file"""
+        """Save configuration to file with owner-only permissions."""
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.config_path, "w") as f:
             toml.dump(self.config, f)
+        os.chmod(self.config_path, 0o600)
     
     def get(self, key: str, default: Any = None) -> Any:
         """Get configuration value using dot notation (e.g., 'alerts.probability_threshold')"""
+        env_name = SECRET_ENV.get(key)
+        if env_name:
+            env_val = os.environ.get(env_name)
+            if env_val:
+                return env_val
         keys = key.split(".")
         value = self.config
         for k in keys:
