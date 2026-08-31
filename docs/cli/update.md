@@ -1,35 +1,50 @@
 # Update
 
-> Check for and install updates.
+> Reinstall PolyTerm from GitHub main. PyPI is decommissioned.
 
 ## Overview
 
-Check for and install updates.
+`polyterm update` reinstalls the current machine from GitHub `main`. GitHub is the source of truth. It does not query PyPI and does not install the PyPI package name `polyterm`.
+
+The command prefers `pipx install --force git+https://github.com/NYTEMODEONLY/polyterm.git@main`, then falls back to `pip install --upgrade` with the same git spec. After a successful reinstall, restart PolyTerm to load the new code.
+
+This command mutates the local install. It does not place trades or write wallet keys.
 
 ## Usage
 
 ### CLI
 
 ```bash
-polyterm update [options]
+polyterm update
 ```
+
+Confirm the prompt to reinstall from GitHub `main`.
 
 ### TUI
 
-Not directly accessible from TUI menu. Use the CLI directly.
-
+- Settings screen option `6` (`8` or `s` from the main menu, then `6`)
+- Main-menu shortcut `u` / `update` (same GitHub reinstall as Settings)
 
 ## Examples
 
 ```bash
-# Basic usage
+# Reinstall from GitHub main
 polyterm update
+```
+
+Manual equivalent when the command cannot run pipx or pip:
+
+```bash
+pipx install --force git+https://github.com/NYTEMODEONLY/polyterm.git@main
+pip install --upgrade git+https://github.com/NYTEMODEONLY/polyterm.git@main
 ```
 
 ## Data Sources
 
-- User configuration (`~/.polyterm/config.toml`)
-- PyPI API
+- Installed package version (`polyterm.__version__`)
+- GitHub `main` via pipx or pip (`git+https://github.com/NYTEMODEONLY/polyterm.git@main`)
+
+PyPI is decommissioned and is not consulted.
 
 
 ## Related Commands
