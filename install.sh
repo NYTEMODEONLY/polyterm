@@ -17,7 +17,7 @@ if ! command -v pipx &> /dev/null; then
         brew install pipx
     else
         echo "❌ Homebrew not found. Please install Homebrew first:"
-        echo "   /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+        echo "   /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
         exit 1
     fi
     
@@ -28,9 +28,9 @@ else
     echo "✅ pipx already installed"
 fi
 
-# Install PolyTerm
-echo "📥 Installing PolyTerm..."
-pipx install polyterm
+# Install PolyTerm from GitHub main (PyPI is decommissioned)
+echo "📥 Installing PolyTerm from GitHub main..."
+pipx install git+https://github.com/NYTEMODEONLY/polyterm.git@main
 
 echo ""
 echo "🎉 Installation complete!"
