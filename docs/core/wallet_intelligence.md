@@ -47,11 +47,13 @@ Local DB rows are used as a fallback and enrichment source. If refresh data exis
 
 `live_whales()` also logs the Data API whale-query result set locally: it upserts whale wallet summaries into `wallets` and inserts each matching public trade into `trades`. Trade caching is idempotent when a transaction hash is available, keyed by transaction hash + wallet + market, so repeated natural-language lookups enrich the local store without duplicating rows.
 
+Data API wallet, positions, and trades returned by `analyze_wallet` (refresh path), `live_whales`, and `whale_trades` are lagged. They are not the live CLOB tape. Payloads include `lag=true`, `lagged=true`, and `quality_flags` containing `lagged_data_api`. Do not invent a lag duration.
+
 ## Data Sources
 
 - Data API `/positions`
 - Data API `/trades`
-- Data API `/trades?filterType=CASH&filterAmount=<min_notional>` for live whale discovery
+- Data API `/trades?filterType=CASH&filterAmount=<min_notional>` for lagged whale discovery (not live CLOB)
 - Data API `/value` when available
 - Local SQLite `wallets` and `trades`
 
@@ -63,6 +65,7 @@ Returned profiles include flags such as:
 - `no_public_positions`
 - `no_public_trades`
 - `trade_direction_may_be_inferred`
+- `lagged_data_api`
 - `public_data_api`
 - `data_api_recent_tape_window_limited`
 - `local_db_only`

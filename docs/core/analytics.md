@@ -147,6 +147,9 @@ Empty collections are reserved for real "no results" from live sources
     "roi_percent": float,
     "positions": List[Dict],
     "data_source": "data_api",
+    "source": "data_api",
+    "lag": True,
+    "lagged": True,
 }
 ```
 
