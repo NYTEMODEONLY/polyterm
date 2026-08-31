@@ -57,6 +57,6 @@ No dedicated configuration. Behavior is determined by the `GammaClient` and `CLO
 
 ## Related
 
-- **CLI commands**: `monitor`, `live_monitor`, `analytics` (all import `APIAggregator`)
+- **CLI commands**: `monitor`, `live_monitor`, `analytics` (all import `APIAggregator`), `watch` (same both-sources-failed outage honesty via `service_health`)
 - **TUI screens**: `analytics.py` (uses `get_top_markets_by_volume` directly for trending markets display), `market_picker.py` (uses aggregator for market selection)
 - **Core modules**: `core/scanner.py` (uses aggregator for market monitoring and shift detection)
