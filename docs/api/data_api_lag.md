@@ -35,6 +35,7 @@ It does not invent a lag duration. There is no minutes/seconds field and no esti
 | JSON | `source=data_api` (when missing), `lag=true`, `lagged=true`, `quality_flags` includes `lagged_data_api` |
 | CLI table | Yellow banner with `DISCLOSURE` plus lagged table title |
 | TUI | Panel text on wallets, whales (`--wallets` note), and portfolio screens |
+| Print alerts | `polyterm alerts --add-rule print` / `--evaluate print` JSON and table titles |
 
 This is a view-only honesty label. It does not change which API is called.
 
@@ -74,6 +75,8 @@ Unit tests mock Data API clients. They must not hit the network.
 - [Wallets CLI](../cli/wallets.md)
 - [Whales CLI](../cli/whales.md)
 - [Portfolio CLI](../cli/portfolio.md)
+- [Alerts CLI](../cli/alerts.md)
+- [Print scanner](../core/print_scanner.md)
 - [Wallet intelligence](../core/wallet_intelligence.md)
 
 ## Documentation Maintenance
