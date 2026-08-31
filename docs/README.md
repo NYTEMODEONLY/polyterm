@@ -235,6 +235,7 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 | [data_api](api/data_api.md) | Data API client (wallet positions, activity) | Wallet data |
 | [gamma](api/gamma.md) | Gamma REST API + SharedRateLimiter | Market data |
 | [market_utils](api/market_utils.md) | Identifier and metadata normalization helpers | ID routing |
+| [status](api/status.md) | Statuspage v2 client for status.polymarket.com | Incident banners |
 | [subgraph](api/subgraph.md) | Subgraph client (legacy) | Historical data |
 
 ### Core Modules
@@ -267,6 +268,7 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 | [rewards](core/rewards.md) | Holding and liquidity rewards calculator | Rewards estimator |
 | [risk_score](core/risk_score.md) | Market risk scoring (A-F grades, 6 factors) | Risk engine |
 | [scanner](core/scanner.md) | Market monitoring and shift detection | Market scanner |
+| [service_health](core/service_health.md) | Gamma, CLOB, and Statuspage health combiner | Watch outage honesty |
 | [trade_thesis](core/trade_thesis.md) | Explainable market-level thesis composer | Decision support |
 | [uma_tracker](core/uma_tracker.md) | UMA oracle dispute risk analysis | Dispute tracking |
 | [wash_trade_detector](core/wash_trade_detector.md) | Wash trade detection indicators | Volume quality |
