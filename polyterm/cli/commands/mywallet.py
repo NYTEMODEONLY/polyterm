@@ -80,7 +80,11 @@ def get_wallet_trades(db: Database, address: str, limit: int = 50) -> list:
 @click.option("--disconnect", is_flag=True, help="Disconnect saved wallet")
 @click.option("--positions", "-p", is_flag=True, help="View open positions")
 @click.option("--history", "-h", "show_history", is_flag=True, help="View trade history")
-@click.option("--pnl", is_flag=True, help="View P&L summary")
+@click.option(
+    "--pnl",
+    is_flag=True,
+    help="View lagged Data API activity-cashflow P&L (not SUM(cashPnl); not live CLOB)",
+)
 @click.option("--interactive", "-i", is_flag=True, help="Interactive mode")
 @click.option("--format", "output_format", type=click.Choice(["table", "json"]), default="table")
 @click.pass_context
@@ -90,11 +94,17 @@ def mywallet(ctx, address, connect, disconnect, positions, show_history, pnl, in
     This is a VIEW-ONLY feature - no private keys are stored or needed.
     You can track your positions, history, and P&L from your wallet address.
 
+    --pnl replays lagged Data API /activity (BUY, SELL, REDEEM, MERGE, SPLIT,
+    REBATE) plus an open-size mark. That is not live CLOB and not SUM(cashPnl).
+    Official lb-api /profit is a pre-fee cross-check when reachable.
+    Local closed-position journal remains `polyterm pnl`.
+
     Examples:
         polyterm mywallet -c                  # Connect a wallet
         polyterm mywallet -p                  # View positions
         polyterm mywallet -h                  # View trade history
-        polyterm mywallet --pnl               # View P&L summary
+        polyterm mywallet --pnl               # Activity-cashflow P&L
+        polyterm mywallet --pnl -a 0x... --format json
         polyterm mywallet -i                  # Interactive mode
         polyterm mywallet -a 0x123...         # View specific wallet
     """
@@ -417,59 +427,88 @@ def _show_history(console, address, db, output_format):
     console.print()
 
 
+def _format_signed_usd(value):
+    if value is None:
+        return "n/a"
+    color = "green" if value >= 0 else "red"
+    return f"[{color}]${value:+,.2f}[/{color}]"
+
+
 def _show_pnl(console, address, db, output_format):
-    """Show P&L summary"""
-    if output_format != 'json':
-        console.print("[bold]P&L Summary[/bold]")
-        console.print()
+    """Show wallet P&L from lagged Data API activity cashflow.
 
-    # Get position summary from local tracking
-    summary = db.get_position_summary()
+    View-only. Source of truth is activity replay, not local SQLite and
+    not SUM(positions.cashPnl). `polyterm pnl` remains the local journal.
+    """
+    from ...api.data_api import DataAPIClient
+    from ...api.data_api_lag import DISCLOSURE, table_title
+    from ...core.pnl_cashflow import CashflowPnl
+    from ...utils.errors import handle_api_error
 
-    # Get wallet stats if available
-    wallet = db.get_wallet(address)
+    data_api = DataAPIClient()
+    try:
+        report = CashflowPnl(data_api=data_api).compute(address)
+    except Exception as exc:
+        if output_format == "json":
+            print_json({
+                "success": False,
+                "error": str(exc),
+                "wallet": address,
+            })
+        else:
+            handle_api_error(console, exc, "wallet P&L")
+        return
+    finally:
+        data_api.close()
 
-    if output_format == 'json':
-        print_json({
-            'success': True,
-            'wallet': address,
-            'position_summary': summary,
-            'wallet_stats': wallet.to_dict() if wallet else None,
-        })
+    if output_format == "json":
+        payload = dict(report)
+        payload["success"] = True
+        payload["wallet"] = address
+        print_json(payload)
         return
 
+    console.print(Panel(f"[yellow]{DISCLOSURE}[/yellow]", border_style="yellow"))
+    console.print()
+    console.print(f"[bold]{table_title('P&L (activity cashflow)')}[/bold]")
+    console.print()
+
     table = Table(show_header=False, box=None)
-    table.add_column(width=25)
-    table.add_column(width=15, justify="right")
+    table.add_column(width=28)
+    table.add_column(width=22, justify="right")
 
-    table.add_row("[bold]Position Tracking:[/bold]", "")
-    table.add_row("  Open Positions", f"{summary['open_positions']}")
-    table.add_row("  Open Value", f"${summary['open_value']:,.2f}")
-    table.add_row("  Closed Trades", f"{summary['closed_positions']}")
-    table.add_row("", "")
+    table.add_row("source", "activity-cashflow")
+    table.add_row("vs-leaderboard", "pre-fee")
+    table.add_row("lagged", "true")
 
-    # P&L
-    realized = summary['realized_pnl']
-    pnl_color = "green" if realized >= 0 else "red"
-    table.add_row("[bold]Performance:[/bold]", "")
-    table.add_row("  Realized P&L", f"[{pnl_color}]${realized:+,.2f}[/{pnl_color}]")
-    table.add_row("  Wins", f"[green]{summary['wins']}[/green]")
-    table.add_row("  Losses", f"[red]{summary['losses']}[/red]")
-    table.add_row("  Win Rate", f"{summary['win_rate']:.1f}%")
+    if report.get("empty"):
+        table.add_row("P&L", "[dim]n/a (empty activity)[/dim]")
+        table.add_row("Cashflow", "[dim]n/a[/dim]")
+        table.add_row("Open mark", _format_signed_usd(report.get("open_mark")))
+        table.add_row("Leaderboard profit", _format_signed_usd(report.get("leaderboard_profit")))
+        console.print(table)
+        console.print()
+        console.print("[dim]No Data API activity for this wallet.[/dim]")
+        console.print("[dim]P&L is not synthesized from positions.cashPnl.[/dim]")
+        console.print()
+        return
 
-    if wallet:
-        table.add_row("", "")
-        table.add_row("[bold]Wallet Stats:[/bold]", "")
-        table.add_row("  Total Trades", f"{wallet.total_trades}")
-        table.add_row("  Total Volume", f"${wallet.total_volume:,.2f}")
-        table.add_row("  Avg Position", f"${wallet.avg_position_size:,.2f}")
+    table.add_row("Cashflow", _format_signed_usd(report.get("cashflow")))
+    table.add_row("Open mark", _format_signed_usd(report.get("open_mark")))
+    table.add_row("P&L", _format_signed_usd(report.get("pnl")))
+    table.add_row("Leaderboard profit", _format_signed_usd(report.get("leaderboard_profit")))
+    table.add_row("Open positions", str(report.get("open_positions") or 0))
+    table.add_row("Activity rows", str(report.get("activity_count") or 0))
+    flags = report.get("quality_flags") or []
+    if flags:
+        table.add_row("Quality flags", ", ".join(flags))
 
     console.print(table)
     console.print()
-
-    if summary['open_positions'] == 0 and summary['closed_positions'] == 0:
-        console.print("[dim]No tracked positions yet.[/dim]")
-        console.print("[dim]Use 'polyterm position --add' to manually track trades.[/dim]")
+    counts = report.get("included_counts") or {}
+    parts = [f"{name}={count}" for name, count in counts.items() if count]
+    if parts:
+        console.print(f"[dim]Included: {', '.join(parts)}[/dim]")
         console.print()
 
 
