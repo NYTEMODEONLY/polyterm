@@ -17,7 +17,7 @@ if ! command -v pipx &> /dev/null; then
         brew install pipx
     else
         echo "❌ Homebrew not found. Please install Homebrew first:"
-        echo "   /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+        echo "   /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
         exit 1
     fi
     
