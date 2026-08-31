@@ -480,6 +480,42 @@ class TestDataAPIGetTrades:
             client.get_trades("0xabc123")
 
 
+class TestDataAPIWalletProfileLag:
+    """Aggregated wallet profile is lagged Data API, not live CLOB."""
+
+    @pytest.fixture
+    def client(self):
+        return DataAPIClient(base_url=BASE_URL)
+
+    @responses.activate
+    def test_get_wallet_profile_is_lagged(self, client):
+        responses.add(
+            responses.GET,
+            f"{BASE_URL}/positions",
+            json=[{"market": "m1", "size": "1"}],
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            f"{BASE_URL}/trades",
+            json=[{"side": "BUY", "size": "1"}],
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            f"{BASE_URL}/value",
+            json={"value": 10},
+            status=200,
+        )
+
+        profile = client.get_wallet_profile("0xabc123")
+        assert profile["source"] == "data_api"
+        assert profile["lag"] is True
+        assert profile["lagged"] is True
+        assert profile["positions"][0]["market"] == "m1"
+        assert profile["trades"][0]["side"] == "BUY"
+
+
 class TestDataAPIGetProfitSummary:
     """Test get_profit_summary method"""
 
@@ -506,6 +542,9 @@ class TestDataAPIGetProfitSummary:
         assert summary["total_invested"] == 500 + 300 + 200
         assert summary["position_count"] == 3
         assert len(summary["positions"]) == 3
+        assert summary["source"] == "data_api"
+        assert summary["lag"] is True
+        assert summary["lagged"] is True
         assert "sortBy=CASHPNL" in responses.calls[0].request.url
         assert "limit=500" in responses.calls[0].request.url
 
