@@ -6,7 +6,6 @@ A powerful, terminal-based monitoring and analytics tool for PolyMarket predicti
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![PyPI version](https://img.shields.io/pypi/v/polyterm.svg)](https://pypi.org/project/polyterm/)
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/NYTEMODEONLY?label=Sponsor)](https://github.com/sponsors/NYTEMODEONLY)
 
 **[Full Documentation](docs/README.md)** — Comprehensive docs for every CLI command, TUI screen, API module, core engine, and agentic runtime integration.
@@ -17,21 +16,26 @@ A powerful, terminal-based monitoring and analytics tool for PolyMarket predicti
 
 ## Quick Start
 
-### Option 1: Install from PyPI (Recommended)
-```bash
-pipx install polyterm
-```
+Install from GitHub `main`. GitHub is the source of truth. PyPI is decommissioned.
 
-### Option 2: One-Command Install
-```bash
-curl -sSL https://raw.githubusercontent.com/NYTEMODEONLY/polyterm/main/install.sh | bash
-```
+### Option 1: Clone and install (recommended)
 
-### Option 3: Manual Install
 ```bash
 git clone https://github.com/NYTEMODEONLY/polyterm.git
 cd polyterm
 pip install -e .
+```
+
+### Option 2: pipx from GitHub
+
+```bash
+pipx install git+https://github.com/NYTEMODEONLY/polyterm.git@main
+```
+
+### Option 3: One-command install (GitHub `main`)
+
+```bash
+curl -sSL https://raw.githubusercontent.com/NYTEMODEONLY/polyterm/main/install.sh | bash
 ```
 
 **Launch PolyTerm:**
@@ -1024,7 +1028,7 @@ python -m twine upload dist/*
 
 - **Issues**: [GitHub Issues](https://github.com/NYTEMODEONLY/polyterm/issues)
 - **Documentation**: See this README and inline `--help`
-- **Updates**: `polyterm update` or `pipx upgrade polyterm`
+- **Updates**: reinstall from GitHub `main` (`pipx install --force git+https://github.com/NYTEMODEONLY/polyterm.git@main`). `polyterm update` uses the same GitHub source. PyPI is decommissioned.
 
 ---
 
