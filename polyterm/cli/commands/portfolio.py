@@ -2,10 +2,12 @@
 
 import click
 from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
 
 from ...api.gamma import GammaClient
 from ...api.clob import CLOBClient
+from ...api.data_api_lag import DISCLOSURE, label_payload, table_title
 from ...core.analytics import AnalyticsEngine
 from ...utils.json_output import safe_float
 from ...utils.errors import handle_api_error
@@ -60,7 +62,10 @@ def _extract_position_fields(position):
 @click.option("--wallet", default=None, help="Wallet address (or use config)")
 @click.pass_context
 def portfolio(ctx, wallet):
-    """View portfolio and positions"""
+    """View portfolio and positions
+
+    Positions come from the lagged Data API, not the live CLOB fill tape.
+    """
     
     config = ctx.obj["config"]
     console = Console()
@@ -102,6 +107,9 @@ def portfolio(ctx, wallet):
         if not portfolio_data.get("positions"):
             console.print("[yellow]No positions found[/yellow]")
             return
+
+        portfolio_data = label_payload(portfolio_data)
+        console.print(Panel(f"[yellow]{DISCLOSURE}[/yellow]", border_style="yellow"))
         
         # Display summary
         console.print("[bold]Portfolio Summary:[/bold]")
@@ -111,7 +119,7 @@ def portfolio(ctx, wallet):
         console.print(f"  ROI: {portfolio_data['roi_percent']:,.1f}%\n")
         
         # Display positions
-        table = Table(title="Positions")
+        table = Table(title=table_title("Positions"))
         
         table.add_column("Market", style="cyan", no_wrap=False, max_width=50)
         table.add_column("Outcome", justify="center")

@@ -3,11 +3,13 @@
 import click
 from datetime import datetime
 from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
 
 from ...db.database import Database
 from ...db.models import Wallet
 from ...api.data_api import DataAPIClient
+from ...api.data_api_lag import DISCLOSURE, label_payload
 from ...core.whale_tracker import InsiderDetector
 from ...core.wallet_intelligence import WalletIntelligence
 from ...utils.json_output import print_json
@@ -18,7 +20,11 @@ from ...utils.errors import handle_api_error
 @click.option("--type", "wallet_type", type=click.Choice(["whales", "smart", "suspicious", "all"]), default="whales", help="Type of wallets to show")
 @click.option("--limit", default=20, help="Maximum wallets to show")
 @click.option("--analyze", default=None, help="Analyze specific wallet address")
-@click.option("--refresh", is_flag=True, help="Refresh analyzed wallet from the public Data API")
+@click.option(
+    "--refresh",
+    is_flag=True,
+    help="Refresh analyzed wallet from lagged Data API (not live CLOB)",
+)
 @click.option("--min-win-rate", default=0.70, type=float, help="Minimum win rate for --type smart")
 @click.option("--min-trades", default=10, type=int, help="Minimum trades for --type smart")
 @click.option("--track", default=None, help="Add wallet to tracking list")
@@ -26,7 +32,11 @@ from ...utils.errors import handle_api_error
 @click.option("--format", "output_format", type=click.Choice(["table", "json"]), default="table", help="Output format")
 @click.pass_context
 def wallets(ctx, wallet_type, limit, analyze, refresh, min_win_rate, min_trades, track, untrack, output_format):
-    """Track and analyze whale and smart money wallets"""
+    """Track and analyze whale and smart money wallets
+
+    --analyze --refresh reads lagged Data API wallet, positions, and trades.
+    That is not the live CLOB fill tape. Local list/analyze paths stay local.
+    """
 
     config = ctx.obj["config"]
     console = Console()
@@ -56,7 +66,7 @@ def wallets(ctx, wallet_type, limit, analyze, refresh, min_win_rate, min_trades,
                 data_api = DataAPIClient()
                 try:
                     intelligence = WalletIntelligence(data_api=data_api, database=db)
-                    profile = intelligence.analyze_wallet(analyze, limit=limit, refresh=True)
+                    profile = label_payload(intelligence.analyze_wallet(analyze, limit=limit, refresh=True))
                 finally:
                     data_api.close()
 
@@ -64,6 +74,7 @@ def wallets(ctx, wallet_type, limit, analyze, refresh, min_win_rate, min_trades,
                     print_json({'success': True, 'wallet_intelligence': profile})
                 else:
                     metrics = profile["metrics"]
+                    console.print(Panel(f"[yellow]{DISCLOSURE}[/yellow]", border_style="yellow"))
                     console.print(f"\n[bold]Wallet Intelligence: {analyze[:30]}...[/bold]\n")
                     console.print(f"Positions: {metrics['position_count']}")
                     console.print(f"Trades: {metrics['trade_count']}")
