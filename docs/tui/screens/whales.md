@@ -6,7 +6,7 @@
 
 The Whales screen lists markets by Gamma 24h volume. It does not identify whale wallets or invent trader names. Configurable by minimum 24h volume, lookback prompt (kept for CLI compatibility), and result count.
 
-For wallet-level public trades, run `polyterm whales --wallets`.
+For wallet-level public trades, run `polyterm whales --wallets`. That path is lagged Data API, not live CLOB.
 
 ## Access
 
@@ -41,7 +41,7 @@ polyterm whales --wallets --min-amount 100000 --hours 72
 ## Data Sources
 
 - Gamma REST API `volume24hr` for the default TUI heuristic
-- Data API `/trades` for `polyterm whales --wallets`
+- Lagged Data API `/trades` for `polyterm whales --wallets` (not live CLOB)
 - CLOB WebSocket / REST polling live in `core/whale_tracker.py`, not this screen
 
 ## Related Screens

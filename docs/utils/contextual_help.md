@@ -41,7 +41,7 @@ Each entry in the `HELP_CONTENT` dictionary is itself a dictionary with these fi
 
 **monitor** -- Options for `--limit`, `--category`, `--sort`, `--active-only`, `--once`. Tips cover update frequency, Ctrl+C to stop, and JSON output.
 
-**whales** -- Options for `--min-amount`, `--hours`, `--market`, `--limit`. Tips cover whale-price correlation, lowering thresholds, and smart money combination.
+**whales** -- Options for `--min-amount`, `--hours`, `--market`, `--limit`, `--wallets`. Tips cover the Gamma volume heuristic vs lagged Data API wallet trades (not live CLOB).
 
 **arbitrage** -- Options for `--min-spread`, `--limit`, `--include-kalshi`. Tips explain intra-market, correlated, and cross-platform arbitrage types, plus the importance of speed.
 
@@ -55,7 +55,7 @@ Each entry in the `HELP_CONTENT` dictionary is itself a dictionary with these fi
 
 **simulate** -- Options for `--shares`, `--entry`, `--probability`, `-i`. Tips advise calculating max loss, considering fees, and using conservative estimates.
 
-**wallets** -- Options for `--type` (smart/whales/all), `--market`, `--min-volume`. Tips clarify smart money and whale definitions.
+**wallets** -- Options for `--type` (smart/whales/all), `--analyze`, `--refresh`. Tips clarify smart money vs whale definitions and that `--refresh` is lagged Data API, not live CLOB.
 
 **alerts** -- Options for `--list`, `--add`, `--remove`. Includes an `alert_types` table: Price, Volume, Whale, Followed. Tips cover desktop notification support and email configuration.
 
