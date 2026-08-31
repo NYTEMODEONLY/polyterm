@@ -9,6 +9,8 @@ from polyterm.cli.commands.watch import _render_watch_dashboard
 from polyterm.cli.commands.watchdog import _render_watchdog_dashboard
 from polyterm.core.alerts import Alert, AlertLevel, AlertManager
 from polyterm.core.scanner import MarketSnapshot
+from polyterm.core.service_health import SourceProbe, combine_health
+from polyterm.api.status import unknown_status_snapshot
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -110,6 +112,38 @@ def test_watch_dashboard_keeps_status_metrics_and_alerts_visible():
     assert "Probability" in output
     assert "Recent Alerts" in output
     assert "probability" in output
+
+
+def test_watch_dashboard_shows_outage_instead_of_waiting_snapshot():
+    """Both-API failure should render outage, not an empty waiting state."""
+    scanner = type("FakeScanner", (), {})()
+    scanner.snapshots = {}
+    health = combine_health(
+        SourceProbe("gamma", ok=False, error="Gamma down"),
+        SourceProbe("clob", ok=False, error="CLOB down"),
+        unknown_status_snapshot(reachable=False, error="offline"),
+    )
+
+    output = render_text(_render_watch_dashboard(
+        scanner=scanner,
+        market_id="m1",
+        market_title="Bitcoin Test Market",
+        threshold=10.0,
+        volume_threshold=50.0,
+        interval=30,
+        notify=False,
+        check_count=1,
+        last_check="12:30:00",
+        recent_alerts=[],
+        health=health,
+        trading_flags={"accepting_orders": False},
+    ))
+
+    assert "Market Watch Outage" in output
+    assert "Gamma and CLOB both failed" in output
+    assert "accepting_orders" in output
+    assert "cancel_only" not in output
+    assert "Waiting for first snapshot" not in output
 
 
 def test_watchdog_dashboard_keeps_status_market_state_and_alerts_visible():

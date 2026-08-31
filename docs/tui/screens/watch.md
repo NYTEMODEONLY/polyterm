@@ -33,8 +33,11 @@ polyterm watch --market <market_id> --threshold 5 --interval 10
 
 ## Data Sources
 
-- Gamma REST API for market data polling
-- CLOB API as fallback
+- Gamma REST API for market data polling (Gamma market ID or slug)
+- CLOB REST `/sampling-markets` health probe; CLOB token IDs for optional book/ticker
+- Statuspage v2 `https://status.polymarket.com/api/v2/summary.json`
+
+If Gamma and CLOB both fail, the launched CLI watch command reports an outage instead of `No markets found`. An unreachable status page is `status_unknown`, never operational.
 
 ## Related Screens
 
