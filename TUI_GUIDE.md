@@ -430,7 +430,7 @@ chat_id = "YOUR_CHAT_ID"
 **TUI not launching?**
 ```bash
 pip show polyterm
-pip install --upgrade polyterm
+pipx install --force git+https://github.com/NYTEMODEONLY/polyterm.git@main
 ```
 
 **Want CLI only?**
