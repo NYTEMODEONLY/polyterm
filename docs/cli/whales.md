@@ -6,7 +6,7 @@
 
 Default `polyterm whales` lists high-volume **markets** from Gamma `volume24hr`. That path is a volume heuristic. It does not identify traders, invent addresses, or emit `trader='Volume Spike'`. JSON uses `markets` plus `evidence_level: "gamma_volume24hr_heuristic"`.
 
-`polyterm whales --wallets` is the wallet-level whale path. It reads the public Data API trade tape and returns real wallet addresses.
+`polyterm whales --wallets` is the wallet-level whale path. It reads the public Data API trade tape and returns real wallet addresses. Those fills are lagged Data API rows, not the live CLOB tape. Table output shows a lagged banner; JSON includes `lag=true`, `lagged=true`, and `quality_flags` containing `lagged_data_api`.
 
 `--local` implies wallet-level mode using only the local observed-trades database.
 
@@ -35,7 +35,7 @@ The TUI screen is labeled as a high-volume market heuristic and tells users to r
 | `--market` | string | `none` | Filter by market ID |
 | `--hours` | int | `24` | Hours of history for `--wallets` |
 | `--limit` | int | `20` | Maximum rows to show |
-| `--wallets` | flag | `false` | Wallet-level whale trades from the public Data API trade tape |
+| `--wallets` | flag | `false` | Wallet-level whale trades from lagged Data API (not live CLOB) |
 | `--volume` | flag | `false` | Explicit Gamma 24h high-volume market heuristic |
 | `--local` | flag | `false` | Local observed-trades database (implies `--wallets`) |
 | `--format` | ['table', 'json'] | `table` | Output format |
@@ -55,7 +55,7 @@ Default JSON (heuristic) includes `mode: "volume_heuristic"`, `evidence_level`, 
 ## Data Sources
 
 - Default / `--volume`: Gamma Markets REST API (`volume24hr`)
-- `--wallets`: Polymarket Data API `/trades`
+- `--wallets`: lagged Polymarket Data API `/trades` (not live CLOB)
 - `--local`: local SQLite observed trades
 
 

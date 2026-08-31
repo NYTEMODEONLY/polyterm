@@ -42,3 +42,5 @@ def portfolio_screen(console: RichConsole):
         subprocess.run(cmd)
     except KeyboardInterrupt:
         console.print("\n[yellow]Portfolio view stopped[/yellow]")
+
+
