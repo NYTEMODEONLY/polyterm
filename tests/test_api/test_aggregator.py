@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime
 
 from polyterm.api.aggregator import APIAggregator
+from polyterm.utils.errors import APIError
 
 
 class TestAggregatorGetLiveMarkets:
@@ -71,10 +72,21 @@ class TestAggregatorGetLiveMarkets:
         assert len(markets) == 2
         mock_clob.get_current_markets.assert_called_once()
 
-    def test_both_fail_returns_empty_list(self, aggregator, mock_gamma, mock_clob):
-        """When both Gamma and CLOB fail, returns empty list"""
+    def test_both_fail_raises_api_error(self, aggregator, mock_gamma, mock_clob):
+        """When both Gamma and CLOB fail, raise APIError instead of []"""
         mock_gamma.get_markets.side_effect = Exception("Gamma down")
         mock_clob.get_current_markets.side_effect = Exception("CLOB down")
+
+        with pytest.raises(APIError) as exc:
+            aggregator.get_live_markets()
+        assert "both failed" in exc.value.message
+        assert "Gamma down" in (exc.value.details or "")
+        assert "CLOB down" in (exc.value.details or "")
+
+    def test_successful_empty_sources_return_empty_list(self, aggregator, mock_gamma, mock_clob):
+        """Successful empty results stay [] and are not treated as an outage"""
+        mock_gamma.filter_fresh_markets.return_value = []
+        mock_clob.get_current_markets.return_value = []
 
         markets = aggregator.get_live_markets()
         assert markets == []
@@ -129,7 +141,8 @@ class TestAggregatorGetLiveMarkets:
         mock_clob.get_current_markets.side_effect = Exception("down")
 
         with caplog.at_level(logging.ERROR, logger="polyterm.api.aggregator"):
-            aggregator.get_live_markets()
+            with pytest.raises(APIError):
+                aggregator.get_live_markets()
 
         assert any("All API sources failed" in r.message for r in caplog.records)
 

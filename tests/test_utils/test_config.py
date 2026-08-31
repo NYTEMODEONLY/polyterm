@@ -76,3 +76,34 @@ class TestConfig:
 
         config2 = Config(config_path=config_path)
         assert config2.get("test_key") == "persisted_value"
+
+
+    def test_default_subgraph_endpoint_is_empty(self, tmp_path):
+        """Default config must not advertise the removed The Graph URL"""
+        config = Config(config_path=tmp_path / "nonexistent.toml")
+        assert config.subgraph_endpoint == ""
+        assert "thegraph.com" not in config.subgraph_endpoint.lower()
+        assert "thegraph.com" not in str(config.DEFAULT_CONFIG["api"].get("subgraph_endpoint", "")).lower()
+
+    def test_save_sets_owner_only_permissions(self, tmp_path):
+        """save() writes config.toml as 0600"""
+        config_path = tmp_path / "test.toml"
+        config = Config(config_path=config_path)
+        config.set("api.gamma_api_key", "from-file")
+        config.save()
+        assert (config_path.stat().st_mode & 0o777) == 0o600
+
+    def test_env_overrides_toml_secret(self, tmp_path, monkeypatch):
+        """POLYTERM_* env vars beat plaintext config values"""
+        config_path = tmp_path / "test.toml"
+        config = Config(config_path=config_path)
+        config.set("api.gamma_api_key", "from-file")
+        config.set("notifications.email.smtp_password", "from-file")
+        config.save()
+
+        monkeypatch.setenv("POLYTERM_GAMMA_API_KEY", "from-env")
+        monkeypatch.setenv("POLYTERM_SMTP_PASSWORD", "smtp-env")
+        loaded = Config(config_path=config_path)
+        assert loaded.gamma_api_key == "from-env"
+        assert loaded.get("notifications.email.smtp_password") == "smtp-env"
+        assert loaded.get("api.gamma_api_key") == "from-env"

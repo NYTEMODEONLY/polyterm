@@ -7,6 +7,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from ...contracts import envelope
 from ....api.data_api import DataAPIClient
+from ....api.data_api_lag import label_payload, with_quality_flag
 from ....api.gamma import GammaClient
 from ....api.market_utils import (
     get_clob_token_ids,
@@ -60,18 +61,19 @@ def whale_trades(
             rows.append(normalized)
         rows.sort(key=lambda item: item["notional"], reverse=True)
         return envelope(
-            {
+            label_payload({
                 "hours": hours,
                 "min_notional": min_notional,
                 "sample_size": sample_size,
                 "count": min(len(rows), limit),
                 "trades": rows[:limit],
-                "quality_flags": [
-                    "live_data_api_trades",
-                    "notional=size_times_price",
-                    "public_trade_rows_only",
-                ],
-            },
+                "quality_flags": with_quality_flag(
+                    [
+                        "notional=size_times_price",
+                        "public_trade_rows_only",
+                    ]
+                ),
+            }),
             meta={"tool": "wallet.whale_trades"},
         )
     finally:
@@ -110,17 +112,18 @@ def top_traders(
 
         scored.sort(key=lambda item: (item["recent_notional"], item["wins"]), reverse=True)
         return envelope(
-            {
+            label_payload({
                 "hours": hours,
                 "min_win_rate": min_win_rate,
                 "count": min(len(scored), limit),
                 "traders": scored[:limit],
-                "quality_flags": [
-                    "live_data_api_trades",
-                    "win_rate_from_recent_closed_positions",
-                    "candidate_pool_limited",
-                ],
-            },
+                "quality_flags": with_quality_flag(
+                    [
+                        "win_rate_from_recent_closed_positions",
+                        "candidate_pool_limited",
+                    ]
+                ),
+            }),
             meta={"tool": "trader.leaderboard"},
         )
     finally:

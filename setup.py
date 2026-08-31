@@ -36,7 +36,7 @@ setup(
             "twine>=4.0.0",
         ],
         "mcp": [
-            "mcp>=1.0.0; python_version >= '3.10'",
+            "mcp>=1.0.0,<2; python_version >= '3.10'",
         ],
     },
     entry_points={

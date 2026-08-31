@@ -26,7 +26,7 @@ In the TUI main menu, use any of these shortcuts: `11`, `wal`
 | `--type` | ['whales', 'smart', 'suspicious', 'all'] | `whales` | Type of wallets to show |
 | `--limit` | int | `20` | Maximum wallets to show |
 | `--analyze` | string | `none` | Analyze specific wallet address |
-| `--refresh` | flag | `false` | Refresh analyzed wallet from the public Data API |
+| `--refresh` | flag | `false` | Refresh analyzed wallet from lagged Data API (not live CLOB) |
 | `--min-win-rate` | float | `0.70` | Minimum win rate for `--type smart` |
 | `--min-trades` | int | `10` | Minimum trade count for `--type smart` |
 | `--track` | string | `none` | Add wallet to tracking list |
@@ -51,7 +51,8 @@ polyterm wallets --type smart --limit 20 --format json
 
 ## Data Sources
 
-- Local SQLite database (`~/.polyterm/data.db`)
+- Local SQLite database (`~/.polyterm/data.db`) for lists and `--analyze` without `--refresh`
+- Lagged Data API (`data-api.polymarket.com`) for `--analyze --refresh` wallet, positions, and trades — not live CLOB
 
 
 ## Related Commands
@@ -68,7 +69,7 @@ polyterm wallets --type smart --limit 20 --format json
 
 ## June 2026 Data API Refresh
 
-`polyterm wallets --analyze <address> --refresh` calls the public Polymarket Data API through `WalletIntelligence`. This produces a richer profile than local SQLite alone.
+`polyterm wallets --analyze <address> --refresh` calls the public Polymarket Data API through `WalletIntelligence`. This produces a richer profile than local SQLite alone. The Data API path is lagged (not live CLOB). Table output shows a lagged banner; JSON includes `lag=true`, `lagged=true`, and `quality_flags` containing `lagged_data_api`.
 
 ```bash
 polyterm wallets --analyze 0xabc... --refresh --format json

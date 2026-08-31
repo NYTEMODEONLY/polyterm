@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from polyterm.core.wallet_intelligence import WalletIntelligence
+from polyterm.api.data_api_lag import QUALITY_FLAG
 
 
 class FakeDataAPI:
@@ -40,12 +41,31 @@ class FakeDatabase:
     def upsert_wallet(self, wallet):
         self.wallets.append(wallet)
 
+    def get_wallet(self, address):
+        for wallet in self.wallets:
+            if wallet.address == address:
+                return wallet
+        return None
+
+    def get_wallet_stats(self, address):
+        return {}
+
     def get_smart_money_wallets(self, min_win_rate=0.70, min_trades=10):
         return [
             wallet
             for wallet in self.wallets
             if wallet.win_rate >= min_win_rate and wallet.total_trades >= min_trades
         ]
+
+
+class ProfileDataAPI:
+    def get_wallet_profile(self, address, trades_limit=100, positions_limit=100):
+        return {
+            "address": address,
+            "positions": [{"currentValue": 10, "initialValue": 8, "pnl": 2}],
+            "trades": [{"size": 2, "price": 0.5, "side": "BUY"}],
+            "value": {},
+        }
 
 
 def test_live_whales_returns_public_trades_and_wallet_rollups_by_timeframe():
@@ -95,13 +115,18 @@ def test_live_whales_returns_public_trades_and_wallet_rollups_by_timeframe():
     result = engine.live_whales(min_notional=100_000, hours=72, limit=5, now=now, page_size=1000)
 
     assert result["source"] == "public_data_api"
+    assert result["lag"] is True
+    assert result["lagged"] is True
     assert result["trade_count"] == 1
     assert result["wallet_count"] == 1
     assert result["trades"][0]["wallet"] == "0xaaa"
     assert result["trades"][0]["notional"] == 120_000
     assert result["wallets"][0]["address"] == "0xaaa"
     assert result["wallets"][0]["notional"] == 120_000
-    assert result["quality_flags"] == ["public_data_api", "trade_direction_may_be_inferred"]
+    assert result["quality_flags"][0] == "lagged_data_api"
+    assert "public_data_api" in result["quality_flags"]
+    assert "trade_direction_may_be_inferred" in result["quality_flags"]
+    assert "live_data_api_trades" not in result["quality_flags"]
 
 
 def test_live_whales_paginates_public_trades_until_limit_or_cutoff():
@@ -218,6 +243,17 @@ def test_smart_money_returns_ranked_local_wallets_with_thresholds():
     assert result["quality_flags"] == ["local_db_smart_money", "requires_recent_refresh_for_live_flow"]
 
 
+def test_analyze_wallet_refresh_labels_lagged_data_api():
+    engine = WalletIntelligence(data_api=ProfileDataAPI(), database=FakeDatabase())
+    result = engine.analyze_wallet("0xabc", refresh=True)
+    assert result["lag"] is True
+    assert result["lagged"] is True
+    assert QUALITY_FLAG in result["quality_flags"]
+    assert "live_data_api_trades" not in result["quality_flags"]
+    assert result["source"]["positions"] == "data-api"
+    assert result["source"]["trades"] == "data-api"
+
+
 def test_whale_trades_scans_pages_and_ranks_by_notional_not_recency():
     now = datetime(2026, 7, 5, 3, 0, 0, tzinfo=timezone.utc)
     recent_ts = int((now - timedelta(minutes=5)).timestamp())
@@ -269,6 +305,9 @@ def test_whale_trades_scans_pages_and_ranks_by_notional_not_recency():
     assert result["rows_scanned"] == 2
     assert result["sample_size"] == 3000
     assert "notional_desc_sorted" in result["quality_flags"]
+    assert result["lagged"] is True
+    assert "lagged_data_api" in result["quality_flags"]
+    assert "live_data_api_trades" not in result["quality_flags"]
 
 
 def test_whale_trades_reports_api_errors_and_window_limits():

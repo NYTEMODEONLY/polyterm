@@ -4,7 +4,7 @@
 
 ## Overview
 
-The Settings screen displays the current configuration values and provides a menu for editing alert, API, and display settings. It also includes a self-update feature that checks PyPI for new versions and upgrades via pipx or pip. Config editing currently directs users to manually edit `~/.polyterm/config.toml`.
+The Settings screen displays the current configuration values and provides a menu for editing alert, API, and display settings. It also includes a self-update feature that reinstalls PolyTerm from GitHub `main` via pipx or pip. PyPI is decommissioned and is not queried. Config editing currently directs users to manually edit `~/.polyterm/config.toml`.
 
 ## Access
 
@@ -31,7 +31,7 @@ Then a submenu of six operations.
 - `3` -- Edit Display Settings (refresh rate)
 - `4` -- View Config File location
 - `5` -- Reset to Defaults
-- `6` -- Update PolyTerm (checks PyPI, upgrades via pipx/pip, optional restart)
+- `6` -- Update PolyTerm (reinstalls from GitHub `main` via pipx/pip, optional restart)
 - `b` -- Back to main menu
 
 ## CLI Command
@@ -41,7 +41,7 @@ This screen does not invoke a CLI subprocess. It reads configuration directly vi
 ## Data Sources
 
 - Local config file (`~/.polyterm/config.toml`)
-- PyPI API (`https://pypi.org/pypi/polyterm/json`) for version checking
+- GitHub `main` via `polyterm.utils.install_source` (`pipx install --force git+https://github.com/NYTEMODEONLY/polyterm.git@main`)
 
 ## Related Screens
 

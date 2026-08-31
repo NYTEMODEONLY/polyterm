@@ -1,10 +1,16 @@
 # Whales
 
-> Track large trades (whale activity)
+> Wallet-level public trades (`--wallets`) or Gamma 24h volume heuristic (default)
 
 ## Overview
 
-Track large trades (whale activity).
+Default `polyterm whales` lists high-volume **markets** from Gamma `volume24hr`. That path is a volume heuristic. It does not identify traders, invent addresses, or emit `trader='Volume Spike'`. JSON uses `markets` plus `evidence_level: "gamma_volume24hr_heuristic"`.
+
+`polyterm whales --wallets` is the wallet-level whale path. It reads the public Data API trade tape and returns real wallet addresses. Those fills are lagged Data API rows, not the live CLOB tape. Table output shows a lagged banner; JSON includes `lag=true`, `lagged=true`, and `quality_flags` containing `lagged_data_api`.
+
+`--local` implies wallet-level mode using only the local observed-trades database.
+
+This workflow is view-only.
 
 ## Usage
 
@@ -12,43 +18,45 @@ Track large trades (whale activity).
 
 ```bash
 polyterm whales [options]
+polyterm whales --wallets [options]
 ```
 
 ### TUI
 
-In the TUI main menu, use any of these shortcuts: `3`, `w`
+Shortcuts: `3`, `w`
 
+The TUI screen is labeled as a high-volume market heuristic and tells users to run `polyterm whales --wallets` for trader identity.
 
 ## Options
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--min-amount` | int | `10000` | Minimum trade size to track |
+| `--min-amount` | int | `10000` | Minimum 24h volume (heuristic) or trade notional (`--wallets`) |
 | `--market` | string | `none` | Filter by market ID |
-| `--hours` | int | `24` | Hours of history to check |
-| `--limit` | int | `20` | Maximum number of trades to show |
-| `--wallets` | flag | `false` | Show wallet-level whale trades from the public Data API trade tape |
-| `--local` | flag | `false` | With `--wallets`, use only the local observed-trades database |
+| `--hours` | int | `24` | Hours of history for `--wallets` |
+| `--limit` | int | `20` | Maximum rows to show |
+| `--wallets` | flag | `false` | Wallet-level whale trades from lagged Data API (not live CLOB) |
+| `--volume` | flag | `false` | Explicit Gamma 24h high-volume market heuristic |
+| `--local` | flag | `false` | Local observed-trades database (implies `--wallets`) |
 | `--format` | ['table', 'json'] | `table` | Output format |
 
 ## Examples
 
 ```bash
-# Basic usage
-polyterm whales
+# Volume heuristic (no trader identity)
+polyterm whales --volume --min-amount 10000 --format json
 
-# With min-amount option
-polyterm whales --min-amount 10000
-
-# JSON output
-polyterm whales --format json
+# Wallet-level public trades
+polyterm whales --wallets --min-amount 100000 --hours 72 --format json
 ```
+
+Default JSON (heuristic) includes `mode: "volume_heuristic"`, `evidence_level`, `disclosure`, and `markets`. It does not include a `trades` array or a `trader` field.
 
 ## Data Sources
 
-- Gamma Markets REST API
-- CLOB REST API
-- WebSocket real-time feed
+- Default / `--volume`: Gamma Markets REST API (`volume24hr`)
+- `--wallets`: lagged Polymarket Data API `/trades` (not live CLOB)
+- `--local`: local SQLite observed trades
 
 
 ## Related Commands
@@ -80,3 +88,16 @@ Use `--local` only when you explicitly want the older local SQLite observed-trad
 ```bash
 polyterm whales --wallets --local --min-amount 50000 --hours 24 --format json
 ```
+
+`--local` without `--wallets` still selects wallet-level local data rather than the Gamma volume heuristic.
+
+## Documentation Maintenance
+
+This page is part of the generated PolyTerm documentation set and should stay aligned with the source module and command inventory.
+
+When updating this feature:
+
+- Confirm `polyterm/cli/commands/whales.py` still exists.
+- Keep the heuristic vs `--wallets` evidence levels distinct.
+- Do not document a synthetic trader identity on the volume path.
+- Run `./test_all_commands.sh` and `.venv/bin/python scripts/validate_docs.py`.

@@ -1,7 +1,6 @@
 """CLI output contract tests for JSON mode."""
 
 import json
-from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from click.testing import CliRunner
@@ -10,29 +9,24 @@ from polyterm.cli.main import cli
 from polyterm.utils.json_output import AGENT_SCHEMA_VERSION
 
 
-@patch("polyterm.cli.commands.whales.AnalyticsEngine")
-@patch("polyterm.cli.commands.whales.CLOBClient")
+@patch("polyterm.cli.commands.whales.detect_high_volume_markets")
 @patch("polyterm.cli.commands.whales.GammaClient")
-def test_whales_json_output_is_valid_json(mock_gamma_cls, mock_clob_cls, mock_analytics_cls, tmp_path, monkeypatch):
+def test_whales_json_output_is_valid_json(mock_gamma_cls, mock_detect, tmp_path, monkeypatch):
     """`whales --format json` should emit pure JSON with no preamble text."""
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
 
-    mock_gamma = Mock()
-    mock_clob = Mock()
-    mock_gamma_cls.return_value = mock_gamma
-    mock_clob_cls.return_value = mock_clob
-
-    trade = SimpleNamespace(
-        market_id="market-1",
-        data={"_market_title": "Market 1"},
-        outcome="YES",
-        price=0.61,
-        notional=125000.0,
-        timestamp=1700000000,
-    )
-    mock_analytics = Mock()
-    mock_analytics.track_whale_trades.return_value = [trade]
-    mock_analytics_cls.return_value = mock_analytics
+    mock_gamma_cls.return_value = Mock()
+    from polyterm.core.volume_spikes import HighVolumeMarket
+    mock_detect.return_value = [
+        HighVolumeMarket(
+            market_id="market-1",
+            market_title="Market 1",
+            volume_24hr=125000.0,
+            last_price=0.61,
+            outcome_lean="YES",
+            timestamp=1700000000,
+        )
+    ]
 
     runner = CliRunner()
     result = runner.invoke(cli, ["whales", "--format", "json", "--limit", "1"])
@@ -41,7 +35,9 @@ def test_whales_json_output_is_valid_json(mock_gamma_cls, mock_clob_cls, mock_an
     payload = json.loads(result.output)
     assert payload["success"] is True
     assert payload["count"] == 1
-    assert payload["trades"][0]["market_id"] == "market-1"
+    assert payload["mode"] == "volume_heuristic"
+    assert payload["markets"][0]["market_id"] == "market-1"
+    assert "trades" not in payload
 
 
 def test_mywallet_positions_without_connected_wallet_returns_json_error(tmp_path, monkeypatch):

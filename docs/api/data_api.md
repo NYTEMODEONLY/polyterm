@@ -4,7 +4,9 @@
 
 ## Overview
 
-The `DataAPIClient` class provides access to the Polymarket Data API at `data-api.polymarket.com`. It retrieves real wallet positions, trading activity, trade history, and profit/loss summaries for any wallet address. This client replaces the deprecated Subgraph for wallet data and uses the same retry pattern as `CLOBClient` for resilience against rate limits and server errors.
+The `DataAPIClient` class provides access to the Polymarket Data API at `data-api.polymarket.com`. It retrieves wallet positions, trading activity, trade history, and profit/loss summaries for any wallet address. Those surfaces are **lagged**. They are not the live CLOB fill tape. Aggregated payloads (`get_wallet_profile`, `get_profit_summary`) are labeled `source=data_api` with `lag=true` / `lagged=true`. CLI/TUI/JSON that prints this data must keep that label. Do not invent a lag duration.
+
+This client replaces the deprecated Subgraph for wallet data and uses the same retry pattern as `CLOBClient` for resilience against rate limits and server errors.
 
 ## Key Classes and Functions
 
@@ -27,6 +29,7 @@ Client for Polymarket Data API providing wallet-level data.
 | `get_activity` | `(address, limit=100, offset=0)` | Get wallet activity feed |
 | `get_trades` | `(address, limit=100, market=None)` | Get wallet trades, optionally filtered by market |
 | `get_profit_summary` | `(address)` | Aggregate P&L summary across all positions |
+| `get_leaderboard` | `(period="7d", limit=50, sort_by="profit")` | Public `/v1/leaderboard`. `profit`/`volume`/`active` map to PNL/VOL. `winrate` is not mapped to PNL. |
 | `close` | `()` | Close the HTTP session |
 
 ## API Endpoints Used
@@ -38,6 +41,7 @@ All endpoints are on `https://data-api.polymarket.com`:
 | `/positions` | GET | `user`, `limit`, `offset`, `sortBy` | Wallet positions. Current sort keys include `CURRENT` and `CASHPNL` |
 | `/activity` | GET | `user`, `limit`, `offset` | Wallet activity feed |
 | `/trades` | GET | `user`, `limit`, `market` (optional) | Wallet trade history |
+| `/v1/leaderboard` | GET | `timePeriod`, `orderBy`, `limit` | Public trader rankings (`DAY`/`WEEK`/`MONTH`/`ALL`, `PNL`/`VOL`) |
 
 ## Configuration
 
@@ -74,7 +78,8 @@ The `_request` method follows the same retry pattern as `CLOBClient`:
 - **Core modules**: `core/analytics.py` (imports `DataAPIClient` for wallet analytics)
 - **Package exports**: Exported via `polyterm.api.__init__` as part of `__all__`
 - **Replaces**: `SubgraphClient` (deprecated) for wallet position and trade data
-- **CLI commands**: Used indirectly through `core/analytics.py` for wallet-related features like `mywallet`
+- **Lag labels**: [data_api_lag](data_api_lag.md) (`source=data_api`, `lag=true`, `lagged=true`)
+- **CLI commands**: `portfolio` (positions), `wallets --analyze --refresh` (wallet profile), `whales --wallets` (trades)
 
 ## June 2026 Wallet Intelligence Methods
 
@@ -89,7 +94,7 @@ client.get_closed_positions("0xabc...", limit=50)
 client.get_wallet_profile("0xabc...")
 ```
 
-These methods use the public Data API base URL, `https://data-api.polymarket.com`. Leaderboard calls use the current documented `/v1/leaderboard` endpoint with `timePeriod`, `orderBy`, `limit`, and pagination parameters. The helper maps PolyTerm's `24h`, `7d`, `30d`, and `all` periods to Polymarket's `DAY`, `WEEK`, `MONTH`, and `ALL` values, and maps `profit`/`volume` to `PNL`/`VOL`.
+These methods use the public Data API base URL, `https://data-api.polymarket.com`. Leaderboard calls use the current documented `/v1/leaderboard` endpoint with `timePeriod`, `orderBy`, `limit`, and pagination parameters. The helper maps PolyTerm's `24h`, `7d`, `30d`, and `all` periods to Polymarket's `DAY`, `WEEK`, `MONTH`, and `ALL` values, and maps `profit`/`volume`/`active` to `PNL`/`VOL`. It does not map `winrate` to `PNL`; the CLI refuses `--type winrate` on the Data API source.
 
 The exact holder and ranking surfaces have changed more often than `/positions`, `/closed-positions`, and `/trades`, so callers should handle empty responses or request errors gracefully.
 

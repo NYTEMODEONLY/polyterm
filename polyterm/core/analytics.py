@@ -1,14 +1,15 @@
 """Analytics engine for whale tracking, correlations, and predictions"""
 
-import time
-from typing import Dict, List, Optional, Any, Tuple
-from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Any, NoReturn
 from collections import defaultdict
 
 from ..api.gamma import GammaClient
 from ..api.clob import CLOBClient
 from ..api.data_api import DataAPIClient
+from ..api.data_api_lag import label_payload
 from ..utils.json_output import safe_float
+from ..utils.errors import FeatureUnavailable
+from .volume_spikes import EVIDENCE_LEVEL as VOLUME_SPIKE_EVIDENCE, detect_high_volume_markets
 
 
 class WhaleActivity:
@@ -24,6 +25,7 @@ class WhaleActivity:
         self.notional = safe_float(trade_data.get("notional", self.shares * self.price))
         self.timestamp = int(trade_data.get("timestamp", 0))
         self.tx_hash = trade_data.get("transactionHash", "")
+        self.evidence_level = trade_data.get("evidence_level", "")
     
     def __repr__(self):
         return f"WhaleActivity(trader={self.trader[:8]}..., notional=${self.notional:,.0f})"
@@ -65,110 +67,39 @@ class AnalyticsEngine:
         min_notional: float = 10000,
         lookback_hours: int = 24,
     ) -> List[WhaleActivity]:
-        """Track whale activity using volume spikes (individual trades not available from API)
-        
-        Args:
-            min_notional: Minimum volume spike to be considered whale activity
-            lookback_hours: Hours to look back
-        
-        Returns:
-            List of whale activities (volume-based detection)
+        """Return high-volume market heuristics, not attributable whale trades.
+
+        Prefer ``volume_spikes.detect_high_volume_markets`` or
+        ``WalletIntelligence.live_whales`` for wallet-level public trades.
+        ``lookback_hours`` is accepted for call-site compatibility; Gamma
+        ``volume24hr`` is a 24h market aggregate, not a trade window.
         """
         try:
-            # Get active markets from Gamma
-            markets = self.gamma_client.get_markets(limit=50, active=True, closed=False)
-            
+            markets = detect_high_volume_markets(
+                self.gamma_client,
+                min_volume=min_notional,
+            )
             activities = []
-            current_time = int(time.time())
-            
             for market in markets:
-                market_id = market.get('id')
-                if not market_id:
-                    continue
-                
-                # Check for volume spikes as proxy for whale activity
-                volume_24hr = float(market.get('volume24hr', 0) or 0)
-                
-                # If significant volume in last 24hrs, could indicate whale activity
-                if volume_24hr >= min_notional:
-                    # Get price info - check direct fields first (from /markets endpoint)
-                    # then fall back to nested markets (from /events endpoint)
-                    last_price = float(market.get('lastTradePrice', 0) or 0)
-                    prices = market.get('outcomePrices', [])
-                    outcome = "Unknown"
-
-                    # Handle outcomePrices which might be a JSON string
-                    if isinstance(prices, str):
-                        import json
-                        try:
-                            prices = json.loads(prices)
-                        except Exception:
-                            prices = []
-
-                    # Determine trend based on YES price (first outcome)
-                    if prices and len(prices) > 0:
-                        try:
-                            yes_price = float(prices[0])
-                            # Use price thresholds to determine market direction
-                            if yes_price > 0.65:
-                                outcome = "YES"  # Leaning YES
-                            elif yes_price < 0.35:
-                                outcome = "NO"   # Leaning NO
-                            else:
-                                outcome = "MIXED"  # Uncertain/competitive
-                            # Also use this as last_price if not already set
-                            if last_price == 0:
-                                last_price = yes_price
-                        except Exception:
-                            pass
-
-                    # Fall back to nested markets if no direct price data
-                    if last_price == 0 or outcome == "Unknown":
-                        nested_markets = market.get('markets', [])
-                        if nested_markets:
-                            nested = nested_markets[0]
-                            if last_price == 0:
-                                last_price = float(nested.get('lastTradePrice', 0) or 0)
-                            nested_prices = nested.get('outcomePrices', [])
-                            if isinstance(nested_prices, str):
-                                import json
-                                try:
-                                    nested_prices = json.loads(nested_prices)
-                                except Exception:
-                                    nested_prices = []
-                            if nested_prices and len(nested_prices) > 0 and outcome == "Unknown":
-                                try:
-                                    yes_price = float(nested_prices[0])
-                                    if yes_price > 0.65:
-                                        outcome = "YES"
-                                    elif yes_price < 0.35:
-                                        outcome = "NO"
-                                    else:
-                                        outcome = "MIXED"
-                                except Exception:
-                                    pass
-                    
-                    # Store market title for display
-                    market_title = market.get('title', market.get('question', 'Unknown'))
-                    
-                    # Create activity based on volume spike
-                    activity = WhaleActivity({
-                        'trader': 'Volume Spike',  # Can't determine individual trader
-                        'market': market_id,
-                        'outcome': outcome,
-                        'shares': volume_24hr / (last_price if last_price > 0 else 1),
-                        'price': last_price,
-                        'notional': volume_24hr,
-                        'timestamp': current_time,
-                        'transactionHash': '',
-                        '_market_title': market_title,  # Cache title
+                last_price = market.last_price if market.last_price > 0 else 1
+                activities.append(
+                    WhaleActivity({
+                        "trader": "",
+                        "market": market.market_id,
+                        "outcome": market.outcome_lean,
+                        "shares": market.volume_24hr / last_price,
+                        "price": market.last_price,
+                        "notional": market.volume_24hr,
+                        "timestamp": market.timestamp,
+                        "transactionHash": "",
+                        "evidence_level": VOLUME_SPIKE_EVIDENCE,
+                        "_market_title": market.market_title,
                     })
-                    activities.append(activity)
-            
-            return sorted(activities, key=lambda x: x.notional, reverse=True)
-            
+                )
+            _ = lookback_hours
+            return activities
         except Exception as e:
-            print(f"Error tracking whale trades: {e}")
+            print(f"Error tracking high-volume markets: {e}")
             return []
     
     def get_whale_impact_on_market(
@@ -206,18 +137,22 @@ class AnalyticsEngine:
             "trades": trades,
         }
     
+    def _unavailable(self, feature: str) -> NoReturn:
+        raise FeatureUnavailable(
+            f"{feature} is not implemented and has no data source.",
+            suggestion=(
+                "Use CorrelationEngine with real CLOB price history, "
+                "or polyterm chart / polyterm replay."
+            ),
+            details=feature,
+        )
+
     def identify_whale_followers(self, whale_address: str) -> List[Dict[str, Any]]:
-        """Identify traders who follow whale activity
-        
-        Args:
-            whale_address: Whale wallet address
-        
-        Returns:
-            List of potential follower addresses with statistics
+        """Identify traders who follow whale activity.
+
+        Not implemented. Raises instead of returning [].
         """
-        # This would require more sophisticated analysis
-        # For now, return a placeholder
-        return []
+        self._unavailable("identify_whale_followers")
     
     def calculate_market_correlation(
         self,
@@ -225,18 +160,11 @@ class AnalyticsEngine:
         market2_id: str,
         window_hours: int = 24,
     ) -> Optional[MarketCorrelation]:
-        """Calculate correlation between two markets
+        """Calculate correlation between two markets.
 
-        Args:
-            market1_id: First market ID
-            market2_id: Second market ID
-            window_hours: Time window for correlation
-
-        Returns:
-            Correlation object or None
+        Not implemented. Raises instead of returning None.
         """
-        # Placeholder — requires time-series data source
-        return None
+        self._unavailable("calculate_market_correlation")
     
     def find_correlated_markets(
         self,
@@ -244,98 +172,34 @@ class AnalyticsEngine:
         min_correlation: float = 0.7,
         limit: int = 5,
     ) -> List[MarketCorrelation]:
-        """Find markets correlated with given market
-        
-        Args:
-            market_id: Market to find correlations for
-            min_correlation: Minimum correlation threshold
-            limit: Maximum number of results
-        
-        Returns:
-            List of correlated markets
+        """Find markets correlated with given market.
+
+        Not implemented. Raises instead of returning [].
         """
-        # Placeholder - would need to calculate against all markets
-        return []
+        self._unavailable("find_correlated_markets")
     
     def analyze_historical_trends(
         self,
         market_id: str,
         hours: int = 168,  # 1 week
     ) -> Dict[str, Any]:
-        """Analyze historical trends for a market
+        """Analyze historical trends for a market.
 
-        Args:
-            market_id: Market ID
-            hours: Hours of history to analyze
-
-        Returns:
-            Trend statistics
+        Not implemented. Raises instead of returning {}.
         """
-        # Historical trend analysis requires a time-series data source.
-        # The Subgraph endpoint has been removed; return empty until a
-        # replacement (e.g. CLOB price history) is wired in.
-        return {}
+        self._unavailable("analyze_historical_trends")
     
     def predict_price_movement(
         self,
         market_id: str,
         horizon_hours: int = 24,
     ) -> Dict[str, Any]:
-        """Predict price movement using basic signals
-        
-        Args:
-            market_id: Market ID
-            horizon_hours: Prediction horizon
-        
-        Returns:
-            Prediction with confidence
+        """Predict price movement using trend plus volume signals.
+
+        Not implemented: it depended on analyze_historical_trends,
+        which has no data source. Raises instead of inventing a signal.
         """
-        try:
-            # Get recent trends
-            trends = self.analyze_historical_trends(market_id, hours=168)
-            
-            # Get current whale activity
-            whale_trades = self.track_whale_trades(lookback_hours=24)
-            market_whale_activity = [w for w in whale_trades if w.market_id == market_id]
-            
-            # Simple prediction based on momentum and whale activity
-            price_momentum = trends.get("price_change_percent", 0)
-            whale_net_position = sum(
-                w.notional if w.outcome == "YES" else -w.notional
-                for w in market_whale_activity
-            )
-            
-            # Combined signal
-            signal = (price_momentum * 0.6) + (whale_net_position / 10000 * 0.4)
-            
-            if signal > 5:
-                prediction = "up"
-                confidence = min(abs(signal) / 20, 1.0)
-            elif signal < -5:
-                prediction = "down"
-                confidence = min(abs(signal) / 20, 1.0)
-            else:
-                prediction = "stable"
-                confidence = 0.5
-            
-            return {
-                "market_id": market_id,
-                "prediction": prediction,
-                "confidence": confidence,
-                "signal_strength": signal,
-                "factors": {
-                    "price_momentum": price_momentum,
-                    "whale_activity": whale_net_position,
-                },
-            }
-            
-        except Exception as e:
-            print(f"Error predicting price movement: {e}")
-            return {
-                "prediction": "unknown",
-                "confidence": 0.0,
-                "error": str(e),
-            }
+        self._unavailable("predict_price_movement")
     
     def get_portfolio_analytics(self, wallet_address: str) -> Dict[str, Any]:
         """Get analytics for a user's portfolio.
@@ -354,7 +218,7 @@ class AnalyticsEngine:
             if data_api_client is None:
                 raise RuntimeError("Data API client not configured")
 
-            # Primary source: Data API (live wallet positions/trades)
+            # Primary source: lagged Data API wallet positions (not live CLOB)
             positions = data_api_client.get_positions(wallet_address, limit=500, sort_by="CURRENT")
             if not isinstance(positions, list):
                 positions = []
@@ -408,7 +272,7 @@ class AnalyticsEngine:
                 total_pnl += position_pnl
                 total_invested += initial_value
             
-            return {
+            return label_payload({
                 "wallet_address": wallet_address,
                 "total_positions": position_count,
                 "total_value": total_value,
@@ -417,7 +281,7 @@ class AnalyticsEngine:
                 "roi_percent": (total_pnl / total_invested * 100) if total_invested > 0 else 0,
                 "positions": positions,
                 "data_source": "data_api",
-            }
+            })
             
         except Exception as e:
             # Graceful degradation when no position source is available
@@ -433,20 +297,8 @@ class AnalyticsEngine:
             }
     
     def detect_market_manipulation(self, market_id: str) -> Dict[str, Any]:
-        """Detect potential market manipulation patterns
+        """Detect potential market manipulation patterns.
 
-        Args:
-            market_id: Market ID
-
-        Returns:
-            Manipulation risk analysis
+        Not implemented. Raises instead of returning a fake risk_score of 0.
         """
-        # Manipulation detection required on-chain Subgraph data which is no
-        # longer available.  Return a safe default until a replacement source
-        # (e.g. CLOB trade history) is wired in.
-        return {
-            "market_id": market_id,
-            "risk_level": "unknown",
-            "risk_score": 0,
-            "risk_factors": [],
-        }
+        self._unavailable("detect_market_manipulation")

@@ -1,10 +1,14 @@
 # Backtest Screen
 
-> Test trading strategies against historical market data.
+> DEMO strategy simulation. Not historical backtesting.
 
 ## Overview
 
-The Backtest screen lets you run strategy backtests either interactively or as quick tests with predefined strategies. Quick tests run each strategy over a 30-day period. Interactive mode allows full customization of strategy parameters.
+The Backtest screen launches a seeded random DEMO simulation. It does not replay historical Polymarket trades or prices. The screen shows that disclosure before any run and always passes `--demo` to the CLI.
+
+Do not treat Sharpe, win rate, or P&L from this screen as historical performance.
+
+This workflow is view-only.
 
 ## Access
 
@@ -13,38 +17,43 @@ The Backtest screen lets you run strategy backtests either interactively or as q
 
 ## What It Shows
 
-Backtest results for the selected strategy, including simulated trade outcomes over the chosen period.
+A DEMO disclosure, then simulated random trade outcomes for the selected strategy name. Strategy names only change the RNG heuristic.
 
 ## Navigation / Keyboard Shortcuts
 
 Strategy selection:
 
-- `1` -- Interactive mode (recommended, default)
-- `2` -- Quick test: Momentum strategy (30d)
-- `3` -- Quick test: Mean Reversion strategy (30d)
-- `4` -- Quick test: Whale Follow strategy (30d)
-- `5` -- Quick test: Contrarian strategy (30d)
+- `1` -- Interactive DEMO
+- `2` -- Quick DEMO: Momentum (30d)
+- `3` -- Quick DEMO: Mean Reversion (30d)
+- `4` -- Quick DEMO: Whale Follow (30d)
+- `5` -- Quick DEMO: Contrarian (30d)
 - `b` -- Back to menu
+
+Without `--demo`, the CLI refuses to run.
 
 ## CLI Commands
 
 | Option | Command |
 |--------|---------|
-| Interactive | `polyterm backtest -i` |
-| Momentum | `polyterm backtest -s momentum -p 30d` |
-| Mean Reversion | `polyterm backtest -s mean-reversion -p 30d` |
-| Whale Follow | `polyterm backtest -s whale-follow -p 30d` |
-| Contrarian | `polyterm backtest -s contrarian -p 30d` |
+| Interactive DEMO | `polyterm backtest --demo -i` |
+| Momentum DEMO | `polyterm backtest --demo -s momentum -p 30d` |
+| Mean Reversion DEMO | `polyterm backtest --demo -s mean-reversion -p 30d` |
+| Whale Follow DEMO | `polyterm backtest --demo -s whale-follow -p 30d` |
+| Contrarian DEMO | `polyterm backtest --demo -s contrarian -p 30d` |
+| Refused without --demo | `polyterm backtest --format json` |
 
 ## Data Sources
 
-- Local SQLite database (`~/.polyterm/data.db`) for historical snapshots
-- Gamma / CLOB APIs for market data
+- Seeded random number generator (`polyterm/core/demo_strategy_sim.py`)
+- Gamma market snapshots used only as labels
+- Not local SQLite historical replay, not CLOB price history
 
 ## Related Screens
 
 - [benchmark_screen](../screens/benchmark_screen.md) -- compare performance to market averages
 - [attribution_screen](../screens/attribution_screen.md) -- analyze performance drivers
+- [chart_screen](chart_screen.md) -- real price history charts
 
 ## Documentation Maintenance
 

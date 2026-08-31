@@ -1,12 +1,23 @@
-"""Data API client for Polymarket wallet data"""
+"""Data API client for Polymarket wallet data.
+
+Wallet, positions, activity, and trades from this client are lagged.
+They are not the live CLOB fill tape. Callers that print this data must
+label it lagged and must not invent a lag duration.
+"""
 
 import json
 import requests
 from typing import Dict, List, Optional, Any
 
+from .data_api_lag import label_payload
+
 
 class DataAPIClient:
-    """Client for Polymarket Data API — real wallet positions, activity, trades"""
+    """Client for Polymarket Data API — lagged wallet positions, activity, trades.
+
+    This is not the live CLOB tape. Aggregated payloads are labeled
+    `source=data_api` with `lag=true` / `lagged=true`.
+    """
 
     BASE_URL = "https://data-api.polymarket.com"
 
@@ -165,7 +176,6 @@ class DataAPIClient:
             "pnl": "PNL",
             "volume": "VOL",
             "vol": "VOL",
-            "winrate": "PNL",
             "active": "VOL",
         }
         params = {
@@ -188,12 +198,12 @@ class DataAPIClient:
             value = self.get_value(address)
         except Exception:
             value = {}
-        return {
+        return label_payload({
             "address": address,
             "positions": positions if isinstance(positions, list) else [],
             "trades": trades if isinstance(trades, list) else [],
             "value": value if isinstance(value, dict) else {},
-        }
+        })
 
     def get_profit_summary(self, address):
         """Get profit/loss summary for a wallet by aggregating positions sorted by cash P&L.
@@ -217,12 +227,12 @@ class DataAPIClient:
             except (ValueError, TypeError):
                 continue
 
-        return {
+        return label_payload({
             "total_pnl": total_pnl,
             "total_invested": total_invested,
             "position_count": len(positions),
             "positions": positions,
-        }
+        })
 
     def close(self):
         """Close the session"""

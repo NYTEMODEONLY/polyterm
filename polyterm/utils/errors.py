@@ -31,6 +31,11 @@ class ValidationError(PolyTermError):
     pass
 
 
+class FeatureUnavailable(PolyTermError):
+    """Called a feature that has no data source yet"""
+    pass
+
+
 class NetworkError(PolyTermError):
     """Network connectivity errors"""
     pass
@@ -158,9 +163,9 @@ ERROR_MESSAGES = {
         "suggestion": "Try broader search terms or check if the market is still active.",
     },
     "no_whales_found": {
-        "title": "No Whale Activity",
-        "message": "No whale trades found in the specified time period.",
-        "suggestion": "Try extending the time period with --hours or lowering the threshold with --min-amount.",
+        "title": "No High-Volume Markets",
+        "message": "No markets met the 24h volume threshold. This path is a volume heuristic, not whale identity.",
+        "suggestion": "Lower --min-amount, or use --wallets for wallet-level Data API trades.",
     },
     "no_arbitrage": {
         "title": "No Arbitrage Opportunities",

@@ -1,4 +1,4 @@
-"""TUI Screen for Strategy Backtesting"""
+"""TUI Screen for DEMO strategy simulation (not historical backtesting)"""
 
 import subprocess
 import sys
@@ -8,18 +8,21 @@ from rich.prompt import Prompt
 
 
 def run_backtest_screen(console: Console):
-    """Strategy backtesting screen"""
+    """DEMO strategy simulation screen. Does not replay historical data."""
     console.print()
-    console.print(Panel("[bold]Strategy Backtester[/bold]", border_style="cyan"))
-    console.print()
-    console.print("[bold]Test trading strategies on historical data[/bold]")
+    console.print(Panel(
+        "[bold yellow]DEMO Strategy Simulator[/bold yellow]\n"
+        "[dim]This does not replay historical Polymarket trades or prices. "
+        "Results are seeded random numbers.[/dim]",
+        border_style="yellow",
+    ))
     console.print()
     console.print("[cyan]Options:[/cyan]")
-    console.print("  [yellow]1.[/yellow] Interactive mode (recommended)")
-    console.print("  [yellow]2.[/yellow] Quick test - Momentum strategy")
-    console.print("  [yellow]3.[/yellow] Quick test - Mean Reversion strategy")
-    console.print("  [yellow]4.[/yellow] Quick test - Whale Follow strategy")
-    console.print("  [yellow]5.[/yellow] Quick test - Contrarian strategy")
+    console.print("  [yellow]1.[/yellow] Interactive DEMO")
+    console.print("  [yellow]2.[/yellow] Quick DEMO - Momentum")
+    console.print("  [yellow]3.[/yellow] Quick DEMO - Mean Reversion")
+    console.print("  [yellow]4.[/yellow] Quick DEMO - Whale Follow")
+    console.print("  [yellow]5.[/yellow] Quick DEMO - Contrarian")
     console.print("  [yellow]b.[/yellow] Back to menu")
     console.print()
 
@@ -35,12 +38,12 @@ def run_backtest_screen(console: Console):
     console.print()
 
     if choice == "1":
-        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "backtest", "-i"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "backtest", "--demo", "-i"])
     elif choice == "2":
-        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "backtest", "-s", "momentum", "-p", "30d"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "backtest", "--demo", "-s", "momentum", "-p", "30d"])
     elif choice == "3":
-        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "backtest", "-s", "mean-reversion", "-p", "30d"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "backtest", "--demo", "-s", "mean-reversion", "-p", "30d"])
     elif choice == "4":
-        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "backtest", "-s", "whale-follow", "-p", "30d"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "backtest", "--demo", "-s", "whale-follow", "-p", "30d"])
     elif choice == "5":
-        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "backtest", "-s", "contrarian", "-p", "30d"])
+        subprocess.run([sys.executable, "-m", "polyterm.cli.main", "backtest", "--demo", "-s", "contrarian", "-p", "30d"])

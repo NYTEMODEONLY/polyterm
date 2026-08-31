@@ -14,7 +14,12 @@ def wallets_screen(console: RichConsole):
     Args:
         console: Rich Console instance
     """
-    console.print(Panel("[bold]Wallet Tracker[/bold]", style="cyan"))
+    console.print(Panel(
+        "[bold]Wallet Tracker[/bold]\n"
+        "[dim]Data API wallet, positions, and trades are lagged (not live CLOB). "
+        "Refresh with: polyterm wallets --analyze <address> --refresh[/dim]",
+        style="cyan",
+    ))
     console.print()
 
     # Submenu for wallet operations

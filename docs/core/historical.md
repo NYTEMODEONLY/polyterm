@@ -134,7 +134,7 @@ The `get_statistics` method calculates:
   - `get_recent_trades(hours, limit)` -- recent trades across all markets
   - `get_market_history(market_id, hours, limit)` -- market snapshots
 - **Gamma API** (`api/gamma.py`): Market title lookup (optional)
-- **CLOB API** (`api/clob.py`): Not directly used but available for future integration
+- **CLOB API** (`api/clob.py`): Not used by this local-DB module. Live CLOB `GET /prices-history` lives in `core/price_history.py` and `polyterm history`.
 
 ## Output Format
 
@@ -205,6 +205,6 @@ Full `HistoricalData.to_dict()` output with all trades, snapshots, and OHLCV can
 
 ## Related
 
-- CLI commands: `polyterm chart` (uses historical data for price charts), `polyterm stats` (market statistics), `polyterm export` (data export)
-- TUI screens: `7/e` (export), `ch` (chart), `st` (stats)
-- Other modules: `core/charts.py` (renders historical data as ASCII charts), `core/correlation.py` (uses price snapshots for correlation calculation), `core/predictions.py` (uses historical trends for prediction signals)
+- CLI commands: `polyterm chart` (uses historical data for price charts), `polyterm history` (CLOB `/prices-history`), `polyterm stats` (market statistics), `polyterm export` (data export)
+- TUI screens: `7/e` (export), `ch` (chart), `hist` (history), `st` (stats)
+- Other modules: `core/price_history.py` (CLOB price series), `core/charts.py` (renders historical data as ASCII charts), `core/correlation.py` (uses price snapshots for correlation calculation), `core/predictions.py` (uses historical trends for prediction signals)

@@ -4,6 +4,12 @@ from .gamma import GammaClient
 from .clob import CLOBClient
 from .aggregator import APIAggregator
 from .data_api import DataAPIClient
+from .status import StatusPageClient
 
-__all__ = ["GammaClient", "CLOBClient", "APIAggregator", "DataAPIClient"]
-
+__all__ = [
+    "GammaClient",
+    "CLOBClient",
+    "APIAggregator",
+    "DataAPIClient",
+    "StatusPageClient",
+]

@@ -35,7 +35,22 @@ config.set("alerts.probability_threshold", 15.0)  # OK
 config.set("alerts.check_interval", 2)             # ValueError: must be between 5 and 3600
 ```
 
-**`save()`** -- Persist the current in-memory config to `~/.polyterm/config.toml`. Creates the parent directory if it does not exist.
+**`save()`** -- Persist the current in-memory config to `~/.polyterm/config.toml`. Creates the parent directory if it does not exist. After writing, the file mode is set to `0600` (owner read/write only).
+
+### Secrets
+
+API keys, webhook URLs, Telegram tokens, Discord webhooks, and SMTP passwords in `config.toml` are plaintext. Prefer environment variables; they override the file:
+
+| Config key | Environment variable |
+|---|---|
+| `api.gamma_api_key` | `POLYTERM_GAMMA_API_KEY` |
+| `api.kalshi_api_key` | `POLYTERM_KALSHI_API_KEY` |
+| `notifications.webhook_url` | `POLYTERM_WEBHOOK_URL` |
+| `notifications.telegram.bot_token` | `POLYTERM_TELEGRAM_BOT_TOKEN` |
+| `notifications.telegram.chat_id` | `POLYTERM_TELEGRAM_CHAT_ID` |
+| `notifications.discord.webhook_url` | `POLYTERM_DISCORD_WEBHOOK` |
+| `notifications.email.smtp_password` | `POLYTERM_SMTP_PASSWORD` |
+
 
 **`_deep_merge(base, update)`** -- Recursively merges `update` into `base`. Nested dictionaries are merged rather than replaced, so a user config that sets only `alerts.probability_threshold` will not overwrite the other `alerts` defaults.
 
@@ -50,7 +65,7 @@ The class exposes frequently accessed values as read-only properties to avoid do
 | `gamma_markets_endpoint` | `api.gamma_markets_endpoint` | `/events` |
 | `clob_endpoint` | `api.clob_endpoint` | `wss://ws-subscriptions-clob.polymarket.com/ws/market` |
 | `clob_rest_endpoint` | `api.clob_rest_endpoint` | `https://clob.polymarket.com` |
-| `subgraph_endpoint` | `api.subgraph_endpoint` | Thegraph URL |
+| `subgraph_endpoint` | `api.subgraph_endpoint` | `""` (The Graph subgraph was removed) |
 | `kalshi_api_key` | `api.kalshi_api_key` | `""` |
 | `kalshi_base_url` | `api.kalshi_base_url` | Kalshi trading API URL |
 | `probability_threshold` | `alerts.probability_threshold` | `10.0` |

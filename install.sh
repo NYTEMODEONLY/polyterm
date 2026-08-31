@@ -28,9 +28,9 @@ else
     echo "✅ pipx already installed"
 fi
 
-# Install PolyTerm
-echo "📥 Installing PolyTerm..."
-pipx install polyterm
+# Install PolyTerm from GitHub main (PyPI is decommissioned)
+echo "📥 Installing PolyTerm from GitHub main..."
+pipx install git+https://github.com/NYTEMODEONLY/polyterm.git@main
 
 echo ""
 echo "🎉 Installation complete!"

@@ -266,6 +266,31 @@ def live_monitor_screen(console: RichConsole):
             pass
 
 
+# CREATE_NEW_CONSOLE is Windows-only. Keep a literal fallback so Linux tests
+# can assert the flag without AttributeError on subprocess.
+WINDOWS_CREATE_NEW_CONSOLE = getattr(subprocess, "CREATE_NEW_CONSOLE", 0x00000010)
+
+
+def spawn_windows_live_monitor(python_executable: str, script_path: str):
+    """Start the monitor script in a new Windows console without a shell.
+
+    Interpreter and script path are separate list arguments so a path
+    containing spaces stays one argv element. CREATE_NEW_CONSOLE is win32-only.
+
+    Args:
+        python_executable: Python interpreter path.
+        script_path: Temporary live-monitor script path.
+
+    Returns:
+        The process object from subprocess.Popen.
+    """
+    return subprocess.Popen(
+        [python_executable, script_path],
+        shell=False,
+        creationflags=WINDOWS_CREATE_NEW_CONSOLE,
+    )
+
+
 def launch_live_monitor(console: RichConsole, market_id: str = None, market_title: str = None, category: str = None):
     """Launch the live monitor in a new terminal window"""
     
@@ -383,9 +408,7 @@ monitor.run_live_monitor()
                 "gnome-terminal", "--", "python3", script_path
             ], timeout=5)
         elif sys.platform == "win32":  # Windows
-            subprocess.run([
-                "start", "cmd", "/k", f"python {script_path}"
-            ], shell=True, timeout=5)
+            spawn_windows_live_monitor(sys.executable, script_path)
         else:
             # Fallback - run in current terminal
             console.print("[yellow]Running live monitor in current terminal...[/yellow]")

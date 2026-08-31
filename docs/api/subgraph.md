@@ -1,10 +1,10 @@
 # SubgraphClient
 
-> Legacy GraphQL client for The Graph Protocol subgraph (deprecated).
+> Retired. Constructing `SubgraphClient` raises `APIError`.
 
 ## Overview
 
-The `SubgraphClient` class was the original client for querying on-chain Polymarket data via The Graph Protocol's GraphQL subgraph. The endpoint has been deprecated and removed by The Graph, so this client is kept solely for backward compatibility. It logs a deprecation warning on first instantiation and will fail on all queries against the original endpoint. New code should use `GammaClient` for market data or `DataAPIClient` for wallet data.
+The Graph removed the Polymarket subgraph. `SubgraphClient` is not a supported client. Instantiating it raises `APIError` immediately with guidance to use `GammaClient`, `CLOBClient`, or `DataAPIClient`. It is not exported from `polyterm.api`.
 
 ## Key Classes and Functions
 
@@ -16,7 +16,7 @@ The `SubgraphClient` class was the original client for querying on-chain Polymar
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `endpoint` | `str` | `"https://api.thegraph.com/subgraphs/name/polymarket/matic-markets"` | GraphQL endpoint (no longer functional) |
+| `endpoint` | `str` | `""` | Ignored. Constructor always raises. |
 
 A deprecation warning is logged once (module-level `_DEPRECATION_WARNED` flag) on first instantiation.
 
@@ -37,7 +37,7 @@ A deprecation warning is logged once (module-level `_DEPRECATION_WARNED` flag) o
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `https://api.thegraph.com/subgraphs/name/polymarket/matic-markets` | POST (GraphQL) | **DEPRECATED** -- The Graph has removed this subgraph |
+| *(none by default)* | POST (GraphQL) | **REMOVED** -- do not ship the old The Graph URL |
 
 ### GraphQL Queries
 
@@ -53,7 +53,7 @@ A deprecation warning is logged once (module-level `_DEPRECATION_WARNED` flag) o
 
 ## Configuration
 
-No configuration options. The endpoint URL is hardcoded and no longer functional.
+Unsupported. There is no live subgraph configuration.
 
 ## Rate Limiting / Error Handling
 

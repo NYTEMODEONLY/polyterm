@@ -1,53 +1,70 @@
-"""Backtest Command - Test trading strategies on historical data"""
+"""Backtest Command - DEMO strategy simulation (not historical replay)"""
 
 import click
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.prompt import Prompt
-from datetime import datetime, timedelta
-import random
 
 from ...api.gamma import GammaClient
+from ...core.demo_strategy_sim import DEMO_DISCLOSURE, DEMO_MODE, run_demo_simulation
 from ...utils.json_output import print_json
 from ...utils.errors import handle_api_error
 
 
+DEMO_UNAVAILABLE = (
+    "This command does not replay historical Polymarket data. "
+    "It only offers a seeded random DEMO simulation. "
+    "Pass --demo to run that simulation, or use `polyterm chart` / "
+    "`polyterm replay` for real historical market data."
+)
+
+
 @click.command()
 @click.option("--strategy", "-s", type=click.Choice(["momentum", "mean-reversion", "whale-follow", "contrarian", "volume-spike"]),
-              default="momentum", help="Strategy to test")
-@click.option("--market", "-m", default=None, help="Specific market to test on")
-@click.option("--period", "-p", type=click.Choice(["7d", "30d", "90d"]), default="30d", help="Backtest period")
+              default="momentum", help="Demo strategy name")
+@click.option("--market", "-m", default=None, help="Market search term used only as simulation labels")
+@click.option("--period", "-p", type=click.Choice(["7d", "30d", "90d"]), default="30d", help="Demo window length")
 @click.option("--capital", "-c", type=float, default=1000, help="Starting capital ($)")
 @click.option("--position-size", type=float, default=0.1, help="Position size as fraction of capital")
-@click.option("--interactive", "-i", is_flag=True, help="Interactive mode")
+@click.option("--interactive", "-i", is_flag=True, help="Interactive mode (still requires --demo)")
+@click.option("--demo", is_flag=True, help="Required. Acknowledge this is a random demo, not a historical backtest")
 @click.option("--format", "output_format", type=click.Choice(["table", "json"]), default="table")
 @click.pass_context
-def backtest(ctx, strategy, market, period, capital, position_size, interactive, output_format):
-    """Backtest trading strategies on historical data
+def backtest(ctx, strategy, market, period, capital, position_size, interactive, demo, output_format):
+    """DEMO strategy simulation (not historical backtesting)
 
-    Test different strategies to see how they would have performed.
-    Helps validate trading approaches before risking real capital.
-
-    Strategies:
-        momentum      - Buy rising markets, sell falling
-        mean-reversion - Buy oversold, sell overbought
-        whale-follow  - Follow large wallet activity
-        contrarian    - Fade extreme moves
-        volume-spike  - Trade on volume spikes
+    This command does not replay historical trades or prices.
+    Without --demo it refuses to run. With --demo it prints a
+    disclosure and then generates seeded random trades.
 
     Examples:
-        polyterm backtest -s momentum -p 30d
-        polyterm backtest -s whale-follow -m "bitcoin" -c 5000
-        polyterm backtest -i
+        polyterm backtest --demo -s momentum -p 30d
+        polyterm backtest --demo -i
     """
     console = Console()
     config = ctx.obj["config"]
 
+    if not demo:
+        if output_format == "json":
+            print_json({
+                "success": False,
+                "error": DEMO_UNAVAILABLE,
+                "mode": "unavailable",
+                "uses_historical_data": False,
+                "hint": "pass --demo to run the random simulation",
+            })
+        else:
+            console.print()
+            console.print(Panel(f"[yellow]{DEMO_UNAVAILABLE}[/yellow]", border_style="yellow"))
+            console.print()
+        return
+
     if interactive:
         console.print()
-        console.print(Panel("[bold]Strategy Backtester[/bold]", border_style="cyan"))
+        console.print(Panel("[bold yellow]DEMO Strategy Simulator[/bold yellow]\n[dim]Not historical backtesting[/dim]", border_style="yellow"))
+        console.print()
+        console.print(f"[yellow]{DEMO_DISCLOSURE}[/yellow]")
         console.print()
 
         console.print("[cyan]Available Strategies:[/cyan]")
@@ -90,6 +107,10 @@ def backtest(ctx, strategy, market, period, capital, position_size, interactive,
             capital = 1000
 
         console.print()
+    elif output_format != "json":
+        console.print()
+        console.print(Panel(f"[yellow]{DEMO_DISCLOSURE}[/yellow]", border_style="yellow"))
+        console.print()
 
     period_days = {"7d": 7, "30d": 30, "90d": 90}[period]
 
@@ -99,33 +120,26 @@ def backtest(ctx, strategy, market, period, capital, position_size, interactive,
     )
 
     try:
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-            transient=True,
-        ) as progress:
-            progress.add_task("Running backtest...", total=None)
+        if market:
+            markets = gamma_client.search_markets(market, limit=5)
+        else:
+            markets = gamma_client.get_markets(limit=20)
 
-            # Get markets to test
-            if market:
-                markets = gamma_client.search_markets(market, limit=5)
+        if not markets:
+            if output_format == 'json':
+                print_json({'success': False, 'error': 'No markets found', 'mode': DEMO_MODE})
             else:
-                markets = gamma_client.get_markets(limit=20)
+                console.print("[yellow]No markets found for demo labels.[/yellow]")
+            return
 
-            if not markets:
-                if output_format == 'json':
-                    print_json({'success': False, 'error': 'No markets found'})
-                else:
-                    console.print("[yellow]No markets found for backtest.[/yellow]")
-                return
-
-            # Run backtest simulation
-            results = _run_backtest(markets, strategy, period_days, capital, position_size)
+        results = run_demo_simulation(markets, strategy, period_days, capital, position_size)
 
         if output_format == 'json':
             print_json({
                 'success': True,
+                'mode': results.get('mode', DEMO_MODE),
+                'uses_historical_data': False,
+                'disclosure': DEMO_DISCLOSURE,
                 'strategy': strategy,
                 'period': period,
                 'starting_capital': capital,
@@ -136,7 +150,11 @@ def backtest(ctx, strategy, market, period, capital, position_size, interactive,
 
         # Display results
         console.print()
-        console.print(Panel(f"[bold]Backtest Results: {strategy.title()} Strategy[/bold]", border_style="cyan"))
+        console.print(Panel(
+            f"[bold yellow]DEMO Results: {strategy.title()} Strategy[/bold yellow]\n"
+            f"[dim]{DEMO_DISCLOSURE}[/dim]",
+            border_style="yellow",
+        ))
         console.print()
 
         # Summary metrics
@@ -162,7 +180,11 @@ def backtest(ctx, strategy, market, period, capital, position_size, interactive,
         summary.add_row("", "")
         summary.add_row("Avg Win:", f"[green]+${results['avg_win']:,.2f}[/green]")
         summary.add_row("Avg Loss:", f"[red]-${results['avg_loss']:,.2f}[/red]")
-        summary.add_row("Profit Factor:", f"{results['profit_factor']:.2f}")
+        profit_factor = results.get("profit_factor")
+        summary.add_row(
+            "Profit Factor:",
+            f"{profit_factor:.2f}" if profit_factor is not None else "n/a (no losing trades)",
+        )
         summary.add_row("", "")
         summary.add_row("Max Drawdown:", f"[red]{results['max_drawdown']:.1f}%[/red]")
         summary.add_row("Sharpe Ratio:", f"{results['sharpe_ratio']:.2f}")
@@ -223,9 +245,7 @@ def backtest(ctx, strategy, market, period, capital, position_size, interactive,
         console.print(f"[dim]{strategy_notes.get(strategy, '')}[/dim]")
         console.print()
 
-        # Risk warning
-        console.print("[yellow]Note: Past performance does not guarantee future results.[/yellow]")
-        console.print("[yellow]This is a simulation using estimated data. Real results may vary.[/yellow]")
+        console.print("[yellow]DEMO: these metrics are random. They are not historical performance.[/yellow]")
         console.print()
 
     except Exception as e:
@@ -235,142 +255,6 @@ def backtest(ctx, strategy, market, period, capital, position_size, interactive,
             handle_api_error(console, e, "backtesting")
     finally:
         gamma_client.close()
-
-
-def _run_backtest(markets: list, strategy: str, days: int, capital: float, position_size: float) -> dict:
-    """Run backtest simulation"""
-    trades = []
-    equity = capital
-    equity_curve = [capital]
-    peak = capital
-
-    max_drawdown = 0
-    returns = []
-
-    # Simulate trading over the period
-    num_trades = min(days // 3, 30)  # Trade every ~3 days
-
-    random.seed(42 + hash(strategy))  # Consistent results per strategy
-
-    for i in range(num_trades):
-        market = random.choice(markets)
-        market_title = market.get('question', market.get('title', ''))[:30]
-
-        # Entry price (simulated)
-        base_price = 0.5
-        tokens = market.get('tokens', [])
-        for token in tokens:
-            if token.get('outcome', '').upper() == 'YES':
-                try:
-                    base_price = float(token.get('price', 0.5))
-                except Exception:
-                    pass
-                break
-
-        entry_price = base_price + random.uniform(-0.15, 0.15)
-        entry_price = max(0.1, min(0.9, entry_price))
-
-        # Determine trade direction based on strategy
-        if strategy == "momentum":
-            # Buy if trending up
-            trend = random.uniform(-0.1, 0.1)
-            side = "BUY" if trend > 0 else "SELL"
-        elif strategy == "mean-reversion":
-            # Buy if low, sell if high
-            side = "BUY" if entry_price < 0.35 else "SELL" if entry_price > 0.65 else random.choice(["BUY", "SELL"])
-        elif strategy == "whale-follow":
-            # Random with slight edge
-            side = "BUY" if random.random() > 0.45 else "SELL"
-        elif strategy == "contrarian":
-            # Opposite of crowd
-            side = "SELL" if entry_price > 0.5 else "BUY"
-        else:  # volume-spike
-            side = random.choice(["BUY", "SELL"])
-
-        # Exit price (simulated with strategy-specific edge)
-        edge = {
-            "momentum": 0.02,
-            "mean-reversion": 0.015,
-            "whale-follow": 0.025,
-            "contrarian": 0.01,
-            "volume-spike": 0.03,
-        }[strategy]
-
-        # Random outcome with strategy edge
-        win = random.random() < (0.5 + edge)
-        move = random.uniform(0.02, 0.15)
-
-        if side == "BUY":
-            exit_price = entry_price + move if win else entry_price - move
-        else:
-            exit_price = entry_price - move if win else entry_price + move
-
-        exit_price = max(0.05, min(0.95, exit_price))
-
-        # Calculate P&L
-        trade_size = equity * position_size
-        if side == "BUY":
-            pnl = trade_size * ((exit_price - entry_price) / entry_price)
-        else:
-            pnl = trade_size * ((entry_price - exit_price) / entry_price)
-
-        equity += pnl
-        equity_curve.append(equity)
-
-        # Track drawdown
-        if equity > peak:
-            peak = equity
-        drawdown = ((peak - equity) / peak) * 100
-        if drawdown > max_drawdown:
-            max_drawdown = drawdown
-
-        # Track return
-        returns.append(pnl / trade_size if trade_size > 0 else 0)
-
-        trade_date = (datetime.now() - timedelta(days=days - (i * (days // num_trades)))).strftime("%Y-%m-%d")
-
-        trades.append({
-            'date': trade_date,
-            'market': market_title,
-            'side': side,
-            'entry': entry_price,
-            'exit': exit_price,
-            'pnl': pnl,
-        })
-
-    # Calculate stats
-    winning = [t for t in trades if t['pnl'] > 0]
-    losing = [t for t in trades if t['pnl'] < 0]
-
-    avg_win = sum(t['pnl'] for t in winning) / len(winning) if winning else 0
-    avg_loss = abs(sum(t['pnl'] for t in losing) / len(losing)) if losing else 1
-
-    total_wins = sum(t['pnl'] for t in winning)
-    total_losses = abs(sum(t['pnl'] for t in losing))
-
-    # Sharpe ratio (simplified)
-    import math
-    if returns:
-        avg_return = sum(returns) / len(returns)
-        std_return = math.sqrt(sum((r - avg_return) ** 2 for r in returns) / len(returns)) if len(returns) > 1 else 1
-        sharpe = (avg_return * math.sqrt(252)) / std_return if std_return > 0 else 0
-    else:
-        sharpe = 0
-
-    return {
-        'final_capital': equity,
-        'total_trades': len(trades),
-        'winning_trades': len(winning),
-        'losing_trades': len(losing),
-        'win_rate': (len(winning) / len(trades) * 100) if trades else 0,
-        'avg_win': avg_win,
-        'avg_loss': avg_loss,
-        'profit_factor': total_wins / total_losses if total_losses > 0 else float('inf'),
-        'max_drawdown': max_drawdown,
-        'sharpe_ratio': sharpe,
-        'trades': trades,
-        'equity_curve': equity_curve,
-    }
 
 
 def _display_equity_curve(console: Console, curve: list, start: float):

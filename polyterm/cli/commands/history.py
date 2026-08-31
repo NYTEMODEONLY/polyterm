@@ -1,330 +1,279 @@
-"""Market History - View price and volume history"""
+"""Market History - CLOB price history (refuses instead of inventing a path)"""
 
 import click
-from datetime import datetime, timedelta
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
+from ...api.clob import CLOBClient
 from ...api.gamma import GammaClient
+from ...api.market_utils import get_primary_clob_token_id, market_probability_price
+from ...core.price_history import (
+    DEMO_DISCLOSURE,
+    HISTORY_UNAVAILABLE,
+    MISSING_TOKEN_IDS,
+    SOURCE_DEMO,
+    build_clob_payload,
+    build_demo_payload,
+    build_time_bounds,
+    parse_clob_history_rows,
+    period_to_hours,
+    refuse_payload,
+    select_clob_granularity,
+)
 from ...utils.json_output import print_json
 
 
 @click.command()
 @click.argument("market_search", required=True)
 @click.option("--period", "-p", type=click.Choice(["day", "week", "month", "all"]), default="week", help="History period")
-@click.option("--chart", "-c", is_flag=True, help="Show price chart")
+@click.option("--chart", "-c", is_flag=True, help="Show ASCII price chart (table mode always includes it)")
+@click.option("--demo", is_flag=True, help="Show a labeled random-walk series instead of CLOB history")
 @click.option("--format", "output_format", type=click.Choice(["table", "json"]), default="table")
 @click.pass_context
-def history(ctx, market_search, period, chart, output_format):
-    """View market price and volume history
+def history(ctx, market_search, period, chart, demo, output_format):
+    """View CLOB market price history
 
-    See how a market has evolved over time.
-    Identify trends, key events, and patterns.
+    Default path fetches YES prices from CLOB GET /prices-history.
+    If that series is missing, the command refuses instead of inventing
+    a random walk. Pass --demo for a labeled synthetic series.
 
     Examples:
-        polyterm history "bitcoin"              # Last week
-        polyterm history "trump" --period month # Last month
-        polyterm history "election" --chart     # With price chart
+        polyterm history "bitcoin"
+        polyterm history "trump" --period month
+        polyterm history "election" --demo
     """
     console = Console()
     config = ctx.obj["config"]
+
+    if demo and output_format != "json":
+        console.print()
+        console.print(Panel(f"[yellow]{DEMO_DISCLOSURE}[/yellow]", border_style="yellow"))
+        console.print()
 
     gamma_client = GammaClient(
         base_url=config.gamma_base_url,
         api_key=config.gamma_api_key,
     )
+    clob_client = None
 
     try:
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-            transient=True,
-        ) as progress:
-            progress.add_task("Loading history...", total=None)
-
-            # Find market
+        if output_format != "json":
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console,
+                transient=True,
+            ) as progress:
+                progress.add_task("Loading history...", total=None)
+                markets = gamma_client.search_markets(market_search, limit=1)
+        else:
             markets = gamma_client.search_markets(market_search, limit=1)
 
-            if not markets:
-                if output_format == 'json':
-                    print_json({'success': False, 'error': 'Market not found'})
-                else:
-                    console.print(f"[yellow]Market '{market_search}' not found.[/yellow]")
-                return
+        if not markets:
+            payload = refuse_payload("Market not found", hint="search for an active Gamma market")
+            _emit_payload(console, payload, output_format)
+            return
 
-            market = markets[0]
-            title = market.get('question', market.get('title', ''))
+        market = markets[0]
+        title = market.get("question", market.get("title", "")) or market_search
+        current_price = market_probability_price(market)
+        volume_24h = _as_float(market.get("volume24hr", market.get("volume24h", 0)))
+        reported_volume = _as_float(market.get("volume", 0))
+        gamma_market_id = str(market.get("id") or "") or None
 
-            # Calculate history (simulated from available data)
-            history_data = _build_history(market, period)
+        if demo:
+            payload = build_demo_payload(
+                market_title=title,
+                period=period,
+                current_price=current_price or 0.5,
+                volume_24h=volume_24h,
+                reported_volume=reported_volume,
+                seed_key=f"{market_search}:{period}",
+                gamma_market_id=gamma_market_id,
+            )
+            _emit_payload(console, payload, output_format, show_chart=True)
+            return
 
+        token_id = get_primary_clob_token_id(market)
+        if not token_id:
+            _emit_payload(console, refuse_payload(MISSING_TOKEN_IDS), output_format)
+            return
+
+        hours = period_to_hours(period)
+        interval, fidelity = select_clob_granularity(hours)
+        start_ts, end_ts = build_time_bounds(hours)
+
+        clob_client = CLOBClient(rest_endpoint=config.clob_rest_endpoint)
+        try:
+            raw_history = clob_client.get_price_history(
+                token_id,
+                interval=interval,
+                fidelity=fidelity,
+                start_ts=start_ts,
+                end_ts=end_ts,
+            )
+        except Exception:
+            _emit_payload(console, refuse_payload(HISTORY_UNAVAILABLE), output_format)
+            return
+
+        points = parse_clob_history_rows(raw_history, start_ts, end_ts)
+        if not points:
+            _emit_payload(console, refuse_payload(HISTORY_UNAVAILABLE), output_format)
+            return
+
+        payload = build_clob_payload(
+            points,
+            market_title=title,
+            period=period,
+            hours=hours,
+            token_id=token_id,
+            current_price=points[-1]["price"],
+            volume_24h=volume_24h,
+            reported_volume=reported_volume,
+            gamma_market_id=gamma_market_id,
+        )
+        _emit_payload(console, payload, output_format, show_chart=True)
     finally:
         gamma_client.close()
+        if clob_client is not None:
+            clob_client.close()
 
-    if output_format == 'json':
-        print_json({
-            'success': True,
-            'market': title,
-            'period': period,
-            'history': history_data,
-        })
+
+def _emit_payload(console: Console, payload: dict, output_format: str, show_chart: bool = False) -> None:
+    if output_format == "json":
+        print_json(payload)
         return
 
-    # Display
+    if not payload.get("success"):
+        console.print()
+        console.print(Panel(f"[yellow]{payload.get('error', 'History unavailable')}[/yellow]", border_style="yellow"))
+        hint = payload.get("hint")
+        if hint:
+            console.print(f"[dim]Hint: {hint}[/dim]")
+        console.print()
+        return
+
+    _render_history(console, payload, show_chart=show_chart)
+
+
+def _render_history(console: Console, payload: dict, show_chart: bool) -> None:
+    history_data = payload["history"]
+    title = payload.get("market", "")
+    source = payload.get("source")
+    uses_historical = payload.get("uses_historical_data")
+
     console.print()
-    console.print(Panel(f"[bold]Market History[/bold]\n{title[:60]}", border_style="cyan"))
+    if source == SOURCE_DEMO:
+        header = f"[bold yellow]DEMO Price Path[/bold yellow]\n{title[:60]}\n[dim]{DEMO_DISCLOSURE}[/dim]"
+        border = "yellow"
+    else:
+        token_id = payload.get("clob_token_id") or ""
+        header = (
+            f"[bold]CLOB Price History[/bold]\n{title[:60]}\n"
+            f"[dim]Source: CLOB GET /prices-history"
+            f"{f' (token {token_id[:16]}…)' if token_id else ''}[/dim]"
+        )
+        border = "cyan"
+    console.print(Panel(header, border_style=border))
+    console.print()
+    console.print(
+        f"[dim]uses_historical_data={str(bool(uses_historical)).lower()}  "
+        f"source={source}  period={payload.get('period')}  "
+        f"points={payload.get('point_count', 0)}[/dim]"
+    )
     console.print()
 
-    # Current state
-    current = history_data['current']
+    current = history_data["current"]
     console.print(f"[bold]Current:[/bold] {current['price']:.1%}")
     console.print()
 
-    # Key metrics
     console.print("[bold]Period Summary:[/bold]")
     console.print()
 
     summary_table = Table(show_header=False, box=None, padding=(0, 2))
-    summary_table.add_column(width=18)
-    summary_table.add_column(justify="right", width=15)
+    summary_table.add_column(width=22)
+    summary_table.add_column(justify="right", width=28)
 
-    summary = history_data['summary']
-
-    # Price change
-    change = summary['price_change']
+    summary = history_data["summary"]
+    change = summary["price_change"]
     change_color = "green" if change >= 0 else "red"
     summary_table.add_row("Price Change", f"[{change_color}]{change:+.1%}[/{change_color}]")
-
-    # High/Low
     summary_table.add_row("Period High", f"[green]{summary['high']:.1%}[/green]")
     summary_table.add_row("Period Low", f"[red]{summary['low']:.1%}[/red]")
 
-    # Volatility
     vol_str = f"{summary['volatility']:.1%}"
-    if summary['volatility'] > 0.15:
+    if summary["volatility"] > 0.15:
         vol_str = f"[red]{vol_str}[/red] (High)"
-    elif summary['volatility'] > 0.05:
+    elif summary["volatility"] > 0.05:
         vol_str = f"[yellow]{vol_str}[/yellow] (Normal)"
     else:
         vol_str = f"[green]{vol_str}[/green] (Low)"
     summary_table.add_row("Volatility", vol_str)
-
-    # Volume
-    summary_table.add_row("Volume", f"${summary['total_volume']:,.0f}")
-
+    summary_table.add_row(
+        "Reported volume",
+        f"${summary.get('reported_volume', 0):,.0f} [dim](Gamma snapshot)[/dim]",
+    )
     console.print(summary_table)
     console.print()
 
-    # Price chart
-    if chart or True:  # Always show chart
-        console.print("[bold]Price History:[/bold]")
+    if show_chart:
+        label = "DEMO Price Path:" if source == SOURCE_DEMO else "Price History:"
+        console.print(f"[bold]{label}[/bold]")
         console.print()
-        _display_chart(console, history_data['points'])
+        _display_chart(console, history_data["points"])
         console.print()
 
-    # Key events/milestones
-    if history_data['milestones']:
+    if history_data.get("milestones"):
         console.print("[bold]Key Moments:[/bold]")
         console.print()
-
-        for milestone in history_data['milestones'][:5]:
-            if milestone['type'] == 'high':
+        for milestone in history_data["milestones"][:5]:
+            if milestone["type"] == "high":
                 icon = "[green]↑[/green]"
-            elif milestone['type'] == 'low':
+            elif milestone["type"] == "low":
                 icon = "[red]↓[/red]"
             else:
                 icon = "[yellow]•[/yellow]"
-
             console.print(f"  {icon} {milestone['date']}: {milestone['description']}")
-
         console.print()
 
-    # Trend analysis
     console.print("[bold]Trend:[/bold]")
-    trend = history_data['trend']
-
-    if trend['direction'] == 'up':
+    trend = history_data["trend"]
+    if trend["direction"] == "up":
         console.print(f"[green]Uptrend[/green] - Price rising {trend['strength']}")
-    elif trend['direction'] == 'down':
+    elif trend["direction"] == "down":
         console.print(f"[red]Downtrend[/red] - Price falling {trend['strength']}")
     else:
-        console.print(f"[yellow]Sideways[/yellow] - Consolidating in range")
-
+        console.print("[yellow]Sideways[/yellow] - Consolidating in range")
     console.print()
 
 
-def _build_history(market: dict, period: str) -> dict:
-    """Build history data from market info"""
-    current_price = _get_price(market)
-    volume_24h = market.get('volume24hr', market.get('volume24h', 0)) or 0
-    total_volume = market.get('volume', 0) or 0
-
-    # Period in days
-    if period == 'day':
-        days = 1
-    elif period == 'week':
-        days = 7
-    elif period == 'month':
-        days = 30
-    else:
-        days = 90
-
-    # Generate synthetic history points (in production, fetch from API)
-    points = _generate_history_points(current_price, volume_24h, days)
-
-    # Calculate summary
-    prices = [p['price'] for p in points]
-    high = max(prices)
-    low = min(prices)
-    start_price = prices[0]
-    price_change = current_price - start_price
-
-    # Volatility (standard deviation approximation)
-    avg = sum(prices) / len(prices)
-    volatility = (sum((p - avg) ** 2 for p in prices) / len(prices)) ** 0.5
-
-    # Milestones
-    milestones = []
-
-    # Find high point
-    high_idx = prices.index(high)
-    milestones.append({
-        'type': 'high',
-        'date': points[high_idx]['date'],
-        'description': f"Period high at {high:.1%}",
-    })
-
-    # Find low point
-    low_idx = prices.index(low)
-    milestones.append({
-        'type': 'low',
-        'date': points[low_idx]['date'],
-        'description': f"Period low at {low:.1%}",
-    })
-
-    # Big moves
-    for i in range(1, len(points)):
-        change = points[i]['price'] - points[i-1]['price']
-        if abs(change) > 0.05:
-            move_type = 'surge' if change > 0 else 'drop'
-            milestones.append({
-                'type': move_type,
-                'date': points[i]['date'],
-                'description': f"{'Surged' if change > 0 else 'Dropped'} {abs(change):.1%}",
-            })
-
-    # Sort milestones by significance
-    milestones.sort(key=lambda m: m['type'] in ['high', 'low'], reverse=True)
-
-    # Trend analysis
-    recent_avg = sum(prices[-3:]) / 3
-    older_avg = sum(prices[:3]) / 3
-
-    if recent_avg > older_avg * 1.03:
-        direction = 'up'
-        strength = 'steadily' if recent_avg < older_avg * 1.10 else 'strongly'
-    elif recent_avg < older_avg * 0.97:
-        direction = 'down'
-        strength = 'steadily' if recent_avg > older_avg * 0.90 else 'sharply'
-    else:
-        direction = 'sideways'
-        strength = ''
-
-    return {
-        'current': {
-            'price': current_price,
-            'volume_24h': volume_24h,
-        },
-        'summary': {
-            'price_change': price_change,
-            'high': high,
-            'low': low,
-            'volatility': volatility,
-            'total_volume': total_volume,
-        },
-        'points': points,
-        'milestones': milestones,
-        'trend': {
-            'direction': direction,
-            'strength': strength,
-        },
-    }
-
-
-def _generate_history_points(current_price: float, volume_24h: float, days: int) -> list:
-    """Generate synthetic history points"""
-    import random
-
-    points = []
-    price = current_price
-
-    # Work backwards from current
-    for i in range(days, -1, -1):
-        date = (datetime.now() - timedelta(days=i)).strftime("%m/%d")
-
-        # Random walk backwards
-        if i > 0:
-            change = random.uniform(-0.03, 0.03)
-            price = max(0.05, min(0.95, price - change))
-
-        # Volume estimate
-        vol = volume_24h * random.uniform(0.5, 1.5) if i < 7 else volume_24h * random.uniform(0.3, 1.0)
-
-        points.append({
-            'date': date,
-            'price': price if i > 0 else current_price,
-            'volume': vol,
-        })
-
-    # Ensure last point is current price
-    points[-1]['price'] = current_price
-
-    return points
-
-
-def _display_chart(console: Console, points: list):
-    """Display ASCII price chart"""
+def _display_chart(console: Console, points: list) -> None:
+    """Display ASCII price chart from series points."""
     if not points:
         console.print("[dim]No data[/dim]")
         return
 
-    prices = [p['price'] for p in points]
+    prices = [point["price"] for point in points]
     min_price = min(prices)
     max_price = max(prices)
-    price_range = max_price - min_price
-
-    if price_range == 0:
-        price_range = 0.01
-
+    price_range = max_price - min_price or 0.01
     height = 8
     width = min(len(points), 40)
 
-    # Sample points if too many
     if len(points) > width:
         step = len(points) / width
         sampled = [points[int(i * step)] for i in range(width)]
     else:
         sampled = points
 
-    # Build chart
     chart = []
     for row in range(height, -1, -1):
         line = ""
         threshold = min_price + (row / height) * price_range
-
         for point in sampled:
-            if point['price'] >= threshold:
-                if row == height or point['price'] < min_price + ((row + 1) / height) * price_range:
-                    line += "█"
-                else:
-                    line += "█"
-            else:
-                line += " "
-
-        # Price label on right
+            line += "█" if point["price"] >= threshold else " "
         if row == height:
             chart.append(f"  {max_price:.0%} │{line}│")
         elif row == 0:
@@ -335,10 +284,9 @@ def _display_chart(console: Console, points: list):
         else:
             chart.append(f"       │{line}│")
 
-    # Date labels
     if sampled:
-        first_date = sampled[0]['date']
-        last_date = sampled[-1]['date']
+        first_date = sampled[0]["date"]
+        last_date = sampled[-1]["date"]
         date_line = f"       {first_date}" + " " * (len(sampled) - len(first_date) - len(last_date)) + last_date
         chart.append("       └" + "─" * len(sampled) + "┘")
         chart.append(date_line)
@@ -347,15 +295,8 @@ def _display_chart(console: Console, points: list):
         console.print(f"[cyan]{line}[/cyan]")
 
 
-def _get_price(market: dict) -> float:
-    """Get market price"""
-    if market.get('outcomePrices'):
-        try:
-            import json
-            prices = market['outcomePrices']
-            if isinstance(prices, str):
-                prices = json.loads(prices)
-            return float(prices[0]) if prices else 0.5
-        except Exception:
-            pass
-    return float(market.get('bestAsk', market.get('lastTradePrice', 0.5)) or 0.5)
+def _as_float(value) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0

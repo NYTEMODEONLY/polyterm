@@ -4,7 +4,7 @@
 
 ## Overview
 
-The Portfolio screen displays on-chain positions for a given wallet address. You can enter a wallet address manually or use the one saved in your config file. This is a read-only view -- no private keys are needed.
+The Portfolio screen displays positions for a given wallet address from the lagged Data API. That is not the live CLOB fill tape. You can enter a wallet address manually or use the one saved in your config file. This is a read-only view -- no private keys are needed.
 
 ## Access
 
@@ -31,7 +31,7 @@ polyterm portfolio [--wallet <address>]
 
 ## Data Sources
 
-- Data API (`data-api.polymarket.com`) for wallet positions
+- Lagged Data API (`data-api.polymarket.com`) for wallet positions — not live CLOB
 - Gamma REST API for market metadata
 - Config file (`~/.polyterm/config.toml`) for default wallet address
 

@@ -1,4 +1,4 @@
-"""TUI Screen for Market History"""
+"""TUI Screen for CLOB market price history"""
 
 import subprocess
 import sys
@@ -8,11 +8,16 @@ from rich.prompt import Prompt
 
 
 def run_history_screen(console: Console):
-    """Market history screen"""
+    """CLOB price history screen. Refuses instead of inventing a path."""
     console.print()
-    console.print(Panel("[bold]Market History[/bold]", border_style="cyan"))
+    console.print(Panel(
+        "[bold]CLOB Price History[/bold]\n"
+        "[dim]Uses CLOB GET /prices-history. If that series is missing, "
+        "the command refuses instead of inventing a random walk.[/dim]",
+        border_style="cyan",
+    ))
     console.print()
-    console.print("[bold]View price and volume history[/bold]")
+    console.print("[bold]View real CLOB price history[/bold]")
     console.print()
 
     market = Prompt.ask("[cyan]Enter market to view history[/cyan]")

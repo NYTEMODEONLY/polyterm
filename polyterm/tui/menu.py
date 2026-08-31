@@ -2,11 +2,7 @@
 
 from rich.console import Console
 from rich.table import Table
-from rich.panel import Panel
 import polyterm
-import requests
-import re
-from packaging import version
 from ..utils.errors import handle_api_error
 
 
@@ -20,167 +16,27 @@ class MainMenu:
         self._update_cache = None  # Cached update check result
 
     def check_for_updates(self) -> tuple[str, str]:
-        """Check if there's a newer version available on PyPI
+        """Do not query PyPI. GitHub is the install source; PyPI is decommissioned.
 
         Returns:
-            Tuple of (update_indicator_string, latest_version)
+            Empty indicator and version. Reinstall from GitHub via Settings
+            option 6, menu shortcut ``u``, or ``polyterm update``.
         """
-        # Return cached result if available (only check once per session)
         if self._update_cache is not None:
             return self._update_cache
-
-        try:
-            current_version = polyterm.__version__
-            
-            # Get latest version from PyPI
-            response = requests.get("https://pypi.org/pypi/polyterm/json", timeout=5)
-            if response.status_code == 200:
-                data = response.json()
-                latest_version = data["info"]["version"]
-                
-                # Compare versions
-                if version.parse(latest_version) > version.parse(current_version):
-                    result = f" [bold green]🔄 Update Available: v{latest_version}[/bold green]", latest_version
-                    self._update_cache = result
-                    return result
-
-        except Exception:
-            # If update check fails, silently continue
-            pass
-
         self._update_cache = ("", "")
         return "", ""
-    
-    def _get_installed_version_pipx(self) -> str:
-        """Get the currently installed version from pipx"""
-        import subprocess
-        try:
-            result = subprocess.run(["pipx", "list"], capture_output=True, text=True)
-            if result.returncode == 0:
-                for line in result.stdout.split('\n'):
-                    if 'polyterm' in line.lower():
-                        # Parse "package polyterm 0.4.2, installed using..."
-                        match = re.search(r'polyterm\s+(\d+\.\d+\.\d+)', line)
-                        if match:
-                            return match.group(1)
-        except Exception:
-            pass
-        return ""
 
     def quick_update(self) -> bool:
-        """Perform a quick update from the main menu with auto-restart
+        """Reinstall from GitHub main using the Settings update flow.
 
         Returns:
             True if update was successful, False otherwise
         """
         try:
-            import subprocess
-            import sys
-            import shutil
-            import os
+            from .screens.settings import update_polyterm
 
-            self.console.print("\n[bold green]🔄 Quick Update Starting...[/bold green]")
-
-            # Get latest version from PyPI
-            latest_version = None
-            try:
-                response = requests.get("https://pypi.org/pypi/polyterm/json", timeout=5)
-                if response.status_code == 200:
-                    latest_version = response.json()["info"]["version"]
-            except Exception:
-                pass
-
-            has_pipx = False
-            has_pip = False
-
-            # Check for pipx first (preferred)
-            try:
-                subprocess.run(["pipx", "--version"], capture_output=True, check=True)
-                has_pipx = True
-            except (subprocess.CalledProcessError, FileNotFoundError):
-                pass
-
-            # Check for pip
-            try:
-                subprocess.run([sys.executable, "-m", "pip", "--version"], capture_output=True, check=True)
-                has_pip = True
-            except (subprocess.CalledProcessError, FileNotFoundError):
-                pass
-
-            update_success = False
-
-            if has_pipx:
-                self.console.print("[dim]Using pipx to update...[/dim]")
-
-                # First try pipx upgrade
-                result = subprocess.run(["pipx", "upgrade", "polyterm"], capture_output=True, text=True)
-
-                # Verify the upgrade actually worked
-                installed_version = self._get_installed_version_pipx()
-                if latest_version and installed_version == latest_version:
-                    update_success = True
-                    self.console.print(f"[green]✓ Upgraded to {installed_version}[/green]")
-                else:
-                    # pipx upgrade didn't work, try reinstall
-                    self.console.print("[yellow]pipx upgrade didn't work, trying reinstall...[/yellow]")
-                    subprocess.run(["pipx", "uninstall", "polyterm"], capture_output=True, text=True)
-                    # Use --no-cache-dir to avoid pip caching old versions
-                    result = subprocess.run(
-                        ["pipx", "install", "polyterm", "--pip-args=--no-cache-dir"],
-                        capture_output=True, text=True
-                    )
-
-                    if result.returncode == 0:
-                        installed_version = self._get_installed_version_pipx()
-                        if latest_version and installed_version == latest_version:
-                            update_success = True
-                            self.console.print(f"[green]✓ Reinstalled to {installed_version}[/green]")
-
-            if not update_success and has_pip:
-                self.console.print("[dim]Using pip to update...[/dim]")
-                result = subprocess.run(
-                    [sys.executable, "-m", "pip", "install", "--upgrade", "polyterm"],
-                    capture_output=True, text=True
-                )
-                if result.returncode == 0:
-                    update_success = True
-
-            if update_success:
-                self.console.print(f"[bold green]✅ Update successful![/bold green]")
-                if latest_version:
-                    self.console.print(f"[green]Updated to version {latest_version}[/green]")
-                self.console.print()
-
-                # Ask user if they want to restart
-                self.console.print("[bold cyan]Would you like to restart PolyTerm now?[/bold cyan]")
-                self.console.print("[dim]Restarting is required to use the new version.[/dim]")
-                self.console.print()
-                restart = self.console.input("[cyan]Restart now? (Y/n):[/cyan] ").strip().lower()
-
-                if restart != 'n':
-                    self.console.print()
-                    self.console.print("[green]🔄 Restarting PolyTerm...[/green]")
-                    self.console.print()
-
-                    # Use os.execv to replace current process with new polyterm
-                    polyterm_path = shutil.which("polyterm")
-
-                    if polyterm_path:
-                        os.execv(polyterm_path, ["polyterm"])
-                    else:
-                        # Fallback: try running as module
-                        os.execv(sys.executable, [sys.executable, "-m", "polyterm"])
-                else:
-                    self.console.print()
-                    self.console.print("[yellow]Update installed but not active.[/yellow]")
-                    self.console.print("[dim]Please restart PolyTerm manually to use the new version.[/dim]")
-
-                return True
-            else:
-                self.console.print("[bold red]❌ Update failed[/bold red]")
-                self.console.print("[yellow]Try: pipx uninstall polyterm && pipx install polyterm[/yellow]")
-                return False
-
+            return update_polyterm(self.console)
         except Exception as e:
             handle_api_error(self.console, e, "menu")
             return False
@@ -195,7 +51,7 @@ class MainMenu:
         page1_items = [
             ("1", "📊 Monitor Markets", "Real-time market tracking"),
             ("2", "🔴 Live Monitor", "Live trades in new window"),
-            ("3", "🐋 Whale Activity", "High-volume market moves"),
+            ("3", "🐋 Whale Activity", "Volume heuristic; --wallets for traders"),
             ("4", "👁  Watch Market", "Track specific market"),
             ("5", "📈 Market Analytics", "Trends and predictions"),
             ("6", "💼 Portfolio", "View your positions"),

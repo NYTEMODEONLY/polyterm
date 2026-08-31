@@ -4,11 +4,21 @@
 
 ## Quick Start
 
+Install from GitHub `main`. GitHub is the source of truth. PyPI is decommissioned.
+
 ```bash
-pip install polyterm
+git clone https://github.com/NYTEMODEONLY/polyterm.git
+cd polyterm
+pip install -e .
 polyterm              # Launch TUI
 polyterm tutorial     # Interactive tutorial
 polyterm --help       # See all commands
+```
+
+Isolated install via pipx:
+
+```bash
+pipx install git+https://github.com/NYTEMODEONLY/polyterm.git@main
 ```
 
 ## Table of Contents
@@ -37,7 +47,7 @@ Each CLI command has its own documentation page with usage, options, and example
 | [analyze](cli/analyze.md) | Market analytics and trending | `polyterm analyze` |
 | [arbitrage](cli/arbitrage.md) | Arbitrage opportunity scanner | `polyterm arbitrage` |
 | [attribution](cli/attribution.md) | Trade attribution analysis | `polyterm attribution` |
-| [backtest](cli/backtest.md) | Strategy backtesting | `polyterm backtest` |
+| [backtest](cli/backtest.md) | DEMO strategy simulation (not historical) | `polyterm backtest --demo` |
 | [benchmark](cli/benchmark.md) | Performance benchmarking | `polyterm benchmark` |
 | [bookmarks](cli/bookmarks.md) | Save and manage favorite markets | `polyterm bookmarks` |
 | [calendar](cli/calendar.md) | Upcoming market resolutions | `polyterm calendar` |
@@ -61,11 +71,11 @@ Each CLI command has its own documentation page with usage, options, and example
 | [glossary](cli/glossary.md) | Prediction market terminology | `polyterm glossary` |
 | [groups](cli/groups.md) | Market grouping and organization | `polyterm groups` |
 | [health](cli/health.md) | Market health indicators | `polyterm health` |
-| [history](cli/history.md) | Trade and price history | `polyterm history` |
+| [history](cli/history.md) | CLOB price history (refuses if unavailable) | `polyterm history` |
 | [hot](cli/hot.md) | Hot / trending markets | `polyterm hot` |
 | [journal](cli/journal.md) | Trading journal | `polyterm journal` |
 | [ladder](cli/ladder.md) | Price ladder display | `polyterm ladder` |
-| [leaderboard](cli/leaderboard.md) | Trader leaderboard | `polyterm leaderboard` |
+| [leaderboard](cli/leaderboard.md) | Public Data API trader rankings | `polyterm leaderboard` |
 | [liquidity](cli/liquidity.md) | Liquidity analysis | `polyterm liquidity` |
 | [live-monitor](cli/live-monitor.md) | Real-time WebSocket market monitor | `polyterm live-monitor` |
 | [lookup](cli/lookup.md) | Market lookup by ID or slug | `polyterm lookup` |
@@ -111,7 +121,7 @@ Each CLI command has its own documentation page with usage, options, and example
 | [timing](cli/timing.md) | Trade timing analysis | `polyterm timing` |
 | [trade](cli/trade.md) | Trade management | `polyterm trade` |
 | [tutorial](cli/tutorial.md) | Interactive tutorial for new users | `polyterm tutorial` |
-| [update](cli/update.md) | Check for and install updates | `polyterm update` |
+| [update](cli/update.md) | Reinstall from GitHub main (PyPI decommissioned) | `polyterm update` |
 | [volume](cli/volume.md) | Volume analysis | `polyterm volume` |
 | [wallets](cli/wallets.md) | Wallet management and analysis | `polyterm wallets` |
 | [watch](cli/watch.md) | Market watchlist | `polyterm watch` |
@@ -130,7 +140,7 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 | [analyze_screen](tui/screens/analyze_screen.md) | Deep market analysis | an | TUI |
 | [arbitrage](tui/screens/arbitrage.md) | Arbitrage opportunities | 9/arb | TUI |
 | [attribution_screen](tui/screens/attribution_screen.md) | Trade attribution | - | TUI |
-| [backtest_screen](tui/screens/backtest_screen.md) | Strategy backtesting | - | TUI |
+| [backtest_screen](tui/screens/backtest_screen.md) | DEMO strategy simulation | - | TUI |
 | [benchmark_screen](tui/screens/benchmark_screen.md) | Performance benchmark | - | TUI |
 | [bookmarks_screen](tui/screens/bookmarks_screen.md) | Saved markets | 17/bm | TUI |
 | [calendar_screen](tui/screens/calendar_screen.md) | Resolution calendar | cal | TUI |
@@ -152,7 +162,7 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 | [groups_screen](tui/screens/groups.md) | Market groups | - | TUI |
 | [health_screen](tui/screens/health.md) | Market health | - | TUI |
 | [help](tui/screens/help.md) | Help screen | h/? | TUI |
-| [history_screen](tui/screens/history.md) | Trade history | - | TUI |
+| [history_screen](tui/screens/history.md) | CLOB price history | hist | TUI |
 | [hot_screen](tui/screens/hot.md) | Hot markets | hot | TUI |
 | [journal_screen](tui/screens/journal_screen.md) | Trading journal | jn | TUI |
 | [ladder_screen](tui/screens/ladder_screen.md) | Price ladder | - | TUI |
@@ -203,14 +213,14 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 | [wallets](tui/screens/wallets.md) | Wallet management | 11/wal | TUI |
 | [watch](tui/screens/watch.md) | Watchlist | 4 | TUI |
 | [watchdog_screen](tui/screens/watchdog_screen.md) | Market watchdog | - | TUI |
-| [whales](tui/screens/whales.md) | Whale tracker | 3/w | TUI |
+| [whales](tui/screens/whales.md) | High-volume market heuristic | 3/w | TUI |
 
 ### TUI Infrastructure
 
 | Module | Description | Doc |
 |--------|-------------|-----|
 | [controller](tui/infrastructure/controller.md) | Main TUI loop and routing | `TUIController` |
-| [menu](tui/infrastructure/menu.md) | Main menu with update checking | Menu display |
+| [menu](tui/infrastructure/menu.md) | Main menu display and GitHub reinstall | Menu display |
 | [shortcuts](tui/infrastructure/shortcuts.md) | Keyboard shortcut mapping | Shortcut registry |
 | [statusbar](tui/infrastructure/statusbar.md) | Status bar display | Status info |
 | [themes](tui/infrastructure/themes.md) | Color themes and styling | Theme config |
@@ -222,9 +232,11 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 |--------|-------------|-----|
 | [aggregator](api/aggregator.md) | Multi-source data aggregation with fallback | Primary data layer |
 | [clob](api/clob.md) | CLOB REST + WebSocket (order book, trades, settlement) | Real-time data |
-| [data_api](api/data_api.md) | Data API client (wallet positions, activity) | Wallet data |
+| [data_api](api/data_api.md) | Data API client (lagged wallet positions, activity, trades) | Wallet data |
+| [data_api_lag](api/data_api_lag.md) | Lag labels for Data API fills (not live CLOB) | Honesty labels |
 | [gamma](api/gamma.md) | Gamma REST API + SharedRateLimiter | Market data |
 | [market_utils](api/market_utils.md) | Identifier and metadata normalization helpers | ID routing |
+| [status](api/status.md) | Statuspage v2 client for status.polymarket.com | Incident banners |
 | [subgraph](api/subgraph.md) | Subgraph client (legacy) | Historical data |
 
 ### Core Modules
@@ -233,7 +245,11 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 |--------|-------------|-----|
 | [alerts](core/alerts.md) | Alert generation and management | Alert engine |
 | [alert_engine](core/alert_engine.md) | Unified local alert rule engine | Rule evaluation |
+| [print_scanner](core/print_scanner.md) | Verified Data API prints (lagged, not live CLOB) | Print ingest |
 | [analytics](core/analytics.md) | Market analytics and trending analysis | Analytics engine |
+| [demo_strategy_sim](core/demo_strategy_sim.md) | Seeded random strategy simulation (not historical backtesting) | Demo simulator |
+| [leaderboard](core/leaderboard.md) | Data API leaderboard normalization without fabricated stats | Ranking helper |
+| [volume_spikes](core/volume_spikes.md) | Gamma 24h volume heuristic (not whale identity) | Volume heuristic |
 | [archive](core/archive.md) | Research archive snapshot collection and dataset manifests | Data collection |
 | [arbitrage](core/arbitrage.md) | Intra-market, correlated, and cross-platform arbitrage | Arb scanner |
 | [charts](core/charts.md) | ASCII chart generation (line, bar, sparkline) | Visualization |
@@ -242,6 +258,7 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 | [cross_venue](core/cross_venue.md) | Cross-venue hedge and arbitrage monitor | Venue matching |
 | [fees](core/fees.md) | CLOB V2 fee schedule parsing and protocol fee estimates | Fee model |
 | [historical](core/historical.md) | Historical data management | Data history |
+| [price_history](core/price_history.md) | CLOB price series builder (opt-in demo walk) | Price history |
 | [market_research](core/market_research.md) | Agent-native market research brief composer | Market research engine |
 | [market_move](core/market_move.md) | Recent market price movement explanation | Move explanation engine |
 | [market_compare](core/market_compare.md) | Agent-native market comparison and divergence analysis | Compare engine |
@@ -253,6 +270,7 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 | [rewards](core/rewards.md) | Holding and liquidity rewards calculator | Rewards estimator |
 | [risk_score](core/risk_score.md) | Market risk scoring (A-F grades, 6 factors) | Risk engine |
 | [scanner](core/scanner.md) | Market monitoring and shift detection | Market scanner |
+| [service_health](core/service_health.md) | Gamma, CLOB, and Statuspage health combiner | Watch outage honesty |
 | [trade_thesis](core/trade_thesis.md) | Explainable market-level thesis composer | Decision support |
 | [uma_tracker](core/uma_tracker.md) | UMA oracle dispute risk analysis | Dispute tracking |
 | [wash_trade_detector](core/wash_trade_detector.md) | Wash trade detection indicators | Volume quality |
@@ -276,6 +294,7 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 | [json_output](utils/json_output.md) | JSON serialization for `--format json` | Scripting interface |
 | [tips](utils/tips.md) | Context-specific tips and hints | Beginner guidance |
 | [contextual_help](utils/contextual_help.md) | Screen-specific help content | Help system |
+| [install_source](utils/install_source.md) | GitHub-only install and reinstall commands | PyPI decommissioned |
 
 ## Architecture Overview
 

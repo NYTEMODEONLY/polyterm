@@ -1,4 +1,4 @@
-"""Whales Screen - High-volume market tracking"""
+"""Whales Screen - high-volume market heuristic (not whale identity)"""
 
 from rich.panel import Panel
 from rich.console import Console as RichConsole
@@ -7,37 +7,40 @@ import sys
 
 
 def whales_screen(console: RichConsole):
-    """Interactive whale tracking screen
-    
-    Args:
-        console: Rich Console instance
+    """Interactive high-volume market screen.
+
+    This path lists Gamma 24h volume. It does not identify traders.
+    Wallet-level whale trades are available via `polyterm whales --wallets`.
     """
-    console.print(Panel("[bold]High-Volume Market Tracker[/bold]", style="cyan"))
+    console.print(Panel(
+        "[bold]High-Volume Market Tracker[/bold]\n"
+        "[dim]Gamma 24h volume heuristic — not whale wallets or trade identity. "
+        "For wallet-level trades run polyterm whales --wallets "
+        "(lagged Data API, not live CLOB).[/dim]",
+        style="cyan",
+    ))
     console.print()
-    
-    console.print("[dim]Configure whale detection parameters:[/dim]")
+
+    console.print("[dim]Configure volume heuristic parameters:[/dim]")
     console.print()
-    
+
     min_amount = console.input("Minimum 24hr volume? [cyan][default: $10,000][/cyan] $").strip() or "10000"
     hours = console.input("Lookback period in hours? [cyan][default: 24][/cyan] ").strip() or "24"
     limit = console.input("Maximum results to show? [cyan][default: 20][/cyan] ").strip() or "20"
-    
+
     console.print()
-    console.print("[green]Tracking whale activity...[/green]")
+    console.print("[green]Listing high-volume markets...[/green]")
     console.print()
-    
-    # Build command
+
     cmd = [
         sys.executable, "-m", "polyterm.cli.main", "whales",
+        "--volume",
         "--min-amount", min_amount,
         "--hours", hours,
         "--limit", limit,
     ]
-    
-    # Launch whales command
+
     try:
         subprocess.run(cmd)
     except KeyboardInterrupt:
-        console.print("\n[yellow]Whale tracking stopped[/yellow]")
-
-
+        console.print("\n[yellow]High-volume listing stopped[/yellow]")
