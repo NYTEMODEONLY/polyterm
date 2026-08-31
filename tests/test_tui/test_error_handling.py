@@ -169,7 +169,7 @@ class TestScreenErrorHandlingIntegration:
     """Integration tests: verify screens pass API errors through handle_api_error.
 
     Screens NOT using handle_api_error (report to TUI Developer for POL-4):
-    - settings.py (bare except for PyPI version check)
+    - settings.py (bare except around GitHub reinstall)
     - market_picker.py (bare except, swallows GammaClient errors silently)
     """
 

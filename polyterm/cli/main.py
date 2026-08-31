@@ -38,68 +38,48 @@ def cli(ctx):
 
 @click.command()
 def update():
-    """Check for and install updates."""
-    import subprocess
+    """Reinstall PolyTerm from GitHub main. PyPI is decommissioned."""
     import sys
 
     import polyterm
-    import requests
     from rich.console import Console
 
+    from ..utils.install_source import manual_reinstall_commands, reinstall_from_github
+
     console = Console()
+    pipx_cmd, pip_cmd = manual_reinstall_commands()
 
     try:
-        console.print("[bold green]🔄 Checking for updates...[/bold green]")
+        console.print("[bold green]🔄 Reinstalling from GitHub main...[/bold green]")
+        console.print("[dim]GitHub is the source of truth. PyPI is decommissioned.[/dim]")
 
         current_version = polyterm.__version__
         console.print(f"[green]Current version:[/green] {current_version}")
 
-        response = requests.get("https://pypi.org/pypi/polyterm/json", timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            latest_version = data["info"]["version"]
+        if not click.confirm("Reinstall PolyTerm from GitHub main now?"):
+            console.print("[yellow]Update cancelled.[/yellow]")
+            return
 
-            if latest_version == current_version:
-                console.print(
-                    f"[green]✅ You're already running the latest version ({current_version})![/green]"
-                )
-                return
+        success, method, error_text = reinstall_from_github(sys.executable)
 
-            console.print(
-                f"[yellow]📦 Update available:[/yellow] {current_version} → {latest_version}"
-            )
+        if success:
+            console.print("[bold green]✅ Update successful![/bold green]")
+            console.print(f"[green]Reinstalled from GitHub main via {method}[/green]")
+            console.print()
+            console.print("[bold yellow]🔄 Restart Required[/bold yellow]")
+            console.print("[yellow]Please restart PolyTerm to use the new version.[/yellow]")
+            return
 
-            if click.confirm("Do you want to update now?"):
-                try:
-                    subprocess.run(["pipx", "--version"], capture_output=True, check=True)
-                    update_cmd = ["pipx", "upgrade", "polyterm"]
-                    method = "pipx"
-                except (subprocess.CalledProcessError, FileNotFoundError):
-                    update_cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "polyterm"]
-                    method = "pip"
+        console.print("[bold red]❌ Update failed[/bold red]")
+        if error_text:
+            console.print(f"[red]Error: {error_text}[/red]")
+        console.print("[yellow]Reinstall from GitHub main:[/yellow]")
+        console.print(f"[yellow]  {pipx_cmd}[/yellow]")
+        console.print(f"[yellow]  {pip_cmd}[/yellow]")
 
-                console.print(f"[dim]Using {method} to update...[/dim]")
-
-                result = subprocess.run(update_cmd, capture_output=True, text=True)
-
-                if result.returncode == 0:
-                    console.print("[bold green]✅ Update successful![/bold green]")
-                    console.print(f"[green]Updated to version {latest_version}[/green]")
-                    console.print()
-                    console.print("[bold yellow]🔄 Restart Required[/bold yellow]")
-                    console.print("[yellow]Please restart PolyTerm to use the new version.[/yellow]")
-                else:
-                    console.print("[bold red]❌ Update failed[/bold red]")
-                    if result.stderr:
-                        console.print(f"[red]Error: {result.stderr}[/red]")
-            else:
-                console.print("[yellow]Update cancelled.[/yellow]")
-        else:
-            console.print("[yellow]⚠️  Could not check for updates online[/yellow]")
-            
     except Exception as e:
         console.print(f"[bold red]❌ Update check failed: {e}[/bold red]")
-        console.print("[yellow]Try running: pipx upgrade polyterm[/yellow]")
+        console.print(f"[yellow]Try running: {pipx_cmd}[/yellow]")
 
 cli.add_command(update)
 

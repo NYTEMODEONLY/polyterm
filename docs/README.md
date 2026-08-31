@@ -4,11 +4,21 @@
 
 ## Quick Start
 
+Install from GitHub `main`. GitHub is the source of truth. PyPI is decommissioned.
+
 ```bash
-pip install polyterm
+git clone https://github.com/NYTEMODEONLY/polyterm.git
+cd polyterm
+pip install -e .
 polyterm              # Launch TUI
 polyterm tutorial     # Interactive tutorial
 polyterm --help       # See all commands
+```
+
+Isolated install via pipx:
+
+```bash
+pipx install git+https://github.com/NYTEMODEONLY/polyterm.git@main
 ```
 
 ## Table of Contents
@@ -111,7 +121,7 @@ Each CLI command has its own documentation page with usage, options, and example
 | [timing](cli/timing.md) | Trade timing analysis | `polyterm timing` |
 | [trade](cli/trade.md) | Trade management | `polyterm trade` |
 | [tutorial](cli/tutorial.md) | Interactive tutorial for new users | `polyterm tutorial` |
-| [update](cli/update.md) | Check for and install updates | `polyterm update` |
+| [update](cli/update.md) | Reinstall from GitHub main (PyPI decommissioned) | `polyterm update` |
 | [volume](cli/volume.md) | Volume analysis | `polyterm volume` |
 | [wallets](cli/wallets.md) | Wallet management and analysis | `polyterm wallets` |
 | [watch](cli/watch.md) | Market watchlist | `polyterm watch` |
@@ -210,7 +220,7 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 | Module | Description | Doc |
 |--------|-------------|-----|
 | [controller](tui/infrastructure/controller.md) | Main TUI loop and routing | `TUIController` |
-| [menu](tui/infrastructure/menu.md) | Main menu with update checking | Menu display |
+| [menu](tui/infrastructure/menu.md) | Main menu display and GitHub reinstall | Menu display |
 | [shortcuts](tui/infrastructure/shortcuts.md) | Keyboard shortcut mapping | Shortcut registry |
 | [statusbar](tui/infrastructure/statusbar.md) | Status bar display | Status info |
 | [themes](tui/infrastructure/themes.md) | Color themes and styling | Theme config |
@@ -280,6 +290,7 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 | [json_output](utils/json_output.md) | JSON serialization for `--format json` | Scripting interface |
 | [tips](utils/tips.md) | Context-specific tips and hints | Beginner guidance |
 | [contextual_help](utils/contextual_help.md) | Screen-specific help content | Help system |
+| [install_source](utils/install_source.md) | GitHub-only install and reinstall commands | PyPI decommissioned |
 
 ## Architecture Overview
 

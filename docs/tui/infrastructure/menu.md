@@ -4,7 +4,7 @@
 
 ## Overview
 
-`MainMenu` renders the two-page TUI main menu using Rich tables, checks PyPI for newer versions (once per session), and provides a `quick_update()` method that can upgrade PolyTerm in-place and restart the process. It handles pagination navigation internally and returns either the user's choice or a pagination signal to the controller.
+`MainMenu` renders the two-page TUI main menu using Rich tables and provides a `quick_update()` method that reinstalls PolyTerm from GitHub `main` (same path as Settings). It does not query PyPI. It handles pagination navigation internally and returns either the user's choice or a pagination signal to the controller.
 
 ## Key Classes / Functions
 
@@ -15,8 +15,8 @@
 | `display()` | Renders the current menu page as a Rich grid with key, name, and description columns. Shows version string and update indicator. |
 | `get_choice()` | Reads user input. Returns the choice string, or `"_next_page"` / `"_prev_page"` for pagination keys (`m`/`more`/`+`/`next` and `b`/`back`/`-`/`prev`). |
 | `reset_page()` | Resets `current_page` to 1. Called by the controller after each screen returns. |
-| `check_for_updates()` | Queries `pypi.org/pypi/polyterm/json` (5s timeout). Returns `(indicator_string, latest_version)`. Result is cached for the session in `_update_cache`. |
-| `quick_update()` | Attempts upgrade via `pipx upgrade`, falling back to `pipx uninstall`+`install`, then `pip install --upgrade`. On success, offers to restart via `os.execv`. |
+| `check_for_updates()` | Does not query PyPI (decommissioned). Returns empty `(indicator, version)` so the menu does not advertise a PyPI package update. |
+| `quick_update()` | Delegates to Settings `update_polyterm()`, which reinstalls from GitHub `main` via `pipx install --force git+https://github.com/NYTEMODEONLY/polyterm.git@main` (pip fallback). On success, offers to restart via `os.execv`. |
 
 ### Menu Pages
 
@@ -25,7 +25,7 @@
 
 ## Configuration
 
-No config file options. Update checking uses `polyterm.__version__` and the PyPI JSON API. The `_update_cache` attribute ensures only one HTTP request per session.
+No config file options. There is no remote version check. Reinstall from GitHub with Settings option `6`, menu shortcut `u`, or `polyterm update`.
 
 ## Architecture Role
 

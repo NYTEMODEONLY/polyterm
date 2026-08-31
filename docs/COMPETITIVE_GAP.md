@@ -62,8 +62,8 @@ Polymarket released their official CLI on Feb 24, 2026. It gained 1,016 GitHub s
 | **Sports metadata** | None | NFL teams, market types | Polymarket CLI |
 | **Reward tracking** | None | Rewards, earnings, order scoring | Polymarket CLI |
 | **API key mgmt** | None | Create/delete CLOB API keys | Polymarket CLI |
-| **Self-update** | PyPI check + auto-restart | `polymarket upgrade` + Homebrew | Polymarket CLI |
-| **Install methods** | pip | Homebrew, curl script, cargo | Polymarket CLI |
+| **Self-update** | GitHub `main` reinstall + auto-restart | `polymarket upgrade` + Homebrew | Polymarket CLI |
+| **Install methods** | GitHub clone, pipx from git, `install.sh` | Homebrew, curl script, cargo | Polymarket CLI |
 | **Performance** | Python (~300ms startup) | Rust (native binary, ~10ms startup) | Polymarket CLI |
 | **Test suite** | CI-backed pytest suite ([CI workflow](https://github.com/NYTEMODEONLY/polyterm/actions/workflows/ci.yml)); reproduce with `pytest --collect-only` | 40 integration tests | PolyTerm (current count is CI, not a hard-coded marketing total) |
 
