@@ -245,6 +245,7 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 |--------|-------------|-----|
 | [alerts](core/alerts.md) | Alert generation and management | Alert engine |
 | [alert_engine](core/alert_engine.md) | Unified local alert rule engine | Rule evaluation |
+| [print_scanner](core/print_scanner.md) | Verified Data API prints (lagged, not live CLOB) | Print ingest |
 | [analytics](core/analytics.md) | Market analytics and trending analysis | Analytics engine |
 | [demo_strategy_sim](core/demo_strategy_sim.md) | Seeded random strategy simulation (not historical backtesting) | Demo simulator |
 | [leaderboard](core/leaderboard.md) | Data API leaderboard normalization without fabricated stats | Ranking helper |
