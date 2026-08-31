@@ -12,7 +12,11 @@ def portfolio_screen(console: RichConsole):
     Args:
         console: Rich Console instance
     """
-    console.print(Panel("[bold]Portfolio Manager[/bold]", style="cyan"))
+    console.print(Panel(
+        "[bold]Portfolio Manager[/bold]\n"
+        "[dim]Positions come from lagged Data API, not live CLOB.[/dim]",
+        style="cyan",
+    ))
     console.print()
     
     console.print("[dim]View your PolyMarket positions:[/dim]")
@@ -38,5 +42,3 @@ def portfolio_screen(console: RichConsole):
         subprocess.run(cmd)
     except KeyboardInterrupt:
         console.print("\n[yellow]Portfolio view stopped[/yellow]")
-
-
