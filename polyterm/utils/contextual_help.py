@@ -26,16 +26,17 @@ HELP_CONTENT = {
     },
     "whales": {
         "title": "Whale Tracking Help",
-        "description": "Track high-volume market activity from large traders.",
+        "description": "Track high-volume markets or lagged Data API wallet trades (not live CLOB).",
         "usage": [
             ("--min-amount N", "Minimum trade size to track (default: $10,000)"),
             ("--hours N", "Hours of history to check (default: 24)"),
             ("--market ID", "Filter by specific market ID"),
             ("--limit N", "Maximum trades to show (default: 20)"),
+            ("--wallets", "Lagged Data API wallet trades, not live CLOB fills"),
         ],
         "tips": [
-            "Whale trades often signal upcoming price movements",
-            "Lower --min-amount to see more activity",
+            "Default path is a Gamma 24h volume heuristic, not trader identity",
+            "--wallets is lagged Data API, not the live CLOB tape",
             "Combine with smart money wallets for better signals",
         ],
         "shortcuts": "w, 3",
@@ -147,12 +148,13 @@ HELP_CONTENT = {
         "description": "Analyze and track smart money and whale wallets.",
         "usage": [
             ("--type X", "Type: smart (high win rate), whales (high volume), all"),
-            ("--market ID", "Filter by market"),
-            ("--min-volume N", "Minimum volume threshold"),
+            ("--analyze ADDR", "Analyze a wallet from local state"),
+            ("--refresh", "Refresh from lagged Data API (not live CLOB)"),
         ],
         "tips": [
             "Smart money = wallets with >55% win rate",
             "Whales = wallets with large average positions",
+            "--analyze --refresh is lagged Data API, not live CLOB fills",
             "Use 'polyterm follow --add' to track specific wallets",
         ],
         "shortcuts": "wal, 11",

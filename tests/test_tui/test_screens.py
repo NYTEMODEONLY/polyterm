@@ -40,6 +40,9 @@ def test_whales_screen(mock_run):
     assert mock_console.print.call_count >= 2
     # Should collect input
     assert mock_console.input.call_count == 3
+    panel = mock_console.print.call_args_list[0].args[0]
+    assert "lagged Data API" in str(panel.renderable)
+    assert "not live CLOB" in str(panel.renderable)
 
 
 @patch('polyterm.tui.screens.watch.subprocess.run')
@@ -126,6 +129,9 @@ def test_portfolio_screen(mock_run):
     
     # Should print panel and prompts
     assert mock_console.print.call_count >= 2
+    panel = mock_console.print.call_args_list[0].args[0]
+    assert "lagged Data API" in str(panel.renderable)
+    assert "not live CLOB" in str(panel.renderable)
 
 
 @patch('polyterm.tui.screens.export.subprocess.run')
@@ -187,5 +193,4 @@ def test_help_screen():
     calls = [str(call) for call in mock_console.print.call_args_list]
     assert any("shortcuts" in str(call).lower() for call in calls)
     assert any("features" in str(call).lower() for call in calls)
-
 

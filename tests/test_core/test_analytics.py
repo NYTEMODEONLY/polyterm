@@ -163,6 +163,9 @@ class TestAnalyticsEngine:
         assert portfolio["total_invested"] == 65
         assert portfolio["total_pnl"] == 15
         assert portfolio["data_source"] == "data_api"
+        assert portfolio["source"] == "data_api"
+        assert portfolio["lag"] is True
+        assert portfolio["lagged"] is True
 
     def test_get_portfolio_analytics_preserves_explicit_zero_values(self, mock_clients):
         """Explicit zero current/initial values should not be replaced by fallback math."""

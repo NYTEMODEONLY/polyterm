@@ -232,7 +232,8 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 |--------|-------------|-----|
 | [aggregator](api/aggregator.md) | Multi-source data aggregation with fallback | Primary data layer |
 | [clob](api/clob.md) | CLOB REST + WebSocket (order book, trades, settlement) | Real-time data |
-| [data_api](api/data_api.md) | Data API client (wallet positions, activity) | Wallet data |
+| [data_api](api/data_api.md) | Data API client (lagged wallet positions, activity, trades) | Wallet data |
+| [data_api_lag](api/data_api_lag.md) | Lag labels for Data API fills (not live CLOB) | Honesty labels |
 | [gamma](api/gamma.md) | Gamma REST API + SharedRateLimiter | Market data |
 | [market_utils](api/market_utils.md) | Identifier and metadata normalization helpers | ID routing |
 | [status](api/status.md) | Statuspage v2 client for status.polymarket.com | Incident banners |

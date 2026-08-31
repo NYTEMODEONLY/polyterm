@@ -6,6 +6,7 @@ from collections import defaultdict
 from ..api.gamma import GammaClient
 from ..api.clob import CLOBClient
 from ..api.data_api import DataAPIClient
+from ..api.data_api_lag import label_payload
 from ..utils.json_output import safe_float
 from ..utils.errors import FeatureUnavailable
 from .volume_spikes import EVIDENCE_LEVEL as VOLUME_SPIKE_EVIDENCE, detect_high_volume_markets
@@ -217,7 +218,7 @@ class AnalyticsEngine:
             if data_api_client is None:
                 raise RuntimeError("Data API client not configured")
 
-            # Primary source: Data API (live wallet positions/trades)
+            # Primary source: lagged Data API wallet positions (not live CLOB)
             positions = data_api_client.get_positions(wallet_address, limit=500, sort_by="CURRENT")
             if not isinstance(positions, list):
                 positions = []
@@ -271,7 +272,7 @@ class AnalyticsEngine:
                 total_pnl += position_pnl
                 total_invested += initial_value
             
-            return {
+            return label_payload({
                 "wallet_address": wallet_address,
                 "total_positions": position_count,
                 "total_value": total_value,
@@ -280,7 +281,7 @@ class AnalyticsEngine:
                 "roi_percent": (total_pnl / total_invested * 100) if total_invested > 0 else 0,
                 "positions": positions,
                 "data_source": "data_api",
-            }
+            })
             
         except Exception as e:
             # Graceful degradation when no position source is available

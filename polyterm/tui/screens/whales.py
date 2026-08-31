@@ -15,7 +15,8 @@ def whales_screen(console: RichConsole):
     console.print(Panel(
         "[bold]High-Volume Market Tracker[/bold]\n"
         "[dim]Gamma 24h volume heuristic — not whale wallets or trade identity. "
-        "For wallet-level trades run polyterm whales --wallets.[/dim]",
+        "For wallet-level trades run polyterm whales --wallets "
+        "(lagged Data API, not live CLOB).[/dim]",
         style="cyan",
     ))
     console.print()

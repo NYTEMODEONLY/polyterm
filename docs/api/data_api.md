@@ -4,7 +4,9 @@
 
 ## Overview
 
-The `DataAPIClient` class provides access to the Polymarket Data API at `data-api.polymarket.com`. It retrieves real wallet positions, trading activity, trade history, and profit/loss summaries for any wallet address. This client replaces the deprecated Subgraph for wallet data and uses the same retry pattern as `CLOBClient` for resilience against rate limits and server errors.
+The `DataAPIClient` class provides access to the Polymarket Data API at `data-api.polymarket.com`. It retrieves wallet positions, trading activity, trade history, and profit/loss summaries for any wallet address. Those surfaces are **lagged**. They are not the live CLOB fill tape. Aggregated payloads (`get_wallet_profile`, `get_profit_summary`) are labeled `source=data_api` with `lag=true` / `lagged=true`. CLI/TUI/JSON that prints this data must keep that label. Do not invent a lag duration.
+
+This client replaces the deprecated Subgraph for wallet data and uses the same retry pattern as `CLOBClient` for resilience against rate limits and server errors.
 
 ## Key Classes and Functions
 
@@ -76,7 +78,8 @@ The `_request` method follows the same retry pattern as `CLOBClient`:
 - **Core modules**: `core/analytics.py` (imports `DataAPIClient` for wallet analytics)
 - **Package exports**: Exported via `polyterm.api.__init__` as part of `__all__`
 - **Replaces**: `SubgraphClient` (deprecated) for wallet position and trade data
-- **CLI commands**: Used indirectly through `core/analytics.py` for wallet-related features like `mywallet`
+- **Lag labels**: [data_api_lag](data_api_lag.md) (`source=data_api`, `lag=true`, `lagged=true`)
+- **CLI commands**: `portfolio` (positions), `wallets --analyze --refresh` (wallet profile), `whales --wallets` (trades)
 
 ## June 2026 Wallet Intelligence Methods
 

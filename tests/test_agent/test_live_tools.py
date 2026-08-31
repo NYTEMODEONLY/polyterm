@@ -130,6 +130,10 @@ def test_whale_trades_filters_by_notional(monkeypatch):
     assert payload["success"] is True
     assert len(payload["data"]["trades"]) == 1
     assert payload["data"]["trades"][0]["wallet"] == "0xabc"
+    assert payload["data"]["lag"] is True
+    assert payload["data"]["lagged"] is True
+    assert "lagged_data_api" in payload["data"]["quality_flags"]
+    assert "live_data_api_trades" not in payload["data"]["quality_flags"]
 
 
 def test_top_traders_calculates_closed_position_win_rate(monkeypatch):
@@ -138,6 +142,9 @@ def test_top_traders_calculates_closed_position_win_rate(monkeypatch):
     payload = live.top_traders(limit=1, hours=1, min_win_rate=0.6)
     assert payload["success"] is True
     assert payload["data"]["traders"][0]["win_rate"] == 2 / 3
+    assert payload["data"]["lagged"] is True
+    assert "lagged_data_api" in payload["data"]["quality_flags"]
+    assert "live_data_api_trades" not in payload["data"]["quality_flags"]
 
 
 def test_market_movers_flags_flips(monkeypatch):

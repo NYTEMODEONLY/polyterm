@@ -6,6 +6,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 
+from ...api.data_api_lag import DISCLOSURE as DATA_API_LAG_DISCLOSURE, label_payload, table_title
 from ...api.gamma import GammaClient
 from ...core.volume_spikes import DISCLOSURE as VOLUME_DISCLOSURE, EVIDENCE_LEVEL, detect_high_volume_markets
 from ...core.wallet_intelligence import WalletIntelligence
@@ -19,7 +20,11 @@ from ...utils.errors import handle_api_error, show_error
 @click.option("--market", default=None, help="Filter by market ID")
 @click.option("--hours", default=24, help="Hours of history for --wallets mode")
 @click.option("--limit", default=20, help="Maximum number of rows to show")
-@click.option("--wallets", is_flag=True, help="Wallet-level whale trades from the public Data API trade tape")
+@click.option(
+    "--wallets",
+    is_flag=True,
+    help="Wallet-level whale trades from lagged Data API (not live CLOB)",
+)
 @click.option("--volume", "volume_heuristic", is_flag=True, help="Gamma 24h high-volume markets (not trader identity)")
 @click.option("--local", is_flag=True, help="Use only the local observed-trades database (implies --wallets)")
 @click.option("--format", "output_format", type=click.Choice(["table", "json"]), default="table", help="Output format")
@@ -31,6 +36,7 @@ def whales(ctx, min_amount, market, hours, limit, wallets, volume_heuristic, loc
     identity. It does not invent trader addresses.
 
     Use --wallets for wallet-level public Data API trades with real addresses.
+    Those fills are lagged Data API rows, not the live CLOB tape.
 
     Examples:
         polyterm whales --wallets --min-amount 100000
@@ -49,13 +55,19 @@ def whales(ctx, min_amount, market, hours, limit, wallets, volume_heuristic, loc
             result = intelligence.local_whales(min_notional=min_amount, hours=hours)
             result["wallets"] = result["wallets"][:limit]
         else:
-            result = intelligence.live_whales(min_notional=min_amount, hours=hours, limit=limit, market=market)
+            result = label_payload(
+                intelligence.live_whales(min_notional=min_amount, hours=hours, limit=limit, market=market)
+            )
 
         if output_format == "json":
             print_json({"success": True, "mode": "wallet_trades", **result})
             return
 
-        table = Table(title=f"Wallet-Level Whale Activity (Last {hours}h)")
+        if not local:
+            console.print(Panel(f"[yellow]{DATA_API_LAG_DISCLOSURE}[/yellow]", border_style="yellow"))
+
+        whale_title = f"Wallet-Level Whale Activity (Last {hours}h)"
+        table = Table(title=table_title(whale_title) if not local else whale_title)
         table.add_column("Wallet", style="cyan")
         table.add_column("Trades", justify="right")
         table.add_column("Notional", justify="right", style="yellow")

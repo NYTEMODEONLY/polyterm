@@ -2,6 +2,7 @@
 
 from ...contracts import envelope
 from ....api.data_api import DataAPIClient
+from ....api.data_api_lag import label_payload
 from ....core.wallet_intelligence import WalletIntelligence
 from ....db.database import Database
 
@@ -67,7 +68,7 @@ def answer(query: str, hours: int = 48, limit: int = 3, min_notional: float = 10
 
     quality_flags = list(whale_result.get("quality_flags", []))
     return envelope(
-        {
+        label_payload({
             "query": query,
             "intent": intent,
             "answer": answer_text,
@@ -81,6 +82,6 @@ def answer(query: str, hours: int = 48, limit: int = 3, min_notional: float = 10
             },
             "tool_trace": ["agent.answer:intent_classifier", "wallet.whale_trades"],
             "quality_flags": quality_flags,
-        },
+        }),
         meta={"tool": "agent.answer"},
     )

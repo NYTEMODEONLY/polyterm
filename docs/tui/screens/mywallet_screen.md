@@ -42,8 +42,10 @@ An options menu with seven actions:
 
 ## Data Sources
 
-- Data API (`data-api.polymarket.com`) for wallet positions, activity, and trades
+- Local SQLite (`~/.polyterm/data.db`) for tracked positions and observed trades
 - Config file (`~/.polyterm/config.toml`) for stored wallet address
+
+This screen does not call the Data API. For lagged Data API wallet positions use `polyterm portfolio` or `polyterm wallets --analyze <address> --refresh`.
 
 ## Related Screens
 

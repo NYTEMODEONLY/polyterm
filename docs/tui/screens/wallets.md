@@ -4,7 +4,7 @@
 
 ## Overview
 
-The Wallet Tracker screen provides a comprehensive interface for monitoring individual wallets on Polymarket. It supports viewing top whale wallets by volume, filtering for smart money (high win rate), identifying suspicious activity, and performing deep analysis on specific wallet addresses.
+The Wallet Tracker screen provides a comprehensive interface for monitoring individual wallets on Polymarket. It supports viewing top whale wallets by volume, filtering for smart money (high win rate), identifying suspicious activity, and performing deep analysis on specific wallet addresses. Data API wallet, positions, and trades (CLI `--analyze --refresh`) are lagged, not live CLOB fills.
 
 ## Access
 
@@ -55,7 +55,7 @@ polyterm wallets --untrack=0xABC...
 
 ## Data Sources
 
-- Data API (`data-api.polymarket.com`) for wallet positions and trade history
+- Lagged Data API (`data-api.polymarket.com`) for `--analyze --refresh` wallet positions and trades — not live CLOB
 - Gamma REST API for market context
 - Local SQLite database for tracked wallet list
 - Insider detection scoring from `core/whale_tracker.py`
