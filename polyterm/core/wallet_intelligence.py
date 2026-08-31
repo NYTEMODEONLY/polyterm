@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from ..api.data_api import DataAPIClient
+from ..api.data_api_lag import label_payload, with_quality_flag
 from ..db.database import Database
 from ..db.models import Trade, Wallet
 
@@ -162,7 +163,7 @@ class WalletIntelligence:
         if refresh and (positions or trades):
             self.db.upsert_wallet(local_wallet)
 
-        return {
+        result = {
             "address": address,
             "source": {
                 "positions": "data-api" if positions else "none",
@@ -178,6 +179,9 @@ class WalletIntelligence:
             "quality_flags": self._quality_flags(positions, trades, errors),
             "errors": errors,
         }
+        if refresh and (positions or trades or not errors):
+            result = label_payload(result)
+        return result
 
     def local_whales(self, min_notional: float = 10000, hours: int = 24) -> Dict[str, Any]:
         """Return locally observed whale trades and wallet summaries."""
@@ -351,13 +355,15 @@ class WalletIntelligence:
                 break
 
         trades.sort(key=lambda row: (row["notional"], row.get("timestamp") or 0), reverse=True)
-        quality_flags = ["live_data_api_trades", "notional=size_times_price", "notional_desc_sorted", "public_trade_rows_only"]
+        quality_flags = with_quality_flag(
+            ["notional=size_times_price", "notional_desc_sorted", "public_trade_rows_only"]
+        )
         if errors:
             quality_flags.append("data_api_page_error")
         if not stopped_at_cutoff:
             quality_flags.append("data_api_recent_tape_window_limited")
 
-        return {
+        return label_payload({
             "hours": hours,
             "min_notional": min_notional,
             "sample_size": sample_size,
@@ -368,7 +374,7 @@ class WalletIntelligence:
             "errors": errors,
             "trades": trades[:limit],
             "quality_flags": quality_flags,
-        }
+        })
 
     def live_whales(
         self,
@@ -483,11 +489,13 @@ class WalletIntelligence:
         displayed_wallets = wallets[:limit]
         cached_trade_count = self._cache_live_whale_results(trades, wallets)
 
-        quality_flags = ["public_data_api", "trade_direction_may_be_inferred"]
+        quality_flags = with_quality_flag(
+            ["public_data_api", "trade_direction_may_be_inferred"]
+        )
         if not stopped_at_cutoff:
             quality_flags.append("data_api_recent_tape_window_limited")
 
-        return {
+        return label_payload({
             "source": "public_data_api",
             "hours": hours,
             "min_notional": min_notional,
@@ -500,7 +508,7 @@ class WalletIntelligence:
             "wallets": displayed_wallets,
             "trades": displayed_trades,
             "quality_flags": quality_flags,
-        }
+        })
 
     def _cache_live_whale_results(self, trades: List[Dict[str, Any]], wallets: List[Dict[str, Any]]) -> int:
         """Persist live Data API whale query results into the local SQLite cache."""
