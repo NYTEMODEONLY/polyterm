@@ -145,6 +145,22 @@ Auto-increment PK. User-defined price target alerts.
 | notified | INTEGER | 0 | 0 = pending, 1 = user notified |
 | notes | TEXT | '' | |
 
+#### `alert_rules`
+Auto-increment PK. Saved local rules that are not price-target rows (print rules).
+
+| Column | Type | Default | Notes |
+|--------|------|---------|-------|
+| id | INTEGER | PK AUTO | |
+| rule_type | TEXT | NOT NULL | `print` (price rules still use `price_alerts`) |
+| market_id | TEXT | '' | Optional market filter |
+| wallet_address | TEXT | '' | Optional wallet filter |
+| title | TEXT | '' | Human rule label |
+| min_notional | REAL | 0 | Print rule threshold |
+| severity | INTEGER | 50 | 0-100 |
+| enabled | INTEGER | 1 | 1 = active |
+| notes | TEXT | '' | |
+| created_at | TIMESTAMP | NOT NULL | |
+
 #### `positions`
 Auto-increment PK. Manual position tracking (no wallet connection required).
 
@@ -220,6 +236,7 @@ Auto-increment PK. `market_id` has a UNIQUE constraint. Tracks market settlement
 | idx_recently_viewed_at | recently_viewed | viewed_at |
 | idx_price_alerts_market | price_alerts | market_id |
 | idx_price_alerts_triggered | price_alerts | triggered |
+| idx_alert_rules_type | alert_rules | rule_type |
 | idx_positions_market | positions | market_id |
 | idx_positions_status | positions | status |
 
@@ -274,6 +291,8 @@ Auto-increment PK. `market_id` has a UNIQUE constraint. Tracks market settlement
 | `get_recent_alerts(limit, alert_type=None)` | Recent alerts, optionally filtered by type |
 | `get_unacknowledged_alerts(limit=50)` | Unread alerts sorted by severity DESC |
 | `acknowledge_alert(alert_id)` | Mark an alert as acknowledged |
+| `add_alert_rule(rule_type, market_id, wallet_address, title, min_notional, severity, notes)` | Save a local print/other rule; returns new ID |
+| `get_alert_rules(rule_type=None)` | List saved local rules, newest first |
 
 ### Snapshot Operations
 

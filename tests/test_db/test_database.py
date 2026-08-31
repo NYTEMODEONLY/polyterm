@@ -253,6 +253,23 @@ class TestDatabase:
         unack = temp_db.get_unacknowledged_alerts()
         assert len(unack) == 0
 
+    def test_alert_rule_operations(self, temp_db):
+        """Print rules persist in alert_rules, not as fake fills."""
+        rule_id = temp_db.add_alert_rule(
+            rule_type="print",
+            market_id="bitcoin-100k",
+            wallet_address="0xabc",
+            title="print min_notional=10000",
+            min_notional=10000,
+            notes="agent_rule: print",
+        )
+        assert rule_id > 0
+        rules = temp_db.get_alert_rules(rule_type="print")
+        assert len(rules) == 1
+        assert rules[0]["min_notional"] == 10000
+        assert rules[0]["wallet_address"] == "0xabc"
+        assert temp_db.get_alert_rules(rule_type="price") == []
+
     def test_market_snapshot_operations(self, temp_db):
         """Test market snapshot operations"""
         snapshot = MarketSnapshot(

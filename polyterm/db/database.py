@@ -201,6 +201,22 @@ class Database:
                 )
             """)
 
+            # Local alert rules (price rules still also live in price_alerts)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS alert_rules (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    rule_type TEXT NOT NULL,
+                    market_id TEXT DEFAULT '',
+                    wallet_address TEXT DEFAULT '',
+                    title TEXT DEFAULT '',
+                    min_notional REAL DEFAULT 0,
+                    severity INTEGER DEFAULT 50,
+                    enabled INTEGER DEFAULT 1,
+                    notes TEXT DEFAULT '',
+                    created_at TIMESTAMP NOT NULL
+                )
+            """)
+
             # Manual positions table (for tracking without wallet)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS positions (
@@ -277,6 +293,7 @@ class Database:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_recently_viewed_at ON recently_viewed(viewed_at)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_price_alerts_market ON price_alerts(market_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_price_alerts_triggered ON price_alerts(triggered)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_alert_rules_type ON alert_rules(rule_type)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_positions_market ON positions(market_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_positions_status ON positions(status)")
 
@@ -653,6 +670,53 @@ class Database:
                 WHERE market_id = ? AND triggered = 0
                 ORDER BY target_price ASC
             """, (market_id,))
+            return [dict(row) for row in cursor.fetchall()]
+
+    def add_alert_rule(
+        self,
+        rule_type: str,
+        market_id: str = "",
+        wallet_address: str = "",
+        title: str = "",
+        min_notional: float = 0.0,
+        severity: int = 50,
+        notes: str = "",
+    ) -> int:
+        """Save a local alert rule and return its ID."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO alert_rules (
+                    rule_type, market_id, wallet_address, title,
+                    min_notional, severity, enabled, notes, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+            """, (
+                rule_type,
+                market_id or "",
+                wallet_address or "",
+                title or "",
+                float(min_notional or 0),
+                int(severity or 50),
+                notes or "",
+                datetime.now().isoformat(),
+            ))
+            return cursor.lastrowid
+
+    def get_alert_rules(self, rule_type: Optional[str] = None) -> List[Dict[str, Any]]:
+        """List saved local alert rules, newest first."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            if rule_type:
+                cursor.execute("""
+                    SELECT * FROM alert_rules
+                    WHERE rule_type = ?
+                    ORDER BY created_at DESC
+                """, (rule_type,))
+            else:
+                cursor.execute("""
+                    SELECT * FROM alert_rules
+                    ORDER BY created_at DESC
+                """)
             return [dict(row) for row in cursor.fetchall()]
 
     # Position tracking operations

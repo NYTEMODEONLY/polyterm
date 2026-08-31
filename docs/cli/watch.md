@@ -8,7 +8,9 @@ Watch specific markets with customizable alerts. The live mode renders a fixed d
 
 Before each JSON/scheduled scan, and at the start of live watch, PolyTerm probes Gamma, CLOB, and `status.polymarket.com`. If Gamma and CLOB both fail, watch reports `mode=outage` (same honesty as `APIAggregator`). An unreachable status page is `status_unknown`, never operational.
 
-Live watch can mutate local alert state when thresholds fire. JSON scheduled scans evaluate `AlertEngine.run_once` and may insert local alerts. Telegram/Discord delivery is a channel label only in this command; this page does not configure bot tokens.
+Live watch can mutate local alert state when thresholds fire. JSON scheduled scans evaluate `AlertEngine.run_once` (Gamma price) and may insert local alerts. Telegram/Discord delivery is a channel label only in this command; this page does not configure bot tokens.
+
+Verified print alerts are not part of watch. Scan lagged Data API fills with `polyterm alerts --evaluate print --min-notional 10000 --format json`.
 
 ## Usage
 
