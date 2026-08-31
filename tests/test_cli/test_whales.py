@@ -49,7 +49,10 @@ def test_whales_wallets_json_uses_wallet_mode(mock_db_cls, mock_intel_cls, mock_
     mock_intel = Mock()
     mock_intel.live_whales.return_value = {
         "wallets": [{"address": "0xabc", "trade_count": 2, "notional": 200000, "largest_trade": 150000, "top_markets": []}],
-        "quality_flags": ["live_data_api_trades"],
+        "quality_flags": ["lagged_data_api"],
+        "lag": True,
+        "lagged": True,
+        "source": "public_data_api",
     }
     mock_intel_cls.return_value = mock_intel
 
@@ -59,3 +62,6 @@ def test_whales_wallets_json_uses_wallet_mode(mock_db_cls, mock_intel_cls, mock_
     assert payload["success"] is True
     assert payload["mode"] == "wallet_trades"
     assert payload["wallets"][0]["address"] == "0xabc"
+    assert payload["lag"] is True
+    assert payload["lagged"] is True
+    assert "lagged_data_api" in payload["quality_flags"]
