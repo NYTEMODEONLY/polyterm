@@ -3,8 +3,10 @@
 import click
 from datetime import datetime
 from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
 
+from ...api.data_api_lag import DISCLOSURE, label_payload, table_title
 from ...db.database import Database
 from ...core.alert_engine import AlertEngine
 from ...core.notifications import NotificationConfig, NotificationManager
@@ -13,21 +15,32 @@ from ...utils.errors import handle_api_error
 
 
 @click.command()
-@click.option("--type", "alert_type", type=click.Choice(["all", "whale", "insider", "arbitrage", "smart_money"]), default="all", help="Filter by alert type")
-@click.option("--limit", default=20, help="Maximum alerts to show")
+@click.option("--type", "alert_type", type=click.Choice(["all", "whale", "insider", "arbitrage", "smart_money", "print"]), default="all", help="Filter by alert type")
+@click.option("--limit", default=20, help="Maximum alerts to show, or max matching prints when evaluating")
 @click.option("--unread", is_flag=True, help="Show only unacknowledged alerts")
 @click.option("--ack", default=None, type=int, help="Acknowledge alert by ID")
-@click.option("--add-rule", type=click.Choice(["price"]), default=None, help="Create a local alert rule")
-@click.option("--market", default=None, help="Market for a new alert rule")
+@click.option(
+    "--add-rule",
+    type=click.Choice(["price", "print"]),
+    default=None,
+    help="Create a local alert rule (price: Gamma probability; print: lagged Data API fill, not live CLOB)",
+)
+@click.option("--evaluate", type=click.Choice(["price", "print"]), default=None, help="Evaluate a rule once without requiring a saved rule")
+@click.option("--market", default=None, help="Market for a price rule, or optional market filter for a print rule")
 @click.option("--above", type=float, default=None, help="Trigger price rule at or above this probability")
 @click.option("--below", type=float, default=None, help="Trigger price rule at or below this probability")
-@click.option("--dry-run", is_flag=True, help="Preview rule creation without mutating local state")
+@click.option("--min-notional", type=float, default=None, help="Minimum verified-print notional for a print rule")
+@click.option("--wallet", default=None, help="Optional wallet filter for a print rule")
+@click.option("--dry-run", is_flag=True, help="Preview rule creation or evaluation without mutating local state")
 @click.option("--test-telegram", is_flag=True, help="Send test Telegram notification")
 @click.option("--test-discord", is_flag=True, help="Send test Discord notification")
 @click.option("--format", "output_format", type=click.Choice(["table", "json"]), default="table", help="Output format")
 @click.pass_context
-def alerts(ctx, alert_type, limit, unread, ack, add_rule, market, above, below, dry_run, test_telegram, test_discord, output_format):
-    """View and manage alerts"""
+def alerts(ctx, alert_type, limit, unread, ack, add_rule, evaluate, market, above, below, min_notional, wallet, dry_run, test_telegram, test_discord, output_format):
+    """View and manage alerts.
+
+    Print rules fire on verified Data API fills (lagged, not live CLOB).
+    """
 
     config = ctx.obj["config"]
     console = Console()
@@ -35,24 +48,36 @@ def alerts(ctx, alert_type, limit, unread, ack, add_rule, market, above, below, 
 
     try:
         if add_rule:
-            if not market:
-                if output_format == 'json':
-                    print_json({'success': False, 'error': '--market is required for --add-rule'})
-                else:
-                    console.print("[red]--market is required for --add-rule[/red]")
-                return
             engine = AlertEngine(database=db)
-            result = engine.create_price_rule(
+            _handle_add_rule(
+                console=console,
+                engine=engine,
+                add_rule=add_rule,
                 market=market,
                 above=above,
                 below=below,
+                min_notional=min_notional,
+                wallet=wallet,
                 dry_run=dry_run,
+                output_format=output_format,
             )
-            if output_format == 'json':
-                print_json({'success': True, **result})
-            else:
-                action = "Previewed" if dry_run else "Created"
-                console.print(f"[green]{action} price alert rule for {result['rule']['title']}[/green]")
+            return
+
+        if evaluate:
+            engine = AlertEngine(database=db)
+            _handle_evaluate(
+                console=console,
+                engine=engine,
+                evaluate=evaluate,
+                market=market,
+                above=above,
+                below=below,
+                min_notional=min_notional,
+                wallet=wallet,
+                limit=limit,
+                dry_run=dry_run,
+                output_format=output_format,
+            )
             return
 
         # Handle acknowledgment
@@ -98,6 +123,8 @@ def alerts(ctx, alert_type, limit, unread, ack, add_rule, market, above, below, 
         else:
             alerts_list = db.get_recent_alerts(limit=limit)
 
+        has_print_alerts = any(getattr(item, "alert_type", "") == "print" for item in alerts_list)
+
         # JSON output
         if output_format == 'json':
             output = {
@@ -108,15 +135,25 @@ def alerts(ctx, alert_type, limit, unread, ack, add_rule, market, above, below, 
                 'count': len(alerts_list),
                 'alerts': [a.to_dict() for a in alerts_list],
             }
+            if has_print_alerts or alert_type == "print":
+                output = label_payload(output, quality_flags=output.get("quality_flags") or [])
             print_json(output)
             return
 
         if not alerts_list:
+            if alert_type == "print":
+                console.print(Panel("[yellow]{}[/yellow]".format(DISCLOSURE), border_style="yellow"))
             console.print("[yellow]No alerts found[/yellow]")
             return
 
+        if has_print_alerts or alert_type == "print":
+            console.print(Panel("[yellow]{}[/yellow]".format(DISCLOSURE), border_style="yellow"))
+            title = table_title("Recent Alerts")
+        else:
+            title = "Recent Alerts"
+
         # Create table
-        table = Table(title="Recent Alerts")
+        table = Table(title=title)
 
         table.add_column("ID", style="dim")
         table.add_column("Type", style="cyan")
@@ -186,3 +223,114 @@ def alerts(ctx, alert_type, limit, unread, ack, add_rule, market, above, below, 
             print_json({'success': False, 'error': str(e)})
         else:
             handle_api_error(console, e, "alerts")
+
+
+def _handle_add_rule(console, engine, add_rule, market, above, below, min_notional, wallet, dry_run, output_format):
+    if add_rule == "print":
+        if min_notional is None:
+            _rule_error(console, output_format, "--min-notional is required for --add-rule print")
+            return
+        result = engine.create_print_rule(
+            min_notional=min_notional,
+            market=market,
+            wallet=wallet,
+            dry_run=dry_run,
+        )
+        if output_format == "json":
+            print_json({"success": True, **result})
+            return
+        action = "Previewed" if dry_run else "Created"
+        console.print(Panel("[yellow]{}[/yellow]".format(DISCLOSURE), border_style="yellow"))
+        console.print("[green]{} print alert rule (min notional ${:,.0f})[/green]".format(
+            action, float(min_notional)
+        ))
+        return
+
+    if not market:
+        _rule_error(console, output_format, "--market is required for --add-rule price")
+        return
+    result = engine.create_price_rule(
+        market=market,
+        above=above,
+        below=below,
+        dry_run=dry_run,
+    )
+    if output_format == "json":
+        print_json({"success": True, **result})
+        return
+    action = "Previewed" if dry_run else "Created"
+    console.print("[green]{} price alert rule for {}[/green]".format(
+        action, result["rule"]["title"]
+    ))
+
+
+def _handle_evaluate(console, engine, evaluate, market, above, below, min_notional, wallet, limit, dry_run, output_format):
+    if evaluate == "print":
+        if min_notional is None:
+            _rule_error(console, output_format, "--min-notional is required for --evaluate print")
+            return
+        result = engine.run_print_once(
+            min_notional=min_notional,
+            market=market,
+            wallet=wallet,
+            limit=limit,
+            dry_run=dry_run,
+        )
+        if output_format == "json":
+            print_json({"success": True, **result})
+            return
+        console.print(Panel("[yellow]{}[/yellow]".format(DISCLOSURE), border_style="yellow"))
+        title = table_title("Verified prints")
+        table = Table(title=title)
+        table.add_column("Time", style="dim")
+        table.add_column("Market", style="cyan")
+        table.add_column("Wallet", style="white")
+        table.add_column("Side", justify="center")
+        table.add_column("Notional", justify="right", style="yellow")
+        prints = result.get("prints") or []
+        if not prints:
+            console.print("[yellow]No verified prints matched this rule[/yellow]")
+            console.print("[dim]Empty Data API tape is not invented fills. source=data_api lagged=true[/dim]")
+            return
+        for row in prints:
+            table.add_row(
+                str(row.get("timestamp_iso") or row.get("timestamp") or "unknown"),
+                str(row.get("market_title") or row.get("market_slug") or row.get("market_id") or row.get("condition_id") or "unknown"),
+                str(row.get("wallet") or "unknown"),
+                str(row.get("side") or "unknown"),
+                _format_notional(row.get("notional")),
+            )
+        console.print(table)
+        action = "Would store" if dry_run else "Stored"
+        console.print("[green]{} {} print alert(s). Matched {} of {} fetched rows.[/green]".format(
+            action, len(result.get("alerts") or []), result.get("matched", 0), result.get("fetched", 0)
+        ))
+        return
+
+    if not market:
+        _rule_error(console, output_format, "--market is required for --evaluate price")
+        return
+    result = engine.run_once(market=market, above=above, below=below, dry_run=dry_run)
+    if output_format == "json":
+        print_json({"success": True, **result})
+        return
+    if result.get("triggered"):
+        console.print("[green]Price rule triggered: {}[/green]".format("; ".join(result.get("reasons") or [])))
+    else:
+        console.print("[yellow]Price rule did not trigger[/yellow]")
+
+
+def _rule_error(console, output_format, message):
+    if output_format == "json":
+        print_json({"success": False, "error": message})
+    else:
+        console.print("[red]{}[/red]".format(message))
+
+
+def _format_notional(value):
+    if value is None:
+        return "unknown"
+    try:
+        return "${:,.0f}".format(float(value))
+    except (TypeError, ValueError):
+        return "unknown"
