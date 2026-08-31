@@ -596,7 +596,8 @@ polyterm/
 ├── api/              # API clients
 │   ├── gamma.py          # Gamma REST API (/events endpoint)
 │   ├── clob.py           # CLOB REST + WebSocket (order book, price history)
-│   ├── data_api.py       # Data API (wallet positions, activity, trades)
+│   ├── data_api.py       # Lagged Data API (wallet positions, activity, trades; not live CLOB)
+│   ├── data_api_lag.py   # Lag labels for Data API fills
 │   └── aggregator.py     # Multi-source aggregator with fallback
 ├── core/             # Business logic
 │   ├── whale_tracker.py  # Whale tracking + insider detection scoring
