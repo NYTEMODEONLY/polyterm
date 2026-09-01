@@ -20,9 +20,10 @@ The module never invents wallets, sides, sizes, notionals, prices, timestamps, o
 polyterm alerts --add-rule print --min-notional 10000 --dry-run --format json
 polyterm alerts --evaluate print --min-notional 10000 --format json
 polyterm alerts --evaluate print --min-notional 10000 --market bitcoin-100k --wallet 0xabc --dry-run
+polyterm whales --wallets --min-notional 10000 --format json
 ```
 
-Print evaluation is also on `polyterm watch` (same lagged tape). `polyterm alerts --evaluate print` remains the one-shot print scan.
+Print evaluation is also on `polyterm watch` (same lagged tape). `polyterm alerts --evaluate print` remains the one-shot print scan. `polyterm whales --wallets` is the wallet-level print tape.
 
 ### Python
 
@@ -79,6 +80,8 @@ Not used: CLOB REST trades, CLOB WebSocket fills, Gamma volume heuristics.
 - [Alerts CLI](../cli/alerts.md)
 - [Watch CLI](../cli/watch.md)
 - [Watch loop](watch_loop.md)
+- [Whales CLI](../cli/whales.md)
+- [Whale prints](whale_prints.md)
 - [Data API lag labels](../api/data_api_lag.md)
 - [Data API client](../api/data_api.md)
 - [Whale tracker](whale_tracker.md)
@@ -86,7 +89,7 @@ Not used: CLOB REST trades, CLOB WebSocket fills, Gamma volume heuristics.
 ## Verification
 
 ```bash
-.venv/bin/python -m pytest tests/test_core/test_print_scanner.py tests/test_core/test_alert_engine.py tests/test_cli/test_alerts.py tests/test_api/test_data_api_lag.py
+.venv/bin/python -m pytest tests/test_core/test_print_scanner.py tests/test_core/test_whale_prints.py tests/test_core/test_alert_engine.py tests/test_cli/test_alerts.py tests/test_cli/test_whales.py tests/test_api/test_data_api_lag.py
 polyterm alerts --help
 polyterm alerts --add-rule print --min-notional 10000 --dry-run --format json
 ```
