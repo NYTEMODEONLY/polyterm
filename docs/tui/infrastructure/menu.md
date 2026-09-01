@@ -4,7 +4,7 @@
 
 ## Overview
 
-`MainMenu` renders the two-page TUI main menu using Rich tables and provides a `quick_update()` method that reinstalls PolyTerm from GitHub `main` (same path as Settings). It does not query PyPI. It handles pagination navigation internally and returns either the user's choice or a pagination signal to the controller.
+`MainMenu` renders the two-page TUI main menu using Rich tables and provides a `quick_update()` method that reinstalls PolyTerm from GitHub `main` (same path as Settings). Update availability is checked against GitHub tags/releases, not PyPI. It handles pagination navigation internally and returns either the user's choice or a pagination signal to the controller.
 
 ## Key Classes / Functions
 
@@ -15,7 +15,7 @@
 | `display()` | Renders the current menu page as a Rich grid with key, name, and description columns. Shows version string and update indicator. |
 | `get_choice()` | Reads user input. Returns the choice string, or `"_next_page"` / `"_prev_page"` for pagination keys (`m`/`more`/`+`/`next` and `b`/`back`/`-`/`prev`). |
 | `reset_page()` | Resets `current_page` to 1. Called by the controller after each screen returns. |
-| `check_for_updates()` | Does not query PyPI (decommissioned). Returns empty `(indicator, version)` so the menu does not advertise a PyPI package update. |
+| `check_for_updates()` | Compares `polyterm.__version__` to GitHub tags/releases (NYTEMODEONLY/polyterm). Cached for the menu session. On a newer tag, returns an update indicator and version so the menu shows `u 🔄 Update`. Network failure returns empty strings and does not crash the menu. Does not query PyPI. |
 | `quick_update()` | Delegates to Settings `update_polyterm()`, which reinstalls from GitHub `main` via `pipx install --force git+https://github.com/NYTEMODEONLY/polyterm.git@main` (pip fallback). On success, offers to restart via `os.execv`. |
 
 ### Menu Pages
@@ -25,7 +25,7 @@
 
 ## Configuration
 
-No config file options. There is no remote version check. Reinstall from GitHub with Settings option `6`, menu shortcut `u`, or `polyterm update`.
+No config file options. The menu checks GitHub tags/releases once per session. Reinstall from GitHub `main` with Settings option `6`, menu shortcut `u`, or `polyterm update`.
 
 ## Architecture Role
 
@@ -36,6 +36,7 @@ No config file options. There is no remote version check. Reinstall from GitHub 
 - [controller](../infrastructure/controller.md) -- owns the `MainMenu` instance and consumes its output
 - [logo](../infrastructure/logo.md) -- displayed above the menu
 - [statusbar](../infrastructure/statusbar.md) -- status display utilities
+- [GitHub update check](../../utils/github_update.md) -- GitHub tags/releases compared to the installed version
 
 ## Documentation Maintenance
 

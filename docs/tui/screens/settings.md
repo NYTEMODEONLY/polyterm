@@ -41,6 +41,7 @@ This screen does not invoke a CLI subprocess. It reads configuration directly vi
 ## Data Sources
 
 - Local config file (`~/.polyterm/config.toml`)
+- GitHub tags/releases for TUI update availability (`polyterm/utils/github_update.py`)
 - GitHub `main` via `polyterm.utils.install_source` (`pipx install --force git+https://github.com/NYTEMODEONLY/polyterm.git@main`)
 
 ## Related Screens

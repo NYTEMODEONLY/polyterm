@@ -220,7 +220,7 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 | Module | Description | Doc |
 |--------|-------------|-----|
 | [controller](tui/infrastructure/controller.md) | Main TUI loop and routing | `TUIController` |
-| [menu](tui/infrastructure/menu.md) | Main menu display and GitHub reinstall | Menu display |
+| [menu](tui/infrastructure/menu.md) | Main menu display, GitHub update check, GitHub reinstall | Menu display |
 | [shortcuts](tui/infrastructure/shortcuts.md) | Keyboard shortcut mapping | Shortcut registry |
 | [statusbar](tui/infrastructure/statusbar.md) | Status bar display | Status info |
 | [themes](tui/infrastructure/themes.md) | Color themes and styling | Theme config |
@@ -299,6 +299,7 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 | [tips](utils/tips.md) | Context-specific tips and hints | Beginner guidance |
 | [contextual_help](utils/contextual_help.md) | Screen-specific help content | Help system |
 | [install_source](utils/install_source.md) | GitHub-only install and reinstall commands | PyPI decommissioned |
+| [github_update](utils/github_update.md) | Compare installed version to GitHub tags/releases | TUI update banner |
 
 ## Architecture Overview
 

@@ -59,8 +59,9 @@ def test_main_menu_creation():
     assert hasattr(menu, 'get_choice')
 
 
+@patch('polyterm.utils.github_update.newer_github_version', return_value=None)
 @patch('polyterm.tui.menu.Console')
-def test_main_menu_display(mock_console_class):
+def test_main_menu_display(mock_console_class, _mock_github_update):
     """Test menu display creates panel"""
     mock_console = Mock()
     # Mock console.size.width for responsive menu

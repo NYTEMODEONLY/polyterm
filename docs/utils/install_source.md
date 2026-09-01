@@ -65,6 +65,7 @@ No network APIs. GitHub is the source of truth; this module only builds local in
 - `polyterm update` in `polyterm/cli/main.py`
 - TUI Settings update (`polyterm/tui/screens/settings.py`)
 - TUI menu `quick_update()` (`polyterm/tui/menu.py`)
+- TUI update availability check (`polyterm/utils/github_update.py`) -- GitHub tags/releases, then this module installs from `main`
 
 First-run install paths that must stay aligned, but do not import this module:
 
@@ -75,6 +76,7 @@ First-run install paths that must stay aligned, but do not import this module:
 ## Related Documentation
 
 - [Update command](../cli/update.md)
+- [GitHub update check](github_update.md)
 - [Settings screen](../tui/screens/settings.md)
 - [Main menu](../tui/infrastructure/menu.md)
 - [Docs index](../README.md)
