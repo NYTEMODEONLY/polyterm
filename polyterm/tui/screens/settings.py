@@ -142,7 +142,10 @@ def update_polyterm(console: RichConsole) -> bool:
 
     import sys
     import polyterm
-    from polyterm.utils.install_source import reinstall_from_github
+    from polyterm.utils.install_source import (
+        installed_package_version,
+        reinstall_from_github,
+    )
 
     try:
         console.print("[cyan]Step 1:[/cyan] Checking current version...")
@@ -154,9 +157,11 @@ def update_polyterm(console: RichConsole) -> bool:
         update_success, method, error_text = reinstall_from_github(sys.executable)
 
         if update_success:
+            installed = installed_package_version() or polyterm.__version__
             console.print()
             console.print("[bold green]✅ Update successful![/bold green]")
             console.print(f"[green]Reinstalled from GitHub main via {method}[/green]")
+            console.print(f"[green]Installed version:[/green] {installed}")
             console.print()
 
             console.print("[bold cyan]Would you like to restart PolyTerm now?[/bold cyan]")

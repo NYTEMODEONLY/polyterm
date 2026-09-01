@@ -7,7 +7,7 @@ from rich.console import Console
 
 from polyterm.tui.menu import MainMenu
 from polyterm.tui.screens.settings import update_polyterm
-from polyterm.utils.github_update import GITHUB_RELEASES_LATEST_URL
+from polyterm.utils.github_update import GITHUB_RELEASES_LATEST_URL, GITHUB_TAGS_URL
 from polyterm.utils.install_source import GITHUB_PIPX_SPEC
 
 
@@ -28,6 +28,9 @@ def test_menu_check_for_updates_does_not_query_pypi():
     with patch("polyterm.__version__", "0.10.0"), patch(
         "polyterm.utils.github_update._get_json",
         side_effect=get_json,
+    ), patch(
+        "polyterm.utils.install_source.installed_git_commit",
+        return_value=None,
     ):
         indicator, latest = menu.check_for_updates()
 
@@ -36,6 +39,61 @@ def test_menu_check_for_updates_does_not_query_pypi():
     assert captured == [GITHUB_RELEASES_LATEST_URL]
     assert all("pypi.org" not in url for url in captured)
     assert not hasattr(menu_mod, "requests")
+
+
+def test_menu_check_for_updates_0112_vs_tag_0112_is_empty():
+    menu = MainMenu()
+    with patch("polyterm.__version__", "0.11.2"), patch(
+        "polyterm.utils.github_update._get_json",
+        return_value={"tag_name": "v0.11.2"},
+    ), patch(
+        "polyterm.utils.install_source.installed_git_commit",
+        return_value=None,
+    ):
+        indicator, latest = menu.check_for_updates()
+
+    assert indicator == ""
+    assert latest == ""
+
+
+def test_menu_check_for_updates_0100_vs_tag_0112_shows_banner():
+    menu = MainMenu()
+    with patch("polyterm.__version__", "0.10.0"), patch(
+        "polyterm.utils.github_update._get_json",
+        return_value={"tag_name": "v0.11.2"},
+    ), patch(
+        "polyterm.utils.install_source.installed_git_commit",
+        return_value=None,
+    ):
+        indicator, latest = menu.check_for_updates()
+
+    assert latest == "0.11.2"
+    assert "Update Available" in indicator
+    assert "v0.11.2" in indicator
+
+
+def test_menu_check_for_updates_commit_matches_latest_tag_is_empty():
+    sha = "dff842cdadcc7b44c70d5953758247872e1ded20"
+
+    def get_json(url):
+        if url == GITHUB_RELEASES_LATEST_URL:
+            return {"tag_name": "v0.11.2"}
+        if url == GITHUB_TAGS_URL:
+            return [{"name": "v0.11.2", "commit": {"sha": sha}}]
+        raise AssertionError(f"unexpected url: {url}")
+
+    menu = MainMenu()
+    with patch("polyterm.__version__", "0.10.0"), patch(
+        "polyterm.utils.github_update._get_json",
+        side_effect=get_json,
+    ), patch(
+        "polyterm.utils.install_source.installed_git_commit",
+        return_value=sha,
+    ):
+        indicator, latest = menu.check_for_updates()
+
+    assert indicator == ""
+    assert latest == ""
 
 
 def test_menu_check_for_updates_newer_github_tag():
@@ -130,11 +188,16 @@ def test_settings_update_success_reinstalls_from_github_without_pypi():
     with patch(
         "polyterm.utils.install_source.reinstall_from_github",
         return_value=(True, "pipx", ""),
-    ) as mock_reinstall:
+    ) as mock_reinstall, patch(
+        "polyterm.utils.install_source.installed_package_version",
+        return_value="0.11.2",
+    ):
         result = update_polyterm(console)
 
     assert result is False
     mock_reinstall.assert_called_once()
     output = _printed_text(console)
     assert "Reinstalled from GitHub main" in output
+    assert "Installed version:" in output
+    assert "0.11.2" in output
     assert "pipx install polyterm" not in output

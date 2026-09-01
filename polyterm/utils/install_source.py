@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
+from pathlib import Path
 from typing import Callable, Optional, Sequence
 
 GITHUB_REPO_URL = "https://github.com/NYTEMODEONLY/polyterm.git"
@@ -24,6 +26,72 @@ def manual_reinstall_commands() -> tuple[str, str]:
         f"pipx install --force {GITHUB_PIPX_SPEC}",
         f"pip install --upgrade {GITHUB_PIPX_SPEC}",
     )
+
+
+def _read_dist_text(filename: str) -> Optional[str]:
+    try:
+        from importlib.metadata import distribution
+
+        return distribution("polyterm").read_text(filename)
+    except Exception:
+        return None
+
+
+def _version_from_init_text(text: str) -> Optional[str]:
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("__version__"):
+            continue
+        _, _, rest = stripped.partition("=")
+        value = rest.strip().strip("'\"")
+        return value or None
+    return None
+
+
+def installed_package_version() -> Optional[str]:
+    """Return the version actually installed on disk, not in-memory ``__version__``.
+
+    After ``pipx install --force``, this process still holds the old module.
+    Reading ``polyterm/__init__.py`` and distribution metadata picks up the
+    new install so success text and a later TUI session agree. Never queries
+    PyPI.
+    """
+    try:
+        import polyterm as pkg
+
+        path = getattr(pkg, "__file__", None)
+        if path:
+            parsed = _version_from_init_text(Path(path).read_text(encoding="utf-8"))
+            if parsed:
+                return parsed
+    except Exception:
+        pass
+    try:
+        from importlib.metadata import version as dist_version
+
+        value = (dist_version("polyterm") or "").strip()
+        return value or None
+    except Exception:
+        return None
+
+
+def installed_git_commit(*, read_direct_url: Optional[Callable[[], Optional[str]]] = None) -> Optional[str]:
+    """Return the git commit from pip/pipx PEP 610 ``direct_url.json``, if any."""
+    reader = read_direct_url or (lambda: _read_dist_text("direct_url.json"))
+    try:
+        raw = reader()
+        if not raw:
+            return None
+        payload = json.loads(raw)
+        if not isinstance(payload, dict):
+            return None
+        vcs_info = payload.get("vcs_info")
+        if not isinstance(vcs_info, dict):
+            return None
+        commit = str(vcs_info.get("commit_id") or "").strip()
+        return commit or None
+    except Exception:
+        return None
 
 
 def _run(
