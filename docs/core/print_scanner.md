@@ -22,7 +22,7 @@ polyterm alerts --evaluate print --min-notional 10000 --format json
 polyterm alerts --evaluate print --min-notional 10000 --market bitcoin-100k --wallet 0xabc --dry-run
 ```
 
-Print evaluation is on `polyterm alerts`, not `polyterm watch`. Watch still evaluates Gamma price rules.
+Print evaluation is also on `polyterm watch` (same lagged tape). `polyterm alerts --evaluate print` remains the one-shot print scan.
 
 ### Python
 
@@ -77,6 +77,8 @@ Not used: CLOB REST trades, CLOB WebSocket fills, Gamma volume heuristics.
 
 - [Alert Engine](alert_engine.md)
 - [Alerts CLI](../cli/alerts.md)
+- [Watch CLI](../cli/watch.md)
+- [Watch loop](watch_loop.md)
 - [Data API lag labels](../api/data_api_lag.md)
 - [Data API client](../api/data_api.md)
 - [Whale tracker](whale_tracker.md)

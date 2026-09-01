@@ -124,7 +124,7 @@ Each CLI command has its own documentation page with usage, options, and example
 | [update](cli/update.md) | Reinstall from GitHub main (PyPI decommissioned) | `polyterm update` |
 | [volume](cli/volume.md) | Volume analysis | `polyterm volume` |
 | [wallets](cli/wallets.md) | Wallet management and analysis | `polyterm wallets` |
-| [watch](cli/watch.md) | Market watchlist | `polyterm watch` |
+| [watch](cli/watch.md) | Live session: CLOB book, lagged prints, outage line | `polyterm watch` |
 | [watchdog](cli/watchdog.md) | Market watchdog monitoring | `polyterm watchdog` |
 | [whales](cli/whales.md) | Whale activity tracker | `polyterm whales` |
 
@@ -246,6 +246,8 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 | [alerts](core/alerts.md) | Alert generation and management | Alert engine |
 | [alert_engine](core/alert_engine.md) | Unified local alert rule engine | Rule evaluation |
 | [print_scanner](core/print_scanner.md) | Verified Data API prints (lagged, not live CLOB) | Print ingest |
+| [watch_loop](core/watch_loop.md) | One watch process: lagged prints, CLOB book, notify events | Watch helpers |
+| [ws_book_freshness](core/ws_book_freshness.md) | Frozen CLOB WS vs live book ticks | Watch honesty |
 | [analytics](core/analytics.md) | Market analytics and trending analysis | Analytics engine |
 | [demo_strategy_sim](core/demo_strategy_sim.md) | Seeded random strategy simulation (not historical backtesting) | Demo simulator |
 | [leaderboard](core/leaderboard.md) | Data API leaderboard normalization without fabricated stats | Ranking helper |

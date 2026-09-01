@@ -144,6 +144,50 @@ def test_watch_dashboard_shows_outage_instead_of_waiting_snapshot():
     assert "accepting_orders" in output
     assert "cancel_only" not in output
     assert "Waiting for first snapshot" not in output
+    assert "Lagged Data API prints" in output
+    assert "No lagged Data API prints" in output
+
+
+def test_watch_dashboard_shows_ws_stale_banner_and_rest_source():
+    scanner = type("FakeScanner", (), {})()
+    scanner.snapshots = {}
+    output = render_text(_render_watch_dashboard(
+        scanner=scanner,
+        market_id="m1",
+        market_title="Bitcoin Test Market",
+        threshold=10.0,
+        volume_threshold=50.0,
+        interval=30,
+        notify=False,
+        check_count=2,
+        last_check="12:31:00",
+        recent_alerts=[],
+        book_payload={
+            "source": "clob_rest",
+            "ws_connected": True,
+            "ws_stale": True,
+            "live": False,
+            "banner": "WS connected, no book ticks",
+            "best_bid": 0.55,
+            "best_ask": 0.56,
+        },
+        prints_payload={
+            "prints": [{
+                "timestamp_iso": "2026-06-01T12:00:00+00:00",
+                "side": "BUY",
+                "notional": 15000,
+                "wallet": "0xabc",
+            }],
+            "lagged": True,
+        },
+    ))
+
+    assert "WS stale" in output
+    assert "WS connected, no book ticks" in output
+    assert "clob_rest" in output
+    assert "Lagged Data API prints" in output
+    assert "15000" in output or "$15,000" in output
+    assert "No lagged Data API prints" not in output
 
 
 def test_watchdog_dashboard_keeps_status_market_state_and_alerts_visible():
