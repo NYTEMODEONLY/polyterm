@@ -1,4 +1,4 @@
-"""Watch command - monitor specific markets with alerts"""
+"""Watch command - one live session: CLOB book, lagged prints, outage line."""
 
 import click
 import time
@@ -13,10 +13,23 @@ from rich.text import Text
 from ...api.gamma import GammaClient
 from ...api.clob import CLOBClient
 from ...api.status import StatusPageClient
+from ...api.data_api_lag import DISCLOSURE, QUALITY_FLAG
 from ...core.alert_engine import AlertEngine
 from ...core.scanner import MarketScanner
 from ...core.alerts import AlertManager
+from ...core.print_scanner import PrintScanner
 from ...core.service_health import ServiceHealth, assess_service_health, clob_trading_flags
+from ...core.watch_loop import (
+    DEFAULT_PRINT_MIN_NOTIONAL,
+    WatchBookSession,
+    collect_watch_surfaces,
+    dispatch_watch_notifications,
+    new_notify_state,
+    notify_events_from_scan,
+    token_ids_for_market,
+    watch_notifier,
+)
+from ...core.ws_book_freshness import DEFAULT_STALE_AFTER_SECONDS, WS_STALE_BANNER
 from ...utils.json_output import print_json
 
 
@@ -27,20 +40,51 @@ from ...utils.json_output import print_json
 @click.option("--interval", default=60, help="Check interval in seconds")
 @click.option("--schedule", default=None, help="Run scheduled foreground scans, e.g. 15m")
 @click.option("--runs", default=1, help="Number of scheduled scans in JSON/scheduled mode")
-@click.option("--notify", default=None, help="Notification channel label, e.g. telegram or discord")
+@click.option(
+    "--notify",
+    default=None,
+    help="telegram or discord: send only on verified prints and threshold events, not every poll",
+)
+@click.option(
+    "--min-notional",
+    default=DEFAULT_PRINT_MIN_NOTIONAL,
+    type=float,
+    help="Minimum lagged Data API print notional to notify on (default 10000; no saved print rule required)",
+)
+@click.option(
+    "--stale-after",
+    default=int(DEFAULT_STALE_AFTER_SECONDS),
+    type=int,
+    help="Seconds without book/price_change ticks before a connected CLOB WS is ws_stale (default 20)",
+)
 @click.option("--format", "output_format", type=click.Choice(["table", "json"]), default="table")
 @click.pass_context
-def watch(ctx, market, threshold, volume_threshold, interval, schedule, runs, notify, output_format):
-    """Watch specific markets with customizable alerts.
+def watch(
+    ctx,
+    market,
+    threshold,
+    volume_threshold,
+    interval,
+    schedule,
+    runs,
+    notify,
+    min_notional,
+    stale_after,
+    output_format,
+):
+    """Watch one market: CLOB book, lagged Data API prints, and outage line.
 
-    When Gamma and CLOB both fail, watch reports an outage instead of an
-    empty market list. Unreachable status.polymarket.com is status_unknown,
-    never operational.
+    A connected WebSocket with no book/price_change ticks is not live
+    (ws_stale / "WS connected, no book ticks"). Prints are lagged Data API
+    fills, never a live CLOB tape. Telegram/Discord notify only on verified
+    prints and price/volume threshold events, not every poll.
     """
 
     config = ctx.obj["config"]
     console = Console()
     gamma_client, clob_client, status_client = _build_clients(config)
+    print_scanner = PrintScanner()
+    book_session = None
 
     try:
         if schedule or output_format == "json":
@@ -49,12 +93,16 @@ def watch(ctx, market, threshold, volume_threshold, interval, schedule, runs, no
                 gamma_client=gamma_client,
                 clob_client=clob_client,
                 status_client=status_client,
+                print_scanner=print_scanner,
+                config=config,
                 market=market,
                 schedule=schedule,
                 runs=runs,
                 notify=notify,
                 output_format=output_format,
                 interval=interval,
+                min_notional=min_notional,
+                stale_after=stale_after,
             )
             return
 
@@ -70,12 +118,32 @@ def watch(ctx, market, threshold, volume_threshold, interval, schedule, runs, no
             return
 
         trading_flags = clob_trading_flags(market_data)
+        book_session = WatchBookSession(
+            clob_client,
+            token_ids_for_market(market_data),
+            stale_after_seconds=stale_after,
+        )
+        book_session.start()
+        book_payload = book_session.snapshot()
+        prints_payload = {
+            "prints": [],
+            "count": 0,
+            "quality_flags": [QUALITY_FLAG],
+        }
 
         console.print(f"\n[green]Watching:[/green] {market_title}")
         console.print(f"[cyan]Probability threshold:[/cyan] {threshold}%")
         console.print(f"[cyan]Volume threshold:[/cyan] {volume_threshold}%")
         console.print(f"[cyan]Check interval:[/cyan] {interval}s")
+        console.print(
+            f"[cyan]Print min-notional:[/cyan] ${float(min_notional):,.0f} "
+            "[dim](lagged Data API, not live CLOB)[/dim]"
+        )
+        console.print(
+            f"[cyan]WS stale after:[/cyan] {stale_after}s without book ticks"
+        )
         _print_health_line(console, health)
+        console.print(f"[dim]{DISCLOSURE}[/dim]")
         console.print()
 
         scanner = MarketScanner(
@@ -85,9 +153,11 @@ def watch(ctx, market, threshold, volume_threshold, interval, schedule, runs, no
         )
 
         alert_manager = AlertManager(
-            enable_system_notifications=notify,
+            enable_system_notifications=bool(notify),
             enable_terminal_output=False,
         )
+        notifier = watch_notifier(config, notify)
+        notify_state = new_notify_state()
 
         def on_shift(shift_data):
             thresholds = {
@@ -116,10 +186,14 @@ def watch(ctx, market, threshold, volume_threshold, interval, schedule, runs, no
                 recent_alerts=recent_alerts,
                 health=health,
                 trading_flags=trading_flags,
+                prints_payload=prints_payload,
+                book_payload=book_payload,
+                min_notional=min_notional,
             )
 
         try:
             scanner.running = True
+            next_scan = 0.0
             with Live(
                 render_dashboard(),
                 console=console,
@@ -127,36 +201,63 @@ def watch(ctx, market, threshold, volume_threshold, interval, schedule, runs, no
                 screen=True,
             ) as live:
                 while scanner.running:
-                    check_count += 1
-                    last_check = datetime.now().strftime("%H:%M:%S")
-                    health = assess_service_health(
-                        gamma_client, clob_client, status_client
-                    )
-                    shifts = []
-                    if health.mode != "outage" and health.gamma.ok:
-                        shifts = scanner.scan_markets(
-                            market_ids=[market_id],
-                            thresholds={
-                                "probability": threshold,
-                                "volume": volume_threshold,
-                            },
+                    now = time.time()
+                    if now >= next_scan:
+                        check_count += 1
+                        last_check = datetime.now().strftime("%H:%M:%S")
+                        health = assess_service_health(
+                            gamma_client, clob_client, status_client
                         )
+                        shifts = []
+                        if health.mode != "outage" and health.gamma.ok:
+                            shifts = scanner.scan_markets(
+                                market_ids=[market_id],
+                                thresholds={
+                                    "probability": threshold,
+                                    "volume": volume_threshold,
+                                },
+                            )
+                            surfaces = collect_watch_surfaces(
+                                market=market,
+                                gamma_client=gamma_client,
+                                clob_client=None,
+                                print_scanner=print_scanner,
+                                market_data=market_data,
+                                min_notional=min_notional,
+                                stale_after_seconds=stale_after,
+                            )
+                            prints_payload = surfaces.get("prints") or prints_payload
+                            events = notify_events_from_scan(
+                                prints_payload,
+                                shifts,
+                                min_notional,
+                                notify_state,
+                            )
+                            if notifier and events:
+                                dispatch_watch_notifications(notify, events, notifier)
 
-                    for shift in shifts:
-                        recent_alerts.insert(0, {
-                            "time": last_check,
-                            "title": shift.get("title") or market_title,
-                            "types": ", ".join(shift.get("shift_type", [])),
-                        })
-                    recent_alerts = recent_alerts[:8]
+                        for shift in shifts:
+                            recent_alerts.insert(0, {
+                                "time": last_check,
+                                "title": shift.get("title") or market_title,
+                                "types": ", ".join(shift.get("shift_type", [])),
+                            })
+                        recent_alerts = recent_alerts[:8]
+                        next_scan = now + max(int(interval), 1)
 
+                    book_payload = book_session.snapshot()
                     live.update(render_dashboard())
-                    time.sleep(interval)
+                    time.sleep(1)
         except KeyboardInterrupt:
             console.print("\n[yellow]Stopped watching market[/yellow]")
         finally:
             scanner.stop_monitoring()
     finally:
+        if book_session is not None:
+            try:
+                book_session.stop()
+            except Exception:
+                pass
         _close_clients(gamma_client, clob_client, status_client)
 
 
@@ -190,18 +291,24 @@ def _run_scheduled_watch(
     gamma_client,
     clob_client,
     status_client,
+    print_scanner,
+    config,
     market,
     schedule,
     runs,
     notify,
     output_format,
     interval,
+    min_notional,
+    stale_after,
 ):
     """JSON/scheduled scans. Outages are reported, never empty success."""
     engine = AlertEngine()
     delay = _parse_schedule(schedule) if schedule else interval
     results = []
     last_health = None
+    notifier = watch_notifier(config, notify)
+    notify_state = new_notify_state()
     try:
         for index in range(max(runs, 1)):
             last_health = assess_service_health(
@@ -221,6 +328,28 @@ def _run_scheduled_watch(
                 scan["mode"] = last_health.mode
                 scan["status"] = last_health.status
                 scan["health"] = last_health.to_dict()
+                surfaces = collect_watch_surfaces(
+                    market=market,
+                    gamma_client=gamma_client,
+                    clob_client=clob_client,
+                    print_scanner=print_scanner,
+                    min_notional=min_notional,
+                    stale_after_seconds=stale_after,
+                )
+                scan["prints"] = surfaces.get("prints")
+                scan["book"] = surfaces.get("book")
+                events = notify_events_from_scan(
+                    surfaces.get("prints") or {},
+                    None,
+                    min_notional,
+                    notify_state,
+                )
+                if notifier and events:
+                    scan["notify_sent"] = dispatch_watch_notifications(
+                        notify, events, notifier
+                    )
+                elif notify:
+                    scan["notify_sent"] = []
                 results.append(scan)
             if schedule and index < runs - 1:
                 time.sleep(delay)
@@ -233,6 +362,8 @@ def _run_scheduled_watch(
         notify=notify,
         results=results,
         health=last_health,
+        min_notional=min_notional,
+        stale_after=stale_after,
     )
     if output_format == "json":
         print_json(payload)
@@ -240,7 +371,15 @@ def _run_scheduled_watch(
         _print_health_console(console, last_health, payload=payload)
 
 
-def _scheduled_payload(market, schedule, notify, results, health):
+def _scheduled_payload(
+    market,
+    schedule,
+    notify,
+    results,
+    health,
+    min_notional=DEFAULT_PRINT_MIN_NOTIONAL,
+    stale_after=DEFAULT_STALE_AFTER_SECONDS,
+):
     """Build the scheduled-watch JSON object with honest outage fields."""
     mode = health.mode if health is not None else "status_unknown"
     status = health.status if health is not None else "status_unknown"
@@ -263,6 +402,8 @@ def _scheduled_payload(market, schedule, notify, results, health):
         "schedule": schedule,
         "runs": len(results),
         "notify": notify,
+        "min_notional": min_notional,
+        "stale_after": stale_after,
         "results": results,
         "long_running": bool(schedule),
     }
@@ -349,6 +490,9 @@ def _render_watch_dashboard(
     recent_alerts: list,
     health: ServiceHealth = None,
     trading_flags: dict = None,
+    prints_payload: dict = None,
+    book_payload: dict = None,
+    min_notional: float = DEFAULT_PRINT_MIN_NOTIONAL,
 ) -> Layout:
     """Render the fixed watch dashboard."""
     snapshots = scanner.snapshots.get(market_id, [])
@@ -356,10 +500,13 @@ def _render_watch_dashboard(
     previous = snapshots[-2] if len(snapshots) >= 2 else None
     changes = current.calculate_shift(previous) if current and previous else None
     trading_flags = trading_flags or {}
+    book_payload = book_payload or {}
+    prints_payload = prints_payload or {}
 
-    title_markup, border_style = _dashboard_title(health)
+    title_markup, border_style = _dashboard_title(health, book_payload)
     health_line = _dashboard_health_line(health)
     flags_line = _dashboard_flags_line(trading_flags)
+    book_line = _dashboard_book_line(book_payload)
 
     header = Panel(
         Text.from_markup(
@@ -369,9 +516,11 @@ def _render_watch_dashboard(
             f"Interval: [white]{interval}s[/white] | Notifications: [white]{'on' if notify else 'off'}[/white]\n"
             f"Probability threshold: [white]{threshold:.1f}%[/white] | "
             f"Volume threshold: [white]{volume_threshold:.1f}%[/white] | "
+            f"Print min-notional: [white]${float(min_notional):,.0f}[/white] | "
             "[dim]Press Ctrl+C to stop[/dim]\n"
             f"{health_line}"
             f"{flags_line}"
+            f"{book_line}"
         ),
         border_style=border_style,
         padding=(0, 2),
@@ -419,6 +568,16 @@ def _render_watch_dashboard(
             Text("clob", style="dim"),
         )
 
+    if book_payload.get("best_bid") is not None or book_payload.get("best_ask") is not None:
+        bid = book_payload.get("best_bid")
+        ask = book_payload.get("best_ask")
+        metrics.add_row(
+            "Book",
+            f"{_fmt_px(bid)} / {_fmt_px(ask)}",
+            Text(str(book_payload.get("source") or ""), style="dim"),
+        )
+
+    prints_table = _render_prints_table(prints_payload)
     alerts = Table(title="Recent Alerts", title_style="bold yellow", expand=True)
     alerts.add_column("Time", style="dim", width=8)
     alerts.add_column("Market", style="white", ratio=1, overflow="ellipsis")
@@ -432,14 +591,65 @@ def _render_watch_dashboard(
 
     layout = Layout()
     layout.split_column(
-        Layout(header, size=10),
+        Layout(header, size=12),
         Layout(metrics, ratio=1),
+        Layout(prints_table, ratio=1),
         Layout(alerts, ratio=1),
     )
     return layout
 
 
-def _dashboard_title(health: ServiceHealth = None):
+def _fmt_px(value):
+    if value is None:
+        return "—"
+    try:
+        return f"${float(value):.4f}"
+    except (TypeError, ValueError):
+        return "—"
+
+
+def _render_prints_table(prints_payload: dict) -> Table:
+    """Recent lagged Data API prints. Empty tape is empty, not synthetic."""
+    table = Table(
+        title="Lagged Data API prints (not live CLOB)",
+        title_style="bold magenta",
+        expand=True,
+    )
+    table.add_column("When", style="dim", width=12)
+    table.add_column("Side", width=6)
+    table.add_column("Notional", justify="right", width=12)
+    table.add_column("Wallet", style="white", ratio=1, overflow="ellipsis")
+
+    rows = []
+    if isinstance(prints_payload, dict):
+        rows = [row for row in (prints_payload.get("prints") or []) if isinstance(row, dict)]
+
+    if not rows:
+        table.add_row("--", "—", "—", Text("No lagged Data API prints", style="dim"))
+        return table
+
+    for row in rows[:8]:
+        when = row.get("timestamp_iso") or row.get("timestamp") or "—"
+        if isinstance(when, (int, float)):
+            when = str(when)
+        side = str(row.get("side") or "—")
+        notional = row.get("notional")
+        if notional is None:
+            notional_text = "unknown"
+        else:
+            try:
+                notional_text = f"${float(notional):,.0f}"
+            except (TypeError, ValueError):
+                notional_text = "unknown"
+        wallet = str(row.get("wallet") or "unknown")
+        table.add_row(str(when)[:19], side, notional_text, wallet)
+    return table
+
+
+def _dashboard_title(health: ServiceHealth = None, book_payload: dict = None):
+    book_payload = book_payload or {}
+    if book_payload.get("ws_stale"):
+        return "[bold yellow]Market Watch (WS stale)[/bold yellow]", "yellow"
     if health is None:
         return "[bold green]Market Watch Active[/bold green]", "green"
     if health.mode == "outage":
@@ -448,6 +658,10 @@ def _dashboard_title(health: ServiceHealth = None):
         return "[bold yellow]Market Watch Degraded[/bold yellow]", "yellow"
     if health.mode == "status_unknown":
         return "[bold yellow]Market Watch (status unknown)[/bold yellow]", "yellow"
+    if book_payload.get("live"):
+        return "[bold green]Market Watch Active[/bold green]", "green"
+    if book_payload.get("source") == "clob_rest":
+        return "[bold cyan]Market Watch (CLOB REST snapshot)[/bold cyan]", "cyan"
     return "[bold green]Market Watch Active[/bold green]", "green"
 
 
@@ -469,6 +683,22 @@ def _dashboard_flags_line(trading_flags: dict) -> str:
     if "accepting_orders" not in trading_flags:
         return ""
     return f"\naccepting_orders: [white]{trading_flags['accepting_orders']}[/white]"
+
+
+def _dashboard_book_line(book_payload: dict) -> str:
+    if not book_payload:
+        return ""
+    source = book_payload.get("source") or "none"
+    if book_payload.get("ws_stale"):
+        banner = book_payload.get("banner") or WS_STALE_BANNER
+        return (
+            f"\nBook: [yellow]{banner}[/yellow] | "
+            f"source=[white]{source}[/white] | live=[white]false[/white]"
+        )
+    live = "true" if book_payload.get("live") else "false"
+    return (
+        f"\nBook source: [white]{source}[/white] | live=[white]{live}[/white]"
+    )
 
 
 def _format_change(value: float, suffix: str = "") -> Text:

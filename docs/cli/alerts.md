@@ -67,7 +67,7 @@ polyterm alerts --evaluate print --min-notional 10000 --dry-run --format json
 polyterm alerts --add-rule price --market bitcoin --above 0.70 --dry-run --format json
 ```
 
-`--evaluate print` is the scan path traders and agents can run. `polyterm watch` still evaluates Gamma price rules only.
+`--evaluate print` is the one-shot print scan. `polyterm watch` now shows the same lagged tape in its live loop and JSON scans.
 
 ## Print rule honesty
 

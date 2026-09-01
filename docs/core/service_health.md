@@ -69,6 +69,7 @@ Identifiers: Gamma numeric IDs and slugs are not required for the probes. CLOB t
 - [Status page client](../api/status.md)
 - [Aggregator](../api/aggregator.md)
 - [Watch](../cli/watch.md)
+- [Watch loop](watch_loop.md)
 - [CLOB](../api/clob.md)
 
 ## Verification

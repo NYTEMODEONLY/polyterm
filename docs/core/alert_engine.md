@@ -6,7 +6,7 @@
 
 `polyterm/core/alert_engine.py` provides local alert rule creation and one-shot evaluation. It supports agent-safe creation of local price rules, print rules on lagged Data API fills, and scheduled scan workflows without adding external custody or trading behavior.
 
-The module mutates local state when a rule is saved or when a triggered alert is inserted. It never mutates Polymarket state. Print evaluation is lagged Data API, not live CLOB.
+The module mutates local state when a rule is saved or when a triggered alert is inserted. It never mutates Polymarket state. Print evaluation is lagged Data API, not live CLOB. `polyterm watch` reuses `PrintScanner` in the same process; this engine still owns one-shot price and print rule evaluation.
 
 ## Usage
 
