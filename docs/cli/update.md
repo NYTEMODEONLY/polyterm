@@ -42,6 +42,7 @@ pip install --upgrade git+https://github.com/NYTEMODEONLY/polyterm.git@main
 ## Data Sources
 
 - Installed package version (`polyterm.__version__`)
+- GitHub tags/releases (`https://api.github.com/repos/NYTEMODEONLY/polyterm/releases/latest`) for TUI update availability
 - GitHub `main` via pipx or pip (`git+https://github.com/NYTEMODEONLY/polyterm.git@main`)
 
 PyPI is decommissioned and is not consulted.

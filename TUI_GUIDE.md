@@ -71,7 +71,7 @@ nw  = news           h/? = help           q   = quit
 
 ### Version Display & Updates
 
-PolyTerm automatically checks for updates on launch:
+PolyTerm automatically checks GitHub tags/releases (not PyPI) for updates on launch:
 
 **Current Version:**
 ```

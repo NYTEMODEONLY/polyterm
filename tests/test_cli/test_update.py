@@ -13,6 +13,16 @@ def _plain(text: str) -> str:
     return re.sub(r"\x1b\[[0-9;]*m", "", text)
 
 
+def test_update_help_still_works():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["update", "--help"])
+
+    assert result.exit_code == 0
+    output = _plain(result.output)
+    assert "GitHub" in output
+    assert "pypi.org" not in output.lower()
+
+
 def test_update_reinstalls_from_github_and_does_not_query_pypi():
     runner = CliRunner()
 

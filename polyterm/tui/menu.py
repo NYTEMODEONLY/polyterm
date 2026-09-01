@@ -16,16 +16,34 @@ class MainMenu:
         self._update_cache = None  # Cached update check result
 
     def check_for_updates(self) -> tuple[str, str]:
-        """Do not query PyPI. GitHub is the install source; PyPI is decommissioned.
+        """Check GitHub tags/releases for a newer version than the install.
+
+        Cached for this menu session so GitHub is not queried on every
+        keypress. Network failure returns empty strings and never crashes
+        the menu. Does not query PyPI.
 
         Returns:
-            Empty indicator and version. Reinstall from GitHub via Settings
-            option 6, menu shortcut ``u``, or ``polyterm update``.
+            ``(indicator, latest_version)``. ``latest_version`` is set only
+            when GitHub has a newer tag/release than ``polyterm.__version__``.
+            Install from the Update row, Settings option 6, or
+            ``polyterm update``.
         """
         if self._update_cache is not None:
             return self._update_cache
-        self._update_cache = ("", "")
-        return "", ""
+        try:
+            from ..utils.github_update import newer_github_version
+
+            latest = newer_github_version(polyterm.__version__)
+            if latest:
+                indicator = (
+                    f" [bold green]🔄 Update Available: v{latest}[/bold green]"
+                )
+                self._update_cache = (indicator, latest)
+            else:
+                self._update_cache = ("", "")
+        except Exception:
+            self._update_cache = ("", "")
+        return self._update_cache
 
     def quick_update(self) -> bool:
         """Reinstall from GitHub main using the Settings update flow.
