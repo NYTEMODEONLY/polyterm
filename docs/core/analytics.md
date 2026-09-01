@@ -82,7 +82,7 @@ Volume-based **market** heuristic using 24-hour Gamma volume. This is not whale 
 4. Outcome lean inferred from YES price thresholds (`> 0.65` YES, `< 0.35` NO, else MIXED)
 5. Results sorted by 24h volume descending
 
-For attributable whale trades use `WalletIntelligence.live_whales` or `polyterm whales --wallets`.
+For attributable whale prints use `polyterm whales --wallets` (`scan_whale_prints`). Agent `wallet.whales` still uses `WalletIntelligence.live_whales`.
 
 ### Price Movement Prediction
 

@@ -4,7 +4,7 @@
 
 ## Overview
 
-`polyterm/core/wallet_intelligence.py` builds wallet profiles from public Polymarket Data API surfaces and PolyTerm's local SQLite observations. It is the core module behind refreshed wallet analysis, wallet-level whale output, and future copy-trade controls.
+`polyterm/core/wallet_intelligence.py` builds wallet profiles from public Polymarket Data API surfaces and PolyTerm's local SQLite observations. It is the core module behind refreshed wallet analysis, agent `wallet.whales` / `wallet.whale_trades`, and `polyterm whales --wallets --local`. CLI `polyterm whales --wallets` (without `--local`) uses `PrintScanner` via `whale_prints.scan_whale_prints` instead of this module.
 
 The module is read-only with respect to Polymarket. It may update local wallet rows when refresh data is available so the local database becomes more useful over time.
 
@@ -15,7 +15,7 @@ The module is read-only with respect to Polymarket. It may update local wallet r
 ```bash
 polyterm wallets --analyze 0xabc... --refresh --format json
 polyterm wallets --type smart --format json
-polyterm whales --wallets --format json
+polyterm whales --wallets --local --format json
 ```
 
 ### Python
@@ -84,7 +84,7 @@ Agent tools should call this module through `wallet.inspect`, `wallet.whales`, o
 polyterm wallets --analyze 0x0000000000000000000000000000000000000000 --refresh --format json
 polyterm wallets --type smart --format json
 printf '{"tool":"wallet.smart_money","args":{"limit":5}}\n' | polyterm agent jsonl-server
-polyterm whales --wallets --format json
+polyterm whales --wallets --local --format json
 ```
 
 Mock Data API responses in focused tests to avoid relying on live wallet availability.
@@ -93,5 +93,6 @@ Mock Data API responses in focused tests to avoid relying on live wallet availab
 
 - [Wallets CLI](../cli/wallets.md)
 - [Whales CLI](../cli/whales.md)
+- [Whale prints](whale_prints.md)
 - [Follow CLI](../cli/follow.md)
 - [Data API](../api/data_api.md)

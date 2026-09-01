@@ -35,7 +35,7 @@ Press `Ctrl+C` to stop and return to the menu.
 
 ```bash
 polyterm whales --volume --min-amount 10000 --hours 24 --limit 20
-polyterm whales --wallets --min-amount 100000 --hours 72
+polyterm whales --wallets --min-notional 10000 --hours 24
 ```
 
 ## Data Sources

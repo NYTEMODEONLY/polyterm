@@ -79,7 +79,7 @@ The `_request` method follows the same retry pattern as `CLOBClient`:
 - **Package exports**: Exported via `polyterm.api.__init__` as part of `__all__`
 - **Replaces**: `SubgraphClient` (deprecated) for wallet position and trade data
 - **Lag labels**: [data_api_lag](data_api_lag.md) (`source=data_api`, `lag=true`, `lagged=true`)
-- **CLI commands**: `portfolio` (positions), `wallets --analyze --refresh` (wallet profile), `whales --wallets` (trades), `mywallet --pnl` (activity-cashflow P&L; not `get_profit_summary`)
+- **CLI commands**: `portfolio` (positions), `wallets --analyze --refresh` (wallet profile), `whales --wallets` (lagged prints via `PrintScanner`), `mywallet --pnl` (activity-cashflow P&L; not `get_profit_summary`)
 
 ## June 2026 Wallet Intelligence Methods
 

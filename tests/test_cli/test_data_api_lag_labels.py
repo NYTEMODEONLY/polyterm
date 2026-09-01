@@ -104,13 +104,10 @@ def test_wallets_refresh_table_banners_lag(mock_db_cls, mock_data_api_cls, mock_
 
 
 @patch("polyterm.cli.main.Config")
-@patch("polyterm.cli.commands.whales.WalletIntelligence")
-@patch("polyterm.cli.commands.whales.Database")
-def test_whales_wallets_json_is_lagged(mock_db_cls, mock_intel_cls, mock_config_cls):
+@patch("polyterm.cli.commands.whales.scan_whale_prints")
+def test_whales_wallets_json_is_lagged(mock_scan, mock_config_cls):
     mock_config_cls.return_value = Mock()
-    mock_db_cls.return_value = Mock()
-    mock_intel = Mock()
-    mock_intel.live_whales.return_value = {
+    mock_scan.return_value = {
         "wallets": [
             {
                 "address": "0xabc",
@@ -120,28 +117,36 @@ def test_whales_wallets_json_is_lagged(mock_db_cls, mock_intel_cls, mock_config_
                 "top_markets": [],
             }
         ],
-        "quality_flags": ["public_data_api"],
-        "source": "public_data_api",
+        "prints": [
+            {
+                "wallet": "0xabc",
+                "notional": 200000,
+                "side": "BUY",
+                "source": "data_api",
+                "lag": True,
+                "lagged": True,
+            }
+        ],
+        "quality_flags": ["public_trade_rows_only"],
+        "source": "data_api",
     }
-    mock_intel_cls.return_value = mock_intel
 
     result = CliRunner().invoke(cli, ["whales", "--wallets", "--format", "json", "--limit", "1"])
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["lag"] is True
     assert payload["lagged"] is True
+    assert payload["source"] == "data_api"
     assert QUALITY_FLAG in payload["quality_flags"]
     assert "live_data_api_trades" not in payload["quality_flags"]
+    assert "insider_score" not in payload
 
 
 @patch("polyterm.cli.main.Config")
-@patch("polyterm.cli.commands.whales.WalletIntelligence")
-@patch("polyterm.cli.commands.whales.Database")
-def test_whales_wallets_table_banners_lag(mock_db_cls, mock_intel_cls, mock_config_cls):
+@patch("polyterm.cli.commands.whales.scan_whale_prints")
+def test_whales_wallets_table_banners_lag(mock_scan, mock_config_cls):
     mock_config_cls.return_value = Mock()
-    mock_db_cls.return_value = Mock()
-    mock_intel = Mock()
-    mock_intel.live_whales.return_value = {
+    mock_scan.return_value = {
         "wallets": [
             {
                 "address": "0xabc",
@@ -151,14 +156,24 @@ def test_whales_wallets_table_banners_lag(mock_db_cls, mock_intel_cls, mock_conf
                 "top_markets": [("slug", 1)],
             }
         ],
-        "quality_flags": ["public_data_api"],
+        "prints": [
+            {
+                "wallet": "0xabc",
+                "notional": 200000,
+                "side": "BUY",
+                "market_slug": "slug",
+                "timestamp_iso": "2023-11-14T22:13:20+00:00",
+            }
+        ],
+        "wallet_count": 1,
+        "quality_flags": ["public_trade_rows_only"],
     }
-    mock_intel_cls.return_value = mock_intel
 
     result = CliRunner().invoke(cli, ["whales", "--wallets", "--limit", "1"])
     assert result.exit_code == 0, result.output
     assert "Lagged Data API" in result.output
     assert "not live CLOB" in result.output
+    assert "0xabc" in result.output
 
 
 @patch("polyterm.cli.main.Config")

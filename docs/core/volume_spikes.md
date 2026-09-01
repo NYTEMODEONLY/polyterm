@@ -6,7 +6,7 @@
 
 The volume-spikes module lists active markets whose Gamma `volume24hr` is at least a threshold. It is the honest implementation behind the default `polyterm whales` path. It does not invent trader addresses, timestamps of individual fills, or transaction hashes.
 
-Wallet-level whale trades live in `WalletIntelligence.live_whales` and `polyterm whales --wallets`, which read the public Data API trade tape.
+Wallet-level whale prints live in `polyterm whales --wallets` (`scan_whale_prints` / `PrintScanner`). Those fills are lagged Data API rows, not live CLOB. Agent `wallet.whales` still uses `WalletIntelligence.live_whales`.
 
 ## Usage
 

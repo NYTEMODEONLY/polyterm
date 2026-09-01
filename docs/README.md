@@ -126,7 +126,7 @@ Each CLI command has its own documentation page with usage, options, and example
 | [wallets](cli/wallets.md) | Wallet management and analysis | `polyterm wallets` |
 | [watch](cli/watch.md) | Live session: CLOB book, lagged prints, outage line | `polyterm watch` |
 | [watchdog](cli/watchdog.md) | Market watchdog monitoring | `polyterm watchdog` |
-| [whales](cli/whales.md) | Whale activity tracker | `polyterm whales` |
+| [whales](cli/whales.md) | Volume heuristic or lagged Data API prints (`--wallets`) | `polyterm whales` |
 
 ### TUI Screens
 
@@ -246,6 +246,7 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 | [alerts](core/alerts.md) | Alert generation and management | Alert engine |
 | [alert_engine](core/alert_engine.md) | Unified local alert rule engine | Rule evaluation |
 | [print_scanner](core/print_scanner.md) | Verified Data API prints (lagged, not live CLOB) | Print ingest |
+| [whale_prints](core/whale_prints.md) | Wallet-level lagged Data API prints for `whales --wallets` | Whale prints |
 | [watch_loop](core/watch_loop.md) | One watch process: lagged prints, CLOB book, notify events | Watch helpers |
 | [ws_book_freshness](core/ws_book_freshness.md) | Frozen CLOB WS vs live book ticks | Watch honesty |
 | [analytics](core/analytics.md) | Market analytics and trending analysis | Analytics engine |
