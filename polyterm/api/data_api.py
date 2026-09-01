@@ -63,22 +63,33 @@ class DataAPIClient:
                 raise
         raise Exception(f"API request failed after {retries} retries: {url}")
 
-    def get_positions(self, address, limit=100, offset=0, sort_by="CURRENT"):
+    def get_positions(self, address, limit=100, offset=0, sort_by="CURRENT", size_threshold=None):
         """Get wallet positions
         GET /positions?user={address}&limit={limit}&offset={offset}&sortBy={sort_by}
         Returns list of position dicts
         """
         params = {"user": address, "limit": limit, "offset": offset, "sortBy": sort_by}
+        if size_threshold is not None:
+            params["sizeThreshold"] = size_threshold
         response = self._request("GET", "/positions", params=params)
         response.raise_for_status()
         return response.json()
 
-    def get_activity(self, address, limit=100, offset=0):
+    def get_activity(self, address, limit=100, offset=0, activity_type=None, sort_direction=None):
         """Get wallet activity
         GET /activity?user={address}&limit={limit}&offset={offset}
         Returns list of activity items
+
+        Optional `activity_type` maps to the Data API `type` filter
+        (TRADE, SPLIT, MERGE, REDEEM, MAKER_REBATE, ...). Optional
+        `sort_direction` maps to `sortDirection` (ASC/DESC). Cashflow
+        replay should pass ASC so MERGE/SPLIT rows are not dropped.
         """
         params = {"user": address, "limit": limit, "offset": offset}
+        if activity_type:
+            params["type"] = activity_type
+        if sort_direction:
+            params["sortDirection"] = sort_direction
         response = self._request("GET", "/activity", params=params)
         response.raise_for_status()
         return response.json()

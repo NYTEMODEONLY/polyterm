@@ -254,6 +254,19 @@ class TestDataAPIGetPositions:
         assert "offset=10" in responses.calls[0].request.url
         assert "sortBy=CASHPNL" in responses.calls[0].request.url
 
+    @responses.activate
+    def test_get_positions_size_threshold(self, client):
+        responses.add(
+            responses.GET,
+            f"{BASE_URL}/positions",
+            json=[{"size": 0.01, "currentValue": 0.01}],
+            status=200,
+        )
+
+        positions = client.get_positions("0xabc123", size_threshold=0)
+        assert len(positions) == 1
+        assert "sizeThreshold=0" in responses.calls[0].request.url
+
 
 class TestDataAPILeaderboardAndClosedPositions:
     """Test current Data API leaderboard and closed-position helpers."""
@@ -387,6 +400,26 @@ class TestDataAPIGetActivity:
         assert len(activity) == 1
         assert "limit=50" in responses.calls[0].request.url
         assert "offset=20" in responses.calls[0].request.url
+
+    @responses.activate
+    def test_get_activity_sort_direction_and_type(self, client):
+        """Cashflow replay needs ASC so MERGE/SPLIT rows are not dropped."""
+        responses.add(
+            responses.GET,
+            f"{BASE_URL}/activity",
+            json=[{"type": "MERGE", "usdcSize": 10}],
+            status=200,
+        )
+
+        activity = client.get_activity(
+            "0xabc123",
+            limit=500,
+            activity_type="MERGE",
+            sort_direction="ASC",
+        )
+        assert len(activity) == 1
+        assert "sortDirection=ASC" in responses.calls[0].request.url
+        assert "type=MERGE" in responses.calls[0].request.url
 
     @responses.activate
     def test_get_activity_empty(self, client):

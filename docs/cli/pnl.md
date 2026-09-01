@@ -4,7 +4,7 @@
 
 ## Overview
 
-Track your profit & loss over time. Analyzes closed positions to show your trading performance.
+Track your profit & loss over time. Analyzes locally tracked closed positions (the local journal). For lagged Data API wallet P&L from activity cashflow, use `polyterm mywallet --pnl`.
 
 Examples:
 polyterm pnl                   # Last month P&L
@@ -55,6 +55,7 @@ polyterm pnl --format json
 
 - [Portfolio](portfolio.md)
 - [Position](position.md)
+- [Mywallet](mywallet.md) (`--pnl` is lagged Data API activity cashflow, not this journal)
 - [Simulate](simulate.md)
 - [Parlay](parlay.md)
 - [Exit](exit.md)

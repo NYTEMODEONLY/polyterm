@@ -19,7 +19,8 @@ from ...utils.json_output import print_json
 def pnl(ctx, period, detailed, output_format):
     """Track your profit & loss over time
 
-    Analyzes closed positions to show your trading performance.
+    Local closed-position journal only. For lagged Data API wallet P&L
+    from activity cashflow, use `polyterm mywallet --pnl`.
 
     Examples:
         polyterm pnl                   # Last month P&L

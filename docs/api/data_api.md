@@ -25,8 +25,8 @@ Client for Polymarket Data API providing wallet-level data.
 | Method | Signature | Description |
 |--------|-----------|-------------|
 | `__init__` | `(base_url=None)` | Initialize client with optional custom base URL |
-| `get_positions` | `(address, limit=100, offset=0, sort_by="CURRENT")` | Get wallet positions sorted by current value |
-| `get_activity` | `(address, limit=100, offset=0)` | Get wallet activity feed |
+| `get_positions` | `(address, limit=100, offset=0, sort_by="CURRENT", size_threshold=None)` | Get wallet positions. Optional `sizeThreshold` (cashflow mark uses `0`). |
+| `get_activity` | `(address, limit=100, offset=0, activity_type=None, sort_direction=None)` | Get wallet activity feed. Optional `type` and `sortDirection`. Cashflow P&L uses `sortDirection=ASC`. |
 | `get_trades` | `(address, limit=100, market=None)` | Get wallet trades, optionally filtered by market |
 | `get_profit_summary` | `(address)` | Aggregate P&L summary across all positions |
 | `get_leaderboard` | `(period="7d", limit=50, sort_by="profit")` | Public `/v1/leaderboard`. `profit`/`volume`/`active` map to PNL/VOL. `winrate` is not mapped to PNL. |
@@ -67,7 +67,7 @@ The `_request` method follows the same retry pattern as `CLOBClient`:
 1. **Positions**: `get_positions(address)` -> GET `/positions?user={address}&sortBy=CURRENT` -> returns list of position dicts with fields like `pnl`, `initialValue`, `currentValue`.
 2. **Activity**: `get_activity(address)` -> GET `/activity?user={address}` -> returns list of activity items.
 3. **Trades**: `get_trades(address, market=...)` -> GET `/trades?user={address}` -> returns list of trade dicts; optionally filtered by `market` parameter.
-4. **Profit summary**: `get_profit_summary(address)` -> fetches up to 500 positions sorted by `CASHPNL` -> aggregates `total_pnl`, `total_invested`, `position_count` across all positions. Silently skips positions with unparseable numeric values.
+4. **Profit summary**: `get_profit_summary(address)` -> fetches up to 500 positions sorted by `CASHPNL` -> aggregates `total_pnl`, `total_invested`, `position_count` across all positions. Silently skips positions with unparseable numeric values. This is **not** honest wallet P&L: `/positions.cashPnl` drops redeemed winners. Use `polyterm mywallet --pnl` / `core/pnl_cashflow.py` (activity cashflow + open-size mark) instead.
 
 ## External Dependencies
 
@@ -79,7 +79,7 @@ The `_request` method follows the same retry pattern as `CLOBClient`:
 - **Package exports**: Exported via `polyterm.api.__init__` as part of `__all__`
 - **Replaces**: `SubgraphClient` (deprecated) for wallet position and trade data
 - **Lag labels**: [data_api_lag](data_api_lag.md) (`source=data_api`, `lag=true`, `lagged=true`)
-- **CLI commands**: `portfolio` (positions), `wallets --analyze --refresh` (wallet profile), `whales --wallets` (trades)
+- **CLI commands**: `portfolio` (positions), `wallets --analyze --refresh` (wallet profile), `whales --wallets` (trades), `mywallet --pnl` (activity-cashflow P&L; not `get_profit_summary`)
 
 ## June 2026 Wallet Intelligence Methods
 

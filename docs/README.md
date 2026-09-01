@@ -80,7 +80,7 @@ Each CLI command has its own documentation page with usage, options, and example
 | [live-monitor](cli/live-monitor.md) | Real-time WebSocket market monitor | `polyterm live-monitor` |
 | [lookup](cli/lookup.md) | Market lookup by ID or slug | `polyterm lookup` |
 | [monitor](cli/monitor.md) | Market monitoring with polling | `polyterm monitor` |
-| [mywallet](cli/mywallet.md) | View-only wallet connection | `polyterm mywallet` |
+| [mywallet](cli/mywallet.md) | View-only wallet connection; `--pnl` is lagged activity cashflow | `polyterm mywallet --pnl` |
 | [negrisk](cli/negrisk.md) | NegRisk multi-outcome arbitrage | `polyterm negrisk` |
 | [news](cli/news.md) | Market-relevant news headlines | `polyterm news` |
 | [notes](cli/notes.md) | Market notes management | `polyterm notes` |
@@ -89,7 +89,7 @@ Each CLI command has its own documentation page with usage, options, and example
 | [orderbook](cli/orderbook.md) | Order book analysis (REST + live WS) | `polyterm orderbook` |
 | [parlay](cli/parlay.md) | Parlay bet calculator | `polyterm parlay` |
 | [pin](cli/pin.md) | Pin markets for quick access | `polyterm pin` |
-| [pnl](cli/pnl.md) | Profit and loss tracking | `polyterm pnl` |
+| [pnl](cli/pnl.md) | Local closed-position journal (not Data API P&L) | `polyterm pnl` |
 | [portfolio](cli/portfolio.md) | Portfolio overview | `polyterm portfolio` |
 | [position](cli/position.md) | Position tracking and management | `polyterm position` |
 | [predict](cli/predict.md) | Signal-based predictions | `polyterm predict` |
@@ -276,6 +276,7 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 | [wash_trade_detector](core/wash_trade_detector.md) | Wash trade detection indicators | Volume quality |
 | [whale_tracker](core/whale_tracker.md) | Whale tracking + insider detection | Whale engine |
 | [wallet_intelligence](core/wallet_intelligence.md) | Data API and local wallet intelligence | Smart money analysis |
+| [pnl_cashflow](core/pnl_cashflow.md) | Wallet P&L from lagged Data API activity cashflow (not SUM(cashPnl)) | `polyterm mywallet --pnl` |
 
 ### Database Layer
 
