@@ -4,13 +4,17 @@ import inspect
 import json
 from unittest.mock import Mock, patch
 
+import pytest
+
 from click.testing import CliRunner
 
 from polyterm.api.data_api_lag import QUALITY_FLAG
+from polyterm.cli.commands.watch import _dashboard_book_line
 from polyterm.cli.main import cli
 from polyterm.core.service_health import SourceProbe, combine_health
 from polyterm.core.uma_tracker import GRADE_FIELDS
 from polyterm.api.status import unknown_status_snapshot
+from polyterm.core.ws_book_freshness import WS_STALE_BANNER
 
 
 def _config_mock():
@@ -359,6 +363,11 @@ def test_watch_json_includes_prints_lag_and_book_source(
     assert book["source"] == "clob_rest"
     assert book["live"] is False
     assert "ws_stale" in book
+    assert book["best_bid"] == 0.55
+    assert book["best_ask"] == 0.56
+    assert book["spread"] == pytest.approx(0.01)
+    assert book["best_bid_size"] == 10.0
+    assert book["best_ask_size"] == 9.0
     resolution = scan["resolution"]
     assert resolution["status"] == "none"
     assert "uma_unavailable" in resolution["quality_flags"]
@@ -548,3 +557,118 @@ def test_watch_json_notify_on_verified_print(
     assert sent[0]["sent"] is True
     manager.send.assert_called_once()
     assert "Lagged Data API print" in manager.send.call_args.kwargs["title"]
+
+
+def test_dashboard_book_line_shows_bid_ask_spread_and_size():
+    line = _dashboard_book_line({
+        "source": "clob_ws",
+        "live": True,
+        "ws_stale": False,
+        "best_bid": 0.55,
+        "best_ask": 0.56,
+        "spread": 0.01,
+        "best_bid_size": 10,
+        "best_ask_size": 9,
+    })
+    assert "bid" in line
+    assert "$0.5500" in line
+    assert "$0.5600" in line
+    assert "$0.0100" in line
+    assert "x 10" in line
+    assert "x 9" in line
+    assert "source=" in line
+    assert "clob_ws" in line
+    assert "live=[white]true[/white]" in line
+    assert WS_STALE_BANNER not in line
+
+
+def test_dashboard_book_line_missing_side_is_em_dash_not_zero():
+    line = _dashboard_book_line({
+        "source": "clob_rest",
+        "live": False,
+        "ws_stale": False,
+        "best_bid": 0.55,
+        "best_bid_size": 4,
+    })
+    assert "$0.5500" in line
+    assert "x 4" in line
+    assert "—" in line
+    assert "$0.0000" not in line
+    assert "clob_rest" in line
+    assert "live=[white]false[/white]" in line
+
+
+def test_dashboard_book_line_keeps_ws_stale_banner_with_quotes():
+    line = _dashboard_book_line({
+        "source": "clob_rest",
+        "live": False,
+        "ws_stale": True,
+        "banner": WS_STALE_BANNER,
+        "best_bid": 0.50,
+        "best_ask": 0.51,
+        "spread": 0.01,
+    })
+    assert WS_STALE_BANNER in line
+    assert "$0.5000" in line
+    assert "$0.5100" in line
+    assert "$0.0100" in line
+    assert "clob_rest" in line
+    assert "live=[white]false[/white]" in line
+    assert "live=[white]true[/white]" not in line
+
+
+@patch("polyterm.cli.commands.watch.PrintScanner")
+@patch("polyterm.cli.commands.watch.AlertEngine")
+@patch("polyterm.cli.commands.watch.StatusPageClient")
+@patch("polyterm.cli.commands.watch.CLOBClient")
+@patch("polyterm.cli.commands.watch.GammaClient")
+@patch("polyterm.cli.main.Config")
+def test_watch_json_runs_1_missing_ask_omits_spread(
+    mock_config_cls,
+    mock_gamma_cls,
+    mock_clob_cls,
+    mock_status_cls,
+    mock_engine_cls,
+    mock_scanner_cls,
+):
+    mock_config_cls.return_value = _config_mock()
+    gamma, clob, status_client = _client_mocks()
+    gamma.get_markets.return_value = [{"id": "m1"}]
+    gamma.get_market.return_value = {
+        "id": "m1",
+        "conditionId": "0xcond",
+        "slug": "bitcoin-100k",
+        "clobTokenIds": ["tok-yes"],
+        "question": "Bitcoin 100k?",
+    }
+    clob.get_current_markets.return_value = [{"id": "c1"}]
+    clob.get_order_book.return_value = {
+        "bids": [{"price": "0.55", "size": "10"}],
+        "asks": [],
+    }
+    mock_gamma_cls.return_value = gamma
+    mock_clob_cls.return_value = clob
+    mock_status_cls.return_value = status_client
+    mock_engine_cls.return_value.run_once.return_value = {
+        "market": "bitcoin",
+        "price": 0.55,
+        "triggered": False,
+        "reasons": [],
+    }
+    _stub_print_scanner(mock_scanner_cls)
+
+    result = CliRunner().invoke(
+        cli, ["watch", "--market", "bitcoin", "--format", "json", "--runs", "1"]
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    book = payload["results"][0]["book"]
+    assert book["source"] == "clob_rest"
+    assert book["live"] is False
+    assert book["best_bid"] == 0.55
+    assert book["best_bid_size"] == 10.0
+    assert "best_ask" not in book
+    assert "spread" not in book
+    assert book.get("best_ask") != 0
+    assert book.get("spread") != 0

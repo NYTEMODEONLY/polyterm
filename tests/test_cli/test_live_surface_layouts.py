@@ -170,6 +170,9 @@ def test_watch_dashboard_shows_ws_stale_banner_and_rest_source():
             "banner": "WS connected, no book ticks",
             "best_bid": 0.55,
             "best_ask": 0.56,
+            "spread": 0.01,
+            "best_bid_size": 10,
+            "best_ask_size": 9,
         },
         prints_payload={
             "prints": [{
@@ -185,9 +188,76 @@ def test_watch_dashboard_shows_ws_stale_banner_and_rest_source():
     assert "WS stale" in output
     assert "WS connected, no book ticks" in output
     assert "clob_rest" in output
+    assert "0.5500" in output
+    assert "0.5600" in output
+    assert "0.0100" in output
     assert "Lagged Data API prints" in output
     assert "15000" in output or "$15,000" in output
     assert "No lagged Data API prints" not in output
+
+
+def test_watch_dashboard_header_shows_top_of_book():
+    scanner = type("FakeScanner", (), {})()
+    scanner.snapshots = {}
+    output = render_text(_render_watch_dashboard(
+        scanner=scanner,
+        market_id="m1",
+        market_title="Bitcoin Test Market",
+        threshold=10.0,
+        volume_threshold=50.0,
+        interval=30,
+        notify=False,
+        check_count=1,
+        last_check="12:33:00",
+        recent_alerts=[],
+        book_payload={
+            "source": "clob_ws",
+            "ws_connected": True,
+            "ws_stale": False,
+            "live": True,
+            "best_bid": 0.61,
+            "best_ask": 0.62,
+            "spread": 0.01,
+            "best_bid_size": 3,
+            "best_ask_size": 4,
+        },
+    ))
+
+    assert "0.6100" in output
+    assert "0.6200" in output
+    assert "0.0100" in output
+    assert "x 3" in output
+    assert "x 4" in output
+    assert "clob_ws" in output
+    assert "live=true" in output or "live=True" in output
+
+
+def test_watch_dashboard_missing_ask_is_em_dash_not_zero():
+    scanner = type("FakeScanner", (), {})()
+    scanner.snapshots = {}
+    output = render_text(_render_watch_dashboard(
+        scanner=scanner,
+        market_id="m1",
+        market_title="Bitcoin Test Market",
+        threshold=10.0,
+        volume_threshold=50.0,
+        interval=30,
+        notify=False,
+        check_count=1,
+        last_check="12:34:00",
+        recent_alerts=[],
+        book_payload={
+            "source": "clob_rest",
+            "ws_stale": False,
+            "live": False,
+            "best_bid": 0.55,
+        },
+    ))
+
+    assert "0.5500" in output
+    assert "—" in output
+    assert "$0.0000" not in output
+    assert "clob_rest" in output
 
 
 def test_watch_dashboard_shows_uma_resolution_line():

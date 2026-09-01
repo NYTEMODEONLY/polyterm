@@ -21,7 +21,7 @@ polyterm watch --market bitcoin --stale-after 20
 polyterm watch --market bitcoin --format json --runs 1
 ```
 
-JSON book objects include `source`, `live`, `ws_connected`, `ws_stale`, and `quality_flags`.
+JSON book objects include `source`, `live`, `ws_connected`, `ws_stale`, and `quality_flags`. When both sides exist they also include `best_bid`, `best_ask`, and `spread` (`best_ask - best_bid`). A missing side is omitted, never zeroed.
 
 ### Python
 
@@ -56,7 +56,7 @@ freshness = tracker.assess(rest_fallback=True, has_rest_book=True)
 4. If the socket has been up that long with no tick, `ws_stale=true` and `live=false`.
 5. REST fallback is `source=clob_rest`, still `live=false`.
 
-No lag duration is invented. Missing bid/ask are omitted, not zeroed.
+No lag duration is invented. Missing bid/ask are omitted, not zeroed. Spread is only emitted when both sides exist.
 
 ## Honesty
 

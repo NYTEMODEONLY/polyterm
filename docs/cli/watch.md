@@ -4,7 +4,7 @@
 
 ## Overview
 
-`polyterm watch` is the no-keys session traders leave running on one market. The live dashboard polls Gamma, shows CLOB top-of-book (WebSocket ticks or a labeled REST snapshot), lists recent verified Data API prints, shows a short UMA/resolution line, and keeps the Statuspage outage line.
+`polyterm watch` is the no-keys session traders leave running on one market. The live dashboard polls Gamma, shows CLOB top-of-book on the header (best bid, best ask, spread, and size when the snapshot already has it), lists recent verified Data API prints, shows a short UMA/resolution line, and keeps the Statuspage outage line. A missing book side is an em dash, never `0`.
 
 A connected CLOB WebSocket with no `book` / `price_change` ticks is not live. After `--stale-after` seconds (default 20) watch sets `ws_stale` and the banner `WS connected, no book ticks`. REST fallback is allowed when it is labeled `clob_rest`.
 
@@ -92,8 +92,11 @@ Successful scans include `prints` and `book` on each result.
 | `book.live` | `true` only after a recent book tick |
 | `book.ws_stale` | Connected WS, no book ticks within `--stale-after` |
 | `book.banner` | `WS connected, no book ticks` when stale |
+| `book.best_bid` / `book.best_ask` | Top of the labeled snapshot. A missing side is omitted, never `0` |
+| `book.spread` | `best_ask - best_bid` when both sides exist; omitted otherwise |
+| `book.best_bid_size` / `book.best_ask_size` | Size at the best level when the snapshot already includes it |
 
-JSON `--runs 1` uses CLOB REST for the book snapshot (`source=clob_rest`, `live=false`). Live table mode starts the CLOB WebSocket and falls back to REST if ticks freeze.
+JSON `--runs 1` uses CLOB REST for the book snapshot (`source=clob_rest`, `live=false`). Live table mode starts the CLOB WebSocket and falls back to REST if ticks freeze. The header book line and JSON `book` object reuse the same snapshot; watch does not invent a second book.
 
 ## Resolution / UMA JSON
 
@@ -153,6 +156,6 @@ Scheduled mode avoids interactive market selection and returns scan results as J
 ## Verification
 
 - `tests/test_cli/test_watch.py`, `tests/test_core/test_uma_tracker.py`, and `tests/test_cli/test_live_surface_layouts.py` mock Gamma, CLOB, Data API prints, and the status page.
-- `.venv/bin/python -m pytest tests/test_cli/test_watch.py tests/test_core/test_watch_loop.py tests/test_core/test_uma_tracker.py tests/test_core/test_ws_book_freshness.py tests/test_core/test_print_scanner.py tests/test_core/test_service_health.py`
+- `.venv/bin/python -m pytest tests/test_cli/test_watch.py tests/test_cli/test_live_surface_layouts.py tests/test_core/test_watch_loop.py tests/test_core/test_uma_tracker.py tests/test_core/test_ws_book_freshness.py tests/test_core/test_print_scanner.py tests/test_core/test_service_health.py`
 - `polyterm watch --help`
 - `polyterm watch --market bitcoin --format json --runs 1`
