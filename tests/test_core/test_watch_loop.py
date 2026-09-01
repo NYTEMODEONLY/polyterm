@@ -5,6 +5,7 @@ from unittest.mock import Mock
 
 from polyterm.api.data_api_lag import QUALITY_FLAG
 from polyterm.core.print_scanner import PrintScanner, normalize_print
+from polyterm.core.uma_tracker import GRADE_FIELDS
 from polyterm.core.watch_loop import (
     WatchBookSession,
     build_book_payload,
@@ -141,6 +142,41 @@ def test_rest_book_payload_is_not_live():
     assert book["best_bid"] == 0.44
     assert book["best_ask"] == 0.45
     assert surfaces["prints"]["lagged"] is True
+    resolution = surfaces["resolution"]
+    assert resolution["status"] == "none"
+    assert "uma_unavailable" in resolution["quality_flags"]
+    for key in GRADE_FIELDS:
+        assert key not in resolution
+
+
+def test_collect_watch_surfaces_includes_gamma_resolution():
+    clob = Mock()
+    clob.get_order_book.return_value = {"bids": [], "asks": []}
+    surfaces = collect_watch_surfaces(
+        market="bitcoin",
+        gamma_client=None,
+        clob_client=clob,
+        print_scanner=PrintScanner(data_api=_FakeDataAPI([])),
+        market_data={
+            "clobTokenIds": ["tok-yes"],
+            "conditionId": "0xcond",
+            "umaResolutionStatus": "disputed",
+            "umaResolutionStatuses": '["proposed", "disputed"]',
+            "acceptingOrders": True,
+            "closed": False,
+        },
+        now=NOW,
+    )
+    resolution = surfaces["resolution"]
+    assert resolution["status"] == "disputed"
+    assert resolution["disputed"] is True
+    assert resolution["trading"] == "open_for_trading"
+    assert resolution["redeemable"] is False
+    assert "hours_remaining" not in resolution
+    assert "missing_timestamps" in resolution["quality_flags"]
+    for key in GRADE_FIELDS:
+        assert key not in resolution
+    assert "fairness" not in str(resolution).lower()
 
 
 def test_frozen_ws_session_uses_rest_fallback_and_banner():

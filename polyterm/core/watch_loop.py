@@ -13,6 +13,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, 
 from ..api.data_api_lag import label_payload
 from ..api.market_utils import get_clob_token_ids, get_market_condition_id, get_primary_clob_token_id
 from .print_scanner import PrintScanner, match_prints, print_message
+from .uma_tracker import snapshot_market_resolution
 from .ws_book_freshness import (
     CLOB_REST_SOURCE,
     DEFAULT_STALE_AFTER_SECONDS,
@@ -327,7 +328,7 @@ def collect_watch_surfaces(
     stale_after_seconds: float = DEFAULT_STALE_AFTER_SECONDS,
     now: Optional[datetime] = None,
 ) -> Dict[str, Any]:
-    """Fetch prints + book for one watch scan. Does not invent tape or ticks."""
+    """Fetch prints + book + UMA/resolution for one watch scan. Does not invent tape or ticks."""
     resolved = market_data if isinstance(market_data, dict) else None
     if resolved is None:
         resolved = resolve_watch_market_data(gamma_client, market)
@@ -358,9 +359,17 @@ def collect_watch_surfaces(
             stale_after_seconds=stale_after_seconds,
         )
 
+    resolution_market = resolved
+    if isinstance(market_data, dict) and gamma_client is not None:
+        fresh = resolve_watch_market_data(gamma_client, market)
+        if isinstance(fresh, dict):
+            resolution_market = fresh
+    resolution_payload = snapshot_market_resolution(resolution_market, now=now)
+
     return {
         "prints": prints_payload,
         "book": book_payload,
+        "resolution": resolution_payload,
     }
 
 

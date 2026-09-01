@@ -1,5 +1,6 @@
 """CLI tests for watch outage, prints, and frozen-WS labels. No live network."""
 
+import inspect
 import json
 from unittest.mock import Mock, patch
 
@@ -8,6 +9,7 @@ from click.testing import CliRunner
 from polyterm.api.data_api_lag import QUALITY_FLAG
 from polyterm.cli.main import cli
 from polyterm.core.service_health import SourceProbe, combine_health
+from polyterm.core.uma_tracker import GRADE_FIELDS
 from polyterm.api.status import unknown_status_snapshot
 
 
@@ -246,6 +248,27 @@ def test_watch_help_mentions_frozen_ws_and_prints():
     assert "lagged" in output or "data api" in output
 
 
+def test_watch_does_not_call_risk_or_fairness_heuristic():
+    from polyterm.cli.commands import watch as watch_mod
+    from polyterm.core import watch_loop as loop_mod
+    from polyterm.core import uma_tracker as uma_mod
+
+    assert "analyze_resolution_risk" not in inspect.getsource(watch_mod)
+    assert "analyze_resolution_risk" not in inspect.getsource(loop_mod)
+    assert "UMADisputeTracker" not in inspect.getsource(watch_mod)
+    assert "UMADisputeTracker" not in inspect.getsource(loop_mod)
+    assert "snapshot_market_resolution" in inspect.getsource(loop_mod)
+    assert "analyze_resolution_risk" in inspect.getsource(uma_mod)
+
+
+def test_watch_help_mentions_resolution_uma():
+    result = CliRunner().invoke(cli, ["watch", "--help"])
+    assert result.exit_code == 0, result.output
+    output = result.output.lower()
+    assert "resolution" in output or "uma" in output
+    assert "never a fairness grade" in output or "fairness grade" in output
+
+
 def test_combine_health_outage_payload_shape():
     health = combine_health(
         SourceProbe("gamma", ok=False, error="down"),
@@ -336,8 +359,75 @@ def test_watch_json_includes_prints_lag_and_book_source(
     assert book["source"] == "clob_rest"
     assert book["live"] is False
     assert "ws_stale" in book
+    resolution = scan["resolution"]
+    assert resolution["status"] == "none"
+    assert "uma_unavailable" in resolution["quality_flags"]
+    for key in GRADE_FIELDS:
+        assert key not in resolution
+        assert key not in scan
     stripped = result.output.lstrip()
     assert stripped.startswith("{") or stripped.startswith("[")
+
+
+@patch("polyterm.cli.commands.watch.PrintScanner")
+@patch("polyterm.cli.commands.watch.AlertEngine")
+@patch("polyterm.cli.commands.watch.StatusPageClient")
+@patch("polyterm.cli.commands.watch.CLOBClient")
+@patch("polyterm.cli.commands.watch.GammaClient")
+@patch("polyterm.cli.main.Config")
+def test_watch_json_includes_disputed_resolution_without_grade(
+    mock_config_cls,
+    mock_gamma_cls,
+    mock_clob_cls,
+    mock_status_cls,
+    mock_engine_cls,
+    mock_scanner_cls,
+):
+    mock_config_cls.return_value = _config_mock()
+    gamma, clob, status_client = _client_mocks()
+    gamma.get_markets.return_value = [{"id": "m1"}]
+    gamma.get_market.return_value = {
+        "id": "m1",
+        "conditionId": "0xcond",
+        "slug": "bitcoin-100k",
+        "clobTokenIds": ["tok-yes"],
+        "question": "Bitcoin 100k?",
+        "umaResolutionStatus": "disputed",
+        "umaResolutionStatuses": '["proposed", "disputed"]',
+        "acceptingOrders": True,
+        "closed": False,
+    }
+    gamma.search_markets.return_value = []
+    clob.get_current_markets.return_value = [{"id": "c1"}]
+    clob.get_order_book.return_value = {"bids": [], "asks": []}
+    mock_gamma_cls.return_value = gamma
+    mock_clob_cls.return_value = clob
+    mock_status_cls.return_value = status_client
+    mock_engine_cls.return_value.run_once.return_value = {
+        "market": "bitcoin",
+        "price": 0.55,
+        "triggered": False,
+        "reasons": [],
+    }
+    _stub_print_scanner(mock_scanner_cls)
+
+    result = CliRunner().invoke(
+        cli, ["watch", "--market", "bitcoin", "--format", "json", "--runs", "1"]
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    scan = payload["results"][0]
+    resolution = scan["resolution"]
+    assert resolution["status"] == "disputed"
+    assert resolution["disputed"] is True
+    assert resolution["trading"] == "open_for_trading"
+    assert resolution["redeemable"] is False
+    assert "hours_remaining" not in resolution
+    for key in GRADE_FIELDS:
+        assert key not in resolution
+    assert "fairness" not in result.output.lower()
+    assert "analyze_resolution_risk" not in result.output
 
 
 @patch("polyterm.cli.commands.watch.watch_notifier")

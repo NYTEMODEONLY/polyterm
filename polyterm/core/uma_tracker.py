@@ -1,9 +1,18 @@
-"""UMA Oracle Dispute Tracker - Monitor market resolution disputes"""
+"""UMA oracle helpers: honest Gamma resolution snapshots, plus optional risk analysis.
 
+Watch uses ``snapshot_market_resolution`` only. That path copies Gamma/CLOB
+fields that exist (disputed, proposed, timestamps, trading flags) and omits
+the rest. It does not invent a fairness score or letter grade.
+
+``UMADisputeTracker.analyze_resolution_risk`` is a separate heuristic used by
+``polyterm risk``. Watch does not call it.
+"""
+
+import json
 from dataclasses import dataclass, field
-from datetime import datetime
-from typing import List, Dict, Optional
+from datetime import datetime, timezone
 from enum import Enum
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 
 class DisputeStatus(Enum):
@@ -340,3 +349,321 @@ class UMADisputeTracker:
             ResolutionRisk.VERY_HIGH: "High dispute risk, careful position sizing recommended",
         }
         return descriptions.get(risk_level, "Unknown risk level")
+
+
+# Honest watch snapshot. Never a fairness / letter grade.
+KNOWN_UMA_STATUSES = frozenset({"none", "pending", "proposed", "disputed", "resolved"})
+UMA_IN_ORACLE = frozenset({"pending", "proposed", "disputed"})
+PROPOSER_KEYS = ("proposer", "proposedBy", "proposed_by", "proposerAddress")
+GRADE_FIELDS = frozenset({
+    "risk_level",
+    "risk_score",
+    "grade",
+    "overall_grade",
+    "fairness",
+    "fairness_score",
+})
+
+
+def snapshot_market_resolution(
+    market: Optional[Mapping[str, Any]],
+    now: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """Copy UMA/resolution fields from one Gamma (or CLOB) market dict.
+
+    Missing fields are omitted. Unparseable timestamps do not become a
+    countdown. No UMA data is ``status=none`` plus ``uma_unavailable``.
+    """
+    flags: List[str] = []
+    if not isinstance(market, dict):
+        return {
+            "status": "none",
+            "disputed": False,
+            "quality_flags": ["uma_unavailable"],
+        }
+
+    raw_status = _scalar_text(_first(market, "umaResolutionStatus", "uma_resolution_status"))
+    statuses, statuses_malformed = _parse_status_list(
+        _first(market, "umaResolutionStatuses", "uma_resolution_statuses")
+    )
+    if statuses_malformed:
+        flags.append("malformed_uma_fields")
+
+    status = _current_uma_status(raw_status, statuses)
+    if status == "none":
+        flags.append("uma_unavailable")
+
+    payload: Dict[str, Any] = {
+        "status": status,
+        "disputed": status == "disputed",
+        "source": "gamma",
+    }
+    if raw_status:
+        payload["uma_resolution_status"] = raw_status
+    if statuses is not None:
+        payload["uma_resolution_statuses"] = statuses
+
+    proposer = _scalar_text(_first(market, *PROPOSER_KEYS))
+    if proposer:
+        payload["proposer"] = proposer
+
+    resolved_by = _scalar_text(_first(market, "resolvedBy", "resolved_by"))
+    if resolved_by:
+        payload["resolved_by"] = resolved_by
+
+    accepting, accepting_present = _optional_bool(
+        market, "acceptingOrders", "accepting_orders"
+    )
+    if accepting_present:
+        if accepting is None:
+            flags.append("malformed_uma_fields")
+        else:
+            payload["accepting_orders"] = accepting
+
+    closed, closed_present = _optional_bool(market, "closed")
+    if closed_present:
+        if closed is None:
+            flags.append("malformed_uma_fields")
+        else:
+            payload["closed"] = closed
+
+    active, active_present = _optional_bool(market, "active")
+    if active_present and active is not None:
+        payload["active"] = active
+
+    auto_resolved, auto_present = _optional_bool(
+        market, "automaticallyResolved", "automatically_resolved"
+    )
+    if auto_present and auto_resolved is not None:
+        payload["automatically_resolved"] = auto_resolved
+
+    trading = _trading_state(payload)
+    if trading:
+        payload["trading"] = trading
+    redeemable = _redeemable_state(payload)
+    if redeemable is not None:
+        payload["redeemable"] = redeemable
+
+    raw_end = _first(market, "umaEndDate", "uma_end_date", "umaEndDateIso", "uma_end_date_iso")
+    uma_end = _parse_timestamp(raw_end)
+    if raw_end not in (None, "") and uma_end is None:
+        flags.append("unparsed_timestamp")
+    elif uma_end is not None:
+        payload["uma_end_date"] = uma_end.isoformat()
+        clock = _as_utc(now) or datetime.now(timezone.utc)
+        hours = (uma_end - clock).total_seconds() / 3600.0
+        if hours > 0:
+            payload["hours_remaining"] = round(hours, 2)
+        else:
+            payload["hours_since_uma_end"] = round(abs(hours), 2)
+
+    if status in UMA_IN_ORACLE and "hours_remaining" not in payload:
+        flags.append("missing_timestamps")
+
+    liveness = _optional_number(_first(market, "customLiveness", "custom_liveness"))
+    if liveness is not None:
+        payload["liveness_seconds"] = liveness
+
+    payload["quality_flags"] = _unique_flags(flags)
+    for key in GRADE_FIELDS:
+        payload.pop(key, None)
+    return payload
+
+
+def resolution_dashboard_line(snapshot: Optional[Mapping[str, Any]]) -> str:
+    """One short watch-header line. Empty snapshot is an empty string."""
+    if not isinstance(snapshot, Mapping):
+        return ""
+    status = str(snapshot.get("status") or "none")
+    parts = [f"UMA: {status}"]
+    if snapshot.get("proposer"):
+        parts.append(f"proposer={snapshot['proposer']}")
+    hours = snapshot.get("hours_remaining")
+    if isinstance(hours, (int, float)):
+        parts.append(f"{hours:g}h remaining")
+    elif status in UMA_IN_ORACLE:
+        parts.append("window unknown")
+    trading = snapshot.get("trading")
+    if trading == "open_for_trading":
+        parts.append("open for trading")
+    elif trading == "not_accepting_orders":
+        parts.append("not accepting orders")
+    elif trading == "closed":
+        parts.append("closed")
+    if snapshot.get("redeemable") is True:
+        parts.append("redeemable")
+    flags = snapshot.get("quality_flags") or []
+    if "uma_unavailable" in flags:
+        parts.append("uma unavailable")
+    return " | ".join(parts)
+
+
+def _first(market: Mapping[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in market and market[key] not in (None, ""):
+            return market[key]
+    return None
+
+
+def _scalar_text(value: Any) -> Optional[str]:
+    if value is None or isinstance(value, (dict, list, tuple)):
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _parse_status_list(value: Any) -> Tuple[Optional[List[str]], bool]:
+    if value is None or value == "":
+        return None, False
+    if isinstance(value, (list, tuple)):
+        return _normalize_status_items(value), False
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return [], False
+        if text.startswith("[") or text.startswith("{"):
+            try:
+                parsed = json.loads(text)
+            except (json.JSONDecodeError, TypeError, ValueError):
+                return None, True
+            if isinstance(parsed, list):
+                return _normalize_status_items(parsed), False
+            return None, True
+        return _normalize_status_items([text]), False
+    return None, True
+
+
+def _normalize_status_items(items: Sequence[Any]) -> List[str]:
+    out: List[str] = []
+    for item in items:
+        text = _scalar_text(item)
+        if text:
+            out.append(text.lower())
+    return out
+
+
+def _current_uma_status(
+    raw_status: Optional[str],
+    statuses: Optional[Sequence[str]],
+) -> str:
+    if raw_status:
+        lowered = raw_status.lower()
+        if lowered in KNOWN_UMA_STATUSES:
+            return lowered
+        if "disput" in lowered:
+            return "disputed"
+        if "propos" in lowered:
+            return "proposed"
+        if lowered in {"resolved", "settled"}:
+            return "resolved"
+        if "pend" in lowered:
+            return "pending"
+    if statuses:
+        if any("disput" in item for item in statuses):
+            return "disputed"
+        if any("propos" in item for item in statuses):
+            return "proposed"
+        if any(item in {"resolved", "settled"} for item in statuses):
+            return "resolved"
+        if any("pend" in item for item in statuses):
+            return "pending"
+    return "none"
+
+
+def _optional_bool(market: Mapping[str, Any], *keys: str) -> Tuple[Optional[bool], bool]:
+    for key in keys:
+        if key not in market:
+            continue
+        value = market[key]
+        if isinstance(value, bool):
+            return value, True
+        if isinstance(value, str) and value.strip().lower() in {"true", "false"}:
+            return value.strip().lower() == "true", True
+        return None, True
+    return None, False
+
+
+def _optional_number(value: Any) -> Optional[float]:
+    if value is None or value == "":
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number != number:  # NaN
+        return None
+    return number
+
+
+def _parse_timestamp(value: Any) -> Optional[datetime]:
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return _as_utc(value)
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        # Only treat values that look like unix seconds/ms as timestamps.
+        if value > 1_000_000_000_000:
+            value = value / 1000.0
+        if value > 1_000_000_000:
+            try:
+                return datetime.fromtimestamp(float(value), tz=timezone.utc)
+            except (OverflowError, OSError, ValueError):
+                return None
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    text = text.replace("Z", "+00:00")
+    if text.endswith("+00"):
+        text = text + ":00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    return _as_utc(parsed)
+
+
+def _as_utc(value: Optional[datetime]) -> Optional[datetime]:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _trading_state(payload: Mapping[str, Any]) -> Optional[str]:
+    closed = payload.get("closed")
+    accepting = payload.get("accepting_orders")
+    if closed is True:
+        return "closed"
+    if accepting is True:
+        return "open_for_trading"
+    if accepting is False:
+        return "not_accepting_orders"
+    return None
+
+
+def _redeemable_state(payload: Mapping[str, Any]) -> Optional[bool]:
+    status = payload.get("status")
+    closed = payload.get("closed")
+    auto = payload.get("automatically_resolved")
+    if status in UMA_IN_ORACLE:
+        return False
+    if closed is True and (status == "resolved" or auto is True):
+        return True
+    if closed is False:
+        return False
+    if status == "resolved":
+        return True
+    return None
+
+
+def _unique_flags(flags: Iterable[str]) -> List[str]:
+    out: List[str] = []
+    seen = set()
+    for flag in flags:
+        if not flag or flag in seen:
+            continue
+        seen.add(flag)
+        out.append(flag)
+    return out

@@ -1,10 +1,10 @@
 # Watch
 
-> One live session: CLOB book, lagged Data API prints, and an honest outage line.
+> One live session: CLOB book, lagged Data API prints, UMA/resolution, and an honest outage line.
 
 ## Overview
 
-`polyterm watch` is the no-keys session traders leave running on one market. The live dashboard polls Gamma, shows CLOB top-of-book (WebSocket ticks or a labeled REST snapshot), lists recent verified Data API prints, and keeps the Statuspage outage line.
+`polyterm watch` is the no-keys session traders leave running on one market. The live dashboard polls Gamma, shows CLOB top-of-book (WebSocket ticks or a labeled REST snapshot), lists recent verified Data API prints, shows a short UMA/resolution line, and keeps the Statuspage outage line.
 
 A connected CLOB WebSocket with no `book` / `price_change` ticks is not live. After `--stale-after` seconds (default 20) watch sets `ws_stale` and the banner `WS connected, no book ticks`. REST fallback is allowed when it is labeled `clob_rest`.
 
@@ -14,7 +14,7 @@ Prints are lagged Data API fills (`source=data_api`, `lag=true`). Empty tape sta
 
 Before each JSON/scheduled scan, and at the start of live watch, PolyTerm probes Gamma, CLOB, and `status.polymarket.com`. If Gamma and CLOB both fail, watch reports `mode=outage`. An unreachable status page is `status_unknown`, never operational.
 
-Live watch can mutate local alert state when thresholds fire. JSON scheduled scans evaluate `AlertEngine.run_once` (Gamma price) and attach prints + book. Telegram/Discord delivery uses configured bot token / webhook; this page does not store secrets.
+Live watch can mutate local alert state when thresholds fire. JSON scheduled scans evaluate `AlertEngine.run_once` (Gamma price) and attach prints, book, and a `resolution` object. Telegram/Discord delivery uses configured bot token / webhook; this page does not store secrets.
 
 This command does not use private keys and does not place orders. It does not spawn `polyterm watchdog`.
 
@@ -95,9 +95,27 @@ Successful scans include `prints` and `book` on each result.
 
 JSON `--runs 1` uses CLOB REST for the book snapshot (`source=clob_rest`, `live=false`). Live table mode starts the CLOB WebSocket and falls back to REST if ticks freeze.
 
+## Resolution / UMA JSON
+
+Successful scans include `resolution` on each result. Fields come from Gamma (`umaResolutionStatus`, `umaResolutionStatuses`, `acceptingOrders`, `closed`, `umaEndDate`, `resolvedBy`) and CLOB `accepting_orders` when those keys exist. Missing keys are omitted.
+
+| Field | Meaning |
+|-------|---------|
+| `resolution.status` | `disputed`, `proposed`, `pending`, `resolved`, or `none` |
+| `resolution.disputed` | `true` only when Gamma current status is disputed |
+| `resolution.proposer` | Present only if Gamma/CLOB actually returned a proposer field |
+| `resolution.hours_remaining` | Hours until `umaEndDate`, only when that timestamp parses and is still in the future |
+| `resolution.trading` | `open_for_trading`, `not_accepting_orders`, or `closed` from real flags |
+| `resolution.redeemable` | `true` when closed and resolved (or `automaticallyResolved`); `false` when still in oracle / still open |
+| `resolution.quality_flags` | includes `uma_unavailable` when Gamma has no UMA status; `missing_timestamps` when proposed/disputed with no usable deadline |
+
+No UMA data is `status=none` plus `uma_unavailable`. Watch does not invent a fairness score, risk letter grade, or dispute-window countdown from a default liveness period. `polyterm risk` remains the separate heuristic command and is not called from watch.
+
+The live dashboard prints one line, for example `UMA: disputed | window unknown | open for trading`.
+
 ## Data Sources
 
-- Gamma Markets REST API (`get_market`, `search_markets`, `get_markets` probe)
+- Gamma Markets REST API (`get_market`, `search_markets`, `get_markets` probe). UMA/resolution uses Gamma `umaResolutionStatus` / `umaResolutionStatuses`, `acceptingOrders`, `closed`, `umaEndDate`, `resolvedBy` when present
 - CLOB REST `/sampling-markets` (health probe) and `/book` (REST snapshot). CLOB token IDs from Gamma `clobTokenIds`
 - CLOB WebSocket market channel (`book`, `price_change`, `last_trade_price`)
 - Data API `/trades` via `PrintScanner` (lagged fills, not live CLOB)
@@ -134,7 +152,7 @@ Scheduled mode avoids interactive market selection and returns scan results as J
 
 ## Verification
 
-- `tests/test_cli/test_watch.py` and `tests/test_cli/test_live_surface_layouts.py` mock Gamma, CLOB, Data API prints, and the status page.
-- `.venv/bin/python -m pytest tests/test_cli/test_watch.py tests/test_core/test_watch_loop.py tests/test_core/test_ws_book_freshness.py tests/test_core/test_print_scanner.py tests/test_core/test_service_health.py`
+- `tests/test_cli/test_watch.py`, `tests/test_core/test_uma_tracker.py`, and `tests/test_cli/test_live_surface_layouts.py` mock Gamma, CLOB, Data API prints, and the status page.
+- `.venv/bin/python -m pytest tests/test_cli/test_watch.py tests/test_core/test_watch_loop.py tests/test_core/test_uma_tracker.py tests/test_core/test_ws_book_freshness.py tests/test_core/test_print_scanner.py tests/test_core/test_service_health.py`
 - `polyterm watch --help`
 - `polyterm watch --market bitcoin --format json --runs 1`

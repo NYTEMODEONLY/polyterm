@@ -19,6 +19,7 @@ from ...core.scanner import MarketScanner
 from ...core.alerts import AlertManager
 from ...core.print_scanner import PrintScanner
 from ...core.service_health import ServiceHealth, assess_service_health, clob_trading_flags
+from ...core.uma_tracker import resolution_dashboard_line, snapshot_market_resolution
 from ...core.watch_loop import (
     DEFAULT_PRINT_MIN_NOTIONAL,
     WatchBookSession,
@@ -72,12 +73,15 @@ def watch(
     stale_after,
     output_format,
 ):
-    """Watch one market: CLOB book, lagged Data API prints, and outage line.
+    """Watch one market: CLOB book, lagged prints, UMA/resolution, outage line.
 
     A connected WebSocket with no book/price_change ticks is not live
     (ws_stale / "WS connected, no book ticks"). Prints are lagged Data API
-    fills, never a live CLOB tape. Telegram/Discord notify only on verified
-    prints and price/volume threshold events, not every poll.
+    fills, never a live CLOB tape. Resolution/UMA is copied from Gamma
+    (disputed, proposed, hours remaining, open-for-trading vs redeemable).
+    Missing UMA data is status=none, never a fairness grade. Telegram/Discord
+    notify only on verified prints and price/volume threshold events, not
+    every poll.
     """
 
     config = ctx.obj["config"]
@@ -130,6 +134,7 @@ def watch(
             "count": 0,
             "quality_flags": [QUALITY_FLAG],
         }
+        resolution_payload = snapshot_market_resolution(market_data)
 
         console.print(f"\n[green]Watching:[/green] {market_title}")
         console.print(f"[cyan]Probability threshold:[/cyan] {threshold}%")
@@ -188,6 +193,7 @@ def watch(
                 trading_flags=trading_flags,
                 prints_payload=prints_payload,
                 book_payload=book_payload,
+                resolution_payload=resolution_payload,
                 min_notional=min_notional,
             )
 
@@ -227,6 +233,8 @@ def watch(
                                 stale_after_seconds=stale_after,
                             )
                             prints_payload = surfaces.get("prints") or prints_payload
+                            if surfaces.get("resolution"):
+                                resolution_payload = surfaces["resolution"]
                             events = notify_events_from_scan(
                                 prints_payload,
                                 shifts,
@@ -338,6 +346,7 @@ def _run_scheduled_watch(
                 )
                 scan["prints"] = surfaces.get("prints")
                 scan["book"] = surfaces.get("book")
+                scan["resolution"] = surfaces.get("resolution")
                 events = notify_events_from_scan(
                     surfaces.get("prints") or {},
                     None,
@@ -492,6 +501,7 @@ def _render_watch_dashboard(
     trading_flags: dict = None,
     prints_payload: dict = None,
     book_payload: dict = None,
+    resolution_payload: dict = None,
     min_notional: float = DEFAULT_PRINT_MIN_NOTIONAL,
 ) -> Layout:
     """Render the fixed watch dashboard."""
@@ -502,11 +512,13 @@ def _render_watch_dashboard(
     trading_flags = trading_flags or {}
     book_payload = book_payload or {}
     prints_payload = prints_payload or {}
+    resolution_payload = resolution_payload or {}
 
     title_markup, border_style = _dashboard_title(health, book_payload)
     health_line = _dashboard_health_line(health)
     flags_line = _dashboard_flags_line(trading_flags)
     book_line = _dashboard_book_line(book_payload)
+    resolution_line = _dashboard_resolution_line(resolution_payload)
 
     header = Panel(
         Text.from_markup(
@@ -521,6 +533,7 @@ def _render_watch_dashboard(
             f"{health_line}"
             f"{flags_line}"
             f"{book_line}"
+            f"{resolution_line}"
         ),
         border_style=border_style,
         padding=(0, 2),
@@ -591,7 +604,7 @@ def _render_watch_dashboard(
 
     layout = Layout()
     layout.split_column(
-        Layout(header, size=12),
+        Layout(header, size=13),
         Layout(metrics, ratio=1),
         Layout(prints_table, ratio=1),
         Layout(alerts, ratio=1),
@@ -699,6 +712,21 @@ def _dashboard_book_line(book_payload: dict) -> str:
     return (
         f"\nBook source: [white]{source}[/white] | live=[white]{live}[/white]"
     )
+
+
+def _dashboard_resolution_line(resolution_payload: dict) -> str:
+    line = resolution_dashboard_line(resolution_payload)
+    if not line:
+        return ""
+    status = str(resolution_payload.get("status") or "none")
+    color = {
+        "disputed": "yellow",
+        "proposed": "yellow",
+        "pending": "yellow",
+        "resolved": "green",
+        "none": "dim",
+    }.get(status, "white")
+    return f"\n[{color}]{line}[/{color}]"
 
 
 def _format_change(value: float, suffix: str = "") -> Text:

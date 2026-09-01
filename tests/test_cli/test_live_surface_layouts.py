@@ -190,6 +190,36 @@ def test_watch_dashboard_shows_ws_stale_banner_and_rest_source():
     assert "No lagged Data API prints" not in output
 
 
+def test_watch_dashboard_shows_uma_resolution_line():
+    scanner = type("FakeScanner", (), {})()
+    scanner.snapshots = {}
+    output = render_text(_render_watch_dashboard(
+        scanner=scanner,
+        market_id="m1",
+        market_title="Bitcoin Test Market",
+        threshold=10.0,
+        volume_threshold=50.0,
+        interval=30,
+        notify=False,
+        check_count=1,
+        last_check="12:32:00",
+        recent_alerts=[],
+        resolution_payload={
+            "status": "disputed",
+            "disputed": True,
+            "trading": "open_for_trading",
+            "redeemable": False,
+            "quality_flags": ["missing_timestamps"],
+        },
+    ))
+
+    assert "UMA: disputed" in output
+    assert "open for trading" in output
+    assert "window unknown" in output
+    assert "fairness" not in output.lower()
+    assert "risk_level" not in output.lower()
+
+
 def test_watchdog_dashboard_keeps_status_market_state_and_alerts_visible():
     """The watchdog dashboard should render fixed status plus recent alerts."""
     output = render_text(_render_watchdog_dashboard(
