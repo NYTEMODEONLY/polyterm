@@ -698,19 +698,69 @@ def _dashboard_flags_line(trading_flags: dict) -> str:
     return f"\naccepting_orders: [white]{trading_flags['accepting_orders']}[/white]"
 
 
+def _book_spread(book_payload: dict):
+    """Spread from the snapshot. Missing side is None, never 0."""
+    spread = book_payload.get("spread")
+    if spread is not None:
+        try:
+            return float(spread)
+        except (TypeError, ValueError):
+            return None
+    bid = book_payload.get("best_bid")
+    ask = book_payload.get("best_ask")
+    if bid is None or ask is None:
+        return None
+    try:
+        return float(ask) - float(bid)
+    except (TypeError, ValueError):
+        return None
+
+
+def _fmt_sz(value):
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number == int(number):
+        return str(int(number))
+    return f"{number:g}"
+
+
+def _quote_side(price, size=None) -> str:
+    text = _fmt_px(price)
+    size_text = _fmt_sz(size)
+    if size_text is not None:
+        return f"{text} x {size_text}"
+    return text
+
+
+def _dashboard_book_quotes(book_payload: dict) -> str:
+    """Header top-of-book from the existing snapshot. Missing side is an em dash."""
+    bid = _quote_side(book_payload.get("best_bid"), book_payload.get("best_bid_size"))
+    ask = _quote_side(book_payload.get("best_ask"), book_payload.get("best_ask_size"))
+    spread = _fmt_px(_book_spread(book_payload))
+    return (
+        f"bid [white]{bid}[/white] / ask [white]{ask}[/white] | "
+        f"spread [white]{spread}[/white]"
+    )
+
+
 def _dashboard_book_line(book_payload: dict) -> str:
     if not book_payload:
         return ""
     source = book_payload.get("source") or "none"
+    quotes = _dashboard_book_quotes(book_payload)
     if book_payload.get("ws_stale"):
         banner = book_payload.get("banner") or WS_STALE_BANNER
         return (
-            f"\nBook: [yellow]{banner}[/yellow] | "
+            f"\nBook: [yellow]{banner}[/yellow] | {quotes} | "
             f"source=[white]{source}[/white] | live=[white]false[/white]"
         )
     live = "true" if book_payload.get("live") else "false"
     return (
-        f"\nBook source: [white]{source}[/white] | live=[white]{live}[/white]"
+        f"\nBook: {quotes} | source=[white]{source}[/white] | live=[white]{live}[/white]"
     )
 
 

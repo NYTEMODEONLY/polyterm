@@ -100,6 +100,8 @@ class BookFreshness:
             payload["best_bid"] = self.best_bid
         if self.best_ask is not None:
             payload["best_ask"] = self.best_ask
+        if self.best_bid is not None and self.best_ask is not None:
+            payload["spread"] = self.best_ask - self.best_bid
         return payload
 
 

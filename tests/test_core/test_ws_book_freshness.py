@@ -2,6 +2,8 @@
 
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from polyterm.core.ws_book_freshness import (
     CLOB_REST_SOURCE,
     CLOB_WS_SOURCE,
@@ -63,6 +65,8 @@ def test_connected_no_ticks_after_n_seconds_is_ws_stale():
     assert WS_STALE_FLAG in payload["quality_flags"]
     assert CLOB_REST_SOURCE in payload["quality_flags"]
     assert payload["best_bid"] == 0.55
+    assert payload["best_ask"] == 0.56
+    assert payload["spread"] == pytest.approx(0.01)
 
 
 def test_recent_book_tick_is_live_clob_ws():
@@ -137,4 +141,22 @@ def test_rest_only_snapshot_is_labeled_not_live():
     assert payload["live"] is False
     assert payload["ws_stale"] is False
     assert payload["ws_connected"] is False
+    assert payload["best_bid"] == 0.4
+    assert payload["best_ask"] == 0.41
+    assert payload["spread"] == pytest.approx(0.01)
     assert DEFAULT_STALE_AFTER_SECONDS == 20.0
+
+
+def test_missing_side_omits_spread_instead_of_zeroing():
+    freshness = assess_book_freshness(
+        ws_connected=False,
+        now=NOW,
+        rest_fallback=True,
+        has_rest_book=True,
+        best_bid=0.55,
+        best_ask=None,
+    )
+    payload = freshness.to_dict()
+    assert payload["best_bid"] == 0.55
+    assert "best_ask" not in payload
+    assert "spread" not in payload

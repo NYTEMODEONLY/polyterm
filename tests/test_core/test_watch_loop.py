@@ -3,6 +3,8 @@
 from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 
+import pytest
+
 from polyterm.api.data_api_lag import QUALITY_FLAG
 from polyterm.core.print_scanner import PrintScanner, normalize_print
 from polyterm.core.uma_tracker import GRADE_FIELDS
@@ -15,6 +17,7 @@ from polyterm.core.watch_loop import (
     fetch_watch_prints,
     new_notify_state,
     notify_events_from_scan,
+    rest_top_of_book,
     watch_print_market_id,
 )
 from polyterm.core.ws_book_freshness import WS_STALE_BANNER, WS_STALE_FLAG
@@ -141,6 +144,9 @@ def test_rest_book_payload_is_not_live():
     assert book["ws_stale"] is False
     assert book["best_bid"] == 0.44
     assert book["best_ask"] == 0.45
+    assert book["spread"] == pytest.approx(0.01)
+    assert book["best_bid_size"] == 10.0
+    assert book["best_ask_size"] == 12.0
     assert surfaces["prints"]["lagged"] is True
     resolution = surfaces["resolution"]
     assert resolution["status"] == "none"
@@ -195,6 +201,9 @@ def test_frozen_ws_session_uses_rest_fallback_and_banner():
     assert payload["source"] == "clob_rest"
     assert payload["banner"] == WS_STALE_BANNER
     assert WS_STALE_FLAG in payload["quality_flags"]
+    assert payload["best_bid"] == 0.50
+    assert payload["best_ask"] == 0.51
+    assert payload["spread"] == pytest.approx(0.01)
     clob.get_order_book.assert_called()
 
 
@@ -220,6 +229,36 @@ def test_build_book_payload_live_ws_skips_calling_it_rest():
     assert payload["live"] is True
     assert payload["source"] == "clob_ws"
     assert payload["ws_stale"] is False
+    assert payload["best_bid"] == 0.61
+    assert payload["best_ask"] == 0.62
+    assert payload["spread"] == pytest.approx(0.01)
+    assert payload["best_bid_size"] == 3.0
+    assert payload["best_ask_size"] == 4.0
+
+
+def test_rest_top_of_book_missing_side_is_none_not_zero():
+    top = rest_top_of_book({
+        "bids": [{"price": "0.55", "size": "8"}],
+        "asks": [],
+    })
+    assert top["best_bid"] == 0.55
+    assert top["best_bid_size"] == 8.0
+    assert top["best_ask"] is None
+    assert top["best_ask_size"] is None
+    assert top["spread"] is None
+
+    payload = build_book_payload(
+        tracker=None,
+        rest_book={"bids": [{"price": "0.55", "size": "8"}], "asks": []},
+        token_id="tok-yes",
+        now=NOW,
+    )
+    assert payload["source"] == "clob_rest"
+    assert payload["live"] is False
+    assert payload["best_bid"] == 0.55
+    assert payload["best_bid_size"] == 8.0
+    assert "best_ask" not in payload
+    assert "spread" not in payload
 
 
 def test_notify_events_only_on_matching_prints_and_shifts():

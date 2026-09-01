@@ -138,15 +138,43 @@ def _level_price(level: Any) -> Optional[float]:
         return None
 
 
+def _level_size(level: Any) -> Optional[float]:
+    if isinstance(level, Mapping):
+        value = level.get("size")
+    elif isinstance(level, (list, tuple)) and len(level) > 1:
+        value = level[1]
+    else:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def rest_top_of_book(book: Any) -> Dict[str, Optional[float]]:
-    """Best bid/ask from a CLOB REST book dict. Missing sides stay None."""
+    """Best bid/ask from a CLOB book dict. Missing sides stay None, never 0."""
+    empty = {
+        "best_bid": None,
+        "best_ask": None,
+        "best_bid_size": None,
+        "best_ask_size": None,
+        "spread": None,
+    }
     if not isinstance(book, dict):
-        return {"best_bid": None, "best_ask": None}
+        return empty
     bids = book.get("bids") or []
     asks = book.get("asks") or []
+    best_bid = _level_price(bids[0]) if bids else None
+    best_ask = _level_price(asks[0]) if asks else None
+    spread = None
+    if best_bid is not None and best_ask is not None:
+        spread = best_ask - best_bid
     return {
-        "best_bid": _level_price(bids[0]) if bids else None,
-        "best_ask": _level_price(asks[0]) if asks else None,
+        "best_bid": best_bid,
+        "best_ask": best_ask,
+        "best_bid_size": _level_size(bids[0]) if bids else None,
+        "best_ask_size": _level_size(asks[0]) if asks else None,
+        "spread": spread,
     }
 
 
@@ -198,6 +226,10 @@ def build_book_payload(
             best_ask=top["best_ask"],
         )
     payload = freshness.to_dict()
+    for key in ("best_bid_size", "best_ask_size", "spread"):
+        value = top.get(key)
+        if value is not None and key not in payload:
+            payload[key] = value
     if rest_error:
         payload["rest_error"] = rest_error
         flags = list(payload.get("quality_flags") or [])

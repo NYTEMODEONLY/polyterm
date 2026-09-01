@@ -77,6 +77,9 @@ Request errors become `prints_unavailable` or `rest_error`. They do not become s
 | `book.source` | `clob_ws`, `clob_rest`, or `none` |
 | `book.live` | `true` only after a recent book tick |
 | `book.ws_stale` | Connected WS, no book ticks within N seconds |
+| `book.best_bid` / `book.best_ask` | Top of the labeled snapshot. Missing sides stay omitted, never `0` |
+| `book.spread` | `best_ask - best_bid` when both sides exist; omitted otherwise |
+| `book.best_bid_size` / `book.best_ask_size` | Size at the best level when the snapshot already includes it |
 
 ## Data Sources
 
