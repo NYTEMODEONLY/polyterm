@@ -8,21 +8,35 @@ import pytest
 
 from click.testing import CliRunner
 
+import polyterm.cli.main as cli_main
 from polyterm.api.data_api_lag import QUALITY_FLAG
 from polyterm.cli.commands.watch import _dashboard_book_line, _dashboard_position_line
 from polyterm.cli.main import cli
 from polyterm.core.service_health import SourceProbe, combine_health
+from polyterm.core.watch_position import configured_wallet_address
 from polyterm.core.uma_tracker import GRADE_FIELDS
 from polyterm.api.status import unknown_status_snapshot
 from polyterm.core.ws_book_freshness import WS_STALE_BANNER
 
 
-def _config_mock():
+def _config_mock(wallet_address=""):
+    """Config instance `cli` puts in ctx.obj. No wallet omits JSON `position`."""
     mock_config = Mock()
     mock_config.gamma_base_url = "https://gamma.example.com"
     mock_config.gamma_api_key = ""
     mock_config.clob_rest_endpoint = "https://clob.example.com"
     mock_config.clob_endpoint = "wss://clob.example.com/ws"
+    mock_config.wallet_address = wallet_address
+
+    def _get(key, default=""):
+        if key == "wallet.address":
+            address = mock_config.wallet_address
+            if isinstance(address, str) and address.strip():
+                return address
+            return default if default is not None else ""
+        return default
+
+    mock_config.get.side_effect = _get
     return mock_config
 
 
@@ -60,7 +74,7 @@ def _stub_print_scanner(mock_scanner_cls, payload=None):
 @patch("polyterm.cli.commands.watch.StatusPageClient")
 @patch("polyterm.cli.commands.watch.CLOBClient")
 @patch("polyterm.cli.commands.watch.GammaClient")
-@patch("polyterm.cli.main.Config")
+@patch.object(cli_main, "Config")
 def test_watch_json_both_apis_fail_is_outage(
     mock_config_cls,
     mock_gamma_cls,
@@ -96,7 +110,7 @@ def test_watch_json_both_apis_fail_is_outage(
 @patch("polyterm.cli.commands.watch.StatusPageClient")
 @patch("polyterm.cli.commands.watch.CLOBClient")
 @patch("polyterm.cli.commands.watch.GammaClient")
-@patch("polyterm.cli.main.Config")
+@patch.object(cli_main, "Config")
 def test_watch_json_gamma_down_clob_up_is_degraded(
     mock_config_cls,
     mock_gamma_cls,
@@ -129,7 +143,7 @@ def test_watch_json_gamma_down_clob_up_is_degraded(
 @patch("polyterm.cli.commands.watch.StatusPageClient")
 @patch("polyterm.cli.commands.watch.CLOBClient")
 @patch("polyterm.cli.commands.watch.GammaClient")
-@patch("polyterm.cli.main.Config")
+@patch.object(cli_main, "Config")
 def test_watch_json_clob_down_still_scans_as_degraded(
     mock_config_cls,
     mock_gamma_cls,
@@ -171,7 +185,7 @@ def test_watch_json_clob_down_still_scans_as_degraded(
 @patch("polyterm.cli.commands.watch.StatusPageClient")
 @patch("polyterm.cli.commands.watch.CLOBClient")
 @patch("polyterm.cli.commands.watch.GammaClient")
-@patch("polyterm.cli.main.Config")
+@patch.object(cli_main, "Config")
 def test_watch_json_status_page_down_is_not_operational(
     mock_config_cls,
     mock_gamma_cls,
@@ -210,7 +224,7 @@ def test_watch_json_status_page_down_is_not_operational(
 @patch("polyterm.cli.commands.watch.StatusPageClient")
 @patch("polyterm.cli.commands.watch.CLOBClient")
 @patch("polyterm.cli.commands.watch.GammaClient")
-@patch("polyterm.cli.main.Config")
+@patch.object(cli_main, "Config")
 def test_watch_table_outage_is_not_no_markets_found(
     mock_config_cls,
     mock_gamma_cls,
@@ -291,7 +305,7 @@ def test_combine_health_outage_payload_shape():
 @patch("polyterm.cli.commands.watch.StatusPageClient")
 @patch("polyterm.cli.commands.watch.CLOBClient")
 @patch("polyterm.cli.commands.watch.GammaClient")
-@patch("polyterm.cli.main.Config")
+@patch.object(cli_main, "Config")
 def test_watch_json_includes_prints_lag_and_book_source(
     mock_config_cls,
     mock_gamma_cls,
@@ -384,7 +398,7 @@ def test_watch_json_includes_prints_lag_and_book_source(
 @patch("polyterm.cli.commands.watch.StatusPageClient")
 @patch("polyterm.cli.commands.watch.CLOBClient")
 @patch("polyterm.cli.commands.watch.GammaClient")
-@patch("polyterm.cli.main.Config")
+@patch.object(cli_main, "Config")
 def test_watch_json_includes_disputed_resolution_without_grade(
     mock_config_cls,
     mock_gamma_cls,
@@ -446,7 +460,7 @@ def test_watch_json_includes_disputed_resolution_without_grade(
 @patch("polyterm.cli.commands.watch.StatusPageClient")
 @patch("polyterm.cli.commands.watch.CLOBClient")
 @patch("polyterm.cli.commands.watch.GammaClient")
-@patch("polyterm.cli.main.Config")
+@patch.object(cli_main, "Config")
 def test_watch_json_notify_not_sent_on_empty_poll(
     mock_config_cls,
     mock_gamma_cls,
@@ -492,7 +506,7 @@ def test_watch_json_notify_not_sent_on_empty_poll(
 @patch("polyterm.cli.commands.watch.StatusPageClient")
 @patch("polyterm.cli.commands.watch.CLOBClient")
 @patch("polyterm.cli.commands.watch.GammaClient")
-@patch("polyterm.cli.main.Config")
+@patch.object(cli_main, "Config")
 def test_watch_json_notify_on_verified_print(
     mock_config_cls,
     mock_gamma_cls,
@@ -623,7 +637,7 @@ def test_dashboard_book_line_keeps_ws_stale_banner_with_quotes():
 @patch("polyterm.cli.commands.watch.StatusPageClient")
 @patch("polyterm.cli.commands.watch.CLOBClient")
 @patch("polyterm.cli.commands.watch.GammaClient")
-@patch("polyterm.cli.main.Config")
+@patch.object(cli_main, "Config")
 def test_watch_json_runs_1_missing_ask_omits_spread(
     mock_config_cls,
     mock_gamma_cls,
@@ -678,11 +692,22 @@ def test_watch_json_runs_1_missing_ask_omits_spread(
 WALLET = "0x0000000000000000000000000000000000000001"
 
 
+def test_config_mock_exposes_wallet_on_the_object_cli_would_use():
+    """Catch 3.10-style Mock.get wiring without invoking the full CLI."""
+    assert configured_wallet_address(_config_mock()) is None
+    assert configured_wallet_address(_config_mock(wallet_address="")) is None
+    assert configured_wallet_address(_config_mock(wallet_address="   ")) is None
+    filled = _config_mock(wallet_address=f"  {WALLET}  ")
+    assert configured_wallet_address(filled) == WALLET
+    assert filled.get("wallet.address", "") == f"  {WALLET}  "
+
+
 def _json_watch_with_wallet(mock_config_cls, mock_gamma_cls, mock_clob_cls, mock_status_cls, mock_engine_cls, mock_scanner_cls, positions, activity=None, positions_error=None):
-    mock_config = _config_mock()
-    mock_config.wallet_address = WALLET
-    mock_config.get.return_value = WALLET
+    mock_config = _config_mock(wallet_address=WALLET)
     mock_config_cls.return_value = mock_config
+    # Python 3.10 patch() can follow a stale polyterm.cli.main package attr.
+    # Bind onto the module `cli` actually uses so ctx.obj["config"] has the wallet.
+    cli_main.Config = mock_config_cls
     gamma, clob, status_client = _client_mocks()
     gamma.get_markets.return_value = [{"id": "m1"}]
     gamma.get_market.return_value = {
@@ -720,7 +745,7 @@ def _json_watch_with_wallet(mock_config_cls, mock_gamma_cls, mock_clob_cls, mock
 @patch("polyterm.cli.commands.watch.StatusPageClient")
 @patch("polyterm.cli.commands.watch.CLOBClient")
 @patch("polyterm.cli.commands.watch.GammaClient")
-@patch("polyterm.cli.main.Config")
+@patch.object(cli_main, "Config")
 def test_watch_json_omits_position_when_no_wallet(
     mock_config_cls,
     mock_gamma_cls,
@@ -764,7 +789,7 @@ def test_watch_json_omits_position_when_no_wallet(
 @patch("polyterm.cli.commands.watch.StatusPageClient")
 @patch("polyterm.cli.commands.watch.CLOBClient")
 @patch("polyterm.cli.commands.watch.GammaClient")
-@patch("polyterm.cli.main.Config")
+@patch.object(cli_main, "Config")
 def test_watch_json_includes_wallet_position(
     mock_config_cls,
     mock_gamma_cls,
@@ -815,7 +840,7 @@ def test_watch_json_includes_wallet_position(
 @patch("polyterm.cli.commands.watch.StatusPageClient")
 @patch("polyterm.cli.commands.watch.CLOBClient")
 @patch("polyterm.cli.commands.watch.GammaClient")
-@patch("polyterm.cli.main.Config")
+@patch.object(cli_main, "Config")
 def test_watch_json_empty_position_is_not_fake_zeros(
     mock_config_cls,
     mock_gamma_cls,
@@ -854,7 +879,7 @@ def test_watch_json_empty_position_is_not_fake_zeros(
 @patch("polyterm.cli.commands.watch.StatusPageClient")
 @patch("polyterm.cli.commands.watch.CLOBClient")
 @patch("polyterm.cli.commands.watch.GammaClient")
-@patch("polyterm.cli.main.Config")
+@patch.object(cli_main, "Config")
 def test_watch_json_position_network_failure_does_not_crash(
     mock_config_cls,
     mock_gamma_cls,
@@ -885,6 +910,50 @@ def test_watch_json_position_network_failure_does_not_crash(
     assert "position_unavailable" in position["quality_flags"]
     assert "shares" not in position
     assert position["lagged"] is True
+
+
+@patch("polyterm.cli.commands.watch.PrintScanner")
+@patch("polyterm.cli.commands.watch.AlertEngine")
+@patch("polyterm.cli.commands.watch.StatusPageClient")
+@patch("polyterm.cli.commands.watch.CLOBClient")
+@patch("polyterm.cli.commands.watch.GammaClient")
+@patch.object(cli_main, "Config")
+def test_watch_json_position_survives_cli_main_reimport(
+    mock_config_cls,
+    mock_gamma_cls,
+    mock_clob_cls,
+    mock_status_cls,
+    mock_engine_cls,
+    mock_scanner_cls,
+):
+    """Python 3.10 patch() follows package attrs left stale by isolated CLI reimports."""
+    from tests.test_cli.test_lazy_cli import isolated_cli_main
+
+    with isolated_cli_main():
+        pass
+
+    _json_watch_with_wallet(
+        mock_config_cls,
+        mock_gamma_cls,
+        mock_clob_cls,
+        mock_status_cls,
+        mock_engine_cls,
+        mock_scanner_cls,
+        positions=[{
+            "conditionId": "0xcond",
+            "size": 3,
+            "outcome": "Yes",
+            "currentValue": 1,
+        }],
+    )
+
+    result = CliRunner().invoke(
+        cli, ["watch", "--market", "bitcoin", "--format", "json", "--runs", "1"]
+    )
+    assert result.exit_code == 0, result.output
+    position = json.loads(result.output)["results"][0]["position"]
+    assert position["wallet"] == WALLET
+    assert position["has_position"] is True
 
 
 def test_watch_help_mentions_wallet_position():

@@ -86,6 +86,40 @@ def test_configured_wallet_address_omits_missing_and_non_strings():
     assert configured_wallet_address(cfg) == WALLET
 
 
+def test_configured_wallet_address_reads_get_side_effect_not_mock_attr():
+    """CLI tests bind wallet via Config.get('wallet.address'); Mock arity varies."""
+    cfg = Mock()
+    cfg.wallet_address = ""
+
+    def _get(key, default=""):
+        if key == "wallet.address":
+            return WALLET
+        return default
+
+    cfg.get.side_effect = _get
+    assert configured_wallet_address(cfg) == WALLET
+
+
+def test_configured_wallet_address_one_arg_get():
+    cfg = Mock()
+    cfg.wallet_address = ""
+
+    def _get(key):
+        if key == "wallet.address":
+            return f"  {WALLET}  "
+        raise KeyError(key)
+
+    cfg.get.side_effect = _get
+    assert configured_wallet_address(cfg) == WALLET
+
+
+def test_configured_wallet_address_rejects_non_string_get_without_wallet_attr():
+    cfg = Mock()
+    cfg.wallet_address = Mock()
+    cfg.get.return_value = Mock()
+    assert configured_wallet_address(cfg) is None
+
+
 def test_fetch_watch_position_no_wallet_is_omitted():
     api = _FakeWalletAPI(positions=[{"conditionId": CONDITION, "size": 10, "outcome": "Yes"}])
     assert fetch_watch_position(api, None, _market(), "bitcoin") is None

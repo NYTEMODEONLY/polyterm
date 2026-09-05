@@ -7,6 +7,21 @@ from contextlib import contextmanager
 from click.testing import CliRunner
 
 
+def _restore_module(module_name, module):
+    """Put a module back in sys.modules and on its parent package.
+
+    unittest.mock.patch on Python 3.10 resolves 'polyterm.cli.main.Config'
+    via getattr(polyterm.cli, 'main'), not sys.modules. Leaving a leftover
+    reimport on the package attribute makes later CLI tests patch a Config
+    that `cli` never instantiates.
+    """
+    sys.modules[module_name] = module
+    parent_name, _, attr = module_name.rpartition(".")
+    parent = sys.modules.get(parent_name)
+    if parent is not None and attr:
+        setattr(parent, attr, module)
+
+
 @contextmanager
 def isolated_cli_main():
     target_modules = (
@@ -28,7 +43,7 @@ def isolated_cli_main():
 
         for module_name, module in original_modules.items():
             if module is not None:
-                sys.modules[module_name] = module
+                _restore_module(module_name, module)
 
 
 def test_version_does_not_import_config_or_commands():
@@ -52,3 +67,17 @@ def test_subcommand_help_imports_only_requested_command():
         assert result.exit_code == 0
         assert "polyterm.cli.commands.monitor" in sys.modules
         assert "polyterm.cli.commands.whales" not in sys.modules
+
+
+def test_isolated_cli_main_restores_package_attribute_for_patch():
+    """Later @patch('polyterm.cli.main.Config') must hit the live cli module."""
+    import polyterm.cli
+    import polyterm.cli.main as original
+
+    with isolated_cli_main() as isolated:
+        assert isolated is not original
+        assert sys.modules["polyterm.cli.main"] is isolated
+
+    restored = sys.modules["polyterm.cli.main"]
+    assert restored is original
+    assert polyterm.cli.main is original

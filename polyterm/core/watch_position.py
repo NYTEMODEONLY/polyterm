@@ -18,6 +18,23 @@ ACTIVITY_OFFSET_CAP = 1500
 PNL_SOURCE = "activity-cashflow"
 
 
+def _config_get(getter: Any, key: str) -> Any:
+    """Call Config.get across Mock / signature variants. Failures are missing."""
+    attempts = (
+        lambda: getter(key, ""),
+        lambda: getter(key, default=""),
+        lambda: getter(key),
+    )
+    for attempt in attempts:
+        try:
+            return attempt()
+        except TypeError:
+            continue
+        except Exception:
+            return None
+    return None
+
+
 def configured_wallet_address(config: Any) -> Optional[str]:
     """Saved view-only wallet, or None. Empty / missing is not invented."""
     if config is None:
@@ -25,16 +42,11 @@ def configured_wallet_address(config: Any) -> Optional[str]:
     candidates: List[Any] = []
     getter = getattr(config, "get", None)
     if callable(getter):
-        try:
-            candidates.append(getter("wallet.address", ""))
-        except TypeError:
-            try:
-                candidates.append(getter("wallet.address"))
-            except Exception:
-                pass
-        except Exception:
-            pass
-    candidates.append(getattr(config, "wallet_address", None))
+        candidates.append(_config_get(getter, "wallet.address"))
+    try:
+        candidates.append(getattr(config, "wallet_address", None))
+    except Exception:
+        pass
     for raw in candidates:
         if isinstance(raw, str):
             address = raw.strip()
