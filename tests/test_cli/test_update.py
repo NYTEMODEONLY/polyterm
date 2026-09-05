@@ -26,7 +26,10 @@ def test_update_help_still_works():
 def test_update_reinstalls_from_github_and_does_not_query_pypi():
     runner = CliRunner()
 
-    with patch("polyterm.utils.install_source.subprocess.run") as mock_run:
+    with patch("polyterm.utils.install_source.subprocess.run") as mock_run, patch(
+        "polyterm.utils.install_source.installed_package_version",
+        return_value="0.11.2",
+    ):
         mock_run.side_effect = [
             type("Result", (), {"returncode": 0})(),
             type("Result", (), {"returncode": 0, "stdout": "ok", "stderr": ""})(),
@@ -37,6 +40,8 @@ def test_update_reinstalls_from_github_and_does_not_query_pypi():
     assert result.exit_code == 0
     assert "GitHub is the source of truth" in output
     assert "PyPI is decommissioned" in output
+    assert "Installed version:" in output
+    assert "0.11.2" in output
     assert "pipx install polyterm" not in output
     assert "pipx upgrade polyterm" not in output
     assert "pypi.org" not in output

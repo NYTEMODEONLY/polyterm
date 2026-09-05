@@ -41,8 +41,8 @@ pip install --upgrade git+https://github.com/NYTEMODEONLY/polyterm.git@main
 
 ## Data Sources
 
-- Installed package version (`polyterm.__version__`)
-- GitHub tags/releases (`https://api.github.com/repos/NYTEMODEONLY/polyterm/releases/latest`) for TUI update availability
+- Installed package version from disk (`installed_package_version()`, then `polyterm.__version__`). After a successful reinstall the success text prints this value (`0.11.2` on current main), not a cached pre-update string.
+- GitHub tags/releases (`https://api.github.com/repos/NYTEMODEONLY/polyterm/releases/latest`) for TUI update availability. No banner when installed `>=` latest tag, or when the pipx `direct_url.json` commit matches the latest tag peel.
 - GitHub `main` via pipx or pip (`git+https://github.com/NYTEMODEONLY/polyterm.git@main`)
 
 PyPI is decommissioned and is not consulted.

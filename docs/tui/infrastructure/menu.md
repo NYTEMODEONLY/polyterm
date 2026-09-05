@@ -15,7 +15,7 @@
 | `display()` | Renders the current menu page as a Rich grid with key, name, and description columns. Shows version string and update indicator. |
 | `get_choice()` | Reads user input. Returns the choice string, or `"_next_page"` / `"_prev_page"` for pagination keys (`m`/`more`/`+`/`next` and `b`/`back`/`-`/`prev`). |
 | `reset_page()` | Resets `current_page` to 1. Called by the controller after each screen returns. |
-| `check_for_updates()` | Compares `polyterm.__version__` to GitHub tags/releases (NYTEMODEONLY/polyterm). Cached for the menu session. On a newer tag, returns an update indicator and version so the menu shows `u 🔄 Update`. Network failure returns empty strings and does not crash the menu. Does not query PyPI. |
+| `check_for_updates()` | Compares `polyterm.__version__` to GitHub tags/releases (NYTEMODEONLY/polyterm). Cached for the menu session. On a newer tag, returns an update indicator and version so the menu shows `u 🔄 Update`. Equal versions (`0.11.2` vs `v0.11.2`) and a pipx commit that matches the latest tag peel return empty strings. Network failure returns empty strings and does not crash the menu. Does not query PyPI. |
 | `quick_update()` | Delegates to Settings `update_polyterm()`, which reinstalls from GitHub `main` via `pipx install --force git+https://github.com/NYTEMODEONLY/polyterm.git@main` (pip fallback). On success, offers to restart via `os.execv`. |
 
 ### Menu Pages

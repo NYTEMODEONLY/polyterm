@@ -5,6 +5,8 @@ from unittest.mock import Mock
 from polyterm.utils.install_source import (
     GITHUB_PIPX_SPEC,
     PIPX_FORCE_INSTALL_CMD,
+    installed_git_commit,
+    installed_package_version,
     manual_reinstall_commands,
     pip_upgrade_from_github_cmd,
     reinstall_from_github,
@@ -82,6 +84,31 @@ def test_reinstall_reports_missing_installers():
     assert ok is False
     assert method == ""
     assert "Neither pipx nor pip" in error
+
+
+def test_installed_package_version_reads_init_from_disk():
+    version = installed_package_version()
+
+    assert version == "0.11.2"
+
+
+def test_installed_git_commit_reads_direct_url_vcs_info():
+    payload = (
+        '{"url": "https://github.com/NYTEMODEONLY/polyterm.git",'
+        ' "vcs_info": {"vcs": "git",'
+        ' "commit_id": "dff842cdadcc7b44c70d5953758247872e1ded20",'
+        ' "requested_revision": "main"}}'
+    )
+
+    commit = installed_git_commit(read_direct_url=lambda: payload)
+
+    assert commit == "dff842cdadcc7b44c70d5953758247872e1ded20"
+
+
+def test_installed_git_commit_missing_direct_url_returns_none():
+    assert installed_git_commit(read_direct_url=lambda: None) is None
+    assert installed_git_commit(read_direct_url=lambda: "{") is None
+    assert installed_git_commit(read_direct_url=lambda: '{"dir_info": {"editable": true}}') is None
 
 
 def test_reinstall_never_invokes_bare_pypi_package_name():

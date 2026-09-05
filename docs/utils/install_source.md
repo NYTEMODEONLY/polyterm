@@ -56,6 +56,14 @@ Tries pipx first (`pipx install --force <git spec>`), then pip. Does not query `
 
 `runner` is injectable for tests. Production callers omit it.
 
+### `installed_package_version()`
+
+Reads the version from `polyterm/__init__.py` on disk, then distribution metadata. Used after a successful reinstall so success text is the new install (`0.11.2`), not the in-memory `__version__` from before `pipx install --force`. Never queries PyPI.
+
+### `installed_git_commit(*, read_direct_url=None)`
+
+Returns the git `commit_id` from PEP 610 `direct_url.json` when pipx/pip installed from git. Editable file installs have no commit. `read_direct_url` is injectable for tests.
+
 ## Data Sources
 
 No network APIs. GitHub is the source of truth; this module only builds local installer commands. PyPI JSON (`https://pypi.org/pypi/polyterm/json`) is not used.

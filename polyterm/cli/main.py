@@ -44,7 +44,11 @@ def update():
     import polyterm
     from rich.console import Console
 
-    from ..utils.install_source import manual_reinstall_commands, reinstall_from_github
+    from ..utils.install_source import (
+        installed_package_version,
+        manual_reinstall_commands,
+        reinstall_from_github,
+    )
 
     console = Console()
     pipx_cmd, pip_cmd = manual_reinstall_commands()
@@ -63,8 +67,10 @@ def update():
         success, method, error_text = reinstall_from_github(sys.executable)
 
         if success:
+            installed = installed_package_version() or polyterm.__version__
             console.print("[bold green]✅ Update successful![/bold green]")
             console.print(f"[green]Reinstalled from GitHub main via {method}[/green]")
+            console.print(f"[green]Installed version:[/green] {installed}")
             console.print()
             console.print("[bold yellow]🔄 Restart Required[/bold yellow]")
             console.print("[yellow]Please restart PolyTerm to use the new version.[/yellow]")

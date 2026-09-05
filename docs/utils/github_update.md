@@ -1,10 +1,10 @@
 # GitHub Update Check -- compare the install to GitHub tags/releases
 
-Helpers that detect whether NYTEMODEONLY/polyterm has a newer GitHub tag or release than the installed `polyterm.__version__`. PyPI is decommissioned and is not queried.
+Helpers that detect whether NYTEMODEONLY/polyterm has a newer GitHub tag or release than the installed package. Comparison uses the version string first (`polyterm.__version__` / distribution metadata). If those strings ever drift, a pipx/pip `direct_url.json` commit that matches the latest tag peel still counts as current. PyPI is decommissioned and is not queried.
 
 ## Overview
 
-Installed users only see an in-app update when this check finds a newer GitHub version. The TUI main menu calls `newer_github_version()` once per session, caches the result, and shows an update indicator plus an Update row when GitHub is ahead. Install still uses the existing GitHub `main` reinstall path (`reinstall_from_github`).
+Installed users only see an in-app update when this check finds a GitHub tag newer than the install. Equal versions (`0.11.2` vs `v0.11.2`) produce no banner. The TUI main menu calls `newer_github_version()` once per session, caches the result, and shows an update indicator plus an Update row when GitHub is ahead. Install still uses the existing GitHub `main` reinstall path (`reinstall_from_github`).
 
 Network failures, HTTP errors, and unparseable tags return "no update" and never raise. The menu must not crash if GitHub is unreachable.
 
@@ -19,7 +19,7 @@ Update availability is checked against GitHub tags/releases, not PyPI.
 | Latest GitHub release | `https://api.github.com/repos/NYTEMODEONLY/polyterm/releases/latest` (`tag_name`) |
 | Git tags (fallback) | `https://api.github.com/repos/NYTEMODEONLY/polyterm/tags` (`name`) |
 
-The highest parseable semver wins on the tags fallback. Versions may include a leading `v` (`v0.11.0`); comparison uses `packaging.version` after stripping that prefix.
+The highest parseable semver wins on the tags fallback. Versions may include a leading `v` (`v0.11.2`); comparison uses `packaging.version` after stripping that prefix. When the version string looks behind, the tags payload `commit.sha` is compared to the local PEP 610 `direct_url.json` `vcs_info.commit_id` (full SHA or a unique prefix). A match means the tagged commit is already installed.
 
 PyPI JSON (`https://pypi.org/pypi/polyterm/json`) is not used.
 
@@ -27,17 +27,18 @@ PyPI JSON (`https://pypi.org/pypi/polyterm/json`) is not used.
 
 ### `fetch_latest_github_version(*, get_json=None)`
 
-Returns the latest GitHub version string (`"0.11.0"`) or `None` if the check fails. Prefers `/releases/latest`. Falls back to git tags. `get_json` is injectable so tests stub HTTP.
+Returns the latest GitHub version string (`"0.11.2"`) or `None` if the check fails. Prefers `/releases/latest`. Falls back to git tags. `get_json` is injectable so tests stub HTTP.
 
-### `newer_github_version(current, *, get_json=None)`
+### `newer_github_version(current, *, get_json=None, installed_commit=...)`
 
-Returns the GitHub version when it is strictly newer than `current`, otherwise `None`. Never raises.
+Returns the GitHub version when it is strictly newer than `current`, otherwise `None`. Never raises. Does not offer an update when `current` is already `>=` the latest tag. `installed_commit` is the pipx/pip git SHA; omit it to read `direct_url.json`.
 
-| Installed | GitHub | Result |
-|-----------|--------|--------|
-| `0.10.0` | `v0.11.0` | `"0.11.0"` |
-| `0.11.0` | `v0.11.0` | `None` |
-| `0.10.0` | network error | `None` |
+| Installed | GitHub | Commit | Result |
+|-----------|--------|--------|--------|
+| `0.10.0` | `v0.11.2` | (none / mismatch) | `"0.11.2"` |
+| `0.11.2` | `v0.11.2` | (ignored) | `None` |
+| `0.10.0` | `v0.11.2` | matches tag peel | `None` |
+| `0.10.0` | network error | | `None` |
 
 ## Used By
 
