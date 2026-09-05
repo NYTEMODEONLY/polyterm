@@ -25,8 +25,8 @@ Client for Polymarket Data API providing wallet-level data.
 | Method | Signature | Description |
 |--------|-----------|-------------|
 | `__init__` | `(base_url=None)` | Initialize client with optional custom base URL |
-| `get_positions` | `(address, limit=100, offset=0, sort_by="CURRENT", size_threshold=None)` | Get wallet positions. Optional `sizeThreshold` (cashflow mark uses `0`). |
-| `get_activity` | `(address, limit=100, offset=0, activity_type=None, sort_direction=None)` | Get wallet activity feed. Optional `type` and `sortDirection`. Cashflow P&L uses `sortDirection=ASC`. |
+| `get_positions` | `(address, limit=100, offset=0, sort_by="CURRENT", size_threshold=None, market=None)` | Get wallet positions. Optional `sizeThreshold` (cashflow mark uses `0`). Optional `market` is a CLOB condition ID. |
+| `get_activity` | `(address, limit=100, offset=0, activity_type=None, sort_direction=None, market=None)` | Get wallet activity feed. Optional `type`, `sortDirection`, and `market` (condition ID). Cashflow P&L uses `sortDirection=ASC`. |
 | `get_trades` | `(address, limit=100, market=None)` | Get wallet trades, optionally filtered by market |
 | `get_profit_summary` | `(address)` | Aggregate P&L summary across all positions |
 | `get_leaderboard` | `(period="7d", limit=50, sort_by="profit")` | Public `/v1/leaderboard`. `profit`/`volume`/`active` map to PNL/VOL. `winrate` is not mapped to PNL. |
@@ -79,7 +79,7 @@ The `_request` method follows the same retry pattern as `CLOBClient`:
 - **Package exports**: Exported via `polyterm.api.__init__` as part of `__all__`
 - **Replaces**: `SubgraphClient` (deprecated) for wallet position and trade data
 - **Lag labels**: [data_api_lag](data_api_lag.md) (`source=data_api`, `lag=true`, `lagged=true`)
-- **CLI commands**: `portfolio` (positions), `wallets --analyze --refresh` (wallet profile), `whales --wallets` (lagged prints via `PrintScanner`), `mywallet --pnl` (activity-cashflow P&L; not `get_profit_summary`)
+- **CLI commands**: `portfolio` (positions), `wallets --analyze --refresh` (wallet profile), `whales --wallets` (lagged prints via `PrintScanner`), `mywallet --pnl` (activity-cashflow P&L; not `get_profit_summary`), `watch` (this-market position when a wallet is configured)
 
 ## June 2026 Wallet Intelligence Methods
 

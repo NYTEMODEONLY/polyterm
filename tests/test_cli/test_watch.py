@@ -9,7 +9,7 @@ import pytest
 from click.testing import CliRunner
 
 from polyterm.api.data_api_lag import QUALITY_FLAG
-from polyterm.cli.commands.watch import _dashboard_book_line
+from polyterm.cli.commands.watch import _dashboard_book_line, _dashboard_position_line
 from polyterm.cli.main import cli
 from polyterm.core.service_health import SourceProbe, combine_health
 from polyterm.core.uma_tracker import GRADE_FIELDS
@@ -374,6 +374,7 @@ def test_watch_json_includes_prints_lag_and_book_source(
     for key in GRADE_FIELDS:
         assert key not in resolution
         assert key not in scan
+    assert "position" not in scan
     stripped = result.output.lstrip()
     assert stripped.startswith("{") or stripped.startswith("[")
 
@@ -672,3 +673,257 @@ def test_watch_json_runs_1_missing_ask_omits_spread(
     assert "spread" not in book
     assert book.get("best_ask") != 0
     assert book.get("spread") != 0
+
+
+WALLET = "0x0000000000000000000000000000000000000001"
+
+
+def _json_watch_with_wallet(mock_config_cls, mock_gamma_cls, mock_clob_cls, mock_status_cls, mock_engine_cls, mock_scanner_cls, positions, activity=None, positions_error=None):
+    mock_config = _config_mock()
+    mock_config.wallet_address = WALLET
+    mock_config.get.return_value = WALLET
+    mock_config_cls.return_value = mock_config
+    gamma, clob, status_client = _client_mocks()
+    gamma.get_markets.return_value = [{"id": "m1"}]
+    gamma.get_market.return_value = {
+        "id": "m1",
+        "conditionId": "0xcond",
+        "slug": "bitcoin-100k",
+        "clobTokenIds": ["tok-yes"],
+        "question": "Bitcoin 100k?",
+    }
+    clob.get_current_markets.return_value = [{"id": "c1"}]
+    clob.get_order_book.return_value = {
+        "bids": [{"price": "0.55", "size": "10"}],
+        "asks": [{"price": "0.56", "size": "9"}],
+    }
+    mock_gamma_cls.return_value = gamma
+    mock_clob_cls.return_value = clob
+    mock_status_cls.return_value = status_client
+    mock_engine_cls.return_value.run_once.return_value = {
+        "market": "bitcoin",
+        "price": 0.55,
+        "triggered": False,
+        "reasons": [],
+    }
+    scanner = _stub_print_scanner(mock_scanner_cls)
+    if positions_error is not None:
+        scanner.data_api.get_positions.side_effect = positions_error
+    else:
+        scanner.data_api.get_positions.return_value = positions
+    scanner.data_api.get_activity.return_value = activity if activity is not None else []
+    return scanner
+
+
+@patch("polyterm.cli.commands.watch.PrintScanner")
+@patch("polyterm.cli.commands.watch.AlertEngine")
+@patch("polyterm.cli.commands.watch.StatusPageClient")
+@patch("polyterm.cli.commands.watch.CLOBClient")
+@patch("polyterm.cli.commands.watch.GammaClient")
+@patch("polyterm.cli.main.Config")
+def test_watch_json_omits_position_when_no_wallet(
+    mock_config_cls,
+    mock_gamma_cls,
+    mock_clob_cls,
+    mock_status_cls,
+    mock_engine_cls,
+    mock_scanner_cls,
+):
+    mock_config_cls.return_value = _config_mock()
+    gamma, clob, status_client = _client_mocks()
+    gamma.get_markets.return_value = [{"id": "m1"}]
+    gamma.get_market.return_value = {
+        "id": "m1",
+        "conditionId": "0xcond",
+        "slug": "bitcoin-100k",
+        "clobTokenIds": ["tok-yes"],
+    }
+    clob.get_current_markets.return_value = [{"id": "c1"}]
+    clob.get_order_book.return_value = {"bids": [], "asks": []}
+    mock_gamma_cls.return_value = gamma
+    mock_clob_cls.return_value = clob
+    mock_status_cls.return_value = status_client
+    mock_engine_cls.return_value.run_once.return_value = {
+        "market": "bitcoin",
+        "price": 0.55,
+        "triggered": False,
+        "reasons": [],
+    }
+    _stub_print_scanner(mock_scanner_cls)
+
+    result = CliRunner().invoke(
+        cli, ["watch", "--market", "bitcoin", "--format", "json", "--runs", "1"]
+    )
+    assert result.exit_code == 0, result.output
+    scan = json.loads(result.output)["results"][0]
+    assert "position" not in scan
+
+
+@patch("polyterm.cli.commands.watch.PrintScanner")
+@patch("polyterm.cli.commands.watch.AlertEngine")
+@patch("polyterm.cli.commands.watch.StatusPageClient")
+@patch("polyterm.cli.commands.watch.CLOBClient")
+@patch("polyterm.cli.commands.watch.GammaClient")
+@patch("polyterm.cli.main.Config")
+def test_watch_json_includes_wallet_position(
+    mock_config_cls,
+    mock_gamma_cls,
+    mock_clob_cls,
+    mock_status_cls,
+    mock_engine_cls,
+    mock_scanner_cls,
+):
+    _json_watch_with_wallet(
+        mock_config_cls,
+        mock_gamma_cls,
+        mock_clob_cls,
+        mock_status_cls,
+        mock_engine_cls,
+        mock_scanner_cls,
+        positions=[{
+            "conditionId": "0xcond",
+            "size": 120,
+            "outcome": "Yes",
+            "currentValue": 40,
+            "cashPnl": -999,
+        }],
+        activity=[{"type": "BUY", "usdcSize": 100, "conditionId": "0xcond"}],
+    )
+
+    result = CliRunner().invoke(
+        cli, ["watch", "--market", "bitcoin", "--format", "json", "--runs", "1"]
+    )
+    assert result.exit_code == 0, result.output
+    scan = json.loads(result.output)["results"][0]
+    position = scan["position"]
+    assert position["wallet"] == WALLET
+    assert position["has_position"] is True
+    assert position["shares"] == 120.0
+    assert position["outcome"] == "Yes"
+    assert position["source"] == "data_api"
+    assert position["lag"] is True
+    assert position["lagged"] is True
+    assert QUALITY_FLAG in position["quality_flags"]
+    assert "cashPnl" not in position
+    assert position["pnl"] != -999
+    assert position["cashflow"] == -100.0
+    assert position["pnl_source"] == "activity-cashflow"
+
+
+@patch("polyterm.cli.commands.watch.PrintScanner")
+@patch("polyterm.cli.commands.watch.AlertEngine")
+@patch("polyterm.cli.commands.watch.StatusPageClient")
+@patch("polyterm.cli.commands.watch.CLOBClient")
+@patch("polyterm.cli.commands.watch.GammaClient")
+@patch("polyterm.cli.main.Config")
+def test_watch_json_empty_position_is_not_fake_zeros(
+    mock_config_cls,
+    mock_gamma_cls,
+    mock_clob_cls,
+    mock_status_cls,
+    mock_engine_cls,
+    mock_scanner_cls,
+):
+    _json_watch_with_wallet(
+        mock_config_cls,
+        mock_gamma_cls,
+        mock_clob_cls,
+        mock_status_cls,
+        mock_engine_cls,
+        mock_scanner_cls,
+        positions=[],
+        activity=[],
+    )
+
+    result = CliRunner().invoke(
+        cli, ["watch", "--market", "bitcoin", "--format", "json", "--runs", "1"]
+    )
+    assert result.exit_code == 0, result.output
+    position = json.loads(result.output)["results"][0]["position"]
+    assert position["has_position"] is False
+    assert "shares" not in position
+    assert "pnl" not in position
+    assert position.get("shares") != 0
+    assert position.get("pnl") != 0
+    assert "empty_position" in position["quality_flags"]
+    assert position["lagged"] is True
+
+
+@patch("polyterm.cli.commands.watch.PrintScanner")
+@patch("polyterm.cli.commands.watch.AlertEngine")
+@patch("polyterm.cli.commands.watch.StatusPageClient")
+@patch("polyterm.cli.commands.watch.CLOBClient")
+@patch("polyterm.cli.commands.watch.GammaClient")
+@patch("polyterm.cli.main.Config")
+def test_watch_json_position_network_failure_does_not_crash(
+    mock_config_cls,
+    mock_gamma_cls,
+    mock_clob_cls,
+    mock_status_cls,
+    mock_engine_cls,
+    mock_scanner_cls,
+):
+    _json_watch_with_wallet(
+        mock_config_cls,
+        mock_gamma_cls,
+        mock_clob_cls,
+        mock_status_cls,
+        mock_engine_cls,
+        mock_scanner_cls,
+        positions=[],
+        positions_error=RuntimeError("data api down"),
+    )
+
+    result = CliRunner().invoke(
+        cli, ["watch", "--market", "bitcoin", "--format", "json", "--runs", "1"]
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    scan = payload["results"][0]
+    assert scan["book"]["source"] == "clob_rest"
+    position = scan["position"]
+    assert "position_unavailable" in position["quality_flags"]
+    assert "shares" not in position
+    assert position["lagged"] is True
+
+
+def test_watch_help_mentions_wallet_position():
+    result = CliRunner().invoke(cli, ["watch", "--help"])
+    assert result.exit_code == 0, result.output
+    output = result.output.lower()
+    assert "wallet" in output
+    assert "position" in output
+    assert "not SUM(cashPnl)" in result.output or "not sum(cashpnl)" in output
+    assert "lagged" in output or "data api" in output
+
+
+def test_dashboard_position_line_omits_without_wallet():
+    assert _dashboard_position_line(None) == ""
+    assert _dashboard_position_line({}) == ""
+
+
+def test_dashboard_position_line_empty_and_open():
+    empty = _dashboard_position_line({
+        "wallet": WALLET,
+        "has_position": False,
+        "source": "data_api",
+        "lagged": True,
+        "quality_flags": [QUALITY_FLAG, "empty_position"],
+    })
+    assert "no position" in empty
+    assert "Wallet:" in empty
+    assert "$0.00" not in empty
+
+    open_line = _dashboard_position_line({
+        "wallet": WALLET,
+        "has_position": True,
+        "shares": 120,
+        "outcome": "Yes",
+        "legs": [{"shares": 120, "outcome": "Yes"}],
+        "pnl": -60.0,
+        "cashflow": -100.0,
+        "quality_flags": [QUALITY_FLAG],
+    })
+    assert "120 Yes" in open_line
+    assert "cashflow P&L" in open_line
+    assert "lagged Data API" in open_line

@@ -1,10 +1,10 @@
 # Watch
 
-> One live session: CLOB book, lagged Data API prints, UMA/resolution, and an honest outage line.
+> One live session: CLOB book, lagged Data API prints, this-wallet position, UMA/resolution, and an honest outage line.
 
 ## Overview
 
-`polyterm watch` is the no-keys session traders leave running on one market. The live dashboard polls Gamma, shows CLOB top-of-book on the header (best bid, best ask, spread, and size when the snapshot already has it), lists recent verified Data API prints, shows a short UMA/resolution line, and keeps the Statuspage outage line. A missing book side is an em dash, never `0`.
+`polyterm watch` is the no-keys session traders leave running on one market. The live dashboard polls Gamma, shows CLOB top-of-book on the header (best bid, best ask, spread, and size when the snapshot already has it), lists recent verified Data API prints, shows a short UMA/resolution line, and keeps the Statuspage outage line. If a wallet is already saved in config, the same header (and JSON) show that wallet's lagged Data API position on this market. A missing book side is an em dash, never `0`. No wallet omits the position line. Empty position is `no position`, not fake zero shares.
 
 A connected CLOB WebSocket with no `book` / `price_change` ticks is not live. After `--stale-after` seconds (default 20) watch sets `ws_stale` and the banner `WS connected, no book ticks`. REST fallback is allowed when it is labeled `clob_rest`.
 
@@ -98,6 +98,24 @@ Successful scans include `prints` and `book` on each result.
 
 JSON `--runs 1` uses CLOB REST for the book snapshot (`source=clob_rest`, `live=false`). Live table mode starts the CLOB WebSocket and falls back to REST if ticks freeze. The header book line and JSON `book` object reuse the same snapshot; watch does not invent a second book.
 
+## Wallet position JSON
+
+Successful scans include `position` only when config has `wallet.address`. No wallet omits the key. The object is lagged Data API (`source=data_api`, `lag=true`), not live CLOB. P&L is activity cashflow plus open-size mark (same path as `polyterm mywallet --pnl`), never `SUM(cashPnl)`.
+
+| Field | Meaning |
+|-------|---------|
+| omitted `position` | No wallet configured |
+| `position.wallet` | Saved view-only address |
+| `position.source` | `data_api` |
+| `position.lag` / `position.lagged` | `true` |
+| `position.has_position` | `true` only when a row has parseable `size > 0` |
+| `position.shares` / `position.outcome` | Open size and outcome; omitted when empty |
+| `position.pnl` / `position.cashflow` | Present only when activity cashflow exists; omitted rather than `$0` |
+| `position.pnl_source` | `activity-cashflow` when P&L is present |
+| `position.quality_flags` | includes `lagged_data_api`, never `live_data_api_trades` |
+
+Header example: `Wallet: 0x0000…0001 | 120 Yes | cashflow P&L -$60.00 | lagged Data API`. Network failure is `position unavailable` and does not crash watch.
+
 ## Resolution / UMA JSON
 
 Successful scans include `resolution` on each result. Fields come from Gamma (`umaResolutionStatus`, `umaResolutionStatuses`, `acceptingOrders`, `closed`, `umaEndDate`, `resolvedBy`) and CLOB `accepting_orders` when those keys exist. Missing keys are omitted.
@@ -122,7 +140,9 @@ The live dashboard prints one line, for example `UMA: disputed | window unknown 
 - CLOB REST `/sampling-markets` (health probe) and `/book` (REST snapshot). CLOB token IDs from Gamma `clobTokenIds`
 - CLOB WebSocket market channel (`book`, `price_change`, `last_trade_price`)
 - Data API `/trades` via `PrintScanner` (lagged fills, not live CLOB)
+- Data API `/positions` and `/activity` for the configured wallet on this market (lagged, not live CLOB; omitted when no wallet)
 - Statuspage v2 `GET https://status.polymarket.com/api/v2/summary.json`
+- Config `wallet.address` when present (view-only)
 
 Identifiers: Gamma numeric IDs and slugs resolve the market. Prints prefer CLOB condition IDs. Order books require CLOB token IDs.
 
@@ -133,8 +153,10 @@ Identifiers: Gamma numeric IDs and slugs resolve the market. Prints prefer CLOB 
 - [Monitor](monitor.md)
 - [Live Monitor](live-monitor.md)
 - [Watch loop](../core/watch_loop.md)
+- [Watch position](../core/watch_position.md)
 - [WS book freshness](../core/ws_book_freshness.md)
 - [Print scanner](../core/print_scanner.md)
+- [Activity-cashflow P&L](../core/pnl_cashflow.md)
 - [Service health](../core/service_health.md)
 - [Status page client](../api/status.md)
 
@@ -155,7 +177,7 @@ Scheduled mode avoids interactive market selection and returns scan results as J
 
 ## Verification
 
-- `tests/test_cli/test_watch.py`, `tests/test_core/test_uma_tracker.py`, and `tests/test_cli/test_live_surface_layouts.py` mock Gamma, CLOB, Data API prints, and the status page.
-- `.venv/bin/python -m pytest tests/test_cli/test_watch.py tests/test_cli/test_live_surface_layouts.py tests/test_core/test_watch_loop.py tests/test_core/test_uma_tracker.py tests/test_core/test_ws_book_freshness.py tests/test_core/test_print_scanner.py tests/test_core/test_service_health.py`
+- `tests/test_cli/test_watch.py`, `tests/test_core/test_watch_position.py`, `tests/test_core/test_uma_tracker.py`, and `tests/test_cli/test_live_surface_layouts.py` mock Gamma, CLOB, Data API prints/positions, and the status page.
+- `.venv/bin/python -m pytest tests/test_cli/test_watch.py tests/test_cli/test_live_surface_layouts.py tests/test_core/test_watch_loop.py tests/test_core/test_watch_position.py tests/test_core/test_uma_tracker.py tests/test_core/test_ws_book_freshness.py tests/test_core/test_print_scanner.py tests/test_core/test_service_health.py`
 - `polyterm watch --help`
 - `polyterm watch --market bitcoin --format json --runs 1`

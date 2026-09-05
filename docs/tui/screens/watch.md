@@ -13,7 +13,7 @@ The Watch screen lets you track a specific market in real time, alerting you whe
 
 ## What It Shows
 
-A live updating view of a single market's probability, CLOB top-of-book, and lagged Data API prints. Alerts fire when probability or volume change exceeds the configured threshold, or when a verified print meets `--min-notional`. A connected WebSocket with no book ticks shows `WS connected, no book ticks` instead of a live book. The display includes check count, last check time, current market state, recent prints, and recent alerts.
+A live updating view of a single market's probability, CLOB top-of-book, lagged Data API prints, and — when a wallet is already configured — that wallet's lagged Data API position on this market. Alerts fire when probability or volume change exceeds the configured threshold, or when a verified print meets `--min-notional`. A connected WebSocket with no book ticks shows `WS connected, no book ticks` instead of a live book. The display includes check count, last check time, current market state, recent prints, and recent alerts. No wallet omits the position line. Empty position is `no position`, not fake zeros.
 
 ## Navigation / Keyboard Shortcuts
 
@@ -37,6 +37,7 @@ polyterm watch --market <market_id> --threshold 5 --interval 10
 - CLOB REST `/sampling-markets` health probe and `/book` snapshot; CLOB token IDs for the book
 - CLOB WebSocket market channel; frozen sockets are `ws_stale`, not live
 - Data API `/trades` via print scanner (lagged fills, not live CLOB)
+- Data API `/positions` and `/activity` for the configured wallet on this market (omitted when no wallet)
 - Statuspage v2 `https://status.polymarket.com/api/v2/summary.json`
 
 If Gamma and CLOB both fail, the launched CLI watch command reports an outage instead of `No markets found`. An unreachable status page is `status_unknown`, never operational.

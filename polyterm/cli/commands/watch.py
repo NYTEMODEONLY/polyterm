@@ -1,4 +1,4 @@
-"""Watch command - one live session: CLOB book, lagged prints, outage line."""
+"""Watch command - one live session: CLOB book, lagged prints, wallet position, outage line."""
 
 import click
 import time
@@ -29,6 +29,11 @@ from ...core.watch_loop import (
     notify_events_from_scan,
     token_ids_for_market,
     watch_notifier,
+)
+from ...core.watch_position import (
+    configured_wallet_address,
+    fetch_watch_position,
+    watch_position_dashboard_line,
 )
 from ...core.ws_book_freshness import DEFAULT_STALE_AFTER_SECONDS, WS_STALE_BANNER
 from ...utils.json_output import print_json
@@ -73,11 +78,14 @@ def watch(
     stale_after,
     output_format,
 ):
-    """Watch one market: CLOB book, lagged prints, UMA/resolution, outage line.
+    """Watch one market: CLOB book, lagged prints, wallet position, UMA/resolution, outage line.
 
     A connected WebSocket with no book/price_change ticks is not live
     (ws_stale / "WS connected, no book ticks"). Prints are lagged Data API
-    fills, never a live CLOB tape. Resolution/UMA is copied from Gamma
+    fills, never a live CLOB tape. If config has a wallet, the header and
+    JSON show that wallet's lagged Data API position on this market (not
+    live CLOB, not SUM(cashPnl)). No wallet omits the line. Empty position
+    is "no position", not fake zeros. Resolution/UMA is copied from Gamma
     (disputed, proposed, hours remaining, open-for-trading vs redeemable).
     Missing UMA data is status=none, never a fairness grade. Telegram/Discord
     notify only on verified prints and price/volume threshold events, not
@@ -135,6 +143,13 @@ def watch(
             "quality_flags": [QUALITY_FLAG],
         }
         resolution_payload = snapshot_market_resolution(market_data)
+        wallet_address = configured_wallet_address(config)
+        position_payload = fetch_watch_position(
+            getattr(print_scanner, "data_api", None),
+            wallet_address,
+            market_data,
+            market,
+        )
 
         console.print(f"\n[green]Watching:[/green] {market_title}")
         console.print(f"[cyan]Probability threshold:[/cyan] {threshold}%")
@@ -194,6 +209,7 @@ def watch(
                 prints_payload=prints_payload,
                 book_payload=book_payload,
                 resolution_payload=resolution_payload,
+                position_payload=position_payload,
                 min_notional=min_notional,
             )
 
@@ -231,10 +247,13 @@ def watch(
                                 market_data=market_data,
                                 min_notional=min_notional,
                                 stale_after_seconds=stale_after,
+                                wallet_address=wallet_address,
                             )
                             prints_payload = surfaces.get("prints") or prints_payload
                             if surfaces.get("resolution"):
                                 resolution_payload = surfaces["resolution"]
+                            if "position" in surfaces:
+                                position_payload = surfaces["position"]
                             events = notify_events_from_scan(
                                 prints_payload,
                                 shifts,
@@ -343,10 +362,13 @@ def _run_scheduled_watch(
                     print_scanner=print_scanner,
                     min_notional=min_notional,
                     stale_after_seconds=stale_after,
+                    wallet_address=configured_wallet_address(config),
                 )
                 scan["prints"] = surfaces.get("prints")
                 scan["book"] = surfaces.get("book")
                 scan["resolution"] = surfaces.get("resolution")
+                if "position" in surfaces:
+                    scan["position"] = surfaces["position"]
                 events = notify_events_from_scan(
                     surfaces.get("prints") or {},
                     None,
@@ -502,6 +524,7 @@ def _render_watch_dashboard(
     prints_payload: dict = None,
     book_payload: dict = None,
     resolution_payload: dict = None,
+    position_payload: dict = None,
     min_notional: float = DEFAULT_PRINT_MIN_NOTIONAL,
 ) -> Layout:
     """Render the fixed watch dashboard."""
@@ -519,6 +542,7 @@ def _render_watch_dashboard(
     flags_line = _dashboard_flags_line(trading_flags)
     book_line = _dashboard_book_line(book_payload)
     resolution_line = _dashboard_resolution_line(resolution_payload)
+    position_line = _dashboard_position_line(position_payload)
 
     header = Panel(
         Text.from_markup(
@@ -534,6 +558,7 @@ def _render_watch_dashboard(
             f"{flags_line}"
             f"{book_line}"
             f"{resolution_line}"
+            f"{position_line}"
         ),
         border_style=border_style,
         padding=(0, 2),
@@ -604,7 +629,7 @@ def _render_watch_dashboard(
 
     layout = Layout()
     layout.split_column(
-        Layout(header, size=13),
+        Layout(header, size=14 if position_line else 13),
         Layout(metrics, ratio=1),
         Layout(prints_table, ratio=1),
         Layout(alerts, ratio=1),
@@ -776,6 +801,21 @@ def _dashboard_resolution_line(resolution_payload: dict) -> str:
         "resolved": "green",
         "none": "dim",
     }.get(status, "white")
+    return f"\n[{color}]{line}[/{color}]"
+
+
+def _dashboard_position_line(position_payload: dict = None) -> str:
+    """Header wallet position. No wallet omits the line; empty is 'no position'."""
+    line = watch_position_dashboard_line(position_payload)
+    if not line:
+        return ""
+    flags = (position_payload or {}).get("quality_flags") or []
+    if (position_payload or {}).get("position_error") or "position_unavailable" in flags:
+        color = "yellow"
+    elif (position_payload or {}).get("has_position"):
+        color = "white"
+    else:
+        color = "dim"
     return f"\n[{color}]{line}[/{color}]"
 
 
