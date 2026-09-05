@@ -106,6 +106,7 @@ Unit tests mock activity streams. They must not hit the network.
 ## Related
 
 - [Mywallet CLI](../cli/mywallet.md)
+- [Watch position](watch_position.md)
 - [Local Pnl journal](../cli/pnl.md)
 - [Data API client](../api/data_api.md)
 - [Data API lag labels](../api/data_api_lag.md)

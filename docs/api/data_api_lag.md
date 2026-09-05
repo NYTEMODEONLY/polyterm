@@ -38,6 +38,7 @@ It does not invent a lag duration. There is no minutes/seconds field and no esti
 | Whale prints | `polyterm whales --wallets` JSON (`source=data_api`, lag flags) and lagged print-tape table |
 | Print alerts | `polyterm alerts --add-rule print` / `--evaluate print` JSON and table titles |
 | Wallet P&L | `polyterm mywallet --pnl` JSON (`source=activity-cashflow`, lag flags) and table disclosure |
+| Watch position | `polyterm watch` header + JSON `position` (`source=data_api`, lag flags) when a wallet is configured |
 
 This is a view-only honesty label. It does not change which API is called.
 
@@ -83,6 +84,7 @@ Unit tests mock Data API clients. They must not hit the network.
 - [Wallet intelligence](../core/wallet_intelligence.md)
 - [Activity-cashflow P&L](../core/pnl_cashflow.md)
 - [Mywallet CLI](../cli/mywallet.md)
+- [Watch position](../core/watch_position.md)
 
 ## Documentation Maintenance
 

@@ -8,7 +8,8 @@
 
 1. CLOB book from WebSocket ticks, or a labeled REST snapshot
 2. Verified lagged Data API prints for the resolved market
-3. Notify-worthy events (matched prints and existing price/volume shifts)
+3. The configured wallet's lagged Data API position on this market (omitted when no wallet)
+4. Notify-worthy events (matched prints and existing price/volume shifts)
 
 Empty Data API tape stays empty. A connected WebSocket with no book ticks is `ws_stale`, not live.
 
@@ -50,7 +51,7 @@ events = notify_events_from_scan(surfaces["prints"], shifts=[], min_notional=100
 | `DEFAULT_PRINT_MIN_NOTIONAL` | `10000` |
 | `empty_prints_payload()` | Labeled empty tape |
 | `fetch_watch_prints(...)` | Data API prints for the resolved market |
-| `collect_watch_surfaces(...)` | Prints + book for one scan |
+| `collect_watch_surfaces(...)` | Prints + book + resolution + optional wallet position for one scan |
 | `WatchBookSession` | Background CLOB WS with REST fallback |
 | `notify_events_from_scan(...)` | Print matches and threshold events only |
 | `dispatch_watch_notifications(...)` | Telegram/Discord send for those events |
@@ -63,9 +64,10 @@ Print identifiers prefer CLOB `conditionId`, then slug, then the trader query. B
 2. Fetch Data API `/trades` through `PrintScanner.fetch_prints`. Stamp `source=data_api`, `lag=true`, `lagged=true`.
 3. If a `WatchBookSession` is running, classify ticks with `ws_book_freshness`. Frozen sockets fall back to CLOB REST `/book`.
 4. JSON scheduled scans skip WS and use REST, labeled `clob_rest`.
-5. Notify dedupes on transaction hash (or a row key when hash is missing). Empty polls send nothing.
+5. If a wallet is configured, fetch that wallet's Data API `/positions` and `/activity` for the resolved condition through the same `DataAPIClient`. Stamp `source=data_api`. Empty rows are `no position`. No wallet omits `position`.
+6. Notify dedupes on transaction hash (or a row key when hash is missing). Empty polls send nothing.
 
-Request errors become `prints_unavailable` or `rest_error`. They do not become synthetic fills or a live book.
+Request errors become `prints_unavailable`, `rest_error`, or `position_unavailable`. They do not become synthetic fills, a live book, or fake shares.
 
 ## Honesty labels
 
@@ -80,11 +82,15 @@ Request errors become `prints_unavailable` or `rest_error`. They do not become s
 | `book.best_bid` / `book.best_ask` | Top of the labeled snapshot. Missing sides stay omitted, never `0` |
 | `book.spread` | `best_ask - best_bid` when both sides exist; omitted otherwise |
 | `book.best_bid_size` / `book.best_ask_size` | Size at the best level when the snapshot already includes it |
+| omitted `position` | No wallet in config |
+| `position.source` | `data_api` |
+| `position.has_position` | `true` only with parseable `size > 0`; empty is `no position`, not zeros |
 
 ## Data Sources
 
 - Gamma market metadata (`conditionId`, `slug`, `clobTokenIds`)
 - Data API trades via `PrintScanner` / `data_api_lag`
+- Data API `/positions` and `/activity` for the configured wallet (same `DataAPIClient` as prints)
 - CLOB WS market channel and CLOB REST `/book`
 
 Not used: private keys, order execution, copy-trade, `polyterm watchdog` as a second command.
@@ -94,13 +100,14 @@ Not used: private keys, order execution, copy-trade, `polyterm watchdog` as a se
 - [WS book freshness](ws_book_freshness.md)
 - [Print scanner](print_scanner.md)
 - [Service health](service_health.md)
+- [Watch position](watch_position.md)
 - [Watch CLI](../cli/watch.md)
 - [Notifications](notifications.md)
 
 ## Verification
 
 ```bash
-.venv/bin/python -m pytest tests/test_core/test_watch_loop.py tests/test_cli/test_watch.py tests/test_core/test_print_scanner.py tests/test_core/test_service_health.py
+.venv/bin/python -m pytest tests/test_core/test_watch_loop.py tests/test_core/test_watch_position.py tests/test_cli/test_watch.py tests/test_core/test_print_scanner.py tests/test_core/test_service_health.py
 .venv/bin/polyterm watch --market bitcoin --format json --runs 1
 ```
 

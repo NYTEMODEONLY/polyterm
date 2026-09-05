@@ -1,8 +1,9 @@
-"""One watch-loop helper: lagged prints, CLOB book snapshot, notify events.
+"""One watch-loop helper: lagged prints, CLOB book, wallet position, notify events.
 
 Watch remains a single process. This module does not spawn a watchdog
 command. Prints are lagged Data API fills. A connected WebSocket without
-book ticks is not live.
+book ticks is not live. A configured wallet's this-market position is
+lagged Data API data, omitted when no wallet is saved.
 """
 
 import asyncio
@@ -14,6 +15,7 @@ from ..api.data_api_lag import label_payload
 from ..api.market_utils import get_clob_token_ids, get_market_condition_id, get_primary_clob_token_id
 from .print_scanner import PrintScanner, match_prints, print_message
 from .uma_tracker import snapshot_market_resolution
+from .watch_position import fetch_watch_position
 from .ws_book_freshness import (
     CLOB_REST_SOURCE,
     DEFAULT_STALE_AFTER_SECONDS,
@@ -359,8 +361,13 @@ def collect_watch_surfaces(
     print_limit: int = DEFAULT_PRINT_LIMIT,
     stale_after_seconds: float = DEFAULT_STALE_AFTER_SECONDS,
     now: Optional[datetime] = None,
+    wallet_address: Optional[str] = None,
+    data_api: Any = None,
 ) -> Dict[str, Any]:
-    """Fetch prints + book + UMA/resolution for one watch scan. Does not invent tape or ticks."""
+    """Fetch prints + book + UMA/resolution + wallet position for one scan.
+
+    Does not invent tape, ticks, shares, or P&L. No wallet means no position key.
+    """
     resolved = market_data if isinstance(market_data, dict) else None
     if resolved is None:
         resolved = resolve_watch_market_data(gamma_client, market)
@@ -398,11 +405,35 @@ def collect_watch_surfaces(
             resolution_market = fresh
     resolution_payload = snapshot_market_resolution(resolution_market, now=now)
 
-    return {
+    surfaces: Dict[str, Any] = {
         "prints": prints_payload,
         "book": book_payload,
         "resolution": resolution_payload,
     }
+
+    client = data_api
+    if client is None and print_scanner is not None:
+        client = getattr(print_scanner, "data_api", None)
+    try:
+        position_payload = fetch_watch_position(
+            client,
+            wallet_address,
+            resolved,
+            market,
+        )
+    except Exception as exc:
+        wallet = wallet_address.strip() if isinstance(wallet_address, str) else ""
+        position_payload = None
+        if wallet:
+            position_payload = label_payload({
+                "wallet": wallet,
+                "has_position": False,
+                "position_error": str(exc),
+                "quality_flags": ["position_unavailable"],
+            })
+    if position_payload is not None:
+        surfaces["position"] = position_payload
+    return surfaces
 
 
 def print_event_id(print_row: Mapping[str, Any]) -> str:

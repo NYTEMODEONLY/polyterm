@@ -290,6 +290,85 @@ def test_watch_dashboard_shows_uma_resolution_line():
     assert "risk_level" not in output.lower()
 
 
+def test_watch_dashboard_omits_position_line_without_wallet():
+    scanner = type("FakeScanner", (), {})()
+    scanner.snapshots = {}
+    output = render_text(_render_watch_dashboard(
+        scanner=scanner,
+        market_id="m1",
+        market_title="Bitcoin Test Market",
+        threshold=10.0,
+        volume_threshold=50.0,
+        interval=30,
+        notify=False,
+        check_count=1,
+        last_check="12:35:00",
+        recent_alerts=[],
+    ))
+    assert "Wallet:" not in output
+    assert "no position" not in output
+
+
+def test_watch_dashboard_header_shows_wallet_position():
+    scanner = type("FakeScanner", (), {})()
+    scanner.snapshots = {}
+    output = render_text(_render_watch_dashboard(
+        scanner=scanner,
+        market_id="m1",
+        market_title="Bitcoin Test Market",
+        threshold=10.0,
+        volume_threshold=50.0,
+        interval=30,
+        notify=False,
+        check_count=1,
+        last_check="12:36:00",
+        recent_alerts=[],
+        position_payload={
+            "wallet": "0x0000000000000000000000000000000000000001",
+            "has_position": True,
+            "shares": 120,
+            "outcome": "Yes",
+            "legs": [{"shares": 120, "outcome": "Yes"}],
+            "pnl": -60.0,
+            "cashflow": -100.0,
+            "source": "data_api",
+            "lagged": True,
+            "quality_flags": ["lagged_data_api"],
+        },
+    ))
+    assert "Wallet:" in output
+    assert "120 Yes" in output
+    assert "cashflow P&L" in output
+    assert "lagged Data API" in output
+
+
+def test_watch_dashboard_empty_position_is_not_zero_shares():
+    scanner = type("FakeScanner", (), {})()
+    scanner.snapshots = {}
+    output = render_text(_render_watch_dashboard(
+        scanner=scanner,
+        market_id="m1",
+        market_title="Bitcoin Test Market",
+        threshold=10.0,
+        volume_threshold=50.0,
+        interval=30,
+        notify=False,
+        check_count=1,
+        last_check="12:37:00",
+        recent_alerts=[],
+        position_payload={
+            "wallet": "0x0000000000000000000000000000000000000001",
+            "has_position": False,
+            "source": "data_api",
+            "lagged": True,
+            "quality_flags": ["lagged_data_api", "empty_position"],
+        },
+    ))
+    assert "no position" in output
+    assert "0 Yes" not in output
+    assert "$0.00" not in output
+
+
 def test_watchdog_dashboard_keeps_status_market_state_and_alerts_visible():
     """The watchdog dashboard should render fixed status plus recent alerts."""
     output = render_text(_render_watchdog_dashboard(

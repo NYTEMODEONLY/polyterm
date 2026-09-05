@@ -267,6 +267,20 @@ class TestDataAPIGetPositions:
         assert len(positions) == 1
         assert "sizeThreshold=0" in responses.calls[0].request.url
 
+    @responses.activate
+    def test_get_positions_market_filter(self, client):
+        responses.add(
+            responses.GET,
+            f"{BASE_URL}/positions",
+            json=[{"conditionId": "0xcond", "size": 10}],
+            status=200,
+        )
+        positions = client.get_positions("0xabc123", market="0xcond", size_threshold=0)
+        assert len(positions) == 1
+        url = responses.calls[0].request.url
+        assert "market=0xcond" in url
+        assert "sizeThreshold=0" in url
+
 
 class TestDataAPILeaderboardAndClosedPositions:
     """Test current Data API leaderboard and closed-position helpers."""
@@ -420,6 +434,24 @@ class TestDataAPIGetActivity:
         assert len(activity) == 1
         assert "sortDirection=ASC" in responses.calls[0].request.url
         assert "type=MERGE" in responses.calls[0].request.url
+
+    @responses.activate
+    def test_get_activity_market_filter(self, client):
+        responses.add(
+            responses.GET,
+            f"{BASE_URL}/activity",
+            json=[{"type": "BUY", "usdcSize": 10, "conditionId": "0xcond"}],
+            status=200,
+        )
+        activity = client.get_activity(
+            "0xabc123",
+            sort_direction="ASC",
+            market="0xcond",
+        )
+        assert len(activity) == 1
+        url = responses.calls[0].request.url
+        assert "market=0xcond" in url
+        assert "sortDirection=ASC" in url
 
     @responses.activate
     def test_get_activity_empty(self, client):
