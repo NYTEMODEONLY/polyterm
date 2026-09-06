@@ -23,7 +23,7 @@ polyterm alerts --evaluate print --min-notional 10000 --market bitcoin-100k --wa
 polyterm whales --wallets --min-notional 10000 --format json
 ```
 
-Print evaluation is also on `polyterm watch` (same lagged tape). `polyterm alerts --evaluate print` remains the one-shot print scan. `polyterm whales --wallets` is the wallet-level print tape.
+Print evaluation is also on `polyterm watch` (same lagged tape; watch counts those rows as `prints this session: N`). `polyterm alerts --evaluate print` remains the one-shot print scan. `polyterm whales --wallets` is the wallet-level print tape.
 
 ### Python
 

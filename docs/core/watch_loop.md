@@ -1,13 +1,13 @@
 # Watch Loop
 
-> Helpers for one `polyterm watch` process: lagged prints, CLOB book, notify events.
+> Helpers for one `polyterm watch` process: lagged prints, session print count, CLOB book, notify events.
 
 ## Overview
 
 `polyterm/core/watch_loop.py` is the thin scan helper behind `polyterm watch`. It is not a second process and not `polyterm watchdog`. One watch loop can show:
 
 1. CLOB book from WebSocket ticks, or a labeled REST snapshot
-2. Verified lagged Data API prints for the resolved market
+2. Verified lagged Data API prints for the resolved market, plus how many unique prints this session has seen
 3. The configured wallet's lagged Data API position on this market (omitted when no wallet)
 4. Notify-worthy events (matched prints and existing price/volume shifts)
 
@@ -51,7 +51,7 @@ events = notify_events_from_scan(surfaces["prints"], shifts=[], min_notional=100
 | `DEFAULT_PRINT_MIN_NOTIONAL` | `10000` |
 | `empty_prints_payload()` | Labeled empty tape |
 | `fetch_watch_prints(...)` | Data API prints for the resolved market |
-| `collect_watch_surfaces(...)` | Prints + book + resolution + optional wallet position for one scan |
+| `collect_watch_surfaces(...)` | Prints + session_count + book + resolution + optional wallet position for one scan |
 | `WatchBookSession` | Background CLOB WS with REST fallback |
 | `notify_events_from_scan(...)` | Print matches and threshold events only |
 | `dispatch_watch_notifications(...)` | Telegram/Discord send for those events |
@@ -61,7 +61,7 @@ Print identifiers prefer CLOB `conditionId`, then slug, then the trader query. B
 ## How It Works
 
 1. Resolve Gamma metadata when the caller did not already pass a market dict.
-2. Fetch Data API `/trades` through `PrintScanner.fetch_prints`. Stamp `source=data_api`, `lag=true`, `lagged=true`.
+2. Fetch Data API `/trades` through `PrintScanner.fetch_prints`. Stamp `source=data_api`, `lag=true`, `lagged=true`. Stamp `session_count` from those same rows (unique print ids). Empty tape is `0`.
 3. If a `WatchBookSession` is running, classify ticks with `ws_book_freshness`. Frozen sockets fall back to CLOB REST `/book`.
 4. JSON scheduled scans skip WS and use REST, labeled `clob_rest`.
 5. If a wallet is configured, fetch that wallet's Data API `/positions` and `/activity` for the resolved condition through the same `DataAPIClient`. Stamp `source=data_api`. Empty rows are `no position`. No wallet omits `position`.
@@ -76,6 +76,7 @@ Request errors become `prints_unavailable`, `rest_error`, or `position_unavailab
 | `prints.source` | `data_api` |
 | `prints.lag` / `prints.lagged` | `true` |
 | `prints.quality_flags` | includes `lagged_data_api`, never `live_data_api_trades` |
+| `prints.session_count` | Unique real tape rows this process has seen; empty is `0` |
 | `book.source` | `clob_ws`, `clob_rest`, or `none` |
 | `book.live` | `true` only after a recent book tick |
 | `book.ws_stale` | Connected WS, no book ticks within N seconds |
@@ -99,6 +100,7 @@ Not used: private keys, order execution, copy-trade, `polyterm watchdog` as a se
 
 - [WS book freshness](ws_book_freshness.md)
 - [Print scanner](print_scanner.md)
+- [Watch print count](watch_print_count.md)
 - [Service health](service_health.md)
 - [Watch position](watch_position.md)
 - [Watch CLI](../cli/watch.md)
@@ -107,7 +109,7 @@ Not used: private keys, order execution, copy-trade, `polyterm watchdog` as a se
 ## Verification
 
 ```bash
-.venv/bin/python -m pytest tests/test_core/test_watch_loop.py tests/test_core/test_watch_position.py tests/test_cli/test_watch.py tests/test_core/test_print_scanner.py tests/test_core/test_service_health.py
+.venv/bin/python -m pytest tests/test_core/test_watch_loop.py tests/test_core/test_watch_print_count.py tests/test_core/test_watch_position.py tests/test_cli/test_watch.py tests/test_core/test_print_scanner.py tests/test_core/test_service_health.py
 .venv/bin/polyterm watch --market bitcoin --format json --runs 1
 ```
 

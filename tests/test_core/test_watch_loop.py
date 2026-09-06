@@ -148,6 +148,8 @@ def test_rest_book_payload_is_not_live():
     assert book["best_bid_size"] == 10.0
     assert book["best_ask_size"] == 12.0
     assert surfaces["prints"]["lagged"] is True
+    assert surfaces["prints"]["session_count"] == 0
+    assert surfaces["prints"]["prints"] == []
     resolution = surfaces["resolution"]
     assert resolution["status"] == "none"
     assert "uma_unavailable" in resolution["quality_flags"]

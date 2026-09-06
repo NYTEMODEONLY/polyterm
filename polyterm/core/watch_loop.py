@@ -1,9 +1,10 @@
 """One watch-loop helper: lagged prints, CLOB book, wallet position, notify events.
 
 Watch remains a single process. This module does not spawn a watchdog
-command. Prints are lagged Data API fills. A connected WebSocket without
-book ticks is not live. A configured wallet's this-market position is
-lagged Data API data, omitted when no wallet is saved.
+command. Prints are lagged Data API fills. Session print count is taken
+from that same tape. A connected WebSocket without book ticks is not live.
+A configured wallet's this-market position is lagged Data API data,
+omitted when no wallet is saved.
 """
 
 import asyncio
@@ -16,6 +17,7 @@ from ..api.market_utils import get_clob_token_ids, get_market_condition_id, get_
 from .print_scanner import PrintScanner, match_prints, print_message
 from .uma_tracker import snapshot_market_resolution
 from .watch_position import fetch_watch_position
+from .watch_print_count import WatchPrintSession, stamp_session_print_count
 from .ws_book_freshness import (
     CLOB_REST_SOURCE,
     DEFAULT_STALE_AFTER_SECONDS,
@@ -363,10 +365,12 @@ def collect_watch_surfaces(
     now: Optional[datetime] = None,
     wallet_address: Optional[str] = None,
     data_api: Any = None,
+    print_session: Optional[WatchPrintSession] = None,
 ) -> Dict[str, Any]:
     """Fetch prints + book + UMA/resolution + wallet position for one scan.
 
     Does not invent tape, ticks, shares, or P&L. No wallet means no position key.
+    Session print count is stamped from the existing tape, not a second fetch.
     """
     resolved = market_data if isinstance(market_data, dict) else None
     if resolved is None:
@@ -383,6 +387,7 @@ def collect_watch_surfaces(
     prints_payload["min_notional"] = min_notional
     prints_payload["matched"] = len(matched)
     prints_payload["matched_prints"] = matched
+    prints_payload = stamp_session_print_count(prints_payload, print_session)
 
     if book_session is not None:
         book_payload = book_session.snapshot(now=now)

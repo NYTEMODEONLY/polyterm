@@ -124,7 +124,7 @@ Each CLI command has its own documentation page with usage, options, and example
 | [update](cli/update.md) | Reinstall from GitHub main (PyPI decommissioned) | `polyterm update` |
 | [volume](cli/volume.md) | Volume analysis | `polyterm volume` |
 | [wallets](cli/wallets.md) | Wallet management and analysis | `polyterm wallets` |
-| [watch](cli/watch.md) | Live session: CLOB book, lagged prints, wallet position, outage line | `polyterm watch` |
+| [watch](cli/watch.md) | Live session: CLOB book, lagged prints, session print count, wallet position, outage line | `polyterm watch` |
 | [watchdog](cli/watchdog.md) | Market watchdog monitoring | `polyterm watchdog` |
 | [whales](cli/whales.md) | Volume heuristic or lagged Data API prints (`--wallets`) | `polyterm whales` |
 
@@ -248,6 +248,7 @@ Each TUI screen is documented with navigation, keyboard shortcuts, and data sour
 | [print_scanner](core/print_scanner.md) | Verified Data API prints (lagged, not live CLOB) | Print ingest |
 | [whale_prints](core/whale_prints.md) | Wallet-level lagged Data API prints for `whales --wallets` | Whale prints |
 | [watch_loop](core/watch_loop.md) | One watch process: lagged prints, CLOB book, notify events | Watch helpers |
+| [watch_print_count](core/watch_print_count.md) | Session count of lagged Data API prints already on the watch tape | Watch session |
 | [watch_position](core/watch_position.md) | Configured wallet's lagged Data API position on the watched market | Watch session |
 | [ws_book_freshness](core/ws_book_freshness.md) | Frozen CLOB WS vs live book ticks | Watch honesty |
 | [analytics](core/analytics.md) | Market analytics and trending analysis | Analytics engine |

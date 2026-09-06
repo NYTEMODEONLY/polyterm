@@ -1,4 +1,4 @@
-"""Watch command - one live session: CLOB book, lagged prints, wallet position, outage line."""
+"""Watch command - one live session: CLOB book, lagged prints, session print count, wallet position, outage line."""
 
 import click
 import time
@@ -29,6 +29,12 @@ from ...core.watch_loop import (
     notify_events_from_scan,
     token_ids_for_market,
     watch_notifier,
+)
+from ...core.watch_print_count import (
+    WatchPrintSession,
+    session_print_count_value,
+    stamp_session_print_count,
+    watch_print_count_dashboard_line,
 )
 from ...core.watch_position import (
     configured_wallet_address,
@@ -82,14 +88,15 @@ def watch(
 
     A connected WebSocket with no book/price_change ticks is not live
     (ws_stale / "WS connected, no book ticks"). Prints are lagged Data API
-    fills, never a live CLOB tape. If config has a wallet, the header and
-    JSON show that wallet's lagged Data API position on this market (not
-    live CLOB, not SUM(cashPnl)). No wallet omits the line. Empty position
-    is "no position", not fake zeros. Resolution/UMA is copied from Gamma
-    (disputed, proposed, hours remaining, open-for-trading vs redeemable).
-    Missing UMA data is status=none, never a fairness grade. Telegram/Discord
-    notify only on verified prints and price/volume threshold events, not
-    every poll.
+    fills, never a live CLOB tape. The header and JSON show how many lagged
+    Data API prints this session has seen (empty tape is 0). If config has
+    a wallet, the header and JSON show that wallet's lagged Data API
+    position on this market (not live CLOB, not SUM(cashPnl)). No wallet
+    omits the line. Empty position is "no position", not fake zeros.
+    Resolution/UMA is copied from Gamma (disputed, proposed, hours remaining,
+    open-for-trading vs redeemable). Missing UMA data is status=none, never
+    a fairness grade. Telegram/Discord notify only on verified prints and
+    price/volume threshold events, not every poll.
     """
 
     config = ctx.obj["config"]
@@ -137,11 +144,12 @@ def watch(
         )
         book_session.start()
         book_payload = book_session.snapshot()
-        prints_payload = {
+        print_session = WatchPrintSession()
+        prints_payload = stamp_session_print_count({
             "prints": [],
             "count": 0,
             "quality_flags": [QUALITY_FLAG],
-        }
+        }, print_session)
         resolution_payload = snapshot_market_resolution(market_data)
         wallet_address = configured_wallet_address(config)
         position_payload = fetch_watch_position(
@@ -248,6 +256,7 @@ def watch(
                                 min_notional=min_notional,
                                 stale_after_seconds=stale_after,
                                 wallet_address=wallet_address,
+                                print_session=print_session,
                             )
                             prints_payload = surfaces.get("prints") or prints_payload
                             if surfaces.get("resolution"):
@@ -336,6 +345,7 @@ def _run_scheduled_watch(
     last_health = None
     notifier = watch_notifier(config, notify)
     notify_state = new_notify_state()
+    print_session = WatchPrintSession()
     try:
         for index in range(max(runs, 1)):
             last_health = assess_service_health(
@@ -363,6 +373,7 @@ def _run_scheduled_watch(
                     min_notional=min_notional,
                     stale_after_seconds=stale_after,
                     wallet_address=configured_wallet_address(config),
+                    print_session=print_session,
                 )
                 scan["prints"] = surfaces.get("prints")
                 scan["book"] = surfaces.get("book")
@@ -541,6 +552,7 @@ def _render_watch_dashboard(
     health_line = _dashboard_health_line(health)
     flags_line = _dashboard_flags_line(trading_flags)
     book_line = _dashboard_book_line(book_payload)
+    print_count_line = _dashboard_print_count_line(prints_payload)
     resolution_line = _dashboard_resolution_line(resolution_payload)
     position_line = _dashboard_position_line(position_payload)
 
@@ -557,6 +569,7 @@ def _render_watch_dashboard(
             f"{health_line}"
             f"{flags_line}"
             f"{book_line}"
+            f"{print_count_line}"
             f"{resolution_line}"
             f"{position_line}"
         ),
@@ -627,9 +640,12 @@ def _render_watch_dashboard(
     else:
         alerts.add_row("--:--:--", "No shifts detected yet", Text("waiting", style="dim"))
 
+    header_size = 14
+    if position_line:
+        header_size += 1
     layout = Layout()
     layout.split_column(
-        Layout(header, size=14 if position_line else 13),
+        Layout(header, size=header_size),
         Layout(metrics, ratio=1),
         Layout(prints_table, ratio=1),
         Layout(alerts, ratio=1),
@@ -801,6 +817,16 @@ def _dashboard_resolution_line(resolution_payload: dict) -> str:
         "resolved": "green",
         "none": "dim",
     }.get(status, "white")
+    return f"\n[{color}]{line}[/{color}]"
+
+
+def _dashboard_print_count_line(prints_payload: dict = None) -> str:
+    """Header session print count from the live tape. Empty tape is 0."""
+    line = watch_print_count_dashboard_line(prints_payload)
+    if not line:
+        return ""
+    count = session_print_count_value(prints_payload)
+    color = "dim" if count == 0 else "cyan"
     return f"\n[{color}]{line}[/{color}]"
 
 

@@ -146,6 +146,7 @@ def test_watch_dashboard_shows_outage_instead_of_waiting_snapshot():
     assert "Waiting for first snapshot" not in output
     assert "Lagged Data API prints" in output
     assert "No lagged Data API prints" in output
+    assert "prints this session: 0" in output
 
 
 def test_watch_dashboard_shows_ws_stale_banner_and_rest_source():
@@ -194,6 +195,7 @@ def test_watch_dashboard_shows_ws_stale_banner_and_rest_source():
     assert "Lagged Data API prints" in output
     assert "15000" in output or "$15,000" in output
     assert "No lagged Data API prints" not in output
+    assert "prints this session: 1" in output
 
 
 def test_watch_dashboard_header_shows_top_of_book():
@@ -367,6 +369,60 @@ def test_watch_dashboard_empty_position_is_not_zero_shares():
     assert "no position" in output
     assert "0 Yes" not in output
     assert "$0.00" not in output
+
+
+def _watch_dashboard_output(**kwargs):
+    scanner = type("FakeScanner", (), {})()
+    scanner.snapshots = {}
+    defaults = dict(
+        scanner=scanner,
+        market_id="m1",
+        market_title="Bitcoin Test Market",
+        threshold=10.0,
+        volume_threshold=50.0,
+        interval=30,
+        notify=False,
+        check_count=1,
+        last_check="12:38:00",
+        recent_alerts=[],
+    )
+    defaults.update(kwargs)
+    return render_text(_render_watch_dashboard(**defaults))
+
+
+def test_watch_dashboard_header_empty_tape_print_count_is_zero():
+    output = _watch_dashboard_output(prints_payload={"prints": [], "count": 0})
+    assert "prints this session: 0" in output
+    assert "No lagged Data API prints" in output
+
+
+def test_watch_dashboard_header_one_print_counts_one():
+    output = _watch_dashboard_output(prints_payload={
+        "prints": [{
+            "timestamp_iso": "2026-06-01T12:00:00+00:00",
+            "side": "BUY",
+            "notional": 15000,
+            "wallet": "0xabc",
+            "transaction_hash": "0xtx1",
+        }],
+        "session_count": 1,
+        "lagged": True,
+    })
+    assert "prints this session: 1" in output
+    assert "No lagged Data API prints" not in output
+
+
+def test_watch_dashboard_header_several_prints_count_each_row():
+    output = _watch_dashboard_output(prints_payload={
+        "prints": [
+            {"transaction_hash": "0xtx1", "side": "BUY", "notional": 12000},
+            {"transaction_hash": "0xtx2", "side": "SELL", "notional": 8000},
+            {"transaction_hash": "0xtx3", "side": "BUY", "notional": 25000},
+        ],
+        "session_count": 3,
+        "lagged": True,
+    })
+    assert "prints this session: 3" in output
 
 
 def test_watchdog_dashboard_keeps_status_market_state_and_alerts_visible():
