@@ -1,10 +1,17 @@
 # PolyTerm Documentation
 
-> Comprehensive documentation for PolyTerm — a terminal-based monitoring and analytics tool for Polymarket prediction markets.
+> Terminal session for one Polymarket market: CLOB book, lagged Data API prints, UMA/resolution, outage line. No keys.
 
 ## Quick Start
 
-Install from GitHub `main`. GitHub is the source of truth. PyPI is decommissioned.
+Install from GitHub `main` (the source of truth; PyPI is decommissioned) and run watch:
+
+```bash
+pipx install git+https://github.com/NYTEMODEONLY/polyterm.git@main
+polyterm watch --market bitcoin
+```
+
+Editable clone for contributors:
 
 ```bash
 git clone https://github.com/NYTEMODEONLY/polyterm.git
@@ -13,12 +20,6 @@ pip install -e .
 polyterm              # Launch TUI
 polyterm tutorial     # Interactive tutorial
 polyterm --help       # See all commands
-```
-
-Isolated install via pipx:
-
-```bash
-pipx install git+https://github.com/NYTEMODEONLY/polyterm.git@main
 ```
 
 ## Table of Contents
@@ -124,7 +125,7 @@ Each CLI command has its own documentation page with usage, options, and example
 | [update](cli/update.md) | Reinstall from GitHub main (PyPI decommissioned) | `polyterm update` |
 | [volume](cli/volume.md) | Volume analysis | `polyterm volume` |
 | [wallets](cli/wallets.md) | Wallet management and analysis | `polyterm wallets` |
-| [watch](cli/watch.md) | Live session: CLOB book, lagged prints, session print count, wallet position, outage line | `polyterm watch` |
+| [watch](cli/watch.md) | Live session: CLOB book (frozen WS labeled), lagged Data API prints, session print count, UMA/resolution, wallet position, outage line | `polyterm watch` |
 | [watchdog](cli/watchdog.md) | Market watchdog monitoring | `polyterm watchdog` |
 | [whales](cli/whales.md) | Volume heuristic or lagged Data API prints (`--wallets`) | `polyterm whales` |
 
