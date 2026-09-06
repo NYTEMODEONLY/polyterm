@@ -10,7 +10,11 @@ from click.testing import CliRunner
 
 import polyterm.cli.main as cli_main
 from polyterm.api.data_api_lag import QUALITY_FLAG
-from polyterm.cli.commands.watch import _dashboard_book_line, _dashboard_position_line
+from polyterm.cli.commands.watch import (
+    _dashboard_book_line,
+    _dashboard_position_line,
+    _dashboard_print_count_line,
+)
 from polyterm.cli.main import cli
 from polyterm.core.service_health import SourceProbe, combine_health
 from polyterm.core.watch_position import configured_wallet_address
@@ -373,6 +377,7 @@ def test_watch_json_includes_prints_lag_and_book_source(
     assert QUALITY_FLAG in prints["quality_flags"]
     assert "live_data_api_trades" not in prints["quality_flags"]
     assert prints["prints"][0]["notional"] == 12000
+    assert prints["session_count"] == 1
     book = scan["book"]
     assert book["source"] == "clob_rest"
     assert book["live"] is False
@@ -996,3 +1001,181 @@ def test_dashboard_position_line_empty_and_open():
     assert "120 Yes" in open_line
     assert "cashflow P&L" in open_line
     assert "lagged Data API" in open_line
+
+
+def _print_row(tx, notional=12000):
+    return {
+        "wallet": "0xabc",
+        "side": "BUY",
+        "notional": notional,
+        "transaction_hash": tx,
+        "source": "data_api",
+        "lag": True,
+        "lagged": True,
+    }
+
+
+def _prints_payload(rows):
+    return {
+        "source": "data_api",
+        "lag": True,
+        "lagged": True,
+        "prints": list(rows),
+        "count": len(rows),
+        "fetched": len(rows),
+        "skipped": 0,
+        "quality_flags": [QUALITY_FLAG],
+    }
+
+
+def _json_watch_with_prints(
+    mock_config_cls,
+    mock_gamma_cls,
+    mock_clob_cls,
+    mock_status_cls,
+    mock_engine_cls,
+    mock_scanner_cls,
+    rows,
+):
+    mock_config_cls.return_value = _config_mock()
+    gamma, clob, status_client = _client_mocks()
+    gamma.get_markets.return_value = [{"id": "m1"}]
+    gamma.get_market.return_value = {
+        "id": "m1",
+        "conditionId": "0xcond",
+        "slug": "bitcoin-100k",
+        "clobTokenIds": ["tok-yes"],
+        "question": "Bitcoin 100k?",
+    }
+    clob.get_current_markets.return_value = [{"id": "c1"}]
+    clob.get_order_book.return_value = {
+        "bids": [{"price": "0.55", "size": "10"}],
+        "asks": [{"price": "0.56", "size": "9"}],
+    }
+    mock_gamma_cls.return_value = gamma
+    mock_clob_cls.return_value = clob
+    mock_status_cls.return_value = status_client
+    mock_engine_cls.return_value.run_once.return_value = {
+        "market": "bitcoin",
+        "price": 0.55,
+        "triggered": False,
+        "reasons": [],
+    }
+    _stub_print_scanner(mock_scanner_cls, _prints_payload(rows))
+    return CliRunner().invoke(
+        cli, ["watch", "--market", "bitcoin", "--format", "json", "--runs", "1"]
+    )
+
+
+def _assert_session_print_count(result, expected):
+    assert result.exit_code == 0, result.output
+    prints = json.loads(result.output)["results"][0]["prints"]
+    assert prints["session_count"] == expected
+    assert len(prints["prints"]) == expected
+    if expected == 0:
+        assert prints["prints"] == []
+    return prints
+
+
+@patch("polyterm.cli.commands.watch.PrintScanner")
+@patch("polyterm.cli.commands.watch.AlertEngine")
+@patch("polyterm.cli.commands.watch.StatusPageClient")
+@patch("polyterm.cli.commands.watch.CLOBClient")
+@patch("polyterm.cli.commands.watch.GammaClient")
+@patch.object(cli_main, "Config")
+def test_watch_json_empty_tape_session_print_count_is_zero(
+    mock_config_cls,
+    mock_gamma_cls,
+    mock_clob_cls,
+    mock_status_cls,
+    mock_engine_cls,
+    mock_scanner_cls,
+):
+    result = _json_watch_with_prints(
+        mock_config_cls,
+        mock_gamma_cls,
+        mock_clob_cls,
+        mock_status_cls,
+        mock_engine_cls,
+        mock_scanner_cls,
+        [],
+    )
+    _assert_session_print_count(result, 0)
+
+
+@patch("polyterm.cli.commands.watch.PrintScanner")
+@patch("polyterm.cli.commands.watch.AlertEngine")
+@patch("polyterm.cli.commands.watch.StatusPageClient")
+@patch("polyterm.cli.commands.watch.CLOBClient")
+@patch("polyterm.cli.commands.watch.GammaClient")
+@patch.object(cli_main, "Config")
+def test_watch_json_one_print_session_print_count_is_one(
+    mock_config_cls,
+    mock_gamma_cls,
+    mock_clob_cls,
+    mock_status_cls,
+    mock_engine_cls,
+    mock_scanner_cls,
+):
+    result = _json_watch_with_prints(
+        mock_config_cls,
+        mock_gamma_cls,
+        mock_clob_cls,
+        mock_status_cls,
+        mock_engine_cls,
+        mock_scanner_cls,
+        [_print_row("0xtx1")],
+    )
+    _assert_session_print_count(result, 1)
+
+
+@patch("polyterm.cli.commands.watch.PrintScanner")
+@patch("polyterm.cli.commands.watch.AlertEngine")
+@patch("polyterm.cli.commands.watch.StatusPageClient")
+@patch("polyterm.cli.commands.watch.CLOBClient")
+@patch("polyterm.cli.commands.watch.GammaClient")
+@patch.object(cli_main, "Config")
+def test_watch_json_several_prints_session_print_count(
+    mock_config_cls,
+    mock_gamma_cls,
+    mock_clob_cls,
+    mock_status_cls,
+    mock_engine_cls,
+    mock_scanner_cls,
+):
+    result = _json_watch_with_prints(
+        mock_config_cls,
+        mock_gamma_cls,
+        mock_clob_cls,
+        mock_status_cls,
+        mock_engine_cls,
+        mock_scanner_cls,
+        [_print_row("0xtx1"), _print_row("0xtx2"), _print_row("0xtx3")],
+    )
+    _assert_session_print_count(result, 3)
+
+
+def test_watch_help_mentions_session_print_count():
+    result = CliRunner().invoke(cli, ["watch", "--help"])
+    assert result.exit_code == 0, result.output
+    output = result.output.lower()
+    assert "prints this session" in output or "session has seen" in output
+    assert "empty tape is 0" in output or "empty tape" in output
+    assert "lagged" in output or "data api" in output
+
+
+def test_dashboard_print_count_line_empty_one_several():
+    empty = _dashboard_print_count_line({"prints": [], "count": 0})
+    assert "prints this session: 0" in empty
+
+    one = _dashboard_print_count_line({
+        "prints": [_print_row("0xtx1")],
+        "session_count": 1,
+    })
+    assert "prints this session: 1" in one
+
+    several = _dashboard_print_count_line({
+        "prints": [_print_row("0xtx1"), _print_row("0xtx2"), _print_row("0xtx3")],
+        "session_count": 3,
+    })
+    assert "prints this session: 3" in several

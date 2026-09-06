@@ -1,14 +1,14 @@
 # Watch
 
-> One live session: CLOB book, lagged Data API prints, this-wallet position, UMA/resolution, and an honest outage line.
+> One live session: CLOB book, lagged Data API prints, session print count, this-wallet position, UMA/resolution, and an honest outage line.
 
 ## Overview
 
-`polyterm watch` is the no-keys session traders leave running on one market. The live dashboard polls Gamma, shows CLOB top-of-book on the header (best bid, best ask, spread, and size when the snapshot already has it), lists recent verified Data API prints, shows a short UMA/resolution line, and keeps the Statuspage outage line. If a wallet is already saved in config, the same header (and JSON) show that wallet's lagged Data API position on this market. A missing book side is an em dash, never `0`. No wallet omits the position line. Empty position is `no position`, not fake zero shares.
+`polyterm watch` is the no-keys session traders leave running on one market. The live dashboard polls Gamma, shows CLOB top-of-book on the header (best bid, best ask, spread, and size when the snapshot already has it), lists recent verified Data API prints, shows how many lagged prints this session has seen (`prints this session: N`), shows a short UMA/resolution line, and keeps the Statuspage outage line. If a wallet is already saved in config, the same header (and JSON) show that wallet's lagged Data API position on this market. A missing book side is an em dash, never `0`. No wallet omits the position line. Empty position is `no position`, not fake zero shares. Empty tape is `prints this session: 0`, not synthetic rows.
 
 A connected CLOB WebSocket with no `book` / `price_change` ticks is not live. After `--stale-after` seconds (default 20) watch sets `ws_stale` and the banner `WS connected, no book ticks`. REST fallback is allowed when it is labeled `clob_rest`.
 
-Prints are lagged Data API fills (`source=data_api`, `lag=true`). Empty tape stays empty. Watch never invents wallets, notionals, or a lag duration.
+Prints are lagged Data API fills (`source=data_api`, `lag=true`). Empty tape stays empty. The session counter counts those same rows (unique by transaction hash when present). Watch never invents wallets, notionals, or a lag duration.
 
 `--notify telegram|discord` sends only on verified print matches (default min-notional `$10,000`, no saved print rule required) and on existing price/volume threshold events. It does not fire on every poll.
 
@@ -88,6 +88,7 @@ Successful scans include `prints` and `book` on each result.
 | `prints.lag` / `prints.lagged` | `true` |
 | `prints.quality_flags` | includes `lagged_data_api`, never `live_data_api_trades` |
 | `prints.prints` | Verified fill rows, or `[]` |
+| `prints.session_count` | Unique lagged prints this watch process has seen. Empty tape is `0` |
 | `book.source` | `clob_ws`, `clob_rest`, or `none` |
 | `book.live` | `true` only after a recent book tick |
 | `book.ws_stale` | Connected WS, no book ticks within `--stale-after` |
@@ -96,7 +97,7 @@ Successful scans include `prints` and `book` on each result.
 | `book.spread` | `best_ask - best_bid` when both sides exist; omitted otherwise |
 | `book.best_bid_size` / `book.best_ask_size` | Size at the best level when the snapshot already includes it |
 
-JSON `--runs 1` uses CLOB REST for the book snapshot (`source=clob_rest`, `live=false`). Live table mode starts the CLOB WebSocket and falls back to REST if ticks freeze. The header book line and JSON `book` object reuse the same snapshot; watch does not invent a second book.
+JSON `--runs 1` uses CLOB REST for the book snapshot (`source=clob_rest`, `live=false`). Live table mode starts the CLOB WebSocket and falls back to REST if ticks freeze. The header book line and JSON `book` object reuse the same snapshot; watch does not invent a second book. `prints.session_count` is the same counter as the header `prints this session: N` line. It reuses the existing prints payload; watch does not run a second scanner.
 
 ## Wallet position JSON
 
@@ -153,6 +154,7 @@ Identifiers: Gamma numeric IDs and slugs resolve the market. Prints prefer CLOB 
 - [Monitor](monitor.md)
 - [Live Monitor](live-monitor.md)
 - [Watch loop](../core/watch_loop.md)
+- [Watch print count](../core/watch_print_count.md)
 - [Watch position](../core/watch_position.md)
 - [WS book freshness](../core/ws_book_freshness.md)
 - [Print scanner](../core/print_scanner.md)
@@ -177,7 +179,7 @@ Scheduled mode avoids interactive market selection and returns scan results as J
 
 ## Verification
 
-- `tests/test_cli/test_watch.py`, `tests/test_core/test_watch_position.py`, `tests/test_core/test_uma_tracker.py`, and `tests/test_cli/test_live_surface_layouts.py` mock Gamma, CLOB, Data API prints/positions, and the status page.
-- `.venv/bin/python -m pytest tests/test_cli/test_watch.py tests/test_cli/test_live_surface_layouts.py tests/test_core/test_watch_loop.py tests/test_core/test_watch_position.py tests/test_core/test_uma_tracker.py tests/test_core/test_ws_book_freshness.py tests/test_core/test_print_scanner.py tests/test_core/test_service_health.py`
+- `tests/test_cli/test_watch.py`, `tests/test_core/test_watch_print_count.py`, `tests/test_core/test_watch_position.py`, `tests/test_core/test_uma_tracker.py`, and `tests/test_cli/test_live_surface_layouts.py` mock Gamma, CLOB, Data API prints/positions, and the status page.
+- `.venv/bin/python -m pytest tests/test_cli/test_watch.py tests/test_cli/test_live_surface_layouts.py tests/test_core/test_watch_loop.py tests/test_core/test_watch_print_count.py tests/test_core/test_watch_position.py tests/test_core/test_uma_tracker.py tests/test_core/test_ws_book_freshness.py tests/test_core/test_print_scanner.py tests/test_core/test_service_health.py`
 - `polyterm watch --help`
 - `polyterm watch --market bitcoin --format json --runs 1`
